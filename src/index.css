@@ -1,0 +1,231 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom base styles for Vinctus */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* Scrollbar hide utility */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ===== ELEGANT PAGE TRANSITIONS ===== */
+
+/* Base transition for all pages */
+.page-transition {
+  animation: pageEnter 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Discover page - subtle scale and fade */
+.page-discover {
+  animation: discoverEnter 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes discoverEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+    filter: blur(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+
+/* Feed page - slide from right with fade */
+.page-feed {
+  animation: feedEnter 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes feedEnter {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Projects page - slide from bottom with subtle rotation */
+.page-projects {
+  animation: projectsEnter 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes projectsEnter {
+  from {
+    opacity: 0;
+    transform: translateY(20px) rotateX(3deg);
+    transform-origin: center top;
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) rotateX(0);
+  }
+}
+
+/* Library page - elegant fade with subtle scale */
+.page-library {
+  animation: libraryEnter 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes libraryEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(1.02);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Events page - staggered reveal effect */
+.page-events {
+  animation: eventsEnter 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes eventsEnter {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+    filter: blur(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+    filter: blur(0);
+  }
+}
+
+/* Profile page - soft glow entrance */
+.page-profile {
+  animation: profileEnter 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes profileEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Category detail page - dramatic slide up */
+.page-category {
+  animation: categoryEnter 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes categoryEnter {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+    filter: blur(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+/* Staggered children animation helper */
+.stagger-children>* {
+  opacity: 0;
+  animation: staggerFadeIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.stagger-children>*:nth-child(1) {
+  animation-delay: 0.1s;
+}
+
+.stagger-children>*:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.stagger-children>*:nth-child(3) {
+  animation-delay: 0.2s;
+}
+
+.stagger-children>*:nth-child(4) {
+  animation-delay: 0.25s;
+}
+
+.stagger-children>*:nth-child(5) {
+  animation-delay: 0.3s;
+}
+
+.stagger-children>*:nth-child(6) {
+  animation-delay: 0.35s;
+}
+
+@keyframes staggerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Hover effects for interactive elements */
+.hover-lift {
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.4);
+}
+
+/* Subtle glow effect */
+.hover-glow {
+  transition: box-shadow 0.4s ease;
+}
+
+.hover-glow:hover {
+  box-shadow: 0 0 30px rgba(255, 255, 255, 0.05);
+}
