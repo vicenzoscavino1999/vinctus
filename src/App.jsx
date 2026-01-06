@@ -24,7 +24,10 @@ import {
   ApiContentCard,
   Header,
   UserProfilePage,
-  LoginScreen
+  LoginScreen,
+  SkeletonContentGrid,
+  EmptyState,
+  ErrorState
 } from './components';
 
 // Import hooks
@@ -455,35 +458,35 @@ const CategoryPage = () => {
             ))}
           </div>
 
-          {/* Loading state */}
+          {/* Loading state - Premium skeleton */}
           {loading && (
-            <div className="flex items-center justify-center py-20">
-              <Loader size={24} className="animate-spin text-neutral-500" />
-              <span className="ml-3 text-neutral-500">Cargando contenido...</span>
-            </div>
+            <SkeletonContentGrid count={4} />
           )}
 
-          {/* Error state */}
+          {/* Error state - Premium */}
           {error && (
-            <div className="py-10 text-center border border-dashed border-red-800/50 rounded-lg">
-              <p className="text-red-400/80">Error al cargar: {error}</p>
-            </div>
+            <ErrorState
+              message={error}
+              onRetry={() => window.location.reload()}
+            />
           )}
 
           {/* Content grid */}
           {!loading && !error && liveContent.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 stagger-children">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 stagger-premium">
               {liveContent.map((item, idx) => (
                 <ApiContentCard key={item.id || idx} item={item} type={category.apiSource} />
               ))}
             </div>
           )}
 
-          {/* Empty state */}
+          {/* Empty state - Premium */}
           {!loading && !error && liveContent.length === 0 && (
-            <div className="py-20 text-center border border-dashed border-neutral-800 rounded-lg">
-              <p className="text-neutral-500 font-light italic">No hay contenido disponible en este momento.</p>
-            </div>
+            <EmptyState
+              icon={Feather}
+              title="Sin contenido disponible"
+              message="No hay publicaciones en esta categoría aún. ¡Vuelve pronto!"
+            />
           )}
         </div>
       )}
