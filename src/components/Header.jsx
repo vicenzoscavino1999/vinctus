@@ -5,7 +5,7 @@ const Header = ({ notificationCount = 0 }) => {
     const navigate = useNavigate();
 
     return (
-        <header className="fixed top-0 left-0 right-0 md:left-20 z-30 flex items-center justify-between px-4 md:px-8 py-3 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-neutral-900/50">
+        <header className="fixed top-0 left-0 right-0 md:left-20 z-30 flex items-center justify-between px-4 md:px-8 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] bg-[#0a0a0a]/95 backdrop-blur-md border-b border-neutral-900/50">
             {/* Spacer for mobile - left side empty */}
             <div className="w-16 md:hidden" />
 
@@ -18,7 +18,7 @@ const Header = ({ notificationCount = 0 }) => {
             </h1>
 
             {/* Action icons - right side */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1">
                 {/* Notifications */}
                 <button
                     onClick={() => navigate('/notifications')}

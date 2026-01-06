@@ -523,7 +523,7 @@ const AppLayout = () => {
         <MobileNav activeTab={getActiveTab()} onNavigate={navigate} />
         <Header />
 
-        <main className="flex-1 md:ml-20 pt-16 pb-20 md:pb-6 p-4 md:p-16 overflow-y-auto scrollbar-hide">
+        <main className="flex-1 md:ml-20 pt-[calc(4rem+env(safe-area-inset-top))] md:pt-16 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-6 px-4 md:px-16 overflow-y-auto scrollbar-hide">
           <div className="max-w-5xl mx-auto">
             <Routes>
               <Route path="/" element={<DiscoverPage />} />
