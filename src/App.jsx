@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   Feather,
   BookOpen,
-  Calendar,
   Briefcase,
   ArrowRight,
   Filter,
@@ -55,9 +54,8 @@ const Sidebar = ({ activeTab, onNavigate }) => (
     <nav className="flex flex-col space-y-4">
       <SidebarItem icon={Compass} active={activeTab === 'discover'} onClick={() => onNavigate('/discover')} tooltip="Descubrir" />
       <SidebarItem icon={Hash} active={activeTab === 'feed'} onClick={() => onNavigate('/feed')} tooltip="Conversación" />
-      <SidebarItem icon={Briefcase} active={activeTab === 'projects'} onClick={() => onNavigate('/projects')} tooltip="Colaboraciones" />
-      <SidebarItem icon={BookOpen} active={activeTab === 'library'} onClick={() => onNavigate('/library')} tooltip="Archivo Global" />
-      <SidebarItem icon={Calendar} active={activeTab === 'events'} onClick={() => onNavigate('/events')} tooltip="Eventos" />
+      <SidebarItem icon={Briefcase} active={activeTab === 'projects'} onClick={() => onNavigate('/projects')} tooltip="Conexiones" />
+      <SidebarItem icon={BookOpen} active={activeTab === 'library'} onClick={() => onNavigate('/library')} tooltip="Colecciones" />
     </nav>
     <div className="mt-auto mb-4">
       <SidebarItem icon={User} active={activeTab === 'profile'} onClick={() => onNavigate('/profile')} tooltip="Perfil" />
