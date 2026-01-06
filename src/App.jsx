@@ -399,51 +399,81 @@ const EventsPage = () => (
 );
 
 // Profile page (placeholder)
-// Notifications page (placeholder)
-const NotificationsPage = () => (
-  <div className="page-profile pt-10 max-w-2xl mx-auto">
-    <h1 className="text-3xl font-serif font-light text-white mb-8">Notificaciones</h1>
-    <div className="space-y-4">
-      <div className="p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors">
-        <p className="text-neutral-400"><span className="text-white">Dr. Elena R.</span> comentó en tu publicación</p>
-        <span className="text-neutral-600 text-xs">Hace 2 horas</span>
-      </div>
-      <div className="p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors">
-        <p className="text-neutral-400"><span className="text-white">Marco V.</span> te mencionó en un debate</p>
-        <span className="text-neutral-600 text-xs">Hace 5 horas</span>
-      </div>
-      <div className="p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors">
-        <p className="text-neutral-400">Tu ensayo recibió <span className="text-white">15 nuevas reacciones</span></p>
-        <span className="text-neutral-600 text-xs">Ayer</span>
-      </div>
-    </div>
-  </div>
-);
+// Notifications page with clickable names
+const NotificationsPage = () => {
+  const navigate = useNavigate();
 
-// Messages page (placeholder)
-const MessagesPage = () => (
-  <div className="page-profile pt-10 max-w-2xl mx-auto">
-    <h1 className="text-3xl font-serif font-light text-white mb-8">Mensajes</h1>
-    <div className="space-y-2">
-      <div className="flex items-center gap-4 p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors cursor-pointer">
-        <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400">M</div>
-        <div className="flex-1">
-          <p className="text-white">Marco V.</p>
-          <p className="text-neutral-500 text-sm truncate">¿Viste el nuevo paper sobre jazz modal?</p>
+  return (
+    <div className="page-profile pt-10 max-w-2xl mx-auto">
+      <h1 className="text-3xl font-serif font-light text-white mb-8">Notificaciones</h1>
+      <div className="space-y-4">
+        <div className="p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors">
+          <p className="text-neutral-400">
+            <span
+              onClick={() => navigate('/user/dr-elena-r')}
+              className="text-white cursor-pointer hover:underline"
+            >Dr. Elena R.</span> comentó en tu publicación
+          </p>
+          <span className="text-neutral-600 text-xs">Hace 2 horas</span>
         </div>
-        <span className="text-neutral-600 text-xs">2h</span>
-      </div>
-      <div className="flex items-center gap-4 p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors cursor-pointer">
-        <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400">E</div>
-        <div className="flex-1">
-          <p className="text-white">Dr. Elena R.</p>
-          <p className="text-neutral-500 text-sm truncate">Sobre la colaboración del paper...</p>
+        <div className="p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors">
+          <p className="text-neutral-400">
+            <span
+              onClick={() => navigate('/user/marco-v')}
+              className="text-white cursor-pointer hover:underline"
+            >Marco V.</span> te mencionó en un debate
+          </p>
+          <span className="text-neutral-600 text-xs">Hace 5 horas</span>
         </div>
-        <span className="text-neutral-600 text-xs">1d</span>
+        <div className="p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors">
+          <p className="text-neutral-400">Tu ensayo recibió <span className="text-white">15 nuevas reacciones</span></p>
+          <span className="text-neutral-600 text-xs">Ayer</span>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
+
+// Messages page with clickable names
+const MessagesPage = () => {
+  const navigate = useNavigate();
+
+  return (
+    <div className="page-profile pt-10 max-w-2xl mx-auto">
+      <h1 className="text-3xl font-serif font-light text-white mb-8">Mensajes</h1>
+      <div className="space-y-2">
+        <div className="flex items-center gap-4 p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors cursor-pointer">
+          <div
+            onClick={() => navigate('/user/marco-v')}
+            className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 hover:ring-2 hover:ring-neutral-600 transition-all"
+          >M</div>
+          <div className="flex-1">
+            <p
+              onClick={() => navigate('/user/marco-v')}
+              className="text-white cursor-pointer hover:underline inline"
+            >Marco V.</p>
+            <p className="text-neutral-500 text-sm truncate">¿Viste el nuevo paper sobre jazz modal?</p>
+          </div>
+          <span className="text-neutral-600 text-xs">2h</span>
+        </div>
+        <div className="flex items-center gap-4 p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors cursor-pointer">
+          <div
+            onClick={() => navigate('/user/dr-elena-r')}
+            className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 hover:ring-2 hover:ring-neutral-600 transition-all"
+          >E</div>
+          <div className="flex-1">
+            <p
+              onClick={() => navigate('/user/dr-elena-r')}
+              className="text-white cursor-pointer hover:underline inline"
+            >Dr. Elena R.</p>
+            <p className="text-neutral-500 text-sm truncate">Sobre la colaboración del paper...</p>
+          </div>
+          <span className="text-neutral-600 text-xs">1d</span>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // My Profile page
 const ProfilePage = () => (
