@@ -723,8 +723,8 @@ const ProjectsPage = () => {
           <h1 className="text-4xl md:text-5xl font-serif font-light text-white mb-3 tracking-tight">
             Conexiones
           </h1>
-          <p className="text-neutral-500 font-light text-sm max-w-lg">
-            Conecta habilidades. Construye realidades. La red digital es solo el preludio.
+          <p className="text-neutral-500 font-light text-sm">
+            Conecta. Colabora. Encuentra.
           </p>
         </div>
         <button className="mt-6 md:mt-0 text-xs bg-white text-black px-6 py-3 hover:bg-neutral-200 transition-colors uppercase tracking-widest font-medium flex items-center gap-2">
@@ -732,8 +732,10 @@ const ProjectsPage = () => {
         </button>
       </header>
 
-      {/* Proyectos/Colaboraciones */}
+      {/* Colaboraciones */}
       <section className="mb-10">
+        <h2 className="text-2xl font-serif font-light text-white mb-6">Colaboraciones</h2>
+
         {COLLABORATIONS.map(item => (
           <div
             key={item.id}
@@ -768,17 +770,19 @@ const ProjectsPage = () => {
         ))}
       </section>
 
-      {/* Eventos/Encuentros */}
+      {/* Encuentros */}
       <section>
+        <h2 className="text-2xl font-serif font-light text-white mb-6">Encuentros</h2>
+
         <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 scrollbar-hide">
           {EVENTS_DATA.map(event => (
             <div
               key={event.id}
-              className="flex-shrink-0 w-[200px] bg-neutral-900/30 border border-neutral-800/50 rounded-lg p-5 cursor-pointer hover:bg-neutral-900/50 hover:border-neutral-700 transition-all group"
+              className="flex-shrink-0 w-[220px] bg-neutral-900/30 border border-neutral-800/50 rounded-lg p-5 cursor-pointer hover:bg-neutral-900/50 hover:border-neutral-700 transition-all group"
             >
               <div className="flex items-start justify-between mb-6">
                 <div>
-                  <span className="text-3xl font-serif text-amber-100/90 font-light">{event.day}</span>
+                  <span className="text-3xl font-serif text-white font-light">{event.day}</span>
                   <span className="text-[10px] text-neutral-500 uppercase tracking-wider block mt-1">{event.month}</span>
                 </div>
                 <div className="w-8 h-8 rounded-full border border-neutral-700 flex items-center justify-center group-hover:bg-white group-hover:border-white transition-all">
@@ -786,12 +790,12 @@ const ProjectsPage = () => {
                 </div>
               </div>
 
-              <h4 className="text-white font-light text-sm mb-2 line-clamp-2 group-hover:text-white/90">{event.title}</h4>
+              <h4 className="text-white font-light text-sm mb-3 line-clamp-2 group-hover:text-white/90">{event.title}</h4>
 
-              <div className="flex items-center gap-2 text-neutral-600 text-xs">
+              <div className="flex items-center gap-1 text-neutral-500 text-xs mb-1">
                 <span>📍 {event.location}</span>
               </div>
-              <div className="flex items-center gap-1 text-neutral-500 text-xs mt-2">
+              <div className="flex items-center gap-1 text-neutral-500 text-xs">
                 <User size={10} />
                 <span>{event.attendees}</span>
               </div>
