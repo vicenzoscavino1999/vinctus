@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Search,
@@ -10,7 +10,6 @@ import {
   BookOpen,
   Briefcase,
   ArrowRight,
-  Filter,
   Loader
 } from 'lucide-react';
 
@@ -42,7 +41,7 @@ import {
 
 // Logo component
 const Logo = () => (
-  <div className="w-14 h-14 flex items-center justify-center mb-16 opacity-90 hover:opacity-100 transition-opacity cursor-pointer">
+  <div className="w-14 h-14 flex items-center justify-center mb-16 opacity-90 hover:opacity-100 transition-opacity">
     <img src="/image_fdd620.png" alt="Logo" className="w-full h-full object-contain" />
   </div>
 );
@@ -66,11 +65,11 @@ const Sidebar = ({ activeTab, onNavigate }) => (
 // Mobile navigation
 const MobileNav = ({ activeTab, onNavigate }) => (
   <div className="md:hidden fixed bottom-0 w-full bg-[#0a0a0a]/95 backdrop-blur-md border-t border-neutral-900 flex justify-around px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] z-50">
-    <button onClick={() => onNavigate('/discover')} className={`p-2.5 ${activeTab === 'discover' ? 'text-white' : 'text-neutral-600'}`}><Compass size={24} strokeWidth={1} /></button>
-    <button onClick={() => onNavigate('/feed')} className={`p-2.5 ${activeTab === 'feed' ? 'text-white' : 'text-neutral-600'}`}><Hash size={24} strokeWidth={1} /></button>
-    <button onClick={() => onNavigate('/projects')} className={`p-2.5 ${activeTab === 'projects' ? 'text-white' : 'text-neutral-600'}`}><Briefcase size={24} strokeWidth={1} /></button>
-    <button onClick={() => onNavigate('/library')} className={`p-2.5 ${activeTab === 'library' ? 'text-white' : 'text-neutral-600'}`}><BookOpen size={24} strokeWidth={1} /></button>
-    <button onClick={() => onNavigate('/profile')} className={`p-2.5 ${activeTab === 'profile' ? 'text-white' : 'text-neutral-600'}`}><User size={24} strokeWidth={1} /></button>
+    <button onClick={() => onNavigate('/discover')} aria-label="Descubrir" className={`p-2.5 ${activeTab === 'discover' ? 'text-white' : 'text-neutral-600'}`}><Compass size={24} strokeWidth={1} /></button>
+    <button onClick={() => onNavigate('/feed')} aria-label="Diálogos" className={`p-2.5 ${activeTab === 'feed' ? 'text-white' : 'text-neutral-600'}`}><Hash size={24} strokeWidth={1} /></button>
+    <button onClick={() => onNavigate('/projects')} aria-label="Conexiones" className={`p-2.5 ${activeTab === 'projects' ? 'text-white' : 'text-neutral-600'}`}><Briefcase size={24} strokeWidth={1} /></button>
+    <button onClick={() => onNavigate('/library')} aria-label="Colecciones" className={`p-2.5 ${activeTab === 'library' ? 'text-white' : 'text-neutral-600'}`}><BookOpen size={24} strokeWidth={1} /></button>
+    <button onClick={() => onNavigate('/profile')} aria-label="Perfil" className={`p-2.5 ${activeTab === 'profile' ? 'text-white' : 'text-neutral-600'}`}><User size={24} strokeWidth={1} /></button>
   </div>
 );
 // Datos para publicaciones
@@ -362,6 +361,11 @@ const CategoryPage = () => {
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState('live');
   const [selectedSubgroup, setSelectedSubgroup] = useState(null);
+
+  // Reset selectedSubgroup when category changes
+  useEffect(() => {
+    setSelectedSubgroup(null);
+  }, [categoryId]);
 
   const category = CATEGORIES.find(c => c.id === categoryId);
 
@@ -1071,8 +1075,10 @@ const AppLayout = () => {
     if (location === '/feed') return 'feed';
     if (location === '/projects') return 'projects';
     if (location === '/library') return 'library';
-    if (location === '/events') return 'events';
     if (location === '/profile') return 'profile';
+    if (location === '/notifications') return 'profile';
+    if (location === '/messages') return 'feed';
+    if (location.startsWith('/user/')) return 'profile';
     return 'discover';
   };
 
@@ -1094,11 +1100,12 @@ const AppLayout = () => {
               <Route path="/feed" element={<FeedPage />} />
               <Route path="/projects" element={<ProjectsPage />} />
               <Route path="/library" element={<LibraryPage />} />
-              <Route path="/events" element={<EventsPage />} />
+
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/user/:userId" element={<UserProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/messages" element={<MessagesPage />} />
+              <Route path="*" element={<DiscoverPage />} />
             </Routes>
           </div>
         </main>
