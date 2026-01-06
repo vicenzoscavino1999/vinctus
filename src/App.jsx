@@ -10,7 +10,8 @@ import {
   BookOpen,
   Briefcase,
   ArrowRight,
-  Loader
+  Loader,
+  Check
 } from 'lucide-react';
 
 // Import components
@@ -25,6 +26,7 @@ import {
   Header,
   UserProfilePage,
   LoginScreen,
+  OnboardingFlow,
   SkeletonContentGrid,
   EmptyState,
   ErrorState
@@ -134,7 +136,18 @@ const DiscoverPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchQuery = searchParams.get('q') || '';
-  const [savedCategories, setSavedCategories] = useState([]);
+
+  // Persist saved categories in localStorage
+  const [savedCategories, setSavedCategories] = useState(() => {
+    const saved = localStorage.getItem('vinctus_saved_categories');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Persist joined groups in localStorage
+  const [joinedGroups, setJoinedGroups] = useState(() => {
+    const saved = localStorage.getItem('vinctus_joined_groups');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   const filteredCategories = useMemo(() => {
     if (!searchQuery) return CATEGORIES;
@@ -156,9 +169,23 @@ const DiscoverPage = () => {
   };
 
   const toggleSave = (catId) => {
-    setSavedCategories(prev =>
-      prev.includes(catId) ? prev.filter(id => id !== catId) : [...prev, catId]
-    );
+    setSavedCategories(prev => {
+      const newSaved = prev.includes(catId)
+        ? prev.filter(id => id !== catId)
+        : [...prev, catId];
+      localStorage.setItem('vinctus_saved_categories', JSON.stringify(newSaved));
+      return newSaved;
+    });
+  };
+
+  const toggleJoinGroup = (groupId) => {
+    setJoinedGroups(prev => {
+      const newJoined = prev.includes(groupId)
+        ? prev.filter(id => id !== groupId)
+        : [...prev, groupId];
+      localStorage.setItem('vinctus_joined_groups', JSON.stringify(newJoined));
+      return newJoined;
+    });
   };
 
   return (
@@ -249,9 +276,18 @@ const DiscoverPage = () => {
                     {group.members} miembros, {group.postsPerWeek} post ta/ st semana
                   </p>
                 </div>
-                <button className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 text-neutral-300 rounded text-xs hover:bg-neutral-700 transition-colors">
-                  <BookOpen size={12} />
-                  Unirme
+                <button
+                  onClick={() => toggleJoinGroup(group.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-all btn-premium press-scale ${joinedGroups.includes(group.id)
+                    ? 'bg-brand-gold text-black'
+                    : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                    }`}
+                >
+                  {joinedGroups.includes(group.id) ? (
+                    <><Check size={12} /> Unido</>
+                  ) : (
+                    <><BookOpen size={12} /> Unirme</>
+                  )}
                 </button>
               </div>
 
@@ -1120,14 +1156,26 @@ const AppLayout = () => {
 // App with Router and Authentication
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    return !localStorage.getItem('vinctus_onboarding_complete');
+  });
 
   const handleLogin = () => {
     setIsAuthenticated(true);
   };
 
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
+  };
+
   // Show login screen if not authenticated
   if (!isAuthenticated) {
     return <LoginScreen onLogin={handleLogin} />;
+  }
+
+  // Show onboarding if not completed
+  if (showOnboarding) {
+    return <OnboardingFlow onComplete={handleOnboardingComplete} />;
   }
 
   return (

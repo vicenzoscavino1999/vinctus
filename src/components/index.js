@@ -10,4 +10,5 @@ export { default as ApiContentCard } from './ApiContentCard';
 export { default as Header } from './Header';
 export { default as UserProfilePage } from './UserProfilePage';
 export { default as LoginScreen } from './LoginScreen';
+export { default as OnboardingFlow } from './OnboardingFlow';
 export { SkeletonCard, SkeletonContentGrid, EmptyState, ErrorState } from './SkeletonLoader';
