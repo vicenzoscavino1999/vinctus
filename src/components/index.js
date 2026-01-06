@@ -14,4 +14,5 @@ export { default as OnboardingFlow } from './OnboardingFlow';
 export { default as GroupDetailPage } from './GroupDetailPage';
 export { default as PostDetailPage } from './PostDetailPage';
 export { default as SearchFilters } from './SearchFilters';
+export { default as ErrorBoundary } from './ErrorBoundary';
 export { SkeletonCard, SkeletonContentGrid, EmptyState, ErrorState } from './SkeletonLoader';
