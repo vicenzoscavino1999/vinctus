@@ -23,7 +23,9 @@ import {
   CollaborationCard,
   LibraryItem,
   EventCard,
-  ApiContentCard
+  ApiContentCard,
+  Header,
+  UserProfilePage
 } from './components';
 
 // Import hooks
@@ -217,8 +219,8 @@ const CategoryPage = () => {
                 key={group.id}
                 onClick={() => setSelectedSubgroup(group)}
                 className={`text-xs px-4 py-2 rounded-full border transition-colors ${(selectedSubgroup?.id || category.subgroups[0].id) === group.id
-                    ? 'bg-white text-black border-white'
-                    : 'border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-white'
+                  ? 'bg-white text-black border-white'
+                  : 'border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-white'
                   }`}
               >
                 {group.name}
@@ -397,10 +399,72 @@ const EventsPage = () => (
 );
 
 // Profile page (placeholder)
+// Notifications page (placeholder)
+const NotificationsPage = () => (
+  <div className="page-profile pt-10 max-w-2xl mx-auto">
+    <h1 className="text-3xl font-serif font-light text-white mb-8">Notificaciones</h1>
+    <div className="space-y-4">
+      <div className="p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors">
+        <p className="text-neutral-400"><span className="text-white">Dr. Elena R.</span> comentó en tu publicación</p>
+        <span className="text-neutral-600 text-xs">Hace 2 horas</span>
+      </div>
+      <div className="p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors">
+        <p className="text-neutral-400"><span className="text-white">Marco V.</span> te mencionó en un debate</p>
+        <span className="text-neutral-600 text-xs">Hace 5 horas</span>
+      </div>
+      <div className="p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors">
+        <p className="text-neutral-400">Tu ensayo recibió <span className="text-white">15 nuevas reacciones</span></p>
+        <span className="text-neutral-600 text-xs">Ayer</span>
+      </div>
+    </div>
+  </div>
+);
+
+// Messages page (placeholder)
+const MessagesPage = () => (
+  <div className="page-profile pt-10 max-w-2xl mx-auto">
+    <h1 className="text-3xl font-serif font-light text-white mb-8">Mensajes</h1>
+    <div className="space-y-2">
+      <div className="flex items-center gap-4 p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors cursor-pointer">
+        <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400">M</div>
+        <div className="flex-1">
+          <p className="text-white">Marco V.</p>
+          <p className="text-neutral-500 text-sm truncate">¿Viste el nuevo paper sobre jazz modal?</p>
+        </div>
+        <span className="text-neutral-600 text-xs">2h</span>
+      </div>
+      <div className="flex items-center gap-4 p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors cursor-pointer">
+        <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400">E</div>
+        <div className="flex-1">
+          <p className="text-white">Dr. Elena R.</p>
+          <p className="text-neutral-500 text-sm truncate">Sobre la colaboración del paper...</p>
+        </div>
+        <span className="text-neutral-600 text-xs">1d</span>
+      </div>
+    </div>
+  </div>
+);
+
+// My Profile page
 const ProfilePage = () => (
-  <div className="page-profile flex flex-col items-center justify-center h-[60vh] text-neutral-600">
-    <Feather size={32} strokeWidth={0.5} className="mb-4 opacity-50" />
-    <p className="font-serif italic text-lg">Perfil - Próximamente</p>
+  <div className="page-profile pt-10 max-w-4xl mx-auto">
+    <header className="flex items-start justify-between mb-12 pb-8 border-b border-neutral-900">
+      <div className="flex items-center gap-6">
+        <div className="w-24 h-24 rounded-full bg-neutral-800 flex items-center justify-center text-3xl font-serif text-neutral-400">V</div>
+        <div>
+          <h1 className="text-4xl font-serif font-light text-white mb-2">Vicenzo S.</h1>
+          <p className="text-neutral-400 mb-1">Desarrollador & Curioso</p>
+          <p className="text-neutral-600 text-sm">Lima, Perú</p>
+        </div>
+      </div>
+      <button className="px-5 py-2.5 border border-neutral-700 text-white hover:bg-neutral-900 transition-colors text-sm">
+        Editar Perfil
+      </button>
+    </header>
+    <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
+      <Feather size={32} strokeWidth={0.5} className="mx-auto mb-4 text-neutral-600" />
+      <p className="text-neutral-500 font-light italic">Personaliza tu perfil para comenzar</p>
+    </div>
   </div>
 );
 
@@ -427,6 +491,7 @@ const AppLayout = () => {
       <div className="flex h-screen relative z-10">
         <Sidebar activeTab={getActiveTab()} onNavigate={navigate} />
         <MobileNav activeTab={getActiveTab()} onNavigate={navigate} />
+        <Header />
 
         <main className="flex-1 md:ml-20 p-6 md:p-16 overflow-y-auto scrollbar-hide">
           <div className="max-w-5xl mx-auto">
@@ -439,6 +504,9 @@ const AppLayout = () => {
               <Route path="/library" element={<LibraryPage />} />
               <Route path="/events" element={<EventsPage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/user/:userId" element={<UserProfilePage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/messages" element={<MessagesPage />} />
             </Routes>
           </div>
         </main>

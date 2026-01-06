@@ -32,3 +32,6 @@ pnpm-debug.log*
 
 # PWA generated files
 dev-dist/
+
+.vercel
+.env*.local
