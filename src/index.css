@@ -464,3 +464,20 @@ body {
 .icon-rotate-hover:hover {
   transform: rotate(15deg);
 }
+
+/* Slide up animation for overlays */
+.animate-slide-up {
+  animation: slideUp 0.3s var(--ease-premium) forwards;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

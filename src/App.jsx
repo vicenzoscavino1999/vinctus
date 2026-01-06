@@ -11,7 +11,8 @@ import {
   Briefcase,
   ArrowRight,
   Loader,
-  Check
+  Check,
+  Filter
 } from 'lucide-react';
 
 // Import components
@@ -27,6 +28,9 @@ import {
   UserProfilePage,
   LoginScreen,
   OnboardingFlow,
+  GroupDetailPage,
+  PostDetailPage,
+  SearchFilters,
   SkeletonContentGrid,
   EmptyState,
   ErrorState
@@ -149,6 +153,10 @@ const DiscoverPage = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // Search filters state
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({ category: null, sortBy: 'relevance' });
+
   const filteredCategories = useMemo(() => {
     if (!searchQuery) return CATEGORIES;
     const query = searchQuery.toLowerCase();
@@ -199,18 +207,32 @@ const DiscoverPage = () => {
 
         {/* Barra de búsqueda */}
         <div className="w-full max-w-lg mt-4">
-          <div className="relative bg-neutral-900/50 border border-neutral-800 rounded-full px-6 py-3">
+          <div className="relative bg-neutral-900/50 border border-neutral-800 rounded-full px-6 py-3 flex items-center gap-3">
+            <button
+              onClick={() => setShowFilters(true)}
+              className={`p-1 rounded transition-colors ${filters.category || filters.sortBy !== 'relevance' ? 'text-brand-gold' : 'text-neutral-600 hover:text-white'}`}
+            >
+              <Filter size={18} />
+            </button>
             <input
               type="text"
               placeholder="Buscar intereses o grupos..."
               value={searchQuery}
               onChange={handleSearch}
-              className="w-full bg-transparent text-white text-center focus:outline-none placeholder:text-neutral-600 font-light text-sm"
+              className="flex-1 bg-transparent text-white text-center focus:outline-none placeholder:text-neutral-600 font-light text-sm"
             />
-            <Search className="absolute right-5 top-1/2 -translate-y-1/2 text-neutral-600" size={18} />
+            <Search className="text-neutral-600" size={18} />
           </div>
         </div>
       </header>
+
+      {/* Search Filters Overlay */}
+      <SearchFilters
+        isOpen={showFilters}
+        onClose={() => setShowFilters(false)}
+        filters={filters}
+        onApply={setFilters}
+      />
 
       {/* Tendencias esta semana */}
       <section className="mb-12">
@@ -1144,6 +1166,8 @@ const AppLayout = () => {
               <Route path="/user/:userId" element={<UserProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/messages" element={<MessagesPage />} />
+              <Route path="/group/:groupId" element={<GroupDetailPage />} />
+              <Route path="/post/:postId" element={<PostDetailPage />} />
               <Route path="*" element={<DiscoverPage />} />
             </Routes>
           </div>
