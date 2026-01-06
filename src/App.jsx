@@ -25,7 +25,8 @@ import {
   EventCard,
   ApiContentCard,
   Header,
-  UserProfilePage
+  UserProfilePage,
+  LoginScreen
 } from './components';
 
 // Import hooks
@@ -545,8 +546,19 @@ const AppLayout = () => {
   );
 };
 
-// App with Router
+// App with Router and Authentication
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  const handleLogin = () => {
+    setIsAuthenticated(true);
+  };
+
+  // Show login screen if not authenticated
+  if (!isAuthenticated) {
+    return <LoginScreen onLogin={handleLogin} />;
+  }
+
   return (
     <BrowserRouter>
       <AppLayout />
