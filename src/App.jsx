@@ -523,54 +523,183 @@ const CategoryPage = () => {
   );
 };
 
-// Feed page with search
+// Feed page - Diálogos
 const FeedPage = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const searchQuery = searchParams.get('q') || '';
+  const [activeTab, setActiveTab] = useState('grupos');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredPosts = useMemo(() => {
-    if (!searchQuery) return FEED_POSTS;
-    const query = searchQuery.toLowerCase();
-    return FEED_POSTS.filter(post =>
-      post.title.toLowerCase().includes(query) ||
-      post.content.toLowerCase().includes(query) ||
-      post.author.toLowerCase().includes(query) ||
-      post.group.toLowerCase().includes(query)
-    );
-  }, [searchQuery]);
-
-  const handleSearch = (e) => {
-    const value = e.target.value;
-    if (value) {
-      setSearchParams({ q: value });
-    } else {
-      setSearchParams({});
+  // Datos de conversaciones de grupos
+  const CONVERSATIONS = [
+    {
+      id: 1,
+      name: 'Exploradores Cuánticos',
+      type: 'grupo',
+      icon: '⚛️',
+      lastMessage: 'Anaestio clania urat 1 es',
+      time: '4 min',
+      unread: 2
+    },
+    {
+      id: 2,
+      name: 'Documentales HispaMundo',
+      type: 'grupo',
+      icon: '▶️',
+      lastMessage: 'Marco: Ha salido un nuevo...',
+      time: '1 h',
+      unread: 5
+    },
+    {
+      id: 3,
+      name: 'IA y Futuro',
+      type: 'grupo',
+      icon: '⚛️',
+      lastMessage: 'Álvaro: Increíble! Puedes pas...',
+      time: '10 abr',
+      unread: 8
+    },
+    {
+      id: 4,
+      name: 'Música: Salsa',
+      type: 'grupo',
+      icon: '🎵',
+      lastMessage: 'Adriana: Nuevo tema para...',
+      time: '4 abr',
+      unread: 1
+    },
+    {
+      id: 5,
+      name: 'Astronomía & Cosmos',
+      type: 'grupo',
+      icon: '🌌',
+      lastMessage: 'Reseña: Guía de Observació...',
+      time: '1 abr',
+      unread: 0
+    },
+    {
+      id: 6,
+      name: 'Papajes y Sabores',
+      type: 'grupo',
+      icon: '🥖',
+      lastMessage: 'Eric: Receta fácil para hornear...',
+      time: '14 abr',
+      unread: 1
     }
-  };
+  ];
+
+  // Datos de conversaciones privadas
+  const PRIVATE_CONVERSATIONS = [
+    {
+      id: 1,
+      name: 'Dr. Elena R.',
+      lastMessage: 'Sobre el paper de...',
+      time: '2 h',
+      unread: 1
+    },
+    {
+      id: 2,
+      name: 'Marco V.',
+      lastMessage: '¿Viste el nuevo paper?',
+      time: '1 día',
+      unread: 0
+    }
+  ];
+
+  const currentConversations = activeTab === 'grupos' ? CONVERSATIONS : PRIVATE_CONVERSATIONS;
+
+  const filteredConversations = currentConversations.filter(conv =>
+    conv.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
-    <div className="page-feed max-w-3xl mx-auto pt-10">
-      <header className="mb-16 text-center">
-        <span className="text-xs font-medium tracking-[0.2em] text-neutral-500 uppercase">En Conversación</span>
-        <h2 className="text-3xl md:text-4xl font-serif font-light text-white mt-4">Diálogos Recientes</h2>
-        <div className="relative mt-8 w-full max-w-md mx-auto group">
+    <div className="page-feed pb-32">
+      {/* Header */}
+      <header className="mb-8 pt-6 md:pt-10 text-center">
+        <span className="text-[10px] font-medium tracking-[0.3em] text-neutral-500 uppercase mb-2 block">EN CONVERSACIÓN</span>
+        <h1 className="text-4xl md:text-5xl font-serif font-light text-white tracking-tight">
+          Diálogos
+        </h1>
+      </header>
+
+      {/* Barra de búsqueda */}
+      <div className="mb-6">
+        <div className="relative bg-neutral-900/50 border border-neutral-800 rounded-full px-6 py-3">
           <input
             type="text"
-            placeholder="Buscar publicaciones..."
+            placeholder="Buscar mensajes o grupos..."
             value={searchQuery}
-            onChange={handleSearch}
-            className="w-full bg-transparent border-b border-neutral-800 text-white text-center py-4 focus:outline-none focus:border-neutral-500 transition-colors placeholder:text-neutral-700 font-light"
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-transparent text-white text-center focus:outline-none placeholder:text-neutral-600 font-light text-sm"
           />
-          <Search className="absolute right-0 top-1/2 -translate-y-1/2 text-neutral-700 group-hover:text-neutral-500 transition-colors" size={16} />
+          <Search className="absolute right-5 top-1/2 -translate-y-1/2 text-neutral-600" size={18} />
         </div>
-      </header>
-      {filteredPosts.length > 0 ? (
-        filteredPosts.map(post => <PostCard key={post.id} post={post} />)
-      ) : (
-        <div className="py-20 text-center">
-          <p className="text-neutral-500 font-light italic">No se encontraron publicaciones para "{searchQuery}"</p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex justify-center mb-8">
+        <div className="inline-flex bg-neutral-900/50 border border-neutral-800 rounded-full p-1">
+          <button
+            onClick={() => setActiveTab('grupos')}
+            className={`px-6 py-2 rounded-full text-sm font-light transition-all ${activeTab === 'grupos'
+                ? 'bg-neutral-800 text-white'
+                : 'text-neutral-500 hover:text-neutral-300'
+              }`}
+          >
+            Grupos
+          </button>
+          <button
+            onClick={() => setActiveTab('privados')}
+            className={`px-6 py-2 rounded-full text-sm font-light transition-all ${activeTab === 'privados'
+                ? 'bg-neutral-800 text-white'
+                : 'text-neutral-500 hover:text-neutral-300'
+              }`}
+          >
+            Privados
+          </button>
         </div>
-      )}
+      </div>
+
+      {/* Lista de conversaciones */}
+      <div className="space-y-2">
+        {filteredConversations.map(conv => (
+          <div
+            key={conv.id}
+            className="flex items-center gap-4 bg-neutral-900/20 border border-neutral-800/50 rounded-lg p-4 cursor-pointer hover:bg-neutral-900/40 hover:border-neutral-700 transition-all group"
+          >
+            {/* Icon */}
+            <div className="w-12 h-12 rounded-full bg-neutral-800/80 flex items-center justify-center flex-shrink-0 text-xl">
+              {conv.icon || conv.name.charAt(0)}
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="text-white font-medium text-base truncate">{conv.name}</h3>
+                {activeTab === 'grupos' && (
+                  <span className="text-[9px] px-2 py-0.5 bg-neutral-800 text-neutral-400 rounded uppercase tracking-wider flex items-center gap-1">
+                    <User size={8} />
+                    Grupo
+                  </span>
+                )}
+              </div>
+              <p className="text-neutral-500 text-sm truncate">{conv.lastMessage}</p>
+            </div>
+
+            {/* Time and unread badge */}
+            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+              <div className="flex items-center gap-1 text-neutral-500 text-xs">
+                <span>{conv.time}</span>
+                <ArrowRight size={12} className="text-neutral-600" />
+              </div>
+              {conv.unread > 0 && (
+                <span className="w-5 h-5 rounded-full bg-amber-600 text-white text-[10px] font-medium flex items-center justify-center">
+                  {conv.unread}
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
