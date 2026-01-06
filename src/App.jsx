@@ -165,9 +165,9 @@ const DiscoverPage = () => {
     <div className="page-discover pb-32">
       {/* Header */}
       <header className="mb-12 pt-6 md:pt-10 flex flex-col items-center text-center">
-        <span className="text-[10px] font-medium tracking-[0.3em] text-neutral-500 uppercase mb-4">DESCUBRIR</span>
-        <h1 className="text-3xl md:text-5xl font-serif font-thin text-white mb-8 tracking-tight">
-          Curaduría de <span className="text-neutral-500 italic">Intereses</span>
+        <span className="text-caption font-medium tracking-[0.3em] text-neutral-500 uppercase mb-4">DESCUBRIR</span>
+        <h1 className="text-display-sm md:text-display-md font-display font-normal text-white mb-8 tracking-tight">
+          Curaduría de <span className="text-brand-gold italic">Intereses</span>
         </h1>
 
         {/* Barra de búsqueda */}
@@ -187,15 +187,15 @@ const DiscoverPage = () => {
 
       {/* Tendencias esta semana */}
       <section className="mb-12">
-        <h2 className="text-lg font-light text-white mb-6">
-          <span className="text-amber-200/80">Tendencias</span> esta semana
+        <h2 className="text-heading-lg font-display font-normal text-white mb-6">
+          <span className="text-brand-gold">Tendencias</span> esta semana
         </h2>
 
         <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 scrollbar-hide">
           {filteredCategories.map(cat => (
             <div
               key={cat.id}
-              className="flex-shrink-0 w-[280px] bg-[#1a1916] border border-neutral-800/50 rounded-lg p-5 cursor-pointer hover:border-neutral-700 transition-all group"
+              className="flex-shrink-0 w-[280px] bg-surface-overlay border border-neutral-800/50 rounded-card p-5 cursor-pointer card-premium"
               onClick={() => navigate(`/category/${cat.id}`)}
             >
               <div className="flex items-start justify-between mb-4">
@@ -620,8 +620,8 @@ const FeedPage = () => {
     <div className="page-feed pb-32">
       {/* Header */}
       <header className="mb-8 pt-6 md:pt-10 text-center">
-        <span className="text-[10px] font-medium tracking-[0.3em] text-neutral-500 uppercase mb-2 block">EN CONVERSACIÓN</span>
-        <h1 className="text-4xl md:text-5xl font-serif font-light text-white tracking-tight">
+        <span className="text-caption font-medium tracking-[0.3em] text-neutral-500 uppercase mb-2 block">EN CONVERSACIÓN</span>
+        <h1 className="text-display-sm md:text-display-md font-display font-normal text-white tracking-tight">
           Diálogos
         </h1>
       </header>
@@ -697,7 +697,7 @@ const FeedPage = () => {
                 <ArrowRight size={12} className="text-neutral-600" />
               </div>
               {conv.unread > 0 && (
-                <span className="w-5 h-5 rounded-full bg-amber-600 text-white text-[10px] font-medium flex items-center justify-center">
+                <span className="w-5 h-5 rounded-full bg-brand-gold text-black text-caption font-medium flex items-center justify-center">
                   {conv.unread}
                 </span>
               )}
@@ -725,21 +725,21 @@ const ProjectsPage = () => {
       {/* Header */}
       <header className="mb-10 pt-6 md:pt-10 flex flex-col md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-4xl md:text-5xl font-serif font-light text-white mb-3 tracking-tight">
+          <h1 className="text-display-sm md:text-display-md font-display font-normal text-white mb-3 tracking-tight">
             Conexiones
           </h1>
-          <p className="text-neutral-500 font-light text-sm">
+          <p className="text-neutral-500 font-light text-body-sm">
             Conecta. Colabora. Encuentra.
           </p>
         </div>
-        <button className="mt-6 md:mt-0 text-xs bg-white text-black px-6 py-3 hover:bg-neutral-200 transition-colors uppercase tracking-widest font-medium flex items-center gap-2">
+        <button className="mt-6 md:mt-0 text-xs bg-brand-gold text-black px-6 py-3 rounded-button btn-premium uppercase tracking-widest font-medium flex items-center gap-2">
           + PUBLICAR PROYECTO
         </button>
       </header>
 
       {/* Colaboraciones */}
       <section className="mb-10">
-        <h2 className="text-2xl font-serif font-light text-white mb-6">Colaboraciones</h2>
+        <h2 className="text-heading-lg font-display font-normal text-white mb-6">Colaboraciones</h2>
 
         {COLLABORATIONS.map(item => (
           <div
