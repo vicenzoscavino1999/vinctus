@@ -27,15 +27,18 @@ export async function fetchArxivPapers(category = 'physics', maxResults = 10) {
         const xml = parser.parseFromString(text, 'text/xml');
         const entries = xml.querySelectorAll('entry');
 
-        return Array.from(entries).map(entry => ({
-            id: entry.querySelector('id')?.textContent?.split('/abs/')[1] || '',
-            title: entry.querySelector('title')?.textContent?.trim().replace(/\s+/g, ' ') || '',
-            summary: entry.querySelector('summary')?.textContent?.trim().substring(0, 200) + '...' || '',
-            authors: Array.from(entry.querySelectorAll('author name')).map(a => a.textContent).slice(0, 3).join(', '),
-            published: entry.querySelector('published')?.textContent?.split('T')[0] || '',
-            link: entry.querySelector('id')?.textContent || '',
-            type: 'Paper'
-        }));
+        return Array.from(entries).map(entry => {
+            const summary = entry.querySelector('summary')?.textContent?.trim();
+            return {
+                id: entry.querySelector('id')?.textContent?.split('/abs/')[1] || '',
+                title: entry.querySelector('title')?.textContent?.trim().replace(/\s+/g, ' ') || 'Sin título',
+                summary: summary ? summary.substring(0, 200) + '...' : 'Sin resumen disponible',
+                authors: Array.from(entry.querySelectorAll('author name')).map(a => a.textContent).slice(0, 3).join(', ') || 'Anónimo',
+                published: entry.querySelector('published')?.textContent?.split('T')[0] || '',
+                link: entry.querySelector('id')?.textContent || '',
+                type: 'Paper'
+            };
+        });
     } catch (error) {
         console.error('arXiv API error:', error);
         return [];
@@ -50,14 +53,17 @@ export async function fetchWikipediaArticles(topic = 'Ancient_history', limit = 
         const response = await fetch(url);
         const data = await response.json();
 
-        return (data.pages || []).slice(0, limit).map(page => ({
-            id: page.pageid,
-            title: page.titles?.normalized || page.title,
-            summary: page.extract?.substring(0, 200) + '...' || '',
-            thumbnail: page.thumbnail?.source || null,
-            link: `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title)}`,
-            type: 'Artículo'
-        }));
+        return (data.pages || []).slice(0, limit).map(page => {
+            const extract = page.extract;
+            return {
+                id: page.pageid,
+                title: page.titles?.normalized || page.title || 'Sin título',
+                summary: extract ? extract.substring(0, 200) + '...' : 'Sin resumen disponible',
+                thumbnail: page.thumbnail?.source || null,
+                link: `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title || '')}`,
+                type: 'Artículo'
+            };
+        });
     } catch (error) {
         console.error('Wikipedia API error:', error);
         return [];

@@ -66,12 +66,12 @@ const Sidebar = ({ activeTab, onNavigate }) => (
 
 // Mobile navigation
 const MobileNav = ({ activeTab, onNavigate }) => (
-  <div className="md:hidden fixed bottom-0 w-full bg-[#0a0a0a]/90 backdrop-blur-md border-t border-neutral-900 flex justify-between px-6 py-4 z-50 overflow-x-auto">
-    <button onClick={() => onNavigate('/discover')} className={activeTab === 'discover' ? 'text-white' : 'text-neutral-600 p-2'}><Compass size={24} strokeWidth={1} /></button>
-    <button onClick={() => onNavigate('/feed')} className={activeTab === 'feed' ? 'text-white' : 'text-neutral-600 p-2'}><Hash size={24} strokeWidth={1} /></button>
-    <button onClick={() => onNavigate('/projects')} className={activeTab === 'projects' ? 'text-white' : 'text-neutral-600 p-2'}><Briefcase size={24} strokeWidth={1} /></button>
-    <button onClick={() => onNavigate('/library')} className={activeTab === 'library' ? 'text-white' : 'text-neutral-600 p-2'}><BookOpen size={24} strokeWidth={1} /></button>
-    <button onClick={() => onNavigate('/profile')} className={activeTab === 'profile' ? 'text-white' : 'text-neutral-600 p-2'}><User size={24} strokeWidth={1} /></button>
+  <div className="md:hidden fixed bottom-0 w-full bg-[#0a0a0a]/95 backdrop-blur-md border-t border-neutral-900 flex justify-around px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] z-50">
+    <button onClick={() => onNavigate('/discover')} className={`p-2.5 ${activeTab === 'discover' ? 'text-white' : 'text-neutral-600'}`}><Compass size={24} strokeWidth={1} /></button>
+    <button onClick={() => onNavigate('/feed')} className={`p-2.5 ${activeTab === 'feed' ? 'text-white' : 'text-neutral-600'}`}><Hash size={24} strokeWidth={1} /></button>
+    <button onClick={() => onNavigate('/projects')} className={`p-2.5 ${activeTab === 'projects' ? 'text-white' : 'text-neutral-600'}`}><Briefcase size={24} strokeWidth={1} /></button>
+    <button onClick={() => onNavigate('/library')} className={`p-2.5 ${activeTab === 'library' ? 'text-white' : 'text-neutral-600'}`}><BookOpen size={24} strokeWidth={1} /></button>
+    <button onClick={() => onNavigate('/profile')} className={`p-2.5 ${activeTab === 'profile' ? 'text-white' : 'text-neutral-600'}`}><User size={24} strokeWidth={1} /></button>
   </div>
 );
 

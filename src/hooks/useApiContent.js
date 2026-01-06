@@ -38,6 +38,17 @@ export function useApiContent(apiSource, query, limit = 8) {
                     case 'inaturalist':
                         result = await fetchNatureObservations(query, limit);
                         break;
+                    case 'lastfm':
+                        // Mock data for music - Last.fm requires API key
+                        result = [
+                            { id: 1, title: 'Clair de Lune', artist: 'Claude Debussy', type: 'Clásica', link: 'https://www.last.fm/music/Claude+Debussy' },
+                            { id: 2, title: 'Take Five', artist: 'Dave Brubeck', type: 'Jazz', link: 'https://www.last.fm/music/Dave+Brubeck' },
+                            { id: 3, title: 'Bohemian Rhapsody', artist: 'Queen', type: 'Rock', link: 'https://www.last.fm/music/Queen' },
+                            { id: 4, title: 'So What', artist: 'Miles Davis', type: 'Jazz', link: 'https://www.last.fm/music/Miles+Davis' },
+                            { id: 5, title: 'Für Elise', artist: 'Beethoven', type: 'Clásica', link: 'https://www.last.fm/music/Beethoven' },
+                            { id: 6, title: 'Stairway to Heaven', artist: 'Led Zeppelin', type: 'Rock', link: 'https://www.last.fm/music/Led+Zeppelin' }
+                        ];
+                        break;
                     default:
                         result = [];
                 }

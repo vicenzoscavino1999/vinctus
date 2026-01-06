@@ -15,6 +15,8 @@ const ApiContentCard = ({ item, type }) => {
                 return item.link;
             case 'inaturalist':
                 return item.link;
+            case 'lastfm':
+                return item.link;
             default:
                 return item.link || item.url || '#';
         }
@@ -127,6 +129,22 @@ const ApiContentCard = ({ item, type }) => {
                                 <span className="flex items-center"><User size={12} className="mr-1" /> {item.observer}</span>
                                 <ExternalLink size={14} className="text-neutral-600 group-hover:text-white transition-colors" />
                             </div>
+                        </div>
+                    </>
+                );
+
+            case 'lastfm':
+                return (
+                    <>
+                        <div className="flex justify-between items-start mb-2">
+                            <span className="text-[10px] uppercase tracking-widest text-purple-400/80">{item.type}</span>
+                        </div>
+                        <h3 className="text-lg text-neutral-200 font-serif font-light mb-1 group-hover:text-white transition-colors">
+                            {item.title}
+                        </h3>
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs text-neutral-500">{item.artist}</span>
+                            <ExternalLink size={14} className="text-neutral-600 group-hover:text-white transition-colors" />
                         </div>
                     </>
                 );
