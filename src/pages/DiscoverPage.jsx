@@ -43,11 +43,15 @@ const DiscoverPage = () => {
         }
 
         // Apply sorting
-        if (filters.sortBy === 'name') {
+        if (filters.sortBy === 'alphabetical') {
             result = [...result].sort((a, b) => a.label.localeCompare(b.label));
         } else if (filters.sortBy === 'popular') {
             // Sort by number of subgroups as proxy for popularity
             result = [...result].sort((a, b) => b.subgroups.length - a.subgroups.length);
+        } else if (filters.sortBy === 'recent') {
+            // For now, reverse the default order to simulate "recent" 
+            // In production, this would sort by a real timestamp
+            result = [...result].reverse();
         }
 
         return result;
