@@ -1,20 +1,36 @@
 import { Heart, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ExpertBadge from './ExpertBadge';
+import { useAppState } from '../context';
 
 // Helper to convert author name to URL slug
 const authorToSlug = (name) => {
     return name.toLowerCase().replace(/\s+/g, '-').replace(/\./g, '');
 };
 
-// PostCard component with clickable author
+// PostCard component with clickable author and working likes
 const PostCard = ({ post }) => {
     const navigate = useNavigate();
+    const { isPostLiked, toggleLikePost } = useAppState();
+
+    const liked = isPostLiked(post.id);
+    const likeCount = liked ? post.likes + 1 : post.likes;
 
     const handleAuthorClick = (e) => {
         e.stopPropagation();
         const slug = authorToSlug(post.author);
         navigate(`/user/${slug}`);
+    };
+
+    const handleLike = (e) => {
+        e.stopPropagation();
+        toggleLikePost(post.id);
+    };
+
+    const handleComment = (e) => {
+        e.stopPropagation();
+        // Navigate to post detail for comments
+        navigate(`/post/${post.id}`);
     };
 
     return (
@@ -43,11 +59,19 @@ const PostCard = ({ post }) => {
                     {post.isExpert && <ExpertBadge />}
                 </div>
                 <div className="flex items-center space-x-6 text-neutral-600">
-                    <button className="flex items-center space-x-2 hover:text-white transition-colors">
-                        <Heart size={14} /> <span className="text-xs">{post.likes}</span>
+                    <button
+                        onClick={handleLike}
+                        className={`flex items-center space-x-2 transition-colors ${liked ? 'text-red-500' : 'hover:text-white'}`}
+                    >
+                        <Heart size={14} fill={liked ? 'currentColor' : 'none'} />
+                        <span className="text-xs">{likeCount}</span>
                     </button>
-                    <button className="flex items-center space-x-2 hover:text-white transition-colors">
-                        <MessageSquare size={14} /> <span className="text-xs">{post.comments}</span>
+                    <button
+                        onClick={handleComment}
+                        className="flex items-center space-x-2 hover:text-white transition-colors"
+                    >
+                        <MessageSquare size={14} />
+                        <span className="text-xs">{post.comments}</span>
                     </button>
                 </div>
             </div>

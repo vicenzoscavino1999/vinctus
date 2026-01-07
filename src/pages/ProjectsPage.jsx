@@ -1,14 +1,21 @@
-import { User, ArrowRight } from 'lucide-react';
+import { User, ArrowRight, Plus } from 'lucide-react';
 import { COLLABORATIONS } from '../data';
+import { useToast } from '../components/Toast';
 
 const ProjectsPage = () => {
+    const { showToast } = useToast();
+
     // Datos de eventos
     const EVENTS_DATA = [
-        { id: 1, day: '12', month: 'ENE', title: 'Noche de Vinilos & Charla', location: 'Ciudad de México, Roma Norte', attendees: 34 },
-        { id: 2, day: '15', month: 'FEB', title: 'Simposio de Arqueología', location: 'Lima, Barranco', attendees: 120 },
+        { id: 1, day: '12', month: 'ENE', title: 'Noche de Vinilos & Charla', location: 'Ciudad de Mexico, Roma Norte', attendees: 34 },
+        { id: 2, day: '15', month: 'FEB', title: 'Simposio de Arqueologia', location: 'Lima, Barranco', attendees: 120 },
         { id: 3, day: '28', month: 'ENE', title: 'Hackathon AI for Good', location: 'Buenos Aires, Palermo', attendees: 85 },
-        { id: 4, day: '5', month: 'FEB', title: 'Observación de Aves', location: 'Bogotá, Humedal Córdoba', attendees: 25 }
+        { id: 4, day: '5', month: 'FEB', title: 'Observacion de Aves', location: 'Bogota, Humedal Cordoba', attendees: 25 }
     ];
+
+    const handlePublishProject = () => {
+        showToast('Publicar proyectos estara disponible pronto', 'info');
+    };
 
     return (
         <div className="page-projects pb-32">
@@ -22,8 +29,12 @@ const ProjectsPage = () => {
                         Conecta. Colabora. Encuentra.
                     </p>
                 </div>
-                <button className="mt-6 md:mt-0 text-xs bg-brand-gold text-black px-6 py-3 rounded-button btn-premium uppercase tracking-widest font-medium flex items-center gap-2">
-                    + PUBLICAR PROYECTO
+                <button
+                    onClick={handlePublishProject}
+                    className="mt-6 md:mt-0 text-xs bg-brand-gold text-black px-6 py-3 rounded-button btn-premium uppercase tracking-widest font-medium flex items-center gap-2"
+                >
+                    <Plus size={14} />
+                    PUBLICAR PROYECTO
                 </button>
             </header>
 
