@@ -1,25 +1,25 @@
-import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Users, MessageCircle, Calendar, ArrowRight, Check } from 'lucide-react';
+import { ChevronLeft, Users, MessageCircle, ArrowRight, Check } from 'lucide-react';
 import { CATEGORIES } from '../data';
+import { useAppState } from '../context';
 
 // Mock group data (in real app, would fetch from API)
 const GROUPS_DATA = {
     1: {
         id: 1,
-        name: 'Exploradores Cuánticos',
-        description: 'Grupo dedicado a discutir los últimos avances en física cuántica, mecánica cuántica y teorías del universo. Compartimos papers, debates y experimentos mentales.',
+        name: 'Exploradores Cuanticos',
+        description: 'Grupo dedicado a discutir los ultimos avances en fisica cuantica, mecanica cuantica y teorias del universo. Compartimos papers, debates y experimentos mentales.',
         members: 2340,
         postsPerWeek: 45,
         categoryId: 'science',
         icon: '⚛️',
         recentPosts: [
-            { id: 1, title: 'Nuevo experimento de entrelazamiento', author: 'María L.', time: '2h' },
-            { id: 2, title: 'Discusión: Interpretación de Copenhague vs Many Worlds', author: 'Carlos R.', time: '5h' },
+            { id: 1, title: 'Nuevo experimento de entrelazamiento', author: 'Maria L.', time: '2h' },
+            { id: 2, title: 'Discusion: Interpretacion de Copenhague vs Many Worlds', author: 'Carlos R.', time: '5h' },
             { id: 3, title: 'Paper: Quantum Computing Advances 2024', author: 'Ana M.', time: '1d' },
         ],
         topMembers: [
-            { id: 1, name: 'María L.', role: 'Admin', posts: 234 },
+            { id: 1, name: 'Maria L.', role: 'Admin', posts: 234 },
             { id: 2, name: 'Carlos R.', role: 'Mod', posts: 189 },
             { id: 3, name: 'Ana M.', role: 'Miembro', posts: 156 },
         ]
@@ -27,13 +27,13 @@ const GROUPS_DATA = {
     2: {
         id: 2,
         name: 'Jazz & Vinilos',
-        description: 'Para amantes del jazz en todas sus formas. Desde el bebop hasta el jazz fusión contemporáneo. Compartimos vinilos, conciertos y recomendaciones.',
+        description: 'Para amantes del jazz en todas sus formas. Desde el bebop hasta el jazz fusion contemporaneo. Compartimos vinilos, conciertos y recomendaciones.',
         members: 956,
         postsPerWeek: 28,
         categoryId: 'music',
         icon: '🎷',
         recentPosts: [
-            { id: 1, title: 'La magia de Rubén Blades en vivo', author: 'Pedro S.', time: '1h' },
+            { id: 1, title: 'La magia de Ruben Blades en vivo', author: 'Pedro S.', time: '1h' },
             { id: 2, title: 'Vinilo del mes: Kind of Blue', author: 'Laura G.', time: '3h' },
         ],
         topMembers: [
@@ -47,25 +47,17 @@ const GroupDetailPage = () => {
     const { groupId } = useParams();
     const navigate = useNavigate();
 
-    const [isJoined, setIsJoined] = useState(false);
+    // Use global state from context instead of localStorage directly
+    const { isGroupJoined, toggleJoinGroup } = useAppState();
 
-    // Recalculate isJoined when groupId changes
-    useEffect(() => {
-        const joined = localStorage.getItem('vinctus_joined_groups');
-        const isInGroup = joined ? JSON.parse(joined).includes(parseInt(groupId)) : false;
-        setIsJoined(isInGroup);
-    }, [groupId]);
+    const groupIdNum = parseInt(groupId);
+    const isJoined = isGroupJoined(groupIdNum);
 
     const group = GROUPS_DATA[groupId] || GROUPS_DATA[1];
     const category = CATEGORIES.find(c => c.id === group.categoryId);
 
     const handleJoin = () => {
-        const joined = JSON.parse(localStorage.getItem('vinctus_joined_groups') || '[]');
-        const newJoined = isJoined
-            ? joined.filter(id => id !== parseInt(groupId))
-            : [...joined, parseInt(groupId)];
-        localStorage.setItem('vinctus_joined_groups', JSON.stringify(newJoined));
-        setIsJoined(!isJoined);
+        toggleJoinGroup(groupIdNum);
     };
 
     return (

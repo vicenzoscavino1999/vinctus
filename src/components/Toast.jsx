@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { X } from 'lucide-react';
 
 // Toast Context
 const ToastContext = createContext(null);
@@ -13,13 +14,39 @@ export const useToast = () => {
 
 export const ToastProvider = ({ children }) => {
     const [toast, setToast] = useState(null);
+    const timerRef = useRef(null);
 
     const showToast = useCallback((message, type = 'info', duration = 3000) => {
+        // Clear any existing timer
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+        }
+
         setToast({ message, type, id: Date.now() });
-        setTimeout(() => setToast(null), duration);
+
+        // Set new timer and store reference
+        timerRef.current = setTimeout(() => {
+            setToast(null);
+            timerRef.current = null;
+        }, duration);
     }, []);
 
-    const hideToast = useCallback(() => setToast(null), []);
+    const hideToast = useCallback(() => {
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+            timerRef.current = null;
+        }
+        setToast(null);
+    }, []);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (timerRef.current) {
+                clearTimeout(timerRef.current);
+            }
+        };
+    }, []);
 
     return (
         <ToastContext.Provider value={{ showToast, hideToast }}>
@@ -44,9 +71,10 @@ const Toast = ({ message, type, onClose }) => {
                 <span className="text-sm text-white/90">{message}</span>
                 <button
                     onClick={onClose}
-                    className="text-white/60 hover:text-white text-lg leading-none"
+                    className="text-white/60 hover:text-white transition-colors"
+                    aria-label="Cerrar notificacion"
                 >
-                    ×
+                    <X size={16} />
                 </button>
             </div>
         </div>
