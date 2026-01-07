@@ -4,16 +4,79 @@
 // CORS proxy for APIs that don't allow direct browser requests
 const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
+// ===== Type Definitions =====
+interface ArxivPaper {
+    id: string;
+    title: string;
+    summary: string;
+    authors: string;
+    published: string;
+    link: string;
+    type: string;
+}
+
+interface WikipediaArticle {
+    id: number;
+    title: string;
+    summary: string;
+    thumbnail: string | null;
+    link: string;
+    type: string;
+}
+
+interface HackerNewsStory {
+    id: number;
+    title: string;
+    url: string;
+    author: string;
+    score: number;
+    comments: number;
+    time: string;
+    type: string;
+}
+
+interface Book {
+    id: string;
+    title: string;
+    authors: string;
+    cover: string | null;
+    firstPublished: number | string;
+    link: string;
+    type: string;
+}
+
+interface NatureObservation {
+    id: number;
+    species: string;
+    scientificName: string;
+    location: string;
+    photo: string | null;
+    observer: string;
+    date: string;
+    link: string;
+    type: string;
+}
+
+interface MusicTrack {
+    id: string | number;
+    title: string;
+    artist: string;
+    playcount?: string;
+    listeners?: string;
+    link?: string;
+    type: string;
+}
+
 // ===== arXiv API (Science) =====
-export async function fetchArxivPapers(category = 'physics', maxResults = 10) {
-    const categoryMap = {
+export async function fetchArxivPapers(category: string = 'physics', maxResults: number = 10): Promise<ArxivPaper[]> {
+    const categoryMap: Record<string, string> = {
         'physics': 'physics.gen-ph',
         'quantum': 'quant-ph',
         'cosmology': 'astro-ph.CO',
         'math': 'math.GM',
         'cs': 'cs.AI',
-        'quant-ph': 'quant-ph', // Added for direct use
-        'astro-ph.CO': 'astro-ph.CO' // Added for direct use
+        'quant-ph': 'quant-ph',
+        'astro-ph.CO': 'astro-ph.CO'
     };
 
     const query = categoryMap[category] || category;
@@ -31,9 +94,9 @@ export async function fetchArxivPapers(category = 'physics', maxResults = 10) {
             const summary = entry.querySelector('summary')?.textContent?.trim();
             return {
                 id: entry.querySelector('id')?.textContent?.split('/abs/')[1] || '',
-                title: entry.querySelector('title')?.textContent?.trim().replace(/\s+/g, ' ') || 'Sin título',
+                title: entry.querySelector('title')?.textContent?.trim().replace(/\s+/g, ' ') || 'Sin titulo',
                 summary: summary ? summary.substring(0, 200) + '...' : 'Sin resumen disponible',
-                authors: Array.from(entry.querySelectorAll('author name')).map(a => a.textContent).slice(0, 3).join(', ') || 'Anónimo',
+                authors: Array.from(entry.querySelectorAll('author name')).map(a => a.textContent || '').slice(0, 3).join(', ') || 'Anonimo',
                 published: entry.querySelector('published')?.textContent?.split('T')[0] || '',
                 link: entry.querySelector('id')?.textContent || '',
                 type: 'Paper'
@@ -46,22 +109,22 @@ export async function fetchArxivPapers(category = 'physics', maxResults = 10) {
 }
 
 // ===== Wikipedia API (History) =====
-export async function fetchWikipediaArticles(topic = 'Ancient_history', limit = 10) {
+export async function fetchWikipediaArticles(topic: string = 'Ancient_history', limit: number = 10): Promise<WikipediaArticle[]> {
     const url = `https://en.wikipedia.org/api/rest_v1/page/related/${encodeURIComponent(topic)}`;
 
     try {
         const response = await fetch(url);
         const data = await response.json();
 
-        return (data.pages || []).slice(0, limit).map(page => {
+        return (data.pages || []).slice(0, limit).map((page: any) => {
             const extract = page.extract;
             return {
                 id: page.pageid,
-                title: page.titles?.normalized || page.title || 'Sin título',
+                title: page.titles?.normalized || page.title || 'Sin titulo',
                 summary: extract ? extract.substring(0, 200) + '...' : 'Sin resumen disponible',
                 thumbnail: page.thumbnail?.source || null,
                 link: `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title || '')}`,
-                type: 'Artículo'
+                type: 'Articulo'
             };
         });
     } catch (error) {
@@ -71,8 +134,8 @@ export async function fetchWikipediaArticles(topic = 'Ancient_history', limit = 
 }
 
 // ===== Hacker News API (Technology) =====
-export async function fetchHackerNews(type = 'top', limit = 10) {
-    const typeMap = {
+export async function fetchHackerNews(type: string = 'top', limit: number = 10): Promise<HackerNewsStory[]> {
+    const typeMap: Record<string, string> = {
         'top': 'topstories',
         'new': 'newstories',
         'best': 'beststories'
@@ -82,7 +145,7 @@ export async function fetchHackerNews(type = 'top', limit = 10) {
 
     try {
         const idsResponse = await fetch(`https://hacker-news.firebaseio.com/v0/${storyType}.json`);
-        const ids = await idsResponse.json();
+        const ids: number[] = await idsResponse.json();
 
         const stories = await Promise.all(
             ids.slice(0, limit).map(async (id) => {
@@ -91,7 +154,7 @@ export async function fetchHackerNews(type = 'top', limit = 10) {
             })
         );
 
-        return stories.filter(s => s && s.title).map(story => ({
+        return stories.filter((s: any) => s && s.title).map((story: any) => ({
             id: story.id,
             title: story.title,
             url: story.url || `https://news.ycombinator.com/item?id=${story.id}`,
@@ -108,17 +171,17 @@ export async function fetchHackerNews(type = 'top', limit = 10) {
 }
 
 // ===== Open Library API (Literature) =====
-export async function fetchBooks(subject = 'fiction', limit = 10) {
+export async function fetchBooks(subject: string = 'fiction', limit: number = 10): Promise<Book[]> {
     const url = `https://openlibrary.org/subjects/${subject}.json?limit=${limit}`;
 
     try {
         const response = await fetch(url);
         const data = await response.json();
 
-        return (data.works || []).map(work => ({
+        return (data.works || []).map((work: any) => ({
             id: work.key,
             title: work.title,
-            authors: work.authors?.map(a => a.name).join(', ') || 'Anónimo',
+            authors: work.authors?.map((a: any) => a.name).join(', ') || 'Anonimo',
             cover: work.cover_id ? `https://covers.openlibrary.org/b/id/${work.cover_id}-M.jpg` : null,
             firstPublished: work.first_publish_year || 'Desconocido',
             link: `https://openlibrary.org${work.key}`,
@@ -131,8 +194,8 @@ export async function fetchBooks(subject = 'fiction', limit = 10) {
 }
 
 // ===== iNaturalist API (Nature) =====
-export async function fetchNatureObservations(taxon = 'plants', limit = 10) {
-    const taxonMap = {
+export async function fetchNatureObservations(taxon: string = 'plants', limit: number = 10): Promise<NatureObservation[]> {
+    const taxonMap: Record<string, string> = {
         'plants': '47126',
         'birds': '3',
         'mammals': '40151',
@@ -147,16 +210,16 @@ export async function fetchNatureObservations(taxon = 'plants', limit = 10) {
         const response = await fetch(url);
         const data = await response.json();
 
-        return (data.results || []).map(obs => ({
+        return (data.results || []).map((obs: any) => ({
             id: obs.id,
             species: obs.taxon?.preferred_common_name || obs.taxon?.name || 'Especie desconocida',
             scientificName: obs.taxon?.name || '',
-            location: obs.place_guess || 'Ubicación desconocida',
+            location: obs.place_guess || 'Ubicacion desconocida',
             photo: obs.photos?.[0]?.url?.replace('square', 'medium') || null,
-            observer: obs.user?.login || 'Anónimo',
+            observer: obs.user?.login || 'Anonimo',
             date: obs.observed_on || '',
             link: `https://www.inaturalist.org/observations/${obs.id}`,
-            type: 'Observación'
+            type: 'Observacion'
         }));
     } catch (error) {
         console.error('iNaturalist API error:', error);
@@ -166,11 +229,10 @@ export async function fetchNatureObservations(taxon = 'plants', limit = 10) {
 
 // ===== Last.fm API (Music) - Free tier =====
 // Note: Requires API key from last.fm (free)
-const LASTFM_API_KEY = ''; // User needs to add their key
+const LASTFM_API_KEY = '';
 
-export async function fetchMusicInfo(artist = '', limit = 10) {
+export async function fetchMusicInfo(artist: string = '', limit: number = 10): Promise<MusicTrack[]> {
     if (!LASTFM_API_KEY) {
-        // Return mock data if no API key
         return [
             { id: 1, title: 'Configurar Last.fm API', artist: 'Sistema', type: 'Info' }
         ];
@@ -182,14 +244,14 @@ export async function fetchMusicInfo(artist = '', limit = 10) {
         const response = await fetch(url);
         const data = await response.json();
 
-        return (data.tracks?.track || []).map(track => ({
+        return (data.tracks?.track || []).map((track: any) => ({
             id: track.mbid || track.name,
             title: track.name,
             artist: track.artist?.name || 'Desconocido',
             playcount: track.playcount,
             listeners: track.listeners,
             link: track.url,
-            type: 'Canción'
+            type: 'Cancion'
         }));
     } catch (error) {
         console.error('Last.fm API error:', error);
