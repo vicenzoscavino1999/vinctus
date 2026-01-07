@@ -1,7 +1,8 @@
-import { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
+import type { AppStateContextType } from '../types';
 
-// Create the context
-const AppStateContext = createContext(null);
+// Create the context with proper typing
+const AppStateContext = createContext<AppStateContextType | null>(null);
 
 // LocalStorage keys
 const STORAGE_KEYS = {
@@ -9,10 +10,10 @@ const STORAGE_KEYS = {
     SAVED_CATEGORIES: 'vinctus_saved_categories',
     LIKED_POSTS: 'vinctus_liked_posts',
     SAVED_POSTS: 'vinctus_saved_posts',
-};
+} as const;
 
 // Helper to safely parse JSON from localStorage
-const getStoredValue = (key, defaultValue = []) => {
+const getStoredValue = <T,>(key: string, defaultValue: T): T => {
     try {
         const stored = localStorage.getItem(key);
         return stored ? JSON.parse(stored) : defaultValue;
@@ -21,30 +22,34 @@ const getStoredValue = (key, defaultValue = []) => {
     }
 };
 
+interface AppStateProviderProps {
+    children: ReactNode;
+}
+
 // Provider component
-export const AppStateProvider = ({ children }) => {
+export const AppStateProvider = ({ children }: AppStateProviderProps) => {
     // Joined groups
-    const [joinedGroups, setJoinedGroups] = useState(() =>
-        getStoredValue(STORAGE_KEYS.JOINED_GROUPS)
+    const [joinedGroups, setJoinedGroups] = useState<number[]>(() =>
+        getStoredValue<number[]>(STORAGE_KEYS.JOINED_GROUPS, [])
     );
 
     // Saved categories
-    const [savedCategories, setSavedCategories] = useState(() =>
-        getStoredValue(STORAGE_KEYS.SAVED_CATEGORIES)
+    const [savedCategories, setSavedCategories] = useState<string[]>(() =>
+        getStoredValue<string[]>(STORAGE_KEYS.SAVED_CATEGORIES, [])
     );
 
     // Liked posts
-    const [likedPosts, setLikedPosts] = useState(() =>
-        getStoredValue(STORAGE_KEYS.LIKED_POSTS)
+    const [likedPosts, setLikedPosts] = useState<number[]>(() =>
+        getStoredValue<number[]>(STORAGE_KEYS.LIKED_POSTS, [])
     );
 
     // Saved posts
-    const [savedPosts, setSavedPosts] = useState(() =>
-        getStoredValue(STORAGE_KEYS.SAVED_POSTS)
+    const [savedPosts, setSavedPosts] = useState<number[]>(() =>
+        getStoredValue<number[]>(STORAGE_KEYS.SAVED_POSTS, [])
     );
 
     // Toggle joined group
-    const toggleJoinGroup = useCallback((groupId) => {
+    const toggleJoinGroup = useCallback((groupId: number) => {
         setJoinedGroups(prev => {
             const newJoined = prev.includes(groupId)
                 ? prev.filter(id => id !== groupId)
@@ -55,12 +60,12 @@ export const AppStateProvider = ({ children }) => {
     }, []);
 
     // Check if joined
-    const isGroupJoined = useCallback((groupId) => {
+    const isGroupJoined = useCallback((groupId: number): boolean => {
         return joinedGroups.includes(groupId);
     }, [joinedGroups]);
 
     // Toggle saved category
-    const toggleSaveCategory = useCallback((categoryId) => {
+    const toggleSaveCategory = useCallback((categoryId: string) => {
         setSavedCategories(prev => {
             const newSaved = prev.includes(categoryId)
                 ? prev.filter(id => id !== categoryId)
@@ -71,12 +76,12 @@ export const AppStateProvider = ({ children }) => {
     }, []);
 
     // Check if category saved
-    const isCategorySaved = useCallback((categoryId) => {
+    const isCategorySaved = useCallback((categoryId: string): boolean => {
         return savedCategories.includes(categoryId);
     }, [savedCategories]);
 
     // Toggle liked post
-    const toggleLikePost = useCallback((postId) => {
+    const toggleLikePost = useCallback((postId: number) => {
         setLikedPosts(prev => {
             const newLiked = prev.includes(postId)
                 ? prev.filter(id => id !== postId)
@@ -87,12 +92,12 @@ export const AppStateProvider = ({ children }) => {
     }, []);
 
     // Check if post liked
-    const isPostLiked = useCallback((postId) => {
+    const isPostLiked = useCallback((postId: number): boolean => {
         return likedPosts.includes(postId);
     }, [likedPosts]);
 
     // Toggle saved post
-    const toggleSavePost = useCallback((postId) => {
+    const toggleSavePost = useCallback((postId: number) => {
         setSavedPosts(prev => {
             const newSaved = prev.includes(postId)
                 ? prev.filter(id => id !== postId)
@@ -103,12 +108,12 @@ export const AppStateProvider = ({ children }) => {
     }, []);
 
     // Check if post saved
-    const isPostSaved = useCallback((postId) => {
+    const isPostSaved = useCallback((postId: number): boolean => {
         return savedPosts.includes(postId);
     }, [savedPosts]);
 
     // Memoize context value to prevent unnecessary re-renders
-    const value = useMemo(() => ({
+    const value = useMemo<AppStateContextType>(() => ({
         // Groups
         joinedGroups,
         toggleJoinGroup,
@@ -143,7 +148,7 @@ export const AppStateProvider = ({ children }) => {
 };
 
 // Custom hook to use the context
-export const useAppState = () => {
+export const useAppState = (): AppStateContextType => {
     const context = useContext(AppStateContext);
     if (!context) {
         throw new Error('useAppState must be used within an AppStateProvider');
