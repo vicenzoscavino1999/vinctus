@@ -7,8 +7,25 @@ module.exports = {
     ],
     theme: {
         extend: {
-            // 🎨 COLORES - Sistema de tokens semánticos
+            // 🎨 COLORES - Sincronizados con CSS vars en :root
             colors: {
+                // Tokens base (desde CSS vars)
+                bg: "hsl(var(--bg) / <alpha-value>)",
+                surface: {
+                    1: "hsl(var(--surface-1) / <alpha-value>)",
+                    2: "hsl(var(--surface-2) / <alpha-value>)",
+                    3: "hsl(var(--surface-3) / <alpha-value>)",
+                },
+                text: {
+                    1: "hsl(var(--text-1) / <alpha-value>)",
+                    2: "hsl(var(--text-2) / <alpha-value>)",
+                    3: "hsl(var(--text-3) / <alpha-value>)",
+                },
+                accent: "hsl(var(--accent) / <alpha-value>)",
+                "accent-2": "hsl(var(--accent-2) / <alpha-value>)",
+                border: "hsl(var(--border) / <alpha-value>)",
+                ring: "hsl(var(--ring) / <alpha-value>)",
+                // Tokens legacy (para compatibilidad)
                 brand: {
                     gold: '#d4af37',
                     'gold-light': '#e8c547',
@@ -16,24 +33,17 @@ module.exports = {
                     cream: '#f5f0e6',
                     ivory: '#faf8f5',
                 },
-                surface: {
-                    base: '#0a0a0a',
-                    elevated: '#121212',
-                    overlay: '#1a1a1a',
-                    muted: '#0f0f0f',
-                },
-                accent: {
-                    warm: '#fbbf24',
-                    cool: '#60a5fa',
-                    success: '#34d399',
-                    error: '#f87171',
-                },
+                "surface-base": '#0a0a0a',
+                "surface-elevated": '#121212',
+                "surface-overlay": '#1a1a1a',
             },
 
-            // 📐 TIPOGRAFÍA - Pareja editorial serif + sans
+            // 📐 TIPOGRAFÍA - Sincronizada con CSS vars
             fontFamily: {
-                'display': ['Playfair Display', 'Georgia', 'Times New Roman', 'serif'],
-                'body': ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                'display': 'var(--font-serif)',
+                'serif': 'var(--font-serif)',
+                'body': 'var(--font-sans)',
+                'sans': 'var(--font-sans)',
                 'mono': ['JetBrains Mono', 'Menlo', 'monospace'],
             },
 
@@ -53,35 +63,37 @@ module.exports = {
 
             // 📏 ESPACIADO - Escala consistente (4px base)
             spacing: {
-                '4.5': '1.125rem',  // 18px
-                '13': '3.25rem',    // 52px
-                '15': '3.75rem',    // 60px
-                '18': '4.5rem',     // 72px
-                '22': '5.5rem',     // 88px
-                '26': '6.5rem',     // 104px
-                '30': '7.5rem',     // 120px
+                '4.5': '1.125rem',
+                '13': '3.25rem',
+                '15': '3.75rem',
+                '18': '4.5rem',
+                '22': '5.5rem',
+                '26': '6.5rem',
+                '30': '7.5rem',
             },
 
-            // 🔲 RADIOS DE BORDE - Consistencia
+            // 🔲 RADIOS DE BORDE - Sincronizados con CSS vars
             borderRadius: {
                 'none': '0',
-                'sm': '4px',
-                'base': '8px',
-                'md': '10px',
-                'lg': '12px',
-                'xl': '16px',
+                'sm': 'var(--radius-sm)',
+                'base': 'var(--radius-sm)',
+                'md': 'var(--radius-md)',
+                'lg': 'var(--radius-lg)',
+                'xl': 'var(--radius-xl)',
                 '2xl': '20px',
                 '3xl': '24px',
-                'card': '12px',
-                'button': '8px',
-                'input': '8px',
+                'card': 'var(--radius-lg)',
+                'button': 'var(--radius-sm)',
+                'input': 'var(--radius-sm)',
                 'badge': '6px',
                 'full': '9999px',
             },
 
-            // 🌫️ SOMBRAS - Premium depth system
+            // 🌫️ SOMBRAS - Sincronizadas con CSS vars
             boxShadow: {
-                'soft': '0 2px 8px -2px rgba(0,0,0,0.2)',
+                'soft': 'var(--shadow-soft)',
+                'lift': 'var(--shadow-lift)',
+                'glow': 'var(--shadow-glow)',
                 'card': '0 4px 24px -4px rgba(0,0,0,0.25)',
                 'card-hover': '0 12px 40px -8px rgba(0,0,0,0.4)',
                 'elevated': '0 8px 32px -8px rgba(0,0,0,0.3)',
@@ -91,16 +103,17 @@ module.exports = {
                 'inner-soft': 'inset 0 2px 4px rgba(0,0,0,0.2)',
             },
 
-            // ✨ ANIMACIONES - Duraciones y easings
+            // ✨ ANIMACIONES - Sincronizadas con CSS vars
             transitionDuration: {
-                'fast': '150ms',
+                'fast': 'var(--dur-fast)',
                 'base': '200ms',
-                'slow': '300ms',
+                'med': 'var(--dur-med)',
+                'slow': 'var(--dur-slow)',
                 'slower': '400ms',
                 'slowest': '500ms',
             },
             transitionTimingFunction: {
-                'premium': 'cubic-bezier(0.22, 1, 0.36, 1)',
+                'premium': 'var(--ease-out)',
                 'bounce': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
                 'smooth': 'cubic-bezier(0.4, 0, 0.2, 1)',
                 'out-expo': 'cubic-bezier(0.16, 1, 0.3, 1)',

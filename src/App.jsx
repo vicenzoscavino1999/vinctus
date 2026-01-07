@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import {
   Search,
@@ -15,7 +15,7 @@ import {
   Filter
 } from 'lucide-react';
 
-// Import components
+// Import regular components
 import {
   SidebarItem,
   CategoryCard,
@@ -25,11 +25,7 @@ import {
   EventCard,
   ApiContentCard,
   Header,
-  UserProfilePage,
   LoginScreen,
-  OnboardingFlow,
-  GroupDetailPage,
-  PostDetailPage,
   SearchFilters,
   SkeletonContentGrid,
   EmptyState,
@@ -37,6 +33,22 @@ import {
   ToastProvider,
   useToast
 } from './components';
+
+// Lazy loaded components for code splitting
+const GroupDetailPage = lazy(() => import('./components/GroupDetailPage'));
+const PostDetailPage = lazy(() => import('./components/PostDetailPage'));
+const UserProfilePage = lazy(() => import('./components/UserProfilePage'));
+const OnboardingFlow = lazy(() => import('./components/OnboardingFlow'));
+
+// Suspense fallback component
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-[50vh]">
+    <div className="text-center">
+      <Loader className="w-8 h-8 text-brand-gold animate-spin mx-auto mb-4" />
+      <p className="text-text-2 text-sm">Cargando...</p>
+    </div>
+  </div>
+);
 
 // Import hooks
 import { useApiContent } from './hooks';
@@ -1235,11 +1247,11 @@ const AppLayout = () => {
               <Route path="/library" element={<LibraryPage />} />
 
               <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/user/:userId" element={<UserProfilePage />} />
+              <Route path="/user/:userId" element={<Suspense fallback={<PageLoader />}><UserProfilePage /></Suspense>} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/messages" element={<MessagesPage />} />
-              <Route path="/group/:groupId" element={<GroupDetailPage />} />
-              <Route path="/post/:postId" element={<PostDetailPage />} />
+              <Route path="/group/:groupId" element={<Suspense fallback={<PageLoader />}><GroupDetailPage /></Suspense>} />
+              <Route path="/post/:postId" element={<Suspense fallback={<PageLoader />}><PostDetailPage /></Suspense>} />
               <Route path="*" element={<DiscoverPage />} />
             </Routes>
           </div>
@@ -1271,7 +1283,11 @@ export default function App() {
 
   // Show onboarding if not completed
   if (showOnboarding) {
-    return <OnboardingFlow onComplete={handleOnboardingComplete} />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <OnboardingFlow onComplete={handleOnboardingComplete} />
+      </Suspense>
+    );
   }
 
   return (
