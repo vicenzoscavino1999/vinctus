@@ -9,7 +9,8 @@ import {
 } from '../services/api';
 
 // Generic hook for API content
-export function useApiContent(apiSource, query, limit = 8) {
+// Optional: pass showToast function to display subtle error notifications
+export function useApiContent(apiSource, query, limit = 8, showToast = null) {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -53,10 +54,22 @@ export function useApiContent(apiSource, query, limit = 8) {
                         result = [];
                 }
 
+                // Check if API returned empty due to silent error
+                if (result.length === 0 && apiSource && apiSource !== 'lastfm') {
+                    // Show subtle toast if available
+                    if (showToast) {
+                        showToast('Conexión limitada - mostrando contenido disponible', 'warning');
+                    }
+                }
+
                 setData(result);
             } catch (err) {
                 setError(err.message);
                 setData([]);
+                // Show subtle toast notification
+                if (showToast) {
+                    showToast('Error al cargar contenido', 'error');
+                }
             } finally {
                 setLoading(false);
             }
@@ -67,7 +80,7 @@ export function useApiContent(apiSource, query, limit = 8) {
         } else {
             setLoading(false);
         }
-    }, [apiSource, query, limit]);
+    }, [apiSource, query, limit, showToast]);
 
     return { data, loading, error };
 }

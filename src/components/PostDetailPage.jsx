@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Heart, MessageCircle, Bookmark, Share2, User } from 'lucide-react';
 
@@ -65,8 +65,15 @@ const PostDetailPage = () => {
     const post = POSTS_DATA[postId] || POSTS_DATA[1];
 
     const [liked, setLiked] = useState(false);
-    const [saved, setSaved] = useState(post.saved);
-    const [likeCount, setLikeCount] = useState(post.likes);
+    const [saved, setSaved] = useState(false);
+    const [likeCount, setLikeCount] = useState(0);
+
+    // Reset state when postId changes
+    useEffect(() => {
+        setLiked(false);
+        setSaved(post.saved);
+        setLikeCount(post.likes);
+    }, [postId, post.saved, post.likes]);
 
     const handleLike = () => {
         setLiked(!liked);

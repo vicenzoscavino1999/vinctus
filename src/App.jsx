@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import {
   Search,
   Compass,
@@ -33,7 +33,9 @@ import {
   SearchFilters,
   SkeletonContentGrid,
   EmptyState,
-  ErrorState
+  ErrorState,
+  ToastProvider,
+  useToast
 } from './components';
 
 // Import hooks
@@ -118,7 +120,7 @@ const PUBLICATIONS = [
     title: "Reflexiones sobre el existencialismo moderno",
     group: "Pensadores Libres",
     category: "Filosofía",
-    categoryId: "philosophy",
+    categoryId: "literature",
     image: "/philosophy.png",
     likes: 156,
     comments: 42
@@ -176,7 +178,7 @@ const RECOMMENDED_GROUPS = [
     name: "Pensadores Libres",
     members: 1234,
     postsPerWeek: 6,
-    categoryId: "philosophy",
+    categoryId: "literature",
     subgroup: { name: "Existencialismo", members: "312" }
   }
 ];
@@ -204,14 +206,33 @@ const DiscoverPage = () => {
   const [filters, setFilters] = useState({ category: null, sortBy: 'relevance' });
 
   const filteredCategories = useMemo(() => {
-    if (!searchQuery) return CATEGORIES;
-    const query = searchQuery.toLowerCase();
-    return CATEGORIES.filter(cat =>
-      cat.label.toLowerCase().includes(query) ||
-      cat.description.toLowerCase().includes(query) ||
-      cat.subgroups.some(sub => sub.name.toLowerCase().includes(query))
-    );
-  }, [searchQuery]);
+    let result = CATEGORIES;
+
+    // Apply category filter from SearchFilters
+    if (filters.category) {
+      result = result.filter(cat => cat.id === filters.category);
+    }
+
+    // Apply search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(cat =>
+        cat.label.toLowerCase().includes(query) ||
+        cat.description.toLowerCase().includes(query) ||
+        cat.subgroups.some(sub => sub.name.toLowerCase().includes(query))
+      );
+    }
+
+    // Apply sorting
+    if (filters.sortBy === 'name') {
+      result = [...result].sort((a, b) => a.label.localeCompare(b.label));
+    } else if (filters.sortBy === 'popular') {
+      // Sort by number of subgroups as proxy for popularity
+      result = [...result].sort((a, b) => b.subgroups.length - a.subgroups.length);
+    }
+
+    return result;
+  }, [searchQuery, filters]);
 
   const handleSearch = (e) => {
     const value = e.target.value;
@@ -336,7 +357,11 @@ const DiscoverPage = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {RECOMMENDED_GROUPS.map(group => (
-            <div key={group.id} className="bg-[#1a1916] border border-neutral-800/50 rounded-lg p-5">
+            <div
+              key={group.id}
+              className="bg-[#1a1916] border border-neutral-800/50 rounded-lg p-5 cursor-pointer hover:border-neutral-700 transition-colors"
+              onClick={() => navigate(`/group/${group.id}`)}
+            >
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <h3 className="text-white font-medium text-lg">{group.name}</h3>
@@ -370,9 +395,6 @@ const DiscoverPage = () => {
                   <span>{group.subgroup.name}</span>
                   <span className="text-neutral-600">{group.subgroup.members} miembros</span>
                 </div>
-                <button className="text-neutral-400 text-xs hover:text-white transition-colors">
-                  + Unirme
-                </button>
               </div>
             </div>
           ))}
@@ -388,6 +410,7 @@ const DiscoverPage = () => {
             <div
               key={pub.id}
               className="flex-shrink-0 w-[320px] md:w-[400px] h-[280px] md:h-[320px] relative rounded-lg overflow-hidden cursor-pointer group"
+              onClick={() => navigate(`/post/${pub.id}`)}
             >
               {/* Background image */}
               <img
@@ -468,6 +491,7 @@ const CategoryPage = () => {
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState('live');
   const [selectedSubgroup, setSelectedSubgroup] = useState(null);
+  const { showToast } = useToast();
 
   // Reset selectedSubgroup when category changes
   useEffect(() => {
@@ -479,11 +503,12 @@ const CategoryPage = () => {
   // Get API query from selected subgroup or default to first one
   const apiQuery = selectedSubgroup?.apiQuery || category?.subgroups[0]?.apiQuery || category?.id;
 
-  // Fetch live content from API
+  // Fetch live content from API with toast notifications
   const { data: liveContent, loading, error } = useApiContent(
     category?.apiSource,
     apiQuery,
-    8
+    8,
+    showToast
   );
 
   if (!category) {
@@ -1082,19 +1107,19 @@ const NotificationsPage = () => {
       <div className="space-y-4">
         <div className="p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors">
           <p className="text-neutral-400">
-            <span
+            <button
               onClick={() => navigate('/user/dr-elena-r')}
-              className="text-white cursor-pointer hover:underline"
-            >Dr. Elena R.</span> comentó en tu publicación
+              className="text-white cursor-pointer hover:underline bg-transparent border-none p-0 font-inherit"
+            >Dr. Elena R.</button> comentó en tu publicación
           </p>
           <span className="text-neutral-600 text-xs">Hace 2 horas</span>
         </div>
         <div className="p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors">
           <p className="text-neutral-400">
-            <span
+            <button
               onClick={() => navigate('/user/marco-v')}
-              className="text-white cursor-pointer hover:underline"
-            >Marco V.</span> te mencionó en un debate
+              className="text-white cursor-pointer hover:underline bg-transparent border-none p-0 font-inherit"
+            >Marco V.</button> te mencionó en un debate
           </p>
           <span className="text-neutral-600 text-xs">Hace 5 horas</span>
         </div>
@@ -1116,29 +1141,29 @@ const MessagesPage = () => {
       <h1 className="text-3xl font-serif font-light text-white mb-8">Mensajes</h1>
       <div className="space-y-2">
         <div className="flex items-center gap-4 p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors cursor-pointer">
-          <div
+          <button
             onClick={() => navigate('/user/marco-v')}
-            className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 hover:ring-2 hover:ring-neutral-600 transition-all"
-          >M</div>
+            className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 hover:ring-2 hover:ring-neutral-600 transition-all border-none"
+          >M</button>
           <div className="flex-1">
-            <p
+            <button
               onClick={() => navigate('/user/marco-v')}
-              className="text-white cursor-pointer hover:underline inline"
-            >Marco V.</p>
+              className="text-white cursor-pointer hover:underline bg-transparent border-none p-0 font-inherit"
+            >Marco V.</button>
             <p className="text-neutral-500 text-sm truncate">¿Viste el nuevo paper sobre jazz modal?</p>
           </div>
           <span className="text-neutral-600 text-xs">2h</span>
         </div>
         <div className="flex items-center gap-4 p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors cursor-pointer">
-          <div
+          <button
             onClick={() => navigate('/user/dr-elena-r')}
-            className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 hover:ring-2 hover:ring-neutral-600 transition-all"
-          >E</div>
+            className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 hover:ring-2 hover:ring-neutral-600 transition-all border-none"
+          >E</button>
           <div className="flex-1">
-            <p
+            <button
               onClick={() => navigate('/user/dr-elena-r')}
-              className="text-white cursor-pointer hover:underline inline"
-            >Dr. Elena R.</p>
+              className="text-white cursor-pointer hover:underline bg-transparent border-none p-0 font-inherit"
+            >Dr. Elena R.</button>
             <p className="text-neutral-500 text-sm truncate">Sobre la colaboración del paper...</p>
           </div>
           <span className="text-neutral-600 text-xs">1d</span>
@@ -1174,18 +1199,19 @@ const ProfilePage = () => (
 // Main App Layout
 const AppLayout = () => {
   const navigate = useNavigate();
-  const location = window.location.pathname;
+  const location = useLocation();
+  const pathname = location.pathname;
 
   const getActiveTab = () => {
-    if (location.startsWith('/category')) return 'discover';
-    if (location === '/discover' || location === '/') return 'discover';
-    if (location === '/feed') return 'feed';
-    if (location === '/projects') return 'projects';
-    if (location === '/library') return 'library';
-    if (location === '/profile') return 'profile';
-    if (location === '/notifications') return 'profile';
-    if (location === '/messages') return 'feed';
-    if (location.startsWith('/user/')) return 'profile';
+    if (pathname.startsWith('/category')) return 'discover';
+    if (pathname === '/discover' || pathname === '/') return 'discover';
+    if (pathname === '/feed') return 'feed';
+    if (pathname === '/projects') return 'projects';
+    if (pathname === '/library') return 'library';
+    if (pathname === '/profile') return 'profile';
+    if (pathname === '/notifications') return 'profile';
+    if (pathname === '/messages') return 'feed';
+    if (pathname.startsWith('/user/')) return 'profile';
     return 'discover';
   };
 
@@ -1250,7 +1276,9 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <AppLayout />
+      <ToastProvider>
+        <AppLayout />
+      </ToastProvider>
     </BrowserRouter>
   );
 }

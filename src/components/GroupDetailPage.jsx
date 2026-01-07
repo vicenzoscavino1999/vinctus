@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Users, MessageCircle, Calendar, ArrowRight, Check } from 'lucide-react';
 import { CATEGORIES } from '../data';
@@ -11,7 +11,7 @@ const GROUPS_DATA = {
         description: 'Grupo dedicado a discutir los últimos avances en física cuántica, mecánica cuántica y teorías del universo. Compartimos papers, debates y experimentos mentales.',
         members: 2340,
         postsPerWeek: 45,
-        categoryId: 'ciencia',
+        categoryId: 'science',
         icon: '⚛️',
         recentPosts: [
             { id: 1, title: 'Nuevo experimento de entrelazamiento', author: 'María L.', time: '2h' },
@@ -30,7 +30,7 @@ const GROUPS_DATA = {
         description: 'Para amantes del jazz en todas sus formas. Desde el bebop hasta el jazz fusión contemporáneo. Compartimos vinilos, conciertos y recomendaciones.',
         members: 956,
         postsPerWeek: 28,
-        categoryId: 'musica',
+        categoryId: 'music',
         icon: '🎷',
         recentPosts: [
             { id: 1, title: 'La magia de Rubén Blades en vivo', author: 'Pedro S.', time: '1h' },
@@ -47,10 +47,14 @@ const GroupDetailPage = () => {
     const { groupId } = useParams();
     const navigate = useNavigate();
 
-    const [isJoined, setIsJoined] = useState(() => {
+    const [isJoined, setIsJoined] = useState(false);
+
+    // Recalculate isJoined when groupId changes
+    useEffect(() => {
         const joined = localStorage.getItem('vinctus_joined_groups');
-        return joined ? JSON.parse(joined).includes(parseInt(groupId)) : false;
-    });
+        const isInGroup = joined ? JSON.parse(joined).includes(parseInt(groupId)) : false;
+        setIsJoined(isInGroup);
+    }, [groupId]);
 
     const group = GROUPS_DATA[groupId] || GROUPS_DATA[1];
     const category = CATEGORIES.find(c => c.id === group.categoryId);

@@ -105,9 +105,9 @@ const OnboardingFlow = ({ onComplete }) => {
                                     <button
                                         key={cat.id}
                                         onClick={() => toggleInterest(cat.id)}
-                                        className={`p-4 rounded-xl border text-left transition-all duration-200 press-scale ${isSelected
-                                                ? 'bg-brand-gold/10 border-brand-gold/50 shadow-glow-gold'
-                                                : 'bg-surface-overlay border-neutral-800 hover:border-neutral-700'
+                                        className={`relative p-4 rounded-xl border text-left transition-all duration-200 press-scale ${isSelected
+                                            ? 'bg-brand-gold/10 border-brand-gold/50 shadow-glow-gold'
+                                            : 'bg-surface-overlay border-neutral-800 hover:border-neutral-700'
                                             }`}
                                     >
                                         <div className={`${cat.color} mb-2`}>
@@ -155,8 +155,8 @@ const OnboardingFlow = ({ onComplete }) => {
                                         key={group.id}
                                         onClick={() => toggleGroup(group.id)}
                                         className={`w-full p-4 rounded-xl border flex items-center gap-4 transition-all duration-200 press-scale ${isSelected
-                                                ? 'bg-brand-gold/10 border-brand-gold/50 shadow-glow-gold'
-                                                : 'bg-surface-overlay border-neutral-800 hover:border-neutral-700'
+                                            ? 'bg-brand-gold/10 border-brand-gold/50 shadow-glow-gold'
+                                            : 'bg-surface-overlay border-neutral-800 hover:border-neutral-700'
                                             }`}
                                     >
                                         <span className="text-2xl">{group.icon}</span>
@@ -186,8 +186,8 @@ const OnboardingFlow = ({ onComplete }) => {
                     onClick={nextStep}
                     disabled={!canProceed()}
                     className={`w-full py-4 rounded-xl font-medium text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all btn-premium ${canProceed()
-                            ? 'bg-brand-gold text-black'
-                            : 'bg-neutral-800 text-neutral-500 cursor-not-allowed'
+                        ? 'bg-brand-gold text-black'
+                        : 'bg-neutral-800 text-neutral-500 cursor-not-allowed'
                         }`}
                 >
                     {step === 2 ? 'Comenzar' : 'Continuar'}

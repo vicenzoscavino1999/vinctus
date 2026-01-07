@@ -10,12 +10,12 @@ const Header = ({ notificationCount = 0 }) => {
             <div className="w-16 md:hidden" />
 
             {/* Logo/Title - center on mobile, left on desktop */}
-            <h1
+            <button
                 onClick={() => navigate('/discover')}
-                className="text-lg font-serif tracking-tight text-white cursor-pointer hover:opacity-80 transition-opacity"
+                className="text-lg font-serif tracking-tight text-white cursor-pointer hover:opacity-80 transition-opacity bg-transparent border-none p-0"
             >
                 Vinctus
-            </h1>
+            </button>
 
             {/* Action icons - right side */}
             <div className="flex items-center space-x-1">
