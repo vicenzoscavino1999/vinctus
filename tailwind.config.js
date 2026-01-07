@@ -1,5 +1,7 @@
+import tailwindcssAnimate from 'tailwindcss-animate';
+
 /** @type {import('tailwindcss').Config} */
-module.exports = {
+export default {
     darkMode: ["class"],
     content: [
         "./index.html",
@@ -7,7 +9,7 @@ module.exports = {
     ],
     theme: {
         extend: {
-            // 🎨 COLORES - Sincronizados con CSS vars en :root
+            // COLORES - Sincronizados con CSS vars en :root
             colors: {
                 // Tokens base (desde CSS vars)
                 bg: "hsl(var(--bg) / <alpha-value>)",
@@ -38,7 +40,7 @@ module.exports = {
                 "surface-overlay": '#1a1a1a',
             },
 
-            // 📐 TIPOGRAFÍA - Sincronizada con CSS vars
+            // TIPOGRAFIA - Sincronizada con CSS vars
             fontFamily: {
                 'display': 'var(--font-serif)',
                 'serif': 'var(--font-serif)',
@@ -47,7 +49,7 @@ module.exports = {
                 'mono': ['JetBrains Mono', 'Menlo', 'monospace'],
             },
 
-            // 📏 TAMAÑOS DE FUENTE - Escala armónica
+            // TAMANOS DE FUENTE - Escala armonica
             fontSize: {
                 'display-xl': ['4.5rem', { lineHeight: '1.1', letterSpacing: '-0.02em' }],
                 'display-lg': ['3.5rem', { lineHeight: '1.15', letterSpacing: '-0.02em' }],
@@ -61,7 +63,7 @@ module.exports = {
                 'caption': ['0.75rem', { lineHeight: '1.4', letterSpacing: '0.02em' }],
             },
 
-            // 📏 ESPACIADO - Escala consistente (4px base)
+            // ESPACIADO - Escala consistente (4px base)
             spacing: {
                 '4.5': '1.125rem',
                 '13': '3.25rem',
@@ -72,7 +74,7 @@ module.exports = {
                 '30': '7.5rem',
             },
 
-            // 🔲 RADIOS DE BORDE - Sincronizados con CSS vars
+            // RADIOS DE BORDE - Sincronizados con CSS vars
             borderRadius: {
                 'none': '0',
                 'sm': 'var(--radius-sm)',
@@ -89,7 +91,7 @@ module.exports = {
                 'full': '9999px',
             },
 
-            // 🌫️ SOMBRAS - Sincronizadas con CSS vars
+            // SOMBRAS - Sincronizadas con CSS vars
             boxShadow: {
                 'soft': 'var(--shadow-soft)',
                 'lift': 'var(--shadow-lift)',
@@ -103,7 +105,7 @@ module.exports = {
                 'inner-soft': 'inset 0 2px 4px rgba(0,0,0,0.2)',
             },
 
-            // ✨ ANIMACIONES - Sincronizadas con CSS vars
+            // ANIMACIONES - Sincronizadas con CSS vars
             transitionDuration: {
                 'fast': 'var(--dur-fast)',
                 'base': '200ms',
@@ -119,7 +121,7 @@ module.exports = {
                 'out-expo': 'cubic-bezier(0.16, 1, 0.3, 1)',
             },
 
-            // 🖼️ BACKDROP BLUR
+            // BACKDROP BLUR
             backdropBlur: {
                 xs: '2px',
                 sm: '4px',
@@ -129,7 +131,7 @@ module.exports = {
                 xl: '24px',
             },
 
-            // 📐 Z-INDEX - Sistema ordenado
+            // Z-INDEX - Sistema ordenado
             zIndex: {
                 'dropdown': '1000',
                 'sticky': '1100',
@@ -140,7 +142,7 @@ module.exports = {
                 'tooltip': '1600',
             },
 
-            // 🎭 KEYFRAMES - Animaciones custom
+            // KEYFRAMES - Animaciones custom
             keyframes: {
                 'fade-in': {
                     '0%': { opacity: '0' },
@@ -173,6 +175,6 @@ module.exports = {
         },
     },
     plugins: [
-        require("tailwindcss-animate"),
+        tailwindcssAnimate,
     ],
-}
+};
