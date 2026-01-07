@@ -17,6 +17,9 @@ import {
   ToastProvider
 } from './components';
 
+// Import context
+import { AppStateProvider } from './context';
+
 // Lazy loaded components
 const GroupDetailPage = lazy(() => import('./components/GroupDetailPage'));
 const PostDetailPage = lazy(() => import('./components/PostDetailPage'));
@@ -165,9 +168,11 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <ToastProvider>
-        <AppLayout />
-      </ToastProvider>
+      <AppStateProvider>
+        <ToastProvider>
+          <AppLayout />
+        </ToastProvider>
+      </AppStateProvider>
     </BrowserRouter>
   );
 }

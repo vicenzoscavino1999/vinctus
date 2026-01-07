@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, BookOpen, Check, ArrowRight, Filter } from 'lucide-react';
 import { SearchFilters } from '../components';
+import { useAppState } from '../context';
 import { CATEGORIES, PUBLICATIONS, RECOMMENDED_GROUPS } from '../data';
 
 const DiscoverPage = () => {
@@ -9,19 +10,17 @@ const DiscoverPage = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const searchQuery = searchParams.get('q') || '';
 
-    // Persist saved categories in localStorage
-    const [savedCategories, setSavedCategories] = useState(() => {
-        const saved = localStorage.getItem('vinctus_saved_categories');
-        return saved ? JSON.parse(saved) : [];
-    });
+    // Use global state from context
+    const {
+        savedCategories,
+        toggleSaveCategory,
+        isCategorySaved,
+        joinedGroups,
+        toggleJoinGroup,
+        isGroupJoined
+    } = useAppState();
 
-    // Persist joined groups in localStorage
-    const [joinedGroups, setJoinedGroups] = useState(() => {
-        const saved = localStorage.getItem('vinctus_joined_groups');
-        return saved ? JSON.parse(saved) : [];
-    });
-
-    // Search filters state
+    // Search filters state (local, not persisted)
     const [showFilters, setShowFilters] = useState(false);
     const [filters, setFilters] = useState({ category: null, sortBy: 'relevance' });
 
@@ -61,26 +60,6 @@ const DiscoverPage = () => {
         } else {
             setSearchParams({});
         }
-    };
-
-    const toggleSave = (catId) => {
-        setSavedCategories(prev => {
-            const newSaved = prev.includes(catId)
-                ? prev.filter(id => id !== catId)
-                : [...prev, catId];
-            localStorage.setItem('vinctus_saved_categories', JSON.stringify(newSaved));
-            return newSaved;
-        });
-    };
-
-    const toggleJoinGroup = (groupId) => {
-        setJoinedGroups(prev => {
-            const newJoined = prev.includes(groupId)
-                ? prev.filter(id => id !== groupId)
-                : [...prev, groupId];
-            localStorage.setItem('vinctus_joined_groups', JSON.stringify(newJoined));
-            return newJoined;
-        });
     };
 
     return (
@@ -144,14 +123,14 @@ const DiscoverPage = () => {
                                     </div>
                                 </div>
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); toggleSave(cat.id); }}
-                                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] uppercase tracking-wide transition-colors ${savedCategories.includes(cat.id)
+                                    onClick={(e) => { e.stopPropagation(); toggleSaveCategory(cat.id); }}
+                                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] uppercase tracking-wide transition-colors ${isCategorySaved(cat.id)
                                         ? 'bg-amber-200/20 text-amber-200'
                                         : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
                                         }`}
                                 >
                                     <BookOpen size={10} />
-                                    {savedCategories.includes(cat.id) ? 'Guardado' : 'Guardar'}
+                                    {isCategorySaved(cat.id) ? 'Guardado' : 'Guardar'}
                                 </button>
                             </div>
 
@@ -191,12 +170,12 @@ const DiscoverPage = () => {
                                 </div>
                                 <button
                                     onClick={(e) => { e.stopPropagation(); toggleJoinGroup(group.id); }}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-all btn-premium press-scale ${joinedGroups.includes(group.id)
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-all btn-premium press-scale ${isGroupJoined(group.id)
                                         ? 'bg-brand-gold text-black'
                                         : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
                                         }`}
                                 >
-                                    {joinedGroups.includes(group.id) ? (
+                                    {isGroupJoined(group.id) ? (
                                         <><Check size={12} /> Unido</>
                                     ) : (
                                         <><BookOpen size={12} /> Unirme</>
