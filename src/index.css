@@ -113,6 +113,32 @@
   .focus-ring {
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 focus-visible:ring-offset-2 focus-visible:ring-offset-black;
   }
+
+  /* Grid 12 Columns System */
+  .container-grid {
+    @apply grid grid-cols-4 md:grid-cols-8 lg:grid-cols-12 gap-4 md:gap-6;
+  }
+
+  /* Column Spans - Mobile First */
+  .col-full {
+    @apply col-span-4 md:col-span-8 lg:col-span-12;
+  }
+
+  .col-half {
+    @apply col-span-4 md:col-span-4 lg:col-span-6;
+  }
+
+  .col-third {
+    @apply col-span-4 md:col-span-4 lg:col-span-4;
+  }
+
+  .col-quarter {
+    @apply col-span-2 md:col-span-2 lg:col-span-3;
+  }
+
+  .col-two-thirds {
+    @apply col-span-4 md:col-span-6 lg:col-span-8;
+  }
 }
 
 /* ===== ACCESSIBILITY ===== */
