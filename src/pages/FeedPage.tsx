@@ -68,6 +68,7 @@ const FeedPage = () => {
         {
             id: 1,
             name: 'Dr. Elena R.',
+            icon: '',
             lastMessage: 'Sobre el paper de...',
             time: '2 h',
             unread: 1
@@ -75,6 +76,7 @@ const FeedPage = () => {
         {
             id: 2,
             name: 'Marco V.',
+            icon: '',
             lastMessage: 'Viste el nuevo paper?',
             time: '1 dia',
             unread: 0

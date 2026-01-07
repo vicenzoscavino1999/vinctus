@@ -1,21 +1,30 @@
-import { Component } from 'react';
+import { Component, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
-class ErrorBoundary extends Component {
-    constructor(props) {
+interface ErrorBoundaryProps {
+    children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+    hasError: boolean;
+    error: Error | null;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+    constructor(props: ErrorBoundaryProps) {
         super(props);
         this.state = { hasError: false, error: null };
     }
 
-    static getDerivedStateFromError(error) {
+    static getDerivedStateFromError(error: Error): ErrorBoundaryState {
         return { hasError: true, error };
     }
 
-    componentDidCatch(error, errorInfo) {
+    componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
         console.error('ErrorBoundary caught:', error, errorInfo);
     }
 
-    handleRetry = () => {
+    handleRetry = (): void => {
         this.setState({ hasError: false, error: null });
         window.location.reload();
     };
@@ -29,10 +38,10 @@ class ErrorBoundary extends Component {
                             <AlertTriangle size={32} className="text-red-400" />
                         </div>
                         <h1 className="text-2xl font-serif text-white mb-3">
-                            Algo salió mal
+                            Algo salio mal
                         </h1>
                         <p className="text-neutral-400 text-sm mb-6">
-                            Ha ocurrido un error inesperado. Por favor, intenta recargar la página.
+                            Ha ocurrido un error inesperado. Por favor, intenta recargar la pagina.
                         </p>
                         <button
                             onClick={this.handleRetry}
