@@ -62,11 +62,29 @@ const PostDetailPage = () => {
     const { postId } = useParams();
     const navigate = useNavigate();
 
-    const post = POSTS_DATA[postId] || POSTS_DATA[1];
+    const postIdNum = parseInt(postId, 10);
+    const isValidId = !isNaN(postIdNum) && POSTS_DATA[postIdNum];
+
+    // If invalid ID, show error state
+    if (!isValidId) {
+        return (
+            <div className="page-category pb-32 text-center pt-20">
+                <p className="text-neutral-500 mb-4">Publicacion no encontrada</p>
+                <button
+                    onClick={() => navigate('/discover')}
+                    className="text-brand-gold hover:underline"
+                >
+                    Volver a Descubrir
+                </button>
+            </div>
+        );
+    }
+
+    const post = POSTS_DATA[postIdNum];
 
     const [liked, setLiked] = useState(false);
-    const [saved, setSaved] = useState(false);
-    const [likeCount, setLikeCount] = useState(0);
+    const [saved, setSaved] = useState(post.saved);
+    const [likeCount, setLikeCount] = useState(post.likes);
 
     // Reset state when postId changes
     useEffect(() => {

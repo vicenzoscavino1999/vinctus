@@ -10,6 +10,16 @@ const DiscoverPage = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const searchQuery = searchParams.get('q') || '';
 
+    // Load user interests from onboarding for personalization
+    const userInterests = useMemo(() => {
+        try {
+            const stored = localStorage.getItem('vinctus_interests');
+            return stored ? JSON.parse(stored) : [];
+        } catch {
+            return [];
+        }
+    }, []);
+
     // Use global state from context
     const {
         savedCategories,
@@ -25,9 +35,18 @@ const DiscoverPage = () => {
     const [filters, setFilters] = useState({ category: null, sortBy: 'relevance' });
 
     const filteredCategories = useMemo(() => {
-        let result = CATEGORIES;
+        let result = [...CATEGORIES];
 
-        // Apply category filter from SearchFilters
+        // Sort: user interests first (personalization from onboarding)
+        if (userInterests.length > 0 && filters.sortBy === 'relevance') {
+            result.sort((a, b) => {
+                const aIsInterest = userInterests.includes(a.id);
+                const bIsInterest = userInterests.includes(b.id);
+                if (aIsInterest && !bIsInterest) return -1;
+                if (!aIsInterest && bIsInterest) return 1;
+                return 0;
+            });
+        }
         if (filters.category) {
             result = result.filter(cat => cat.id === filters.category);
         }

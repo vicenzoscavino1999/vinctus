@@ -50,10 +50,26 @@ const GroupDetailPage = () => {
     // Use global state from context instead of localStorage directly
     const { isGroupJoined, toggleJoinGroup } = useAppState();
 
-    const groupIdNum = parseInt(groupId);
-    const isJoined = isGroupJoined(groupIdNum);
+    const groupIdNum = parseInt(groupId, 10);
+    const isValidId = !isNaN(groupIdNum) && GROUPS_DATA[groupIdNum];
 
-    const group = GROUPS_DATA[groupId] || GROUPS_DATA[1];
+    // If invalid ID, show error state
+    if (!isValidId) {
+        return (
+            <div className="page-category pb-32 text-center pt-20">
+                <p className="text-neutral-500 mb-4">Grupo no encontrado</p>
+                <button
+                    onClick={() => navigate('/discover')}
+                    className="text-brand-gold hover:underline"
+                >
+                    Volver a Descubrir
+                </button>
+            </div>
+        );
+    }
+
+    const isJoined = isGroupJoined(groupIdNum);
+    const group = GROUPS_DATA[groupIdNum];
     const category = CATEGORIES.find(c => c.id === group.categoryId);
 
     const handleJoin = () => {

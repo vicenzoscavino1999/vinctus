@@ -139,12 +139,15 @@ const AppLayout = () => {
 
 // App with Router and Authentication
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('vinctus_authenticated') === 'true';
+  });
   const [showOnboarding, setShowOnboarding] = useState(() => {
     return !localStorage.getItem('vinctus_onboarding_complete');
   });
 
   const handleLogin = () => {
+    localStorage.setItem('vinctus_authenticated', 'true');
     setIsAuthenticated(true);
   };
 
