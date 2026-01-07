@@ -13,7 +13,7 @@ const LoginScreen = ({ onLogin }) => {
                 }}
             />
 
-            {/* Segunda capa de luz para más profundidad */}
+            {/* Segunda capa de luz para mas profundidad */}
             <div
                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[250px] h-[250px] md:w-[400px] md:h-[400px] rounded-full pointer-events-none"
                 style={{
@@ -25,7 +25,7 @@ const LoginScreen = ({ onLogin }) => {
                 }}
             />
 
-            {/* Ruido Fílmico - Versión simplificada para mejor compatibilidad */}
+            {/* Ruido Filmico - Version simplificada para mejor compatibilidad */}
             <div
                 className="fixed inset-0 opacity-[0.05] pointer-events-none z-0"
                 style={{
@@ -59,7 +59,7 @@ const LoginScreen = ({ onLogin }) => {
                                 style={{
                                     WebkitAppearance: 'none',
                                     borderRadius: 0,
-                                    fontSize: '16px' // Previene zoom en iOS
+                                    fontSize: '16px'
                                 }}
                             />
                         </div>
@@ -72,13 +72,13 @@ const LoginScreen = ({ onLogin }) => {
                                 style={{
                                     WebkitAppearance: 'none',
                                     borderRadius: 0,
-                                    fontSize: '16px' // Previene zoom en iOS
+                                    fontSize: '16px'
                                 }}
                             />
                         </div>
                     </div>
 
-                    {/* Botón Entrar */}
+                    {/* Boton Entrar */}
                     <button
                         onClick={onLogin}
                         className="w-full bg-white/90 text-black py-4 hover:bg-white active:bg-white/80 transition-all duration-500 uppercase tracking-[0.25em] text-[10px] font-medium mt-12 active:scale-[0.98]"
@@ -94,7 +94,7 @@ const LoginScreen = ({ onLogin }) => {
                     <div className="text-center pt-12 flex flex-col items-center space-y-4">
                         <Lock size={12} className="text-neutral-700" />
                         <p className="text-neutral-600 text-[10px] font-serif italic">
-                            Acceso restringido por invitación.
+                            Acceso restringido por invitacion.
                         </p>
                     </div>
                 </div>

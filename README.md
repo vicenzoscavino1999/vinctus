@@ -2,11 +2,11 @@
 
 Red social basada en intereses. Conecta con comunidades de ciencia, música, historia y más.
 
-## 🎯 Objetivo
+## Objetivo
 
 Vinctus es una plataforma que permite a los usuarios unirse a grupos según sus intereses específicos. A diferencia de las redes sociales tradicionales, aquí las conexiones se forman alrededor de pasiones compartidas.
 
-## 🛠️ Stack Tecnológico
+## Stack Tecnológico
 
 - **Frontend**: React 19 + Vite 5
 - **Estilos**: Tailwind CSS 3
@@ -14,7 +14,7 @@ Vinctus es una plataforma que permite a los usuarios unirse a grupos según sus 
 - **Animaciones**: tailwindcss-animate
 - **Routing**: React Router DOM
 
-## 📦 Instalación
+## Instalación
 
 ```bash
 # Clonar el repositorio
@@ -28,7 +28,7 @@ npm install
 npm run dev
 ```
 
-## 🚀 Uso
+## Uso
 
 Abre `http://localhost:5173` en tu navegador.
 
@@ -40,13 +40,16 @@ Abre `http://localhost:5173` en tu navegador.
 - **Archivo**: Biblioteca de conocimiento
 - **Eventos**: Encuentros presenciales y virtuales
 
-## 📁 Estructura del Proyecto
+## Estructura del Proyecto
 
 ```
 vinctus/
 ├── src/
 │   ├── components/     # Componentes UI reutilizables
+│   ├── pages/          # Páginas de la aplicación
+│   ├── context/        # Estado global (AppState)
 │   ├── data/           # Datos mock y constantes
+│   ├── hooks/          # Custom hooks
 │   ├── App.jsx         # Componente principal
 │   ├── main.jsx        # Punto de entrada
 │   └── index.css       # Estilos globales
@@ -54,6 +57,6 @@ vinctus/
 └── index.html          # HTML principal
 ```
 
-## 📄 Licencia
+## Licencia
 
 MIT

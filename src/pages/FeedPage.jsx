@@ -9,10 +9,10 @@ const FeedPage = () => {
     const CONVERSATIONS = [
         {
             id: 1,
-            name: 'Exploradores Cuánticos',
+            name: 'Exploradores Cuanticos',
             type: 'grupo',
             icon: '⚛️',
-            lastMessage: 'Nuevo paper sobre entrelazamiento cuántico',
+            lastMessage: 'Nuevo paper sobre entrelazamiento cuantico',
             time: '4 min',
             unread: 2
         },
@@ -30,13 +30,13 @@ const FeedPage = () => {
             name: 'IA y Futuro',
             type: 'grupo',
             icon: '⚛️',
-            lastMessage: 'Álvaro: Increíble! Puedes pas...',
+            lastMessage: 'Alvaro: Increible! Puedes pas...',
             time: '10 abr',
             unread: 8
         },
         {
             id: 4,
-            name: 'Música: Salsa',
+            name: 'Musica: Salsa',
             type: 'grupo',
             icon: '🎵',
             lastMessage: 'Adriana: Nuevo tema para...',
@@ -45,19 +45,19 @@ const FeedPage = () => {
         },
         {
             id: 5,
-            name: 'Astronomía & Cosmos',
+            name: 'Astronomia & Cosmos',
             type: 'grupo',
             icon: '🌌',
-            lastMessage: 'Reseña: Guía de Observació...',
+            lastMessage: 'Resena: Guia de Observacio...',
             time: '1 abr',
             unread: 0
         },
         {
             id: 6,
-            name: 'Papajes y Sabores',
+            name: 'Paisajes y Sabores',
             type: 'grupo',
             icon: '🥖',
-            lastMessage: 'Eric: Receta fácil para hornear...',
+            lastMessage: 'Eric: Receta facil para hornear...',
             time: '14 abr',
             unread: 1
         }
@@ -75,8 +75,8 @@ const FeedPage = () => {
         {
             id: 2,
             name: 'Marco V.',
-            lastMessage: '¿Viste el nuevo paper?',
-            time: '1 día',
+            lastMessage: 'Viste el nuevo paper?',
+            time: '1 dia',
             unread: 0
         }
     ];
@@ -92,13 +92,13 @@ const FeedPage = () => {
         <div className="page-feed pb-32">
             {/* Header */}
             <header className="mb-8 pt-6 md:pt-10 text-center">
-                <span className="text-caption font-medium tracking-[0.3em] text-neutral-500 uppercase mb-2 block">EN CONVERSACIÓN</span>
+                <span className="text-caption font-medium tracking-[0.3em] text-neutral-500 uppercase mb-2 block">EN CONVERSACION</span>
                 <h1 className="text-display-sm md:text-display-md font-display font-normal text-white tracking-tight">
-                    Diálogos
+                    Dialogos
                 </h1>
             </header>
 
-            {/* Barra de búsqueda */}
+            {/* Barra de busqueda */}
             <div className="mb-6">
                 <div className="relative bg-neutral-900/50 border border-neutral-800 rounded-full px-6 py-3">
                     <input
