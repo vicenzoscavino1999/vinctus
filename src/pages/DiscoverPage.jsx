@@ -158,7 +158,7 @@ const DiscoverPage = () => {
                     {RECOMMENDED_GROUPS.map(group => (
                         <div
                             key={group.id}
-                            className="bg-[#1a1916] border border-neutral-800/50 rounded-lg p-5 cursor-pointer hover:border-neutral-700 transition-colors"
+                            className="bg-surface-1 border border-neutral-800/50 rounded-lg p-5 cursor-pointer hover:border-neutral-700 transition-colors"
                             onClick={() => navigate(`/group/${group.id}`)}
                         >
                             <div className="flex items-start justify-between mb-3">

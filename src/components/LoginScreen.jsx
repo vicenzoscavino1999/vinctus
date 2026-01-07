@@ -2,7 +2,7 @@ import { Lock } from 'lucide-react';
 
 const LoginScreen = ({ onLogin }) => {
     return (
-        <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center relative overflow-hidden p-6">
+        <div className="min-h-screen bg-bg flex flex-col items-center justify-center relative overflow-hidden p-6">
             {/* Efecto de luz ambiental - Optimizado para iOS */}
             <div
                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] md:w-[600px] md:h-[600px] rounded-full pointer-events-none"
