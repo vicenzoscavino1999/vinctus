@@ -27,8 +27,15 @@ vi.mock('firebase/firestore', () => ({
     getFirestore: vi.fn(() => ({})),
     collection: vi.fn(),
     doc: vi.fn(),
-    getDoc: vi.fn(),
-    setDoc: vi.fn(),
-    deleteDoc: vi.fn(),
-    onSnapshot: vi.fn(),
+    getDoc: vi.fn(() => Promise.resolve({ exists: () => false, data: () => ({}) })),
+    getDocs: vi.fn(() => Promise.resolve({ docs: [] })),
+    setDoc: vi.fn(() => Promise.resolve()),
+    deleteDoc: vi.fn(() => Promise.resolve()),
+    onSnapshot: vi.fn((_ref, callback) => {
+        callback({ docs: [] });
+        return () => { };
+    }),
+    serverTimestamp: vi.fn(() => new Date()),
+    query: vi.fn(),
+    where: vi.fn(),
 }));
