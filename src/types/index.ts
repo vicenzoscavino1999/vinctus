@@ -242,7 +242,7 @@ export interface ToastContextType {
 // ============================================
 
 export interface LoginScreenProps {
-    onLogin: () => void;
+    onLogin?: () => void; // Optional for backward compatibility
 }
 
 export interface OnboardingFlowProps {

@@ -1,46 +1,49 @@
-import { Lock } from 'lucide-react';
-import type { LoginScreenProps } from '../types';
+import { useState } from 'react';
+import { useAuth } from '../context';
 
-const LoginScreen = ({ onLogin }: LoginScreenProps) => {
+const LoginScreen = () => {
+    const { signInWithGoogle, error: authError } = useAuth();
+    const [isLoading, setIsLoading] = useState(false);
+    const [localError, setLocalError] = useState<string | null>(null);
+
+    const handleGoogleSignIn = async () => {
+        setIsLoading(true);
+        setLocalError(null);
+        try {
+            await signInWithGoogle();
+        } catch (err) {
+            // Error is already handled in AuthContext
+            setLocalError(authError || 'Error al iniciar sesi\u00F3n');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-bg flex flex-col items-center justify-center relative overflow-hidden p-6">
-            {/* Efecto de luz ambiental - Optimizado para iOS */}
+            {/* Efecto de luz ambiental */}
             <div
                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] md:w-[600px] md:h-[600px] rounded-full pointer-events-none"
                 style={{
                     background: 'radial-gradient(circle, rgba(255,255,255,0.04) 0%, transparent 70%)',
                     animation: 'pulse 4s ease-in-out infinite',
-                    WebkitAnimation: 'pulse 4s ease-in-out infinite'
                 }}
             />
 
-            {/* Segunda capa de luz para más profundidad */}
+            {/* Segunda capa de luz para m\u00E1s profundidad */}
             <div
                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[250px] h-[250px] md:w-[400px] md:h-[400px] rounded-full pointer-events-none"
                 style={{
                     background: 'radial-gradient(circle, rgba(255,255,255,0.03) 0%, transparent 60%)',
                     animation: 'pulse 6s ease-in-out infinite',
                     animationDelay: '2s',
-                    WebkitAnimation: 'pulse 6s ease-in-out infinite',
-                    WebkitAnimationDelay: '2s'
-                }}
-            />
-
-            {/* Ruido Fílmico - Versión simplificada para mejor compatibilidad */}
-            <div
-                className="fixed inset-0 opacity-[0.05] pointer-events-none z-0"
-                style={{
-                    backgroundImage: 'url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH4AkZCg8xEBz2LgAAAB1pVFh0Q29tbWVudAAAAAAAQ3JlYXRlZCB3aXRoIEdJTVBkLmUHAAACM0lEQVRo3u2ZS0sCURTHfzOOjmM+x9dY5qJFLdq0qlX7Fn2CVn2DalXbWkS0qk0PCDKC0HPRA40IM/AV5JSlFbQoWkhg88jTXFdNc2lxz+XC5XLnnv+f/7mXcwVRFEWkVCry+TwAkiSpnmUYhsOhQqGgoih/9K+uri7S6TQAgiD8aRPW1taoVqt6YuVymVqt9qffampqCqPRiCRJqNVq+vr6KC8vt1tcXFxk69at7Nu3L4b0V1NbW1uh0+lgaWkpAPX19WxtbaWsrEz1W+fl5VFbW0sgEGBpaanqmZycZGpqirq6OtavX09OTk68HdHV1RXXr18Pm82G0+mkoaGBTZs2YTQaycjI+CNBq9VKV1cXy5Yto6amhm3btpGZmYlWq/0lzZYtW5g9e/Yf/f8uQf+W2NnZydq1a5k0aRJ1dXVkZWXpHkpJSWHt2rU4HA5yc3M5duwY06ZNIy0tTfVbe3t7WbJkCT09Pbhcrj8cmZ+fz6xZsxg/fjzZ2dna29vbGTduHK2trQwePJiRI0fqfg0KCuLAgQMYjUYKCgro7u5k0KBBul9DQkI4cOAAPp+P8ePH097eTnl5WVu3bsXv92O1WgkLC6O5uZmQkBDa29vJzMykqamJqqoqNm/eTEdHB319fWzcuJGGhgYcDof2cFdXF729vQCkpaXp/3d1dZGamgpAamoqXq9X/06j0WAwGEhLSyM5OZm0tDRSU1NRq9WkpaW)"'
                 }}
             />
 
             <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
 
                 {/* Logo */}
-                <div
-                    className="mb-16 opacity-90 hover:opacity-100 transition-opacity duration-1000"
-                    style={{ WebkitTransition: 'opacity 1s' }}
-                >
+                <div className="mb-16 opacity-90 hover:opacity-100 transition-opacity duration-1000">
                     <img
                         src="/image_fdd620.png"
                         alt="Vinctus Logo"
@@ -48,82 +51,73 @@ const LoginScreen = ({ onLogin }: LoginScreenProps) => {
                     />
                 </div>
 
-                <form
-                    onSubmit={(e) => {
-                        e.preventDefault();
-                        onLogin();
-                    }}
-                    className="w-full space-y-10"
-                >
-                    {/* Campos de entrada */}
-                    <div className="space-y-8">
-                        <div className="relative group">
-                            <label htmlFor="login-email" className="sr-only">Correo electrónico</label>
-                            <input
-                                id="login-email"
-                                name="email"
-                                type="email"
-                                placeholder="Identidad"
-                                autoComplete="email"
-                                className="w-full bg-transparent border-b border-white/10 text-white py-3 px-2 focus:outline-none focus:border-white/40 transition-all duration-500 placeholder:text-neutral-700 font-light text-center tracking-widest text-base"
-                                style={{
-                                    WebkitAppearance: 'none',
-                                    borderRadius: 0,
-                                    fontSize: '16px'
-                                }}
-                            />
-                        </div>
-                        <div className="relative group">
-                            <label htmlFor="login-password" className="sr-only">Contraseña</label>
-                            <input
-                                id="login-password"
-                                name="password"
-                                type="password"
-                                placeholder="Clave de Acceso"
-                                autoComplete="current-password"
-                                className="w-full bg-transparent border-b border-white/10 text-white py-3 px-2 focus:outline-none focus:border-white/40 transition-all duration-500 placeholder:text-neutral-700 font-light text-center tracking-widest text-base"
-                                style={{
-                                    WebkitAppearance: 'none',
-                                    borderRadius: 0,
-                                    fontSize: '16px'
-                                }}
-                            />
-                        </div>
+                {/* Titulo */}
+                <h1 className="text-white font-serif text-3xl md:text-4xl font-light mb-4 tracking-wide text-center">
+                    Vinctus
+                </h1>
+                <p className="text-neutral-500 text-sm font-light mb-12 text-center">
+                    Red social por intereses
+                </p>
+
+                {/* Error message */}
+                {(localError || authError) && (
+                    <div className="w-full mb-6 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm text-center">
+                        {localError || authError}
                     </div>
+                )}
 
-                    {/* Botón Entrar */}
-                    <button
-                        type="submit"
-                        className="w-full bg-white/90 text-black py-4 hover:bg-white active:bg-white/80 transition-all duration-500 uppercase tracking-[0.25em] text-[10px] font-medium mt-12 active:scale-[0.98]"
-                        style={{
-                            WebkitTapHighlightColor: 'transparent',
-                            WebkitTransition: 'all 0.5s'
-                        }}
-                    >
-                        Entrar
-                    </button>
-                </form>
+                {/* Bot\u00F3n de Google Sign-In */}
+                <button
+                    onClick={handleGoogleSignIn}
+                    disabled={isLoading}
+                    className="w-full flex items-center justify-center gap-3 bg-white text-black py-4 px-6 hover:bg-neutral-100 active:bg-neutral-200 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ WebkitTapHighlightColor: 'transparent' }}
+                >
+                    {isLoading ? (
+                        <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                    ) : (
+                        <>
+                            {/* Google Icon */}
+                            <svg className="w-5 h-5" viewBox="0 0 24 24">
+                                <path
+                                    fill="#4285F4"
+                                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                                />
+                                <path
+                                    fill="#34A853"
+                                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                                />
+                                <path
+                                    fill="#FBBC05"
+                                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                                />
+                                <path
+                                    fill="#EA4335"
+                                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                                />
+                            </svg>
+                            <span className="text-sm font-medium tracking-wide">
+                                Continuar con Google
+                            </span>
+                        </>
+                    )}
+                </button>
 
-                {/* Nota de acceso restringido */}
+                {/* Nota de acceso */}
                 <div className="text-center pt-12 flex flex-col items-center space-y-4">
-                    <Lock size={12} className="text-neutral-700" />
-                    <p className="text-neutral-600 text-[10px] font-serif italic">
-                        Acceso restringido por invitación.
+                    <p className="text-neutral-600 text-[10px] font-light uppercase tracking-wider">
+                        Conecta con comunidades de tu inter\u00E9s
                     </p>
                 </div>
             </div>
 
-            {/* CSS para animaciones compatibles con Safari */}
+            {/* CSS para animaciones */}
             <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 0.3; transform: translate(-50%, -50%) scale(1); }
-          50% { opacity: 0.6; transform: translate(-50%, -50%) scale(1.05); }
-        }
-        @-webkit-keyframes pulse {
-          0%, 100% { opacity: 0.3; -webkit-transform: translate(-50%, -50%) scale(1); }
-          50% { opacity: 0.6; -webkit-transform: translate(-50%, -50%) scale(1.05); }
-        }
-      `}</style>
+                @keyframes pulse {
+                    0%, 100% { opacity: 0.3; transform: translate(-50%, -50%) scale(1); }
+                    50% { opacity: 0.6; transform: translate(-50%, -50%) scale(1.05); }
+                }
+            `}</style>
         </div>
     );
 };

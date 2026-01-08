@@ -1,10 +1,10 @@
-import { useState, lazy, Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
 import { LoginScreen, ToastProvider } from './components';
 import AppLayout from './components/AppLayout';
 import PageLoader from './components/PageLoader';
-import { AppStateProvider } from './context';
+import { AppStateProvider, AuthProvider, useAuth } from './context';
 
 const getStoredItem = (key: string): string | null => {
   if (typeof window === 'undefined') return null;
@@ -26,32 +26,30 @@ const setStoredItem = (key: string, value: string): void => {
 
 const OnboardingFlow = lazy(() => import('./components/OnboardingFlow'));
 
-// App with Router and Authentication
-export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return getStoredItem('vinctus_authenticated') === 'true';
-  });
-  const [showOnboarding, setShowOnboarding] = useState(() => {
-    return !getStoredItem('vinctus_onboarding_complete');
-  });
+// Inner app that uses auth context
+function AppContent() {
+  const { user, loading } = useAuth();
 
-  const handleLogin = () => {
-    setStoredItem('vinctus_authenticated', 'true');
-    setIsAuthenticated(true);
-  };
+  // Check if onboarding is complete
+  const onboardingComplete = getStoredItem('vinctus_onboarding_complete') === 'true';
 
-  const handleOnboardingComplete = () => {
-    setStoredItem('vinctus_onboarding_complete', 'true');
-    setShowOnboarding(false);
-  };
+  // Show loading while checking auth
+  if (loading) {
+    return <PageLoader />;
+  }
 
   // Show login screen if not authenticated
-  if (!isAuthenticated) {
-    return <LoginScreen onLogin={handleLogin} />;
+  if (!user) {
+    return <LoginScreen />;
   }
 
   // Show onboarding if not completed
-  if (showOnboarding) {
+  if (!onboardingComplete) {
+    const handleOnboardingComplete = () => {
+      setStoredItem('vinctus_onboarding_complete', 'true');
+      window.location.reload(); // Simple reload to update state
+    };
+
     return (
       <Suspense fallback={<PageLoader />}>
         <OnboardingFlow onComplete={handleOnboardingComplete} />
@@ -67,5 +65,14 @@ export default function App() {
         </ToastProvider>
       </AppStateProvider>
     </BrowserRouter>
+  );
+}
+
+// Main App with AuthProvider wrapper
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
