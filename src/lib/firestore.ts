@@ -1,22 +1,52 @@
 // Firestore service layer for Vinctus
-// Handles all database operations for groups, memberships, and user data
+// Production-ready: atomic transactions, idempotent, proper pagination
 
 import {
     collection,
     doc,
     getDoc,
     getDocs,
-    setDoc,
-    deleteDoc,
-    onSnapshot,
-    serverTimestamp,
     query,
     where,
+    orderBy,
+    limit,
+    startAfter,
+    onSnapshot,
+    runTransaction,
+    writeBatch,
+    serverTimestamp,
+    type DocumentSnapshot,
     type Unsubscribe
 } from 'firebase/firestore';
 import { db } from './firebase';
 
-// Types
+// ==================== Types & Interfaces ====================
+
+// Edge document shapes (source of truth)
+export interface MembershipDoc {
+    uid: string;
+    groupId: string;
+    role: 'member' | 'moderator' | 'admin';
+    joinedAt: Date;
+}
+
+export interface LikeDoc {
+    uid: string;
+    postId: string;
+    createdAt: Date;
+}
+
+export interface SavedPostDoc {
+    postId: string;
+    createdAt: Date;
+}
+
+export interface SavedCategoryDoc {
+    categoryId: string;
+    createdAt: Date;
+}
+
+// Group structure
 export interface FirestoreGroup {
     id: string;
     name: string;
@@ -26,261 +56,385 @@ export interface FirestoreGroup {
     createdAt?: Date;
 }
 
-export interface GroupMembership {
-    groupId: string;
-    userId: string;
-    joinedAt: Date;
+// Pagination result
+export interface PaginatedResult<T> {
+    items: T[];
+    lastDoc: DocumentSnapshot | null;
+    hasMore: boolean;
 }
 
-// Collection references
+// ==================== Constants ====================
+
+const DEFAULT_LIMIT = 30;
+const SMALL_LIST_LIMIT = 50; // For categories, small lists
+
+// ==================== Groups (Read) ====================
+
 const groupsCollection = collection(db, 'groups');
 
-// ==================== Groups ====================
-
-/**
- * Get all groups
- */
 export const getGroups = async (): Promise<FirestoreGroup[]> => {
     const snapshot = await getDocs(groupsCollection);
-    return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-    } as FirestoreGroup));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as FirestoreGroup));
 };
 
-/**
- * Get groups by category
- */
 export const getGroupsByCategory = async (categoryId: string): Promise<FirestoreGroup[]> => {
     const q = query(groupsCollection, where('categoryId', '==', categoryId));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-    } as FirestoreGroup));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as FirestoreGroup));
 };
 
-/**
- * Get single group by ID
- */
 export const getGroup = async (groupId: string): Promise<FirestoreGroup | null> => {
-    const docRef = doc(db, 'groups', groupId);
-    const docSnap = await getDoc(docRef);
+    const docSnap = await getDoc(doc(db, 'groups', groupId));
     if (!docSnap.exists()) return null;
     return { id: docSnap.id, ...docSnap.data() } as FirestoreGroup;
 };
 
-// ==================== Group Membership ====================
+// ==================== Group Membership (Transactional) ====================
+
+/**
+ * Join a group - truly idempotent with transaction
+ * Source of truth: groups/{groupId}/members/{uid}
+ * User index: users/{uid}/memberships/{groupId}
+ */
+export const joinGroupWithSync = async (groupId: string, uid: string): Promise<void> => {
+    const memberRef = doc(db, 'groups', groupId, 'members', uid);
+    const membershipRef = doc(db, 'users', uid, 'memberships', groupId);
+
+    await runTransaction(db, async (tx) => {
+        const [memberSnap, membershipSnap] = await Promise.all([
+            tx.get(memberRef),
+            tx.get(membershipRef),
+        ]);
+
+        // Only create if doesn't exist (true idempotence)
+        if (!memberSnap.exists()) {
+            tx.set(memberRef, {
+                uid,
+                groupId,
+                role: 'member',
+                joinedAt: serverTimestamp(),
+            });
+        }
+
+        if (!membershipSnap.exists()) {
+            tx.set(membershipRef, {
+                groupId,
+                joinedAt: serverTimestamp(),
+            });
+        }
+    });
+};
+
+/**
+ * Leave a group - delete is idempotent
+ */
+export const leaveGroupWithSync = async (groupId: string, uid: string): Promise<void> => {
+    const memberRef = doc(db, 'groups', groupId, 'members', uid);
+    const membershipRef = doc(db, 'users', uid, 'memberships', groupId);
+
+    await runTransaction(db, async (tx) => {
+        tx.delete(memberRef);
+        tx.delete(membershipRef);
+    });
+};
 
 /**
  * Check if user is member of group
  */
-export const isGroupMember = async (groupId: string, userId: string): Promise<boolean> => {
-    const memberDoc = doc(db, 'groups', groupId, 'members', userId);
+export const isGroupMember = async (groupId: string, uid: string): Promise<boolean> => {
+    const memberDoc = doc(db, 'groups', groupId, 'members', uid);
     const docSnap = await getDoc(memberDoc);
     return docSnap.exists();
 };
 
-/**
- * Join a group
- */
-export const joinGroup = async (groupId: string, userId: string): Promise<void> => {
-    const memberDoc = doc(db, 'groups', groupId, 'members', userId);
-    await setDoc(memberDoc, {
-        joinedAt: serverTimestamp()
-    });
-};
+// ==================== Post Likes (Transactional) ====================
 
 /**
- * Leave a group
+ * Like a post - truly idempotent
+ * Source of truth: posts/{postId}/likes/{uid}
+ * User index: users/{uid}/likes/{postId}
  */
-export const leaveGroup = async (groupId: string, userId: string): Promise<void> => {
-    const memberDoc = doc(db, 'groups', groupId, 'members', userId);
-    await deleteDoc(memberDoc);
-};
+export const likePostWithSync = async (postId: string, uid: string): Promise<void> => {
+    const likeRef = doc(db, 'posts', postId, 'likes', uid);
+    const userLikeRef = doc(db, 'users', uid, 'likes', postId);
 
-/**
- * Get all group IDs that a user has joined
- */
-export const getUserJoinedGroups = async (userId: string): Promise<string[]> => {
-    // Since we store memberships as subcollections, we need to check each group
-    // This is a limitation - in production, consider a separate userGroups collection
-    const groupsSnap = await getDocs(groupsCollection);
-    const joinedGroups: string[] = [];
+    await runTransaction(db, async (tx) => {
+        const [likeSnap, userLikeSnap] = await Promise.all([
+            tx.get(likeRef),
+            tx.get(userLikeRef),
+        ]);
 
-    for (const groupDoc of groupsSnap.docs) {
-        const memberDoc = doc(db, 'groups', groupDoc.id, 'members', userId);
-        const memberSnap = await getDoc(memberDoc);
-        if (memberSnap.exists()) {
-            joinedGroups.push(groupDoc.id);
+        if (!likeSnap.exists()) {
+            tx.set(likeRef, { uid, postId, createdAt: serverTimestamp() });
         }
-    }
-
-    return joinedGroups;
-};
-
-/**
- * Subscribe to user's joined groups (real-time)
- * Returns unsubscribe function
- */
-export const subscribeToUserGroups = (
-    userId: string,
-    onUpdate: (groupIds: string[]) => void
-): Unsubscribe => {
-    // Listen to the user's membership documents collection
-    const userMembershipsRef = collection(db, 'userMemberships', userId, 'groups');
-
-    return onSnapshot(userMembershipsRef, (snapshot) => {
-        const groupIds = snapshot.docs.map(doc => doc.id);
-        onUpdate(groupIds);
-    });
-};
-
-// ==================== User Memberships (Denormalized for fast reads) ====================
-
-/**
- * Add group to user's memberships (denormalized)
- */
-export const addUserMembership = async (userId: string, groupId: string): Promise<void> => {
-    const userGroupDoc = doc(db, 'userMemberships', userId, 'groups', groupId);
-    await setDoc(userGroupDoc, {
-        joinedAt: serverTimestamp()
+        if (!userLikeSnap.exists()) {
+            tx.set(userLikeRef, { postId, createdAt: serverTimestamp() });
+        }
     });
 };
 
 /**
- * Remove group from user's memberships (denormalized)
+ * Unlike a post - delete is idempotent
  */
-export const removeUserMembership = async (userId: string, groupId: string): Promise<void> => {
-    const userGroupDoc = doc(db, 'userMemberships', userId, 'groups', groupId);
-    await deleteDoc(userGroupDoc);
-};
+export const unlikePostWithSync = async (postId: string, uid: string): Promise<void> => {
+    const likeRef = doc(db, 'posts', postId, 'likes', uid);
+    const userLikeRef = doc(db, 'users', uid, 'likes', postId);
 
-// ==================== Combined Operations ====================
-
-/**
- * Join group with denormalized write (both group members and user memberships)
- */
-export const joinGroupWithSync = async (groupId: string, userId: string): Promise<void> => {
-    await Promise.all([
-        joinGroup(groupId, userId),
-        addUserMembership(userId, groupId)
-    ]);
-};
-
-/**
- * Leave group with denormalized cleanup
- */
-export const leaveGroupWithSync = async (groupId: string, userId: string): Promise<void> => {
-    await Promise.all([
-        leaveGroup(groupId, userId),
-        removeUserMembership(userId, groupId)
-    ]);
-};
-
-// ==================== Saved Categories ====================
-
-/**
- * Subscribe to user's saved categories
- */
-export const subscribeToSavedCategories = (
-    userId: string,
-    onUpdate: (categoryIds: string[]) => void
-): Unsubscribe => {
-    const userCategoriesRef = collection(db, 'userSavedCategories', userId, 'categories');
-
-    return onSnapshot(userCategoriesRef, (snapshot) => {
-        const categoryIds = snapshot.docs.map(doc => doc.id);
-        onUpdate(categoryIds);
+    await runTransaction(db, async (tx) => {
+        tx.delete(likeRef);
+        tx.delete(userLikeRef);
     });
 };
 
 /**
- * Save a category
+ * Check if user liked a post
  */
-export const saveCategory = async (userId: string, categoryId: string): Promise<void> => {
-    const docRef = doc(db, 'userSavedCategories', userId, 'categories', categoryId);
-    await setDoc(docRef, { savedAt: serverTimestamp() });
+export const isPostLiked = async (postId: string, uid: string): Promise<boolean> => {
+    const likeDoc = doc(db, 'posts', postId, 'likes', uid);
+    const docSnap = await getDoc(likeDoc);
+    return docSnap.exists();
 };
 
-/**
- * Unsave a category
- */
-export const unsaveCategory = async (userId: string, categoryId: string): Promise<void> => {
-    const docRef = doc(db, 'userSavedCategories', userId, 'categories', categoryId);
-    await deleteDoc(docRef);
-};
-
-// ==================== Liked Posts ====================
+// ==================== Saved Posts (Transactional) ====================
 
 /**
- * Subscribe to user's liked posts
+ * Save a post - uses users/{uid}/savedPosts/{postId}
  */
-export const subscribeToLikedPosts = (
-    userId: string,
-    onUpdate: (postIds: string[]) => void
-): Unsubscribe => {
-    const userLikesRef = collection(db, 'userLikes', userId, 'posts');
+export const savePostWithSync = async (postId: string, uid: string): Promise<void> => {
+    const savedRef = doc(db, 'users', uid, 'savedPosts', postId);
 
-    return onSnapshot(userLikesRef, (snapshot) => {
-        const postIds = snapshot.docs.map(doc => doc.id);
-        onUpdate(postIds);
+    await runTransaction(db, async (tx) => {
+        const snap = await tx.get(savedRef);
+        if (!snap.exists()) {
+            tx.set(savedRef, { postId, createdAt: serverTimestamp() });
+        }
     });
-};
-
-/**
- * Like a post
- */
-export const likePost = async (userId: string, postId: string): Promise<void> => {
-    // Add to user's likes
-    const userLikeDoc = doc(db, 'userLikes', userId, 'posts', postId);
-    await setDoc(userLikeDoc, { likedAt: serverTimestamp() });
-
-    // Add to post's likes (for counting)
-    const postLikeDoc = doc(db, 'posts', postId, 'likes', userId);
-    await setDoc(postLikeDoc, { likedAt: serverTimestamp() });
-};
-
-/**
- * Unlike a post
- */
-export const unlikePost = async (userId: string, postId: string): Promise<void> => {
-    const userLikeDoc = doc(db, 'userLikes', userId, 'posts', postId);
-    await deleteDoc(userLikeDoc);
-
-    const postLikeDoc = doc(db, 'posts', postId, 'likes', userId);
-    await deleteDoc(postLikeDoc);
-};
-
-// ==================== Saved Posts ====================
-
-/**
- * Subscribe to user's saved posts
- */
-export const subscribeToSavedPosts = (
-    userId: string,
-    onUpdate: (postIds: string[]) => void
-): Unsubscribe => {
-    const userSavesRef = collection(db, 'userSavedPosts', userId, 'posts');
-
-    return onSnapshot(userSavesRef, (snapshot) => {
-        const postIds = snapshot.docs.map(doc => doc.id);
-        onUpdate(postIds);
-    });
-};
-
-/**
- * Save a post
- */
-export const savePost = async (userId: string, postId: string): Promise<void> => {
-    const docRef = doc(db, 'userSavedPosts', userId, 'posts', postId);
-    await setDoc(docRef, { savedAt: serverTimestamp() });
 };
 
 /**
  * Unsave a post
  */
-export const unsavePost = async (userId: string, postId: string): Promise<void> => {
-    const docRef = doc(db, 'userSavedPosts', userId, 'posts', postId);
-    await deleteDoc(docRef);
+export const unsavePostWithSync = async (postId: string, uid: string): Promise<void> => {
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'users', uid, 'savedPosts', postId));
+    await batch.commit();
+};
+
+/**
+ * Check if post is saved
+ */
+export const isPostSaved = async (postId: string, uid: string): Promise<boolean> => {
+    const docSnap = await getDoc(doc(db, 'users', uid, 'savedPosts', postId));
+    return docSnap.exists();
+};
+
+// ==================== Saved Categories (Transactional) ====================
+
+/**
+ * Save a category
+ */
+export const saveCategoryWithSync = async (categoryId: string, uid: string): Promise<void> => {
+    const savedRef = doc(db, 'users', uid, 'savedCategories', categoryId);
+
+    await runTransaction(db, async (tx) => {
+        const snap = await tx.get(savedRef);
+        if (!snap.exists()) {
+            tx.set(savedRef, { categoryId, createdAt: serverTimestamp() });
+        }
+    });
+};
+
+/**
+ * Unsave a category
+ */
+export const unsaveCategoryWithSync = async (categoryId: string, uid: string): Promise<void> => {
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'users', uid, 'savedCategories', categoryId));
+    await batch.commit();
+};
+
+/**
+ * Check if category is saved
+ */
+export const isCategorySaved = async (categoryId: string, uid: string): Promise<boolean> => {
+    const docSnap = await getDoc(doc(db, 'users', uid, 'savedCategories', categoryId));
+    return docSnap.exists();
+};
+
+// ==================== Real-time Subscriptions ====================
+
+/**
+ * Subscribe to user's memberships (with limit)
+ */
+export const subscribeToUserMemberships = (
+    uid: string,
+    onUpdate: (groupIds: string[]) => void,
+    limitCount: number = SMALL_LIST_LIMIT
+): Unsubscribe => {
+    const q = query(
+        collection(db, 'users', uid, 'memberships'),
+        orderBy('joinedAt', 'desc'),
+        limit(limitCount)
+    );
+
+    return onSnapshot(q, (snapshot) => {
+        const groupIds = snapshot.docs.map(d => d.id);
+        onUpdate(groupIds);
+    });
+};
+
+/**
+ * Subscribe to user's saved categories (small list, no pagination needed)
+ */
+export const subscribeToSavedCategories = (
+    uid: string,
+    onUpdate: (categoryIds: string[]) => void
+): Unsubscribe => {
+    const q = query(
+        collection(db, 'users', uid, 'savedCategories'),
+        orderBy('createdAt', 'desc'),
+        limit(SMALL_LIST_LIMIT)
+    );
+
+    return onSnapshot(q, (snapshot) => {
+        const categoryIds = snapshot.docs.map(d => d.id);
+        onUpdate(categoryIds);
+    });
+};
+
+/**
+ * Subscribe to user's liked posts (with limit)
+ */
+export const subscribeToLikedPosts = (
+    uid: string,
+    onUpdate: (postIds: string[]) => void,
+    limitCount: number = DEFAULT_LIMIT
+): Unsubscribe => {
+    const q = query(
+        collection(db, 'users', uid, 'likes'),
+        orderBy('createdAt', 'desc'),
+        limit(limitCount)
+    );
+
+    return onSnapshot(q, (snapshot) => {
+        const postIds = snapshot.docs.map(d => d.id);
+        onUpdate(postIds);
+    });
+};
+
+/**
+ * Subscribe to user's saved posts (with limit)
+ */
+export const subscribeToSavedPosts = (
+    uid: string,
+    onUpdate: (postIds: string[]) => void,
+    limitCount: number = DEFAULT_LIMIT
+): Unsubscribe => {
+    const q = query(
+        collection(db, 'users', uid, 'savedPosts'),
+        orderBy('createdAt', 'desc'),
+        limit(limitCount)
+    );
+
+    return onSnapshot(q, (snapshot) => {
+        const postIds = snapshot.docs.map(d => d.id);
+        onUpdate(postIds);
+    });
+};
+
+// ==================== Paginated Queries (Load More) ====================
+
+/**
+ * Get user's memberships with pagination (for "load more")
+ */
+export const getUserMembershipsPaginated = async (
+    uid: string,
+    lastDoc?: DocumentSnapshot,
+    pageSize: number = DEFAULT_LIMIT
+): Promise<PaginatedResult<string>> => {
+    let q = query(
+        collection(db, 'users', uid, 'memberships'),
+        orderBy('joinedAt', 'desc'),
+        limit(pageSize + 1) // +1 to check if there's more
+    );
+
+    if (lastDoc) {
+        q = query(q, startAfter(lastDoc));
+    }
+
+    const snapshot = await getDocs(q);
+    const hasMore = snapshot.docs.length > pageSize;
+    const docs = hasMore ? snapshot.docs.slice(0, -1) : snapshot.docs;
+
+    return {
+        items: docs.map(d => d.id),
+        lastDoc: docs.length > 0 ? docs[docs.length - 1] : null,
+        hasMore
+    };
+};
+
+/**
+ * Get user's liked posts with pagination
+ */
+export const getLikedPostsPaginated = async (
+    uid: string,
+    lastDoc?: DocumentSnapshot,
+    pageSize: number = DEFAULT_LIMIT
+): Promise<PaginatedResult<string>> => {
+    let q = query(
+        collection(db, 'users', uid, 'likes'),
+        orderBy('createdAt', 'desc'),
+        limit(pageSize + 1)
+    );
+
+    if (lastDoc) {
+        q = query(q, startAfter(lastDoc));
+    }
+
+    const snapshot = await getDocs(q);
+    const hasMore = snapshot.docs.length > pageSize;
+    const docs = hasMore ? snapshot.docs.slice(0, -1) : snapshot.docs;
+
+    return {
+        items: docs.map(d => d.id),
+        lastDoc: docs.length > 0 ? docs[docs.length - 1] : null,
+        hasMore
+    };
+};
+
+// ==================== Bulk Operations (for migrations/seeds) ====================
+
+/**
+ * Seed initial groups from mock data (use only in dev/setup)
+ */
+export const seedGroups = async (groups: Omit<FirestoreGroup, 'id'>[]): Promise<void> => {
+    const batch = writeBatch(db);
+
+    for (const group of groups) {
+        const docRef = doc(collection(db, 'groups'));
+        batch.set(docRef, {
+            ...group,
+            memberCount: 0,
+            createdAt: serverTimestamp()
+        });
+    }
+
+    await batch.commit();
+};
+
+/**
+ * Clear all user data (for account deletion/testing)
+ */
+export const clearUserData = async (uid: string): Promise<void> => {
+    const batch = writeBatch(db);
+
+    // Get all user subcollections and delete
+    const collections = ['memberships', 'likes', 'savedPosts', 'savedCategories'];
+
+    for (const collName of collections) {
+        const snapshot = await getDocs(collection(db, 'users', uid, collName));
+        snapshot.docs.forEach(d => batch.delete(d.ref));
+    }
+
+    await batch.commit();
 };

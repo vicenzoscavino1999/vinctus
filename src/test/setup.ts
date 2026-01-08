@@ -36,6 +36,22 @@ vi.mock('firebase/firestore', () => ({
         return () => { };
     }),
     serverTimestamp: vi.fn(() => new Date()),
-    query: vi.fn(),
+    query: vi.fn((...args) => args[0]),
     where: vi.fn(),
+    orderBy: vi.fn(),
+    limit: vi.fn(),
+    startAfter: vi.fn(),
+    runTransaction: vi.fn(async (_db, callback) => {
+        const mockTx = {
+            get: vi.fn(() => Promise.resolve({ exists: () => false, data: () => ({}) })),
+            set: vi.fn(),
+            delete: vi.fn(),
+        };
+        return callback(mockTx);
+    }),
+    writeBatch: vi.fn(() => ({
+        set: vi.fn(),
+        delete: vi.fn(),
+        commit: vi.fn(() => Promise.resolve()),
+    })),
 }));
