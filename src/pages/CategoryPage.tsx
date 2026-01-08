@@ -154,7 +154,19 @@ const CategoryPage = () => {
             {viewMode === 'subgroups' && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-neutral-900 border border-neutral-900 animate-in fade-in duration-500">
                     {category.subgroups.map((group) => (
-                        <div key={group.id} className="bg-neutral-950 p-10 hover:bg-neutral-900/40 transition-colors cursor-pointer group">
+                        <div
+                            key={group.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => navigate(`/group/${group.id}`)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    navigate(`/group/${group.id}`);
+                                }
+                            }}
+                            className="bg-neutral-950 p-10 hover:bg-neutral-900/40 transition-colors cursor-pointer group"
+                        >
                             <div className="flex justify-between items-start mb-8">
                                 <Hash size={16} className="text-neutral-700 group-hover:text-neutral-500 transition-colors" />
                             </div>
