@@ -67,8 +67,8 @@ describe('SearchFilters', () => {
             );
 
             expect(screen.getByText('Relevancia')).toBeInTheDocument();
-            expect(screen.getByText('Mas recientes')).toBeInTheDocument();
-            expect(screen.getByText('Mas populares')).toBeInTheDocument();
+            expect(screen.getByText('M\u00E1s recientes')).toBeInTheDocument();
+            expect(screen.getByText('M\u00E1s populares')).toBeInTheDocument();
             expect(screen.getByText('A-Z')).toBeInTheDocument();
         });
 
@@ -99,7 +99,7 @@ describe('SearchFilters', () => {
                 />
             );
 
-            fireEvent.click(screen.getByText('Mas recientes'));
+            fireEvent.click(screen.getByText('M\u00E1s recientes'));
 
             expect(mockOnApply).toHaveBeenCalledWith({
                 category: null,
