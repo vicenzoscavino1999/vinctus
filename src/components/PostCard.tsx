@@ -61,6 +61,7 @@ const PostCard = ({ post }) => {
                 <div className="flex items-center space-x-6 text-neutral-600">
                     <button
                         onClick={handleLike}
+                        aria-label="Me gusta"
                         className={`flex items-center space-x-2 transition-colors ${liked ? 'text-red-500' : 'hover:text-white'}`}
                     >
                         <Heart size={14} fill={liked ? 'currentColor' : 'none'} />
@@ -68,6 +69,7 @@ const PostCard = ({ post }) => {
                     </button>
                     <button
                         onClick={handleComment}
+                        aria-label="Comentarios"
                         className="flex items-center space-x-2 hover:text-white transition-colors"
                     >
                         <MessageSquare size={14} />
@@ -80,3 +82,4 @@ const PostCard = ({ post }) => {
 };
 
 export default PostCard;
+

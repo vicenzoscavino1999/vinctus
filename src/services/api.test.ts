@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
     fetchArxivPapers,
     fetchWikipediaArticles,
@@ -9,11 +9,65 @@ import {
 
 // Mock global fetch
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+
+const buildArxivUrl = (category: string, maxResults: number) => {
+    const categoryMap: Record<string, string> = {
+        physics: 'physics.gen-ph',
+        quantum: 'quant-ph',
+        cosmology: 'astro-ph.CO',
+        math: 'math.GM',
+        cs: 'cs.AI',
+        'quant-ph': 'quant-ph',
+        'astro-ph.CO': 'astro-ph.CO',
+    };
+
+    const query = categoryMap[category] || category;
+    const arxivUrl = `https://export.arxiv.org/api/query?search_query=cat:${query}&start=0&max_results=${maxResults}&sortBy=submittedDate&sortOrder=descending`;
+    return `${CORS_PROXY}${encodeURIComponent(arxivUrl)}`;
+};
+
+const buildWikipediaUrl = (topic: string) =>
+    `https://en.wikipedia.org/api/rest_v1/page/related/${encodeURIComponent(topic)}`;
+
+const buildHackerNewsListUrl = (type: string) => {
+    const typeMap: Record<string, string> = {
+        top: 'topstories',
+        new: 'newstories',
+        best: 'beststories',
+    };
+
+    const storyType = typeMap[type] || 'topstories';
+    return `https://hacker-news.firebaseio.com/v0/${storyType}.json`;
+};
+
+const buildHackerNewsItemUrl = (id: number) =>
+    `https://hacker-news.firebaseio.com/v0/item/${id}.json`;
+
+const buildBooksUrl = (subject: string, limit: number) =>
+    `https://openlibrary.org/subjects/${subject}.json?limit=${limit}`;
+
+const buildNatureUrl = (taxon: string, limit: number) => {
+    const taxonMap: Record<string, string> = {
+        plants: '47126',
+        birds: '3',
+        mammals: '40151',
+        insects: '47158',
+        reptiles: '26036',
+    };
+
+    const taxonId = taxonMap[taxon] || taxon;
+    return `https://api.inaturalist.org/v1/observations?taxon_id=${taxonId}&quality_grade=research&per_page=${limit}&order=desc&order_by=created_at`;
+};
 
 describe('API Services', () => {
     beforeEach(() => {
-        mockFetch.mockClear();
+        mockFetch.mockReset();
+        vi.stubGlobal('fetch', mockFetch);
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
     });
 
     describe('fetchArxivPapers', () => {
@@ -22,12 +76,13 @@ describe('API Services', () => {
 
             const result = await fetchArxivPapers('physics', 5);
 
+            expect(mockFetch).toHaveBeenCalledWith(buildArxivUrl('physics', 5));
             expect(result).toEqual([]);
         });
 
         it('parsea correctamente respuesta XML de arXiv', async () => {
             const mockXml = `
-        <feed>
+        <feed xmlns="http://www.w3.org/2005/Atom">
           <entry>
             <id>http://arxiv.org/abs/1234.5678</id>
             <title>Test Paper Title</title>
@@ -44,6 +99,7 @@ describe('API Services', () => {
 
             const result = await fetchArxivPapers('physics', 1);
 
+            expect(mockFetch).toHaveBeenCalledWith(buildArxivUrl('physics', 1));
             expect(result).toHaveLength(1);
             expect(result[0].title).toBe('Test Paper Title');
             expect(result[0].type).toBe('Paper');
@@ -56,6 +112,7 @@ describe('API Services', () => {
 
             const result = await fetchWikipediaArticles('Ancient_history', 5);
 
+            expect(mockFetch).toHaveBeenCalledWith(buildWikipediaUrl('Ancient_history'));
             expect(result).toEqual([]);
         });
 
@@ -78,6 +135,7 @@ describe('API Services', () => {
 
             const result = await fetchWikipediaArticles('Ancient_Rome', 1);
 
+            expect(mockFetch).toHaveBeenCalledWith(buildWikipediaUrl('Ancient_Rome'));
             expect(result).toHaveLength(1);
             expect(result[0].title).toBe('Ancient Rome');
             expect(result[0].type).toBe('Articulo');
@@ -90,6 +148,7 @@ describe('API Services', () => {
 
             const result = await fetchHackerNews('top', 5);
 
+            expect(mockFetch).toHaveBeenCalledWith(buildHackerNewsListUrl('top'));
             expect(result).toEqual([]);
         });
 
@@ -128,6 +187,9 @@ describe('API Services', () => {
 
             const result = await fetchHackerNews('top', 2);
 
+            expect(mockFetch).toHaveBeenNthCalledWith(1, buildHackerNewsListUrl('top'));
+            expect(mockFetch).toHaveBeenNthCalledWith(2, buildHackerNewsItemUrl(1));
+            expect(mockFetch).toHaveBeenNthCalledWith(3, buildHackerNewsItemUrl(2));
             expect(result).toHaveLength(2);
             expect(result[0].title).toBe('Test Story');
             expect(result[0].type).toBe('Noticia');
@@ -140,6 +202,7 @@ describe('API Services', () => {
 
             const result = await fetchBooks('fiction', 5);
 
+            expect(mockFetch).toHaveBeenCalledWith(buildBooksUrl('fiction', 5));
             expect(result).toEqual([]);
         });
 
@@ -162,6 +225,7 @@ describe('API Services', () => {
 
             const result = await fetchBooks('fiction', 1);
 
+            expect(mockFetch).toHaveBeenCalledWith(buildBooksUrl('fiction', 1));
             expect(result).toHaveLength(1);
             expect(result[0].title).toBe('Test Book');
             expect(result[0].authors).toBe('Test Author');
@@ -175,6 +239,7 @@ describe('API Services', () => {
 
             const result = await fetchNatureObservations('plants', 5);
 
+            expect(mockFetch).toHaveBeenCalledWith(buildNatureUrl('plants', 5));
             expect(result).toEqual([]);
         });
 
@@ -201,9 +266,11 @@ describe('API Services', () => {
 
             const result = await fetchNatureObservations('plants', 1);
 
+            expect(mockFetch).toHaveBeenCalledWith(buildNatureUrl('plants', 1));
             expect(result).toHaveLength(1);
             expect(result[0].species).toBe('Oak Tree');
             expect(result[0].type).toBe('Observacion');
         });
     });
 });
+

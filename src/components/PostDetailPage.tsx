@@ -7,22 +7,22 @@ const POSTS_DATA = {
     1: {
         id: 1,
         title: 'Un agujero negro revela secretos del universo temprano',
-        content: `Los científicos han descubierto un agujero negro supermasivo que data de apenas 470 millones de años después del Big Bang, desafiando las teorías actuales sobre la formación de estos gigantes cósmicos.
+        content: `Los cientÃ­ficos han descubierto un agujero negro supermasivo que data de apenas 470 millones de aÃ±os despuÃ©s del Big Bang, desafiando las teorÃ­as actuales sobre la formaciÃ³n de estos gigantes cÃ³smicos.
 
-Este hallazgo, publicado en Nature, sugiere que los agujeros negros primordiales podrían haberse formado de manera diferente a lo que pensábamos. El equipo utilizó el telescopio James Webb para hacer estas observaciones sin precedentes.
+Este hallazgo, publicado en Nature, sugiere que los agujeros negros primordiales podrÃ­an haberse formado de manera diferente a lo que pensÃ¡bamos. El equipo utilizÃ³ el telescopio James Webb para hacer estas observaciones sin precedentes.
 
-"Es como encontrar un dinosaurio adulto en el registro fósil de cuando solo deberían existir huevos", explica la Dra. María Rodríguez, coautora del estudio.
+"Es como encontrar un dinosaurio adulto en el registro fÃ³sil de cuando solo deberÃ­an existir huevos", explica la Dra. MarÃ­a RodrÃ­guez, coautora del estudio.
 
-Las implicaciones de este descubrimiento podrían cambiar nuestra comprensión de la cosmología temprana y la evolución de las galaxias.`,
+Las implicaciones de este descubrimiento podrÃ­an cambiar nuestra comprensiÃ³n de la cosmologÃ­a temprana y la evoluciÃ³n de las galaxias.`,
         author: {
-            name: 'María L.',
+            name: 'MarÃ­a L.',
             avatar: null,
             role: 'Investigadora'
         },
         group: {
             id: 1,
-            name: 'Exploradores Cuánticos',
-            icon: '⚛️'
+            name: 'Exploradores CuÃ¡nticos',
+            icon: 'âš›ï¸'
         },
         publishedAt: 'Hace 2 horas',
         likes: 234,
@@ -32,14 +32,14 @@ Las implicaciones de este descubrimiento podrían cambiar nuestra comprensión d
     },
     2: {
         id: 2,
-        title: 'La magia de Rubén Blades en vivo',
-        content: `Anoche tuve el privilegio de asistir al concierto de Rubén Blades en el Auditorio Nacional. Una experiencia transformadora que me recordó por qué la salsa es mucho más que música: es poesía en movimiento.
+        title: 'La magia de RubÃ©n Blades en vivo',
+        content: `Anoche tuve el privilegio de asistir al concierto de RubÃ©n Blades en el Auditorio Nacional. Una experiencia transformadora que me recordÃ³ por quÃ© la salsa es mucho mÃ¡s que mÃºsica: es poesÃ­a en movimiento.
 
-El maestro abrió con "Pedro Navaja" y el público enloqueció. Cada canción era una historia, cada historia una lección de vida. A sus años, sigue teniendo la energía de alguien que ama profundamente lo que hace.
+El maestro abriÃ³ con "Pedro Navaja" y el pÃºblico enloqueciÃ³. Cada canciÃ³n era una historia, cada historia una lecciÃ³n de vida. A sus aÃ±os, sigue teniendo la energÃ­a de alguien que ama profundamente lo que hace.
 
-Lo que más me impactó fue la interpretación de "Patria". En tiempos tan polarizados, escuchar esa letra cobra un significado especial.
+Lo que mÃ¡s me impactÃ³ fue la interpretaciÃ³n de "Patria". En tiempos tan polarizados, escuchar esa letra cobra un significado especial.
 
-¿Alguien más estuvo ahí? Me encantaría leer sus impresiones.`,
+Â¿Alguien mÃ¡s estuvo ahÃ­? Me encantarÃ­a leer sus impresiones.`,
         author: {
             name: 'Pedro S.',
             avatar: null,
@@ -48,7 +48,7 @@ Lo que más me impactó fue la interpretación de "Patria". En tiempos tan polar
         group: {
             id: 2,
             name: 'Jazz & Vinilos',
-            icon: '🎷'
+            icon: 'ðŸŽ·'
         },
         publishedAt: 'Hace 1 hora',
         likes: 89,
@@ -134,7 +134,7 @@ const PostDetailPage = () => {
                 </div>
                 <div>
                     <p className="text-white font-medium">{post.author.name}</p>
-                    <p className="text-neutral-500 text-sm">{post.author.role} · {post.publishedAt}</p>
+                    <p className="text-neutral-500 text-sm">{post.author.role} Â· {post.publishedAt}</p>
                 </div>
             </div>
 
@@ -195,7 +195,7 @@ const PostDetailPage = () => {
             <section className="mt-8">
                 <h2 className="text-heading-lg font-display text-white mb-4">Comentarios ({post.comments})</h2>
                 <div className="bg-surface-overlay border border-dashed border-neutral-800 rounded-card p-8 text-center">
-                    <p className="text-neutral-500 italic">Los comentarios estarán disponibles próximamente</p>
+                    <p className="text-neutral-500 italic">Los comentarios estarÃ¡n disponibles prÃ³ximamente</p>
                 </div>
             </section>
         </div>
@@ -203,3 +203,4 @@ const PostDetailPage = () => {
 };
 
 export default PostDetailPage;
+

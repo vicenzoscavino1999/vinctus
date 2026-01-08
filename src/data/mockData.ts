@@ -234,3 +234,4 @@ export const EVENTS: EventItem[] = [
         attendees: 25
     }
 ];
+

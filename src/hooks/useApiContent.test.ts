@@ -1,23 +1,32 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { useApiContent } from '../hooks/useApiContent';
 
-// Mock de las funciones de API
-vi.mock('../services/api', () => ({
-    fetchArxivPapers: vi.fn(),
-    fetchWikipediaArticles: vi.fn(),
-    fetchHackerNews: vi.fn(),
-    fetchBooks: vi.fn(),
-    fetchNatureObservations: vi.fn(),
-}));
+let useApiContent: typeof import('../hooks/useApiContent').useApiContent;
+let fetchArxivPapers: ReturnType<typeof vi.fn>;
+let fetchWikipediaArticles: ReturnType<typeof vi.fn>;
+let fetchHackerNews: ReturnType<typeof vi.fn>;
+let fetchBooks: ReturnType<typeof vi.fn>;
+let fetchNatureObservations: ReturnType<typeof vi.fn>;
 
-import {
-    fetchArxivPapers,
-    fetchWikipediaArticles,
-    fetchHackerNews,
-    fetchBooks,
-    fetchNatureObservations,
-} from '../services/api';
+beforeAll(async () => {
+    vi.doMock('../services/api', () => ({
+        fetchArxivPapers: vi.fn(),
+        fetchWikipediaArticles: vi.fn(),
+        fetchHackerNews: vi.fn(),
+        fetchBooks: vi.fn(),
+        fetchNatureObservations: vi.fn(),
+    }));
+
+    const api = await import('../services/api');
+    fetchArxivPapers = api.fetchArxivPapers as ReturnType<typeof vi.fn>;
+    fetchWikipediaArticles = api.fetchWikipediaArticles as ReturnType<typeof vi.fn>;
+    fetchHackerNews = api.fetchHackerNews as ReturnType<typeof vi.fn>;
+    fetchBooks = api.fetchBooks as ReturnType<typeof vi.fn>;
+    fetchNatureObservations = api.fetchNatureObservations as ReturnType<typeof vi.fn>;
+
+    const hookModule = await import('../hooks/useApiContent');
+    useApiContent = hookModule.useApiContent;
+});
 
 describe('useApiContent Hook', () => {
     beforeEach(() => {
@@ -25,18 +34,43 @@ describe('useApiContent Hook', () => {
     });
 
     describe('Estado inicial', () => {
-        it('inicia con loading true cuando hay apiSource y query', () => {
+        it('inicia con loading true cuando hay apiSource y query', async () => {
+            let resolveFetch!: (value: any[]) => void;
+            const pendingFetch = new Promise<any[]>((resolve) => {
+                resolveFetch = resolve;
+            });
+            (fetchArxivPapers as any).mockReturnValueOnce(pendingFetch);
             const { result } = renderHook(() => useApiContent('arxiv', 'physics', 5));
 
             expect(result.current.loading).toBe(true);
             expect(result.current.data).toEqual([]);
             expect(result.current.error).toBe(null);
+
+            resolveFetch([]);
+            await waitFor(() => {
+                expect(result.current.loading).toBe(false);
+            });
         });
 
-        it('inicia con loading false cuando no hay apiSource', () => {
+        it('inicia con loading false cuando no hay apiSource', async () => {
             const { result } = renderHook(() => useApiContent(null, null, 5));
 
-            expect(result.current.loading).toBe(false);
+            await waitFor(() => {
+                expect(result.current.loading).toBe(false);
+            });
+
+            expect(fetchArxivPapers).not.toHaveBeenCalled();
+        });
+
+        it('usa fallback cuando query es null', async () => {
+            (fetchArxivPapers as any).mockResolvedValueOnce([]);
+            const { result } = renderHook(() => useApiContent('arxiv', null, 5));
+
+            await waitFor(() => {
+                expect(result.current.loading).toBe(false);
+            });
+
+            expect(fetchArxivPapers).toHaveBeenCalledWith('physics', 5);
         });
     });
 
@@ -203,3 +237,4 @@ describe('useApiContent Hook', () => {
         });
     });
 });
+

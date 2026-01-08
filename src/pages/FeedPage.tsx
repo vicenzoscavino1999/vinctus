@@ -11,7 +11,7 @@ const FeedPage = () => {
             id: 1,
             name: 'Exploradores Cuanticos',
             type: 'grupo',
-            icon: '⚛️',
+            icon: 'âš›ï¸',
             lastMessage: 'Nuevo paper sobre entrelazamiento cuantico',
             time: '4 min',
             unread: 2
@@ -20,7 +20,7 @@ const FeedPage = () => {
             id: 2,
             name: 'Documentales HispaMundo',
             type: 'grupo',
-            icon: '▶️',
+            icon: 'â–¶ï¸',
             lastMessage: 'Marco: Ha salido un nuevo...',
             time: '1 h',
             unread: 5
@@ -29,7 +29,7 @@ const FeedPage = () => {
             id: 3,
             name: 'IA y Futuro',
             type: 'grupo',
-            icon: '⚛️',
+            icon: 'âš›ï¸',
             lastMessage: 'Alvaro: Increible! Puedes pas...',
             time: '10 abr',
             unread: 8
@@ -38,7 +38,7 @@ const FeedPage = () => {
             id: 4,
             name: 'Musica: Salsa',
             type: 'grupo',
-            icon: '🎵',
+            icon: 'ðŸŽµ',
             lastMessage: 'Adriana: Nuevo tema para...',
             time: '4 abr',
             unread: 1
@@ -47,7 +47,7 @@ const FeedPage = () => {
             id: 5,
             name: 'Astronomia & Cosmos',
             type: 'grupo',
-            icon: '🌌',
+            icon: 'ðŸŒŒ',
             lastMessage: 'Resena: Guia de Observacio...',
             time: '1 abr',
             unread: 0
@@ -56,7 +56,7 @@ const FeedPage = () => {
             id: 6,
             name: 'Paisajes y Sabores',
             type: 'grupo',
-            icon: '🥖',
+            icon: 'ðŸ¥–',
             lastMessage: 'Eric: Receta facil para hornear...',
             time: '14 abr',
             unread: 1
@@ -184,3 +184,4 @@ const FeedPage = () => {
 };
 
 export default FeedPage;
+

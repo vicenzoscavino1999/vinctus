@@ -40,7 +40,7 @@ const CategoryPage = () => {
     if (!category) {
         return (
             <div className="py-20 text-center">
-                <p className="text-neutral-500">Categoría no encontrada</p>
+                <p className="text-neutral-500">CategorÃ­a no encontrada</p>
                 <button onClick={() => navigate('/discover')} className="mt-4 text-white underline">Volver</button>
             </div>
         );
@@ -140,7 +140,7 @@ const CategoryPage = () => {
                         <EmptyState
                             icon={Feather}
                             title="Sin contenido disponible"
-                            message="No hay publicaciones en esta categoría aún. ¡Vuelve pronto!"
+                            message="No hay publicaciones en esta categorÃ­a aÃºn. Â¡Vuelve pronto!"
                         />
                     )}
                 </div>
@@ -174,7 +174,7 @@ const CategoryPage = () => {
                         </div>
                     ) : (
                         <div className="py-20 text-center border border-dashed border-neutral-800 rounded-lg">
-                            <p className="text-neutral-500 font-light italic">No hay documentos archivados en esta categoría aún.</p>
+                            <p className="text-neutral-500 font-light italic">No hay documentos archivados en esta categorÃ­a aÃºn.</p>
                         </div>
                     )}
                 </div>
@@ -184,3 +184,4 @@ const CategoryPage = () => {
 };
 
 export default CategoryPage;
+

@@ -8,11 +8,11 @@ const LibraryPage = () => {
 
     // Datos de carpetas
     const FOLDERS = [
-        { id: 1, name: 'Para despues', count: 9, icon: '📁' },
-        { id: 2, name: 'Fisica', count: 12, icon: '📂' },
-        { id: 3, name: 'Salsa', count: 7, icon: '🎵' },
-        { id: 4, name: 'Ideas de proyectos', count: 4, icon: '💡' },
-        { id: 5, name: 'Lecturas largas', count: 14, icon: '📚' }
+        { id: 1, name: 'Para despues', count: 9, icon: 'ðŸ“' },
+        { id: 2, name: 'Fisica', count: 12, icon: 'ðŸ“‚' },
+        { id: 3, name: 'Salsa', count: 7, icon: 'ðŸŽµ' },
+        { id: 4, name: 'Ideas de proyectos', count: 4, icon: 'ðŸ’¡' },
+        { id: 5, name: 'Lecturas largas', count: 14, icon: 'ðŸ“š' }
     ];
 
     // Datos de recientes
@@ -22,7 +22,7 @@ const LibraryPage = () => {
             title: 'Paper sobre orbitas exoplanetarias',
             collection: 'Fisica',
             time: '10 horas',
-            icon: '📄'
+            icon: 'ðŸ“„'
         },
         {
             id: 2,
@@ -181,3 +181,4 @@ const LibraryPage = () => {
 };
 
 export default LibraryPage;
+

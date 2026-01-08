@@ -45,3 +45,4 @@ const Header = ({ notificationCount = 0 }) => {
 };
 
 export default Header;
+

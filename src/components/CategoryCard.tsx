@@ -26,7 +26,7 @@ const CategoryCard = ({ category, onClick }) => (
                 <div className="flex flex-wrap gap-2 opacity-60 group-hover:opacity-100 transition-opacity duration-500">
                     {category.subgroups.map(sub => (
                         <span key={sub.id} className="text-[10px] uppercase tracking-widest text-neutral-500">
-                            {sub.name} &nbsp;•&nbsp;
+                            {sub.name} &nbsp;â€¢&nbsp;
                         </span>
                     ))}
                 </div>
@@ -36,3 +36,4 @@ const CategoryCard = ({ category, onClick }) => (
 );
 
 export default CategoryCard;
+

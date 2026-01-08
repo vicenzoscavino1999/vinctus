@@ -95,7 +95,7 @@ export function useApiContent(
             }
         }
 
-        if (apiSource && query) {
+        if (apiSource) {
             fetchData();
         } else {
             setLoading(false);
@@ -104,3 +104,4 @@ export function useApiContent(
 
     return { data, loading, error };
 }
+

@@ -91,10 +91,10 @@ const DiscoverPage = () => {
             <header className="mb-12 pt-6 md:pt-10 flex flex-col items-center text-center">
                 <span className="text-caption font-medium tracking-[0.3em] text-neutral-500 uppercase mb-4">DESCUBRIR</span>
                 <h1 className="text-display-sm md:text-display-md font-display font-normal text-white mb-8 tracking-tight">
-                    Curaduría de <span className="text-brand-gold italic">Intereses</span>
+                    CuradurÃ­a de <span className="text-brand-gold italic">Intereses</span>
                 </h1>
 
-                {/* Barra de búsqueda */}
+                {/* Barra de bÃºsqueda */}
                 <div className="w-full max-w-lg mt-4">
                     <div className="relative bg-neutral-900/50 border border-neutral-800 rounded-full px-6 py-3 flex items-center gap-3">
                         <button
@@ -188,7 +188,7 @@ const DiscoverPage = () => {
                                 <div>
                                     <h3 className="text-white font-medium text-lg">{group.name}</h3>
                                     <p className="text-neutral-500 text-xs mt-1">
-                                        {group.members.toLocaleString()} miembros · {group.postsPerWeek} posts/semana
+                                        {group.members.toLocaleString()} miembros Â· {group.postsPerWeek} posts/semana
                                     </p>
                                 </div>
                                 <button
@@ -293,7 +293,7 @@ const DiscoverPage = () => {
                                             <span>{pub.category}</span>
                                         </div>
                                         <div className="flex items-center gap-1 text-neutral-400 text-xs">
-                                            <span>Deslizar para ver más</span>
+                                            <span>Deslizar para ver mÃ¡s</span>
                                             <ArrowRight size={12} />
                                         </div>
                                     </div>
@@ -308,3 +308,4 @@ const DiscoverPage = () => {
 };
 
 export default DiscoverPage;
+

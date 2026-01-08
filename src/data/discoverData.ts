@@ -118,3 +118,4 @@ export const RECOMMENDED_GROUPS: DiscoverRecommendedGroup[] = [
         subgroup: { name: "Existencialismo", members: "312" }
     }
 ];
+

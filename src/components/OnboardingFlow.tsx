@@ -10,10 +10,10 @@ const OnboardingFlow = ({ onComplete }) => {
 
     // Sample groups for onboarding
     const SAMPLE_GROUPS = [
-        { id: 1, name: 'Exploradores Cuánticos', members: 2340, icon: '⚛️' },
-        { id: 2, name: 'Historia Viva', members: 1890, icon: '🏛️' },
-        { id: 3, name: 'Jazz & Vinilos', members: 956, icon: '🎷' },
-        { id: 4, name: 'Filosofía Contemporánea', members: 1234, icon: '🤔' },
+        { id: 1, name: 'Exploradores CuÃ¡nticos', members: 2340, icon: 'âš›ï¸' },
+        { id: 2, name: 'Historia Viva', members: 1890, icon: 'ðŸ›ï¸' },
+        { id: 3, name: 'Jazz & Vinilos', members: 956, icon: 'ðŸŽ·' },
+        { id: 4, name: 'FilosofÃ­a ContemporÃ¡nea', members: 1234, icon: 'ðŸ¤”' },
     ];
 
     const toggleInterest = (catId) => {
@@ -78,7 +78,7 @@ const OnboardingFlow = ({ onComplete }) => {
                             Una red social basada en lo que realmente te apasiona.
                         </p>
                         <p className="text-neutral-500 text-body-sm max-w-xs">
-                            Conecta con personas que comparten tus intereses más profundos.
+                            Conecta con personas que comparten tus intereses mÃ¡s profundos.
                         </p>
                     </div>
                 )}
@@ -91,7 +91,7 @@ const OnboardingFlow = ({ onComplete }) => {
                                 <BookOpen size={32} className="text-brand-gold" />
                             </div>
                             <h2 className="text-display-sm font-display text-white mb-2">
-                                ¿Qué te apasiona?
+                                Â¿QuÃ© te apasiona?
                             </h2>
                             <p className="text-neutral-500 text-body-sm">
                                 Selecciona al menos 2 intereses
@@ -127,7 +127,7 @@ const OnboardingFlow = ({ onComplete }) => {
                         </div>
 
                         <p className="text-center text-neutral-600 text-xs mt-6">
-                            {selectedInterests.length} de 2 mínimo seleccionados
+                            {selectedInterests.length} de 2 mÃ­nimo seleccionados
                         </p>
                     </div>
                 )}
@@ -140,7 +140,7 @@ const OnboardingFlow = ({ onComplete }) => {
                                 <Users size={32} className="text-brand-gold" />
                             </div>
                             <h2 className="text-display-sm font-display text-white mb-2">
-                                Únete a tu primer grupo
+                                Ãšnete a tu primer grupo
                             </h2>
                             <p className="text-neutral-500 text-body-sm">
                                 Selecciona al menos 1 grupo para empezar
@@ -208,3 +208,4 @@ const OnboardingFlow = ({ onComplete }) => {
 };
 
 export default OnboardingFlow;
+

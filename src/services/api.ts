@@ -88,17 +88,33 @@ export async function fetchArxivPapers(category: string = 'physics', maxResults:
         const text = await response.text();
         const parser = new DOMParser();
         const xml = parser.parseFromString(text, 'text/xml');
-        const entries = xml.querySelectorAll('entry');
+        const entries = Array.from(xml.getElementsByTagName('entry'));
 
-        return Array.from(entries).map(entry => {
-            const summary = entry.querySelector('summary')?.textContent?.trim();
+        const getText = (parent: Element, tag: string): string => {
+            const element = parent.getElementsByTagName(tag)[0];
+            return element?.textContent?.trim() || '';
+        };
+
+        const getAuthors = (parent: Element): string => {
+            const authors = Array.from(parent.getElementsByTagName('author'))
+                .map(author => author.getElementsByTagName('name')[0]?.textContent?.trim() || '')
+                .filter(Boolean);
+            return authors.slice(0, 3).join(', ') || 'Anonimo';
+        };
+
+        return entries.map(entry => {
+            const summary = getText(entry, 'summary');
+            const idText = getText(entry, 'id');
+            const titleText = getText(entry, 'title');
+            const publishedText = getText(entry, 'published');
+
             return {
-                id: entry.querySelector('id')?.textContent?.split('/abs/')[1] || '',
-                title: entry.querySelector('title')?.textContent?.trim().replace(/\s+/g, ' ') || 'Sin titulo',
+                id: idText.split('/abs/')[1] || '',
+                title: titleText ? titleText.replace(/\s+/g, ' ') : 'Sin titulo',
                 summary: summary ? summary.substring(0, 200) + '...' : 'Sin resumen disponible',
-                authors: Array.from(entry.querySelectorAll('author name')).map(a => a.textContent || '').slice(0, 3).join(', ') || 'Anonimo',
-                published: entry.querySelector('published')?.textContent?.split('T')[0] || '',
-                link: entry.querySelector('id')?.textContent || '',
+                authors: getAuthors(entry),
+                published: publishedText.split('T')[0] || '',
+                link: idText || '',
                 type: 'Paper'
             };
         });
@@ -258,3 +274,4 @@ export async function fetchMusicInfo(artist: string = '', limit: number = 10): P
         return [];
     }
 }
+

@@ -31,3 +31,4 @@ const CollaborationCard = ({ item }) => (
 );
 
 export default CollaborationCard;
+

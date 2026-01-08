@@ -12,7 +12,7 @@ const GROUPS_DATA = {
         members: 2340,
         postsPerWeek: 45,
         categoryId: 'science',
-        icon: '⚛️',
+        icon: 'âš›ï¸',
         recentPosts: [
             { id: 1, title: 'Nuevo experimento de entrelazamiento', author: 'Maria L.', time: '2h' },
             { id: 2, title: 'Discusion: Interpretacion de Copenhague vs Many Worlds', author: 'Carlos R.', time: '5h' },
@@ -31,7 +31,7 @@ const GROUPS_DATA = {
         members: 956,
         postsPerWeek: 28,
         categoryId: 'music',
-        icon: '🎷',
+        icon: 'ðŸŽ·',
         recentPosts: [
             { id: 1, title: 'La magia de Ruben Blades en vivo', author: 'Pedro S.', time: '1h' },
             { id: 2, title: 'Vinilo del mes: Kind of Blue', author: 'Laura G.', time: '3h' },
@@ -138,7 +138,7 @@ const GroupDetailPage = () => {
                         >
                             <div>
                                 <p className="text-white font-medium mb-1">{post.title}</p>
-                                <p className="text-neutral-500 text-sm">{post.author} · {post.time}</p>
+                                <p className="text-neutral-500 text-sm">{post.author} Â· {post.time}</p>
                             </div>
                             <ArrowRight size={16} className="text-neutral-600" />
                         </div>
@@ -170,3 +170,4 @@ const GroupDetailPage = () => {
 };
 
 export default GroupDetailPage;
+

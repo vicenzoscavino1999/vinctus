@@ -1,12 +1,12 @@
 # Vinctus
 
-Red social basada en intereses. Conecta con comunidades de ciencia, música, historia y más.
+Red social basada en intereses. Conecta con comunidades de ciencia, mÃºsica, historia y mÃ¡s.
 
 ## Objetivo
 
-Vinctus es una plataforma que permite a los usuarios unirse a grupos según sus intereses específicos. A diferencia de las redes sociales tradicionales, aquí las conexiones se forman alrededor de pasiones compartidas.
+Vinctus es una plataforma que permite a los usuarios unirse a grupos segÃºn sus intereses especÃ­ficos. A diferencia de las redes sociales tradicionales, aquÃ­ las conexiones se forman alrededor de pasiones compartidas.
 
-## Stack Tecnológico
+## Stack TecnolÃ³gico
 
 - **Frontend**: React 19 + Vite 5
 - **Estilos**: Tailwind CSS 3
@@ -14,7 +14,7 @@ Vinctus es una plataforma que permite a los usuarios unirse a grupos según sus 
 - **Animaciones**: tailwindcss-animate
 - **Routing**: React Router DOM
 
-## Instalación
+## InstalaciÃ³n
 
 ```bash
 # Clonar el repositorio
@@ -32,10 +32,10 @@ npm run dev
 
 Abre `http://localhost:5173` en tu navegador.
 
-### Navegación
+### NavegaciÃ³n
 
-- **Descubrir**: Explora categorías de intereses
-- **Conversación**: Feed de publicaciones recientes
+- **Descubrir**: Explora categorÃ­as de intereses
+- **ConversaciÃ³n**: Feed de publicaciones recientes
 - **Colaboraciones**: Encuentra proyectos y colaboradores
 - **Archivo**: Biblioteca de conocimiento
 - **Eventos**: Encuentros presenciales y virtuales
@@ -44,19 +44,20 @@ Abre `http://localhost:5173` en tu navegador.
 
 ```
 vinctus/
-├── src/
-│   ├── components/     # Componentes UI reutilizables
-│   ├── pages/          # Páginas de la aplicación
-│   ├── context/        # Estado global (AppState)
-│   ├── data/           # Datos mock y constantes
-│   ├── hooks/          # Custom hooks
-│   ├── App.jsx         # Componente principal
-│   ├── main.jsx        # Punto de entrada
-│   └── index.css       # Estilos globales
-├── public/             # Assets estáticos
-└── index.html          # HTML principal
+â”œâ”€â”€ src/
+â”‚   â”œâ”€â”€ components/     # Componentes UI reutilizables
+â”‚   â”œâ”€â”€ pages/          # PÃ¡ginas de la aplicaciÃ³n
+â”‚   â”œâ”€â”€ context/        # Estado global (AppState)
+â”‚   â”œâ”€â”€ data/           # Datos mock y constantes
+â”‚   â”œâ”€â”€ hooks/          # Custom hooks
+â”‚   â”œâ”€â”€ App.jsx         # Componente principal
+â”‚   â”œâ”€â”€ main.jsx        # Punto de entrada
+â”‚   â””â”€â”€ index.css       # Estilos globales
+â”œâ”€â”€ public/             # Assets estÃ¡ticos
+â””â”€â”€ index.html          # HTML principal
 ```
 
 ## Licencia
 
 MIT
+

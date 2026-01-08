@@ -49,8 +49,8 @@ const SearchFilters = ({ isOpen, onClose, filters, onApply }) => {
                     <div className="flex flex-wrap gap-2">
                         {[
                             { id: 'relevance', label: 'Relevancia' },
-                            { id: 'recent', label: 'Más recientes' },
-                            { id: 'popular', label: 'Más populares' },
+                            { id: 'recent', label: 'Mas recientes' },
+                            { id: 'popular', label: 'Mas populares' },
                             { id: 'alphabetical', label: 'A-Z' },
                         ].map(option => (
                             <button
@@ -69,7 +69,7 @@ const SearchFilters = ({ isOpen, onClose, filters, onApply }) => {
 
                 {/* Categories */}
                 <section className="mb-6">
-                    <h3 className="text-sm text-neutral-500 uppercase tracking-wider mb-3">Categoría</h3>
+                    <h3 className="text-sm text-neutral-500 uppercase tracking-wider mb-3">Categoria</h3>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                         {CATEGORIES.map(cat => (
                             <button

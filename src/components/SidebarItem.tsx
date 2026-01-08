@@ -16,3 +16,4 @@ const SidebarItem = ({ icon: Icon, active, onClick, tooltip }) => (
 );
 
 export default SidebarItem;
+

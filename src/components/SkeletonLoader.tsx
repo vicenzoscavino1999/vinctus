@@ -45,7 +45,7 @@ export const ErrorState = ({ message, onRetry }) => (
         <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
             <span className="text-red-400 text-xl">!</span>
         </div>
-        <h3 className="text-lg font-light text-neutral-400 mb-2">Algo salió mal</h3>
+        <h3 className="text-lg font-light text-neutral-400 mb-2">Algo saliÃ³ mal</h3>
         <p className="text-sm text-neutral-600 mb-4">{message}</p>
         {onRetry && (
             <button
@@ -57,3 +57,4 @@ export const ErrorState = ({ message, onRetry }) => (
         )}
     </div>
 );
+

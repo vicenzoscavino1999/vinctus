@@ -274,3 +274,4 @@ export interface SearchFiltersProps {
     };
     onApply: (filters: { category: string | null; sortBy: string }) => void;
 }
+

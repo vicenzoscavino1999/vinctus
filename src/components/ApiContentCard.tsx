@@ -170,3 +170,4 @@ const ApiContentCard = ({ item, type }) => {
 };
 
 export default ApiContentCard;
+

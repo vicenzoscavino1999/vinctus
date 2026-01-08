@@ -6,27 +6,27 @@ const USERS = {
     'marco-v': {
         id: 'marco-v',
         name: 'Marco V.',
-        role: 'Melómano & Pianista',
+        role: 'MelÃ³mano & Pianista',
         location: 'Cali, Colombia',
         avatar: null,
         initial: 'M',
-        bio: 'Investigando las raíces africanas en la música caribeña. Coleccionista de vinilos y pianista de sesión.',
+        bio: 'Investigando las raÃ­ces africanas en la mÃºsica caribeÃ±a. Coleccionista de vinilos y pianista de sesiÃ³n.',
         reputation: 85,
         credentials: [
-            { icon: Music, label: 'Músico Verificado', color: 'text-purple-400' }
+            { icon: Music, label: 'MÃºsico Verificado', color: 'text-purple-400' }
         ],
         contributions: [
-            { id: 1, title: 'Entropía y Jazz: Un ensayo', category: 'BIBLIOTECA: MÚSICA', year: '2023' }
+            { id: 1, title: 'EntropÃ­a y Jazz: Un ensayo', category: 'BIBLIOTECA: MÃšSICA', year: '2023' }
         ]
     },
     'dr-elena-r': {
         id: 'dr-elena-r',
         name: 'Dr. Elena R.',
         role: 'Investigadora',
-        location: 'Madrid, España',
+        location: 'Madrid, EspaÃ±a',
         avatar: null,
         initial: 'E',
-        bio: 'Física teórica especializada en gravedad cuántica. Profesora asociada y divulgadora científica.',
+        bio: 'FÃ­sica teÃ³rica especializada en gravedad cuÃ¡ntica. Profesora asociada y divulgadora cientÃ­fica.',
         reputation: 92,
         credentials: [
             { icon: BookOpen, label: 'Experta Verificada', color: 'text-blue-400' }
@@ -42,7 +42,7 @@ const USERS = {
         location: 'Buenos Aires, Argentina',
         avatar: null,
         initial: 'A',
-        bio: 'Ingeniera de ML en startups de IA. Open source contributor. Apasionada por la ética en tecnología.',
+        bio: 'Ingeniera de ML en startups de IA. Open source contributor. Apasionada por la Ã©tica en tecnologÃ­a.',
         reputation: 78,
         credentials: [
             { icon: BookOpen, label: 'Desarrolladora Verificada', color: 'text-green-400' }
@@ -53,16 +53,16 @@ const USERS = {
         id: 'gabriel-m',
         name: 'Gabriel M.',
         role: 'Naturalista',
-        location: 'Bogotá, Colombia',
+        location: 'BogotÃ¡, Colombia',
         avatar: null,
         initial: 'G',
-        bio: 'Biólogo de campo y fotógrafo de naturaleza. Especializado en ornitología neotropical.',
+        bio: 'BiÃ³logo de campo y fotÃ³grafo de naturaleza. Especializado en ornitologÃ­a neotropical.',
         reputation: 81,
         credentials: [
             { icon: BookOpen, label: 'Naturalista Verificado', color: 'text-emerald-400' }
         ],
         contributions: [
-            { id: 1, title: 'Guía de Aves del Humedal Córdoba', category: 'BIBLIOTECA: NATURALEZA', year: '2023' }
+            { id: 1, title: 'GuÃ­a de Aves del Humedal CÃ³rdoba', category: 'BIBLIOTECA: NATURALEZA', year: '2023' }
         ]
     }
 };
@@ -134,7 +134,7 @@ const UserProfilePage = () => {
                 <div className="md:col-span-1 space-y-8">
                     {/* About me */}
                     <section>
-                        <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">Sobre Mí</h2>
+                        <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">Sobre MÃ­</h2>
                         <p className="text-neutral-400 font-light leading-relaxed">{user.bio}</p>
                     </section>
 
@@ -153,7 +153,7 @@ const UserProfilePage = () => {
 
                     {/* Reputation */}
                     <section>
-                        <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">Reputación</h2>
+                        <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">ReputaciÃ³n</h2>
                         <div className="flex items-center gap-4">
                             <div className="flex-1 h-1 bg-neutral-800 rounded-full overflow-hidden">
                                 <div
@@ -190,7 +190,7 @@ const UserProfilePage = () => {
                         </div>
                     ) : (
                         <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
-                            <p className="text-neutral-600 font-light italic">Sin contribuciones publicadas aún.</p>
+                            <p className="text-neutral-600 font-light italic">Sin contribuciones publicadas aÃºn.</p>
                         </div>
                     )}
                 </div>
@@ -200,3 +200,4 @@ const UserProfilePage = () => {
 };
 
 export default UserProfilePage;
+

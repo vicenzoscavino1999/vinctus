@@ -99,7 +99,7 @@ const ProjectsPage = () => {
                             <h4 className="text-white font-light text-sm mb-3 line-clamp-2 group-hover:text-white/90">{event.title}</h4>
 
                             <div className="flex items-center gap-1 text-neutral-500 text-xs mb-1">
-                                <span>📍 {event.location}</span>
+                                <span>ðŸ“ {event.location}</span>
                             </div>
                             <div className="flex items-center gap-1 text-neutral-500 text-xs">
                                 <User size={10} />
@@ -114,3 +114,4 @@ const ProjectsPage = () => {
 };
 
 export default ProjectsPage;
+
