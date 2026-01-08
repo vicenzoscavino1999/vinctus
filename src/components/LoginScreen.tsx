@@ -1,6 +1,7 @@
 import { Lock } from 'lucide-react';
+import type { LoginScreenProps } from '../types';
 
-const LoginScreen = ({ onLogin }) => {
+const LoginScreen = ({ onLogin }: LoginScreenProps) => {
     return (
         <div className="min-h-screen bg-bg flex flex-col items-center justify-center relative overflow-hidden p-6">
             {/* Efecto de luz ambiental - Optimizado para iOS */}
@@ -13,7 +14,7 @@ const LoginScreen = ({ onLogin }) => {
                 }}
             />
 
-            {/* Segunda capa de luz para mas profundidad */}
+            {/* Segunda capa de luz para más profundidad */}
             <div
                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[250px] h-[250px] md:w-[400px] md:h-[400px] rounded-full pointer-events-none"
                 style={{
@@ -25,11 +26,11 @@ const LoginScreen = ({ onLogin }) => {
                 }}
             />
 
-            {/* Ruido Filmico - Version simplificada para mejor compatibilidad */}
+            {/* Ruido Fílmico - Versión simplificada para mejor compatibilidad */}
             <div
                 className="fixed inset-0 opacity-[0.05] pointer-events-none z-0"
                 style={{
-                    backgroundImage: 'url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH4AkZCg8xEBz2LgAAAB1pVFh0Q29tbWVudAAAAAAAQ3JlYXRlZCB3aXRoIEdJTVBkLmUHAAACM0lEQVRo3u2ZS0sCURTHfzOOjmM+x9dY5qJFLdq0qlX7Fn2CVn2DalXbWkS0qk0PCDKC0HPRA40IM/AV5JSlFbQoWkhg88jTXFdNc2lxz+XC5XLnnv+f/7mXcwVRFEWkVCry+TwAkiSpnmUYhsOhQqGgoih/9K+uri7S6TQAgiD8aRPW1taoVqt6YuVymVqt9qffampqCqPRiCRJqNVq+vr6KC8vt1tcXFxk69at7Nu3L4b0V1NbW1uh0+lgaWkpAPX19WxtbaWsrEz1W+fl5VFbW0sgEGBpaanqmZycZGpqirq6OtavX09OTk68HdHV1RXXr18Pm82G0+mkoaGBTZs2YTQaycjI+CNBq9VKV1cXy5Yto6amhm3btpGZmYlWq/0lzZYtW5g9e/Yf/f8uQf+W2NnZydq1a5k0aRJ1dXVkZWXpHkpJSWHt2rU4HA5yc3M5duwY06ZNIy0tTfVbe3t7WbJkCT09Pbhcrj8cmZ+fz6xZsxg/fjzZ2dna29vbGTduHK2trQwePJiRI0fqfg0KCuLAgQMYjUYKCgro7u5m0KBBul9DQkI4cOAAPp+P8ePH097eTnl5OVu3bsXv92O1WgkLC6O5uZmQkBDa29vJzMykqamJqqoqNm/eTEdHB319fWzcuJGGhgYcDof2cFdXF729vQCkpaXp/3d1dZGamgpAamoqXq9X/06j0WAwGEhLSyM5OZm0tDRSU1NRq9WkpaW)'
+                    backgroundImage: 'url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH4AkZCg8xEBz2LgAAAB1pVFh0Q29tbWVudAAAAAAAQ3JlYXRlZCB3aXRoIEdJTVBkLmUHAAACM0lEQVRo3u2ZS0sCURTHfzOOjmM+x9dY5qJFLdq0qlX7Fn2CVn2DalXbWkS0qk0PCDKC0HPRA40IM/AV5JSlFbQoWkhg88jTXFdNc2lxz+XC5XLnnv+f/7mXcwVRFEWkVCry+TwAkiSpnmUYhsOhQqGgoih/9K+uri7S6TQAgiD8aRPW1taoVqt6YuVymVqt9qffampqCqPRiCRJqNVq+vr6KC8vt1tcXFxk69at7Nu3L4b0V1NbW1uh0+lgaWkpAPX19WxtbaWsrEz1W+fl5VFbW0sgEGBpaanqmZycZGpqirq6OtavX09OTk68HdHV1RXXr18Pm82G0+mkoaGBTZs2YTQaycjI+CNBq9VKV1cXy5Yto6amhm3btpGZmYlWq/0lzZYtW5g9e/Yf/f8uQf+W2NnZydq1a5k0aRJ1dXVkZWXpHkpJSWHt2rU4HA5yc3M5duwY06ZNIy0tTfVbe3t7WbJkCT09Pbhcrj8cmZ+fz6xZsxg/fjzZ2dna29vbGTduHK2trQwePJiRI0fqfg0KCuLAgQMYjUYKCgro7u5k0KBBul9DQkI4cOAAPp+P8ePH097eTnl5WVu3bsXv92O1WgkLC6O5uZmQkBDa29vJzMykqamJqqoqNm/eTEdHB319fWzcuJGGhgYcDof2cFdXF729vQCkpaXp/3d1dZGamgpAamoqXq9X/06j0WAwGEhLSyM5OZm0tDRSU1NRq9WkpaW)"'
                 }}
             />
 
@@ -47,11 +48,20 @@ const LoginScreen = ({ onLogin }) => {
                     />
                 </div>
 
-                <div className="w-full space-y-10">
+                <form
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        onLogin();
+                    }}
+                    className="w-full space-y-10"
+                >
                     {/* Campos de entrada */}
                     <div className="space-y-8">
                         <div className="relative group">
+                            <label htmlFor="login-email" className="sr-only">Correo electrónico</label>
                             <input
+                                id="login-email"
+                                name="email"
                                 type="email"
                                 placeholder="Identidad"
                                 autoComplete="email"
@@ -64,7 +74,10 @@ const LoginScreen = ({ onLogin }) => {
                             />
                         </div>
                         <div className="relative group">
+                            <label htmlFor="login-password" className="sr-only">Contraseña</label>
                             <input
+                                id="login-password"
+                                name="password"
                                 type="password"
                                 placeholder="Clave de Acceso"
                                 autoComplete="current-password"
@@ -78,9 +91,9 @@ const LoginScreen = ({ onLogin }) => {
                         </div>
                     </div>
 
-                    {/* Boton Entrar */}
+                    {/* Botón Entrar */}
                     <button
-                        onClick={onLogin}
+                        type="submit"
                         className="w-full bg-white/90 text-black py-4 hover:bg-white active:bg-white/80 transition-all duration-500 uppercase tracking-[0.25em] text-[10px] font-medium mt-12 active:scale-[0.98]"
                         style={{
                             WebkitTapHighlightColor: 'transparent',
@@ -89,14 +102,14 @@ const LoginScreen = ({ onLogin }) => {
                     >
                         Entrar
                     </button>
+                </form>
 
-                    {/* Nota de acceso restringido */}
-                    <div className="text-center pt-12 flex flex-col items-center space-y-4">
-                        <Lock size={12} className="text-neutral-700" />
-                        <p className="text-neutral-600 text-[10px] font-serif italic">
-                            Acceso restringido por invitacion.
-                        </p>
-                    </div>
+                {/* Nota de acceso restringido */}
+                <div className="text-center pt-12 flex flex-col items-center space-y-4">
+                    <Lock size={12} className="text-neutral-700" />
+                    <p className="text-neutral-600 text-[10px] font-serif italic">
+                        Acceso restringido por invitación.
+                    </p>
                 </div>
             </div>
 
@@ -116,4 +129,3 @@ const LoginScreen = ({ onLogin }) => {
 };
 
 export default LoginScreen;
-

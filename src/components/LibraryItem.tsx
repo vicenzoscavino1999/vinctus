@@ -1,7 +1,12 @@
 import { BookOpen } from 'lucide-react';
+import type { LibraryItem as LibraryItemType } from '../types';
 
 // LibraryItem component
-const LibraryItem = ({ item }) => (
+type LibraryItemProps = {
+    item: LibraryItemType;
+};
+
+const LibraryItem = ({ item }: LibraryItemProps) => (
     <div className="flex items-start py-6 border-b border-neutral-900 group cursor-pointer hover:bg-neutral-900/30 transition-colors -mx-4 px-4">
         <div className="mr-6 pt-1 text-neutral-700 group-hover:text-neutral-500 transition-colors">
             <BookOpen size={20} strokeWidth={1} />

@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 
-const mockCategories = [
-    { id: 'science', label: 'Ciencia', icon: () => null },
-    { id: 'art', label: 'Arte', icon: () => null },
-    { id: 'tech', label: 'Tecnologia', icon: () => null },
+type FiltersState = { category: string | null; sortBy: string };
+
+const mockCategories: Array<{ id: string; label: string; icon: () => null }> = [
+    { id: 'science', label: 'Ciencia', icon: (): null => null },
+    { id: 'art', label: 'Arte', icon: (): null => null },
+    { id: 'tech', label: 'Tecnologia', icon: (): null => null },
 ];
 
 let SearchFilters: typeof import('./SearchFilters').default;
@@ -19,9 +21,9 @@ beforeAll(async () => {
 });
 
 describe('SearchFilters', () => {
-    const defaultFilters = { category: null, sortBy: 'relevance' };
-    const mockOnClose = vi.fn();
-    const mockOnApply = vi.fn();
+    const defaultFilters: FiltersState = { category: null, sortBy: 'relevance' };
+    const mockOnClose: () => void = vi.fn();
+    const mockOnApply: (nextFilters: FiltersState) => void = vi.fn();
 
     beforeEach(() => {
         vi.clearAllMocks();

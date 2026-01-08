@@ -1,18 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { Atom } from 'lucide-react';
 import CategoryCard from './CategoryCard';
+import type { Category } from '../types';
 
-const mockCategory = {
+const mockCategory: Category = {
     id: 'science',
     label: 'Ciencia & Materia',
-    description: 'La busqueda de la verdad fundamental.',
-    icon: () => <span data-testid="category-icon">Icon</span>,
+    description: 'La búsqueda de la verdad fundamental.',
+    icon: Atom,
     color: 'text-blue-400',
     bgHover: 'hover:bg-blue-900/10',
+    apiSource: 'arxiv',
+    features: ['papers'],
     subgroups: [
-        { id: 'physics', name: 'Fisica' },
-        { id: 'chemistry', name: 'Quimica' },
+        { id: 'physics', name: 'Física', members: '1k' },
+        { id: 'chemistry', name: 'Química', members: '1k' },
     ],
+    library: [],
 };
 
 describe('CategoryCard', () => {
@@ -32,20 +37,20 @@ describe('CategoryCard', () => {
         it('renderiza la descripcion', () => {
             render(<CategoryCard category={mockCategory} onClick={mockOnClick} />);
 
-            expect(screen.getByText('La busqueda de la verdad fundamental.')).toBeInTheDocument();
+            expect(screen.getByText('La búsqueda de la verdad fundamental.')).toBeInTheDocument();
         });
 
         it('renderiza el icono de la categoria', () => {
-            render(<CategoryCard category={mockCategory} onClick={mockOnClick} />);
+            const { container } = render(<CategoryCard category={mockCategory} onClick={mockOnClick} />);
 
-            expect(screen.getByTestId('category-icon')).toBeInTheDocument();
+            expect(container.querySelector('svg')).toBeInTheDocument();
         });
 
         it('renderiza los subgrupos', () => {
             render(<CategoryCard category={mockCategory} onClick={mockOnClick} />);
 
-            expect(screen.getByText(/Fisica/)).toBeInTheDocument();
-            expect(screen.getByText(/Quimica/)).toBeInTheDocument();
+            expect(screen.getByText(/Física/)).toBeInTheDocument();
+            expect(screen.getByText(/Química/)).toBeInTheDocument();
         });
     });
 

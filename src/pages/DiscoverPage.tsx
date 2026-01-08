@@ -1,9 +1,15 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type ChangeEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, BookOpen, Check, ArrowRight, Filter } from 'lucide-react';
 import { SearchFilters } from '../components';
 import { useAppState } from '../context';
 import { CATEGORIES, PUBLICATIONS, RECOMMENDED_GROUPS } from '../data';
+import { useToast } from '../components/Toast';
+
+type SearchFiltersState = {
+    category: string | null;
+    sortBy: string;
+};
 
 const DiscoverPage = () => {
     const navigate = useNavigate();
@@ -22,17 +28,20 @@ const DiscoverPage = () => {
 
     // Use global state from context
     const {
-        savedCategories,
         toggleSaveCategory,
         isCategorySaved,
-        joinedGroups,
         toggleJoinGroup,
-        isGroupJoined
+        isGroupJoined,
+        toggleLikePost,
+        isPostLiked,
+        toggleSavePost,
+        isPostSaved
     } = useAppState();
+    const { showToast } = useToast();
 
     // Search filters state (local, not persisted)
     const [showFilters, setShowFilters] = useState(false);
-    const [filters, setFilters] = useState({ category: null, sortBy: 'relevance' });
+    const [filters, setFilters] = useState<SearchFiltersState>({ category: null, sortBy: 'relevance' });
 
     const filteredCategories = useMemo(() => {
         let result = [...CATEGORIES];
@@ -76,13 +85,9 @@ const DiscoverPage = () => {
         return result;
     }, [searchQuery, filters]);
 
-    const handleSearch = (e) => {
+    const handleSearch = (e: ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
-        if (value) {
-            setSearchParams({ q: value });
-        } else {
-            setSearchParams({});
-        }
+        setSearchParams(value ? { q: value } : {}, { replace: true });
     };
 
     return (
@@ -91,20 +96,23 @@ const DiscoverPage = () => {
             <header className="mb-12 pt-6 md:pt-10 flex flex-col items-center text-center">
                 <span className="text-caption font-medium tracking-[0.3em] text-neutral-500 uppercase mb-4">DESCUBRIR</span>
                 <h1 className="text-display-sm md:text-display-md font-display font-normal text-white mb-8 tracking-tight">
-                    CuradurÃ­a de <span className="text-brand-gold italic">Intereses</span>
+                    Curadur{'\u00ED'}a de <span className="text-brand-gold italic">Intereses</span>
                 </h1>
 
-                {/* Barra de bÃºsqueda */}
+                {/* Barra de búsqueda */}
                 <div className="w-full max-w-lg mt-4">
                     <div className="relative bg-neutral-900/50 border border-neutral-800 rounded-full px-6 py-3 flex items-center gap-3">
                         <button
+                            type="button"
                             onClick={() => setShowFilters(true)}
+                            aria-label="Abrir filtros"
                             className={`p-1 rounded transition-colors ${filters.category || filters.sortBy !== 'relevance' ? 'text-brand-gold' : 'text-neutral-600 hover:text-white'}`}
                         >
                             <Filter size={18} />
                         </button>
                         <input
                             type="text"
+                            aria-label="Buscar intereses o grupos"
                             placeholder="Buscar intereses o grupos..."
                             value={searchQuery}
                             onChange={handleSearch}
@@ -133,8 +141,16 @@ const DiscoverPage = () => {
                     {filteredCategories.map(cat => (
                         <div
                             key={cat.id}
+                            role="button"
+                            tabIndex={0}
                             className="flex-shrink-0 w-[280px] bg-surface-overlay border border-neutral-800/50 rounded-card p-5 cursor-pointer card-premium"
                             onClick={() => navigate(`/category/${cat.id}`)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    navigate(`/category/${cat.id}`);
+                                }
+                            }}
                         >
                             <div className="flex items-start justify-between mb-4">
                                 <div className="flex items-center gap-3">
@@ -181,14 +197,22 @@ const DiscoverPage = () => {
                     {RECOMMENDED_GROUPS.map(group => (
                         <div
                             key={group.id}
+                            role="button"
+                            tabIndex={0}
                             className="bg-surface-1 border border-neutral-800/50 rounded-lg p-5 cursor-pointer hover:border-neutral-700 transition-colors"
                             onClick={() => navigate(`/group/${group.id}`)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    navigate(`/group/${group.id}`);
+                                }
+                            }}
                         >
                             <div className="flex items-start justify-between mb-3">
                                 <div>
                                     <h3 className="text-white font-medium text-lg">{group.name}</h3>
                                     <p className="text-neutral-500 text-xs mt-1">
-                                        {group.members.toLocaleString()} miembros Â· {group.postsPerWeek} posts/semana
+                                        {group.members.toLocaleString()} miembros · {group.postsPerWeek} posts/semana
                                     </p>
                                 </div>
                                 <button
@@ -231,8 +255,16 @@ const DiscoverPage = () => {
                     {PUBLICATIONS.map(pub => (
                         <div
                             key={pub.id}
+                            role="button"
+                            tabIndex={0}
                             className="flex-shrink-0 w-[320px] md:w-[400px] h-[280px] md:h-[320px] relative rounded-lg overflow-hidden cursor-pointer group"
                             onClick={() => navigate(`/post/${pub.id}`)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    navigate(`/post/${pub.id}`);
+                                }
+                            }}
                         >
                             {/* Background image */}
                             <img
@@ -262,21 +294,45 @@ const DiscoverPage = () => {
 
                                 {/* Right side - Interaction buttons */}
                                 <div className="absolute right-5 top-1/2 -translate-y-1/2 flex flex-col gap-4">
-                                    <button className="flex flex-col items-center text-white/80 hover:text-white transition-colors">
+                                    <button
+                                        type="button"
+                                        aria-label={`Me gusta: ${pub.likes}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleLikePost(pub.id);
+                                        }}
+                                        className={`flex flex-col items-center transition-colors ${isPostLiked(pub.id) ? 'text-red-400' : 'text-white/80 hover:text-white'}`}
+                                    >
                                         <div className="w-10 h-10 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center mb-1">
-                                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" /></svg>
+                                            <svg className="w-5 h-5" fill={isPostLiked(pub.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" /></svg>
                                         </div>
-                                        <span className="text-xs">{pub.likes}</span>
+                                        <span className="text-xs">{pub.likes + (isPostLiked(pub.id) ? 1 : 0)}</span>
                                     </button>
-                                    <button className="flex flex-col items-center text-white/80 hover:text-white transition-colors">
+                                    <button
+                                        type="button"
+                                        aria-label={`Comentarios: ${pub.comments}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            showToast('Los comentarios estarán disponibles pronto', 'info');
+                                        }}
+                                        className="flex flex-col items-center text-white/80 hover:text-white transition-colors"
+                                    >
                                         <div className="w-10 h-10 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center mb-1">
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
                                         </div>
                                         <span className="text-xs">{pub.comments}</span>
                                     </button>
-                                    <button className="flex flex-col items-center text-white/80 hover:text-white transition-colors">
+                                    <button
+                                        type="button"
+                                        aria-label="Guardar publicación"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleSavePost(pub.id);
+                                        }}
+                                        className={`flex flex-col items-center transition-colors ${isPostSaved(pub.id) ? 'text-brand-gold' : 'text-white/80 hover:text-white'}`}
+                                    >
                                         <div className="w-10 h-10 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center">
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg>
+                                            <svg className="w-5 h-5" fill={isPostSaved(pub.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg>
                                         </div>
                                     </button>
                                 </div>
@@ -293,7 +349,7 @@ const DiscoverPage = () => {
                                             <span>{pub.category}</span>
                                         </div>
                                         <div className="flex items-center gap-1 text-neutral-400 text-xs">
-                                            <span>Deslizar para ver mÃ¡s</span>
+                                            <span>Deslizar para ver más</span>
                                             <ArrowRight size={12} />
                                         </div>
                                     </div>

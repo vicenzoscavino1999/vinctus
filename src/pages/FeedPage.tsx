@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import { Search, User, ArrowRight } from 'lucide-react';
+import { useToast } from '../components';
 
 const FeedPage = () => {
     const [activeTab, setActiveTab] = useState('grupos');
     const [searchQuery, setSearchQuery] = useState('');
+    const { showToast } = useToast();
 
     // Datos de conversaciones de grupos
     const CONVERSATIONS = [
         {
             id: 1,
-            name: 'Exploradores Cuanticos',
+            name: 'Exploradores Cuánticos',
             type: 'grupo',
-            icon: 'âš›ï¸',
-            lastMessage: 'Nuevo paper sobre entrelazamiento cuantico',
+            icon: '⚛️',
+            lastMessage: 'Nuevo paper sobre entrelazamiento cuántico',
             time: '4 min',
             unread: 2
         },
@@ -20,7 +22,7 @@ const FeedPage = () => {
             id: 2,
             name: 'Documentales HispaMundo',
             type: 'grupo',
-            icon: 'â–¶ï¸',
+            icon: '▶️',
             lastMessage: 'Marco: Ha salido un nuevo...',
             time: '1 h',
             unread: 5
@@ -29,26 +31,26 @@ const FeedPage = () => {
             id: 3,
             name: 'IA y Futuro',
             type: 'grupo',
-            icon: 'âš›ï¸',
-            lastMessage: 'Alvaro: Increible! Puedes pas...',
+            icon: '⚛️',
+            lastMessage: 'Álvaro: ¡Increíble! Puedes pas...',
             time: '10 abr',
             unread: 8
         },
         {
             id: 4,
-            name: 'Musica: Salsa',
+            name: 'Música: Salsa',
             type: 'grupo',
-            icon: 'ðŸŽµ',
+            icon: '🎵',
             lastMessage: 'Adriana: Nuevo tema para...',
             time: '4 abr',
             unread: 1
         },
         {
             id: 5,
-            name: 'Astronomia & Cosmos',
+            name: 'Astronomía & Cosmos',
             type: 'grupo',
-            icon: 'ðŸŒŒ',
-            lastMessage: 'Resena: Guia de Observacio...',
+            icon: '🌌',
+            lastMessage: 'Reseña: Guía de Observación...',
             time: '1 abr',
             unread: 0
         },
@@ -56,8 +58,8 @@ const FeedPage = () => {
             id: 6,
             name: 'Paisajes y Sabores',
             type: 'grupo',
-            icon: 'ðŸ¥–',
-            lastMessage: 'Eric: Receta facil para hornear...',
+            icon: '🥖',
+            lastMessage: 'Eric: Receta fácil para hornear...',
             time: '14 abr',
             unread: 1
         }
@@ -77,8 +79,8 @@ const FeedPage = () => {
             id: 2,
             name: 'Marco V.',
             icon: '',
-            lastMessage: 'Viste el nuevo paper?',
-            time: '1 dia',
+            lastMessage: '¿Viste el nuevo paper?',
+            time: '1 día',
             unread: 0
         }
     ];
@@ -90,21 +92,26 @@ const FeedPage = () => {
         conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    const handleOpenConversation = (name: string) => {
+        showToast(`Conversación con ${name} estará disponible pronto`, 'info');
+    };
+
     return (
         <div className="page-feed pb-32">
             {/* Header */}
             <header className="mb-8 pt-6 md:pt-10 text-center">
-                <span className="text-caption font-medium tracking-[0.3em] text-neutral-500 uppercase mb-2 block">EN CONVERSACION</span>
+                <span className="text-caption font-medium tracking-[0.3em] text-neutral-500 uppercase mb-2 block">EN CONVERSACIÓN</span>
                 <h1 className="text-display-sm md:text-display-md font-display font-normal text-white tracking-tight">
-                    Dialogos
+                    Diálogos
                 </h1>
             </header>
 
-            {/* Barra de busqueda */}
+            {/* Barra de búsqueda */}
             <div className="mb-6">
                 <div className="relative bg-neutral-900/50 border border-neutral-800 rounded-full px-6 py-3">
                     <input
                         type="text"
+                        aria-label="Buscar mensajes o grupos"
                         placeholder="Buscar mensajes o grupos..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -143,6 +150,16 @@ const FeedPage = () => {
                 {filteredConversations.map(conv => (
                     <div
                         key={conv.id}
+                        onClick={() => handleOpenConversation(conv.name)}
+                        onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                handleOpenConversation(conv.name);
+                            }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Abrir conversación con ${conv.name}`}
                         className="flex items-center gap-4 bg-neutral-900/20 border border-neutral-800/50 rounded-lg p-4 cursor-pointer hover:bg-neutral-900/40 hover:border-neutral-700 transition-all group"
                     >
                         {/* Icon */}

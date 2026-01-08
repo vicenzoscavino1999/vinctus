@@ -19,10 +19,10 @@ dist-ssr/
 *.sln
 *.sw?
 
-# Environment files
+# Environment files (block all, allow only example)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # Logs
 npm-debug.log*
@@ -34,7 +34,6 @@ pnpm-debug.log*
 dev-dist/
 
 .vercel
-.env*.local
 
 # Playwright
 playwright-report/

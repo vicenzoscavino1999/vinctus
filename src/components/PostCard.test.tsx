@@ -13,11 +13,14 @@ const Wrapper = ({ children }: { children: ReactNode }) => (
 );
 
 const mockPost = {
-    id: 1,
+    id: '1',
     title: 'Test Post Title',
     content: 'This is the post content',
     author: 'John Doe',
+    role: 'Tester',
     group: 'Test Group',
+    categoryId: 'science',
+    time: '1h',
     likes: 42,
     comments: 10,
     isExpert: false,

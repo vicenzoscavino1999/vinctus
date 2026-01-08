@@ -7,14 +7,14 @@ const ProjectsPage = () => {
 
     // Datos de eventos
     const EVENTS_DATA = [
-        { id: 1, day: '12', month: 'ENE', title: 'Noche de Vinilos & Charla', location: 'Ciudad de Mexico, Roma Norte', attendees: 34 },
-        { id: 2, day: '15', month: 'FEB', title: 'Simposio de Arqueologia', location: 'Lima, Barranco', attendees: 120 },
+        { id: 1, day: '12', month: 'ENE', title: 'Noche de Vinilos & Charla', location: 'Ciudad de México, Roma Norte', attendees: 34 },
+        { id: 2, day: '15', month: 'FEB', title: 'Simposio de Arqueología', location: 'Lima, Barranco', attendees: 120 },
         { id: 3, day: '28', month: 'ENE', title: 'Hackathon AI for Good', location: 'Buenos Aires, Palermo', attendees: 85 },
-        { id: 4, day: '5', month: 'FEB', title: 'Observacion de Aves', location: 'Bogota, Humedal Cordoba', attendees: 25 }
+        { id: 4, day: '5', month: 'FEB', title: 'Observación de Aves', location: 'Bogotá, Humedal Córdoba', attendees: 25 }
     ];
 
     const handlePublishProject = () => {
-        showToast('Publicar proyectos estara disponible pronto', 'info');
+        showToast('Publicar proyectos estará disponible pronto', 'info');
     };
 
     return (
@@ -45,6 +45,7 @@ const ProjectsPage = () => {
                 {COLLABORATIONS.map(item => (
                     <div
                         key={item.id}
+                        onClick={() => showToast('Detalle de colaboraciones estará disponible pronto', 'info')}
                         className="bg-neutral-900/20 border border-neutral-800/50 rounded-lg p-6 mb-4 cursor-pointer hover:bg-neutral-900/40 hover:border-neutral-700 transition-all group"
                     >
                         <div className="flex items-start justify-between mb-4">
@@ -84,6 +85,7 @@ const ProjectsPage = () => {
                     {EVENTS_DATA.map(event => (
                         <div
                             key={event.id}
+                            onClick={() => showToast('Detalle de eventos estará disponible pronto', 'info')}
                             className="flex-shrink-0 w-[220px] bg-neutral-900/30 border border-neutral-800/50 rounded-lg p-5 cursor-pointer hover:bg-neutral-900/50 hover:border-neutral-700 transition-all group"
                         >
                             <div className="flex items-start justify-between mb-6">
@@ -99,7 +101,7 @@ const ProjectsPage = () => {
                             <h4 className="text-white font-light text-sm mb-3 line-clamp-2 group-hover:text-white/90">{event.title}</h4>
 
                             <div className="flex items-center gap-1 text-neutral-500 text-xs mb-1">
-                                <span>ðŸ“ {event.location}</span>
+                                <span>📍 {event.location}</span>
                             </div>
                             <div className="flex items-center gap-1 text-neutral-500 text-xs">
                                 <User size={10} />

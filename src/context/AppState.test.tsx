@@ -31,17 +31,17 @@ describe('useAppState', () => {
 
     describe('Hidratacion', () => {
         it('inicializa estado desde localStorage', () => {
-            localStorageMock.setItem('vinctus_joined_groups', JSON.stringify([1, 2]));
+            localStorageMock.setItem('vinctus_joined_groups', JSON.stringify(['1', '2']));
             localStorageMock.setItem('vinctus_saved_categories', JSON.stringify(['science']));
-            localStorageMock.setItem('vinctus_liked_posts', JSON.stringify([7]));
-            localStorageMock.setItem('vinctus_saved_posts', JSON.stringify([9]));
+            localStorageMock.setItem('vinctus_liked_posts', JSON.stringify(['7']));
+            localStorageMock.setItem('vinctus_saved_posts', JSON.stringify(['9']));
 
             const { result } = renderHook(() => useAppState(), { wrapper });
 
-            expect(result.current.joinedGroups).toEqual([1, 2]);
+            expect(result.current.joinedGroups).toEqual(['1', '2']);
             expect(result.current.savedCategories).toEqual(['science']);
-            expect(result.current.likedPosts).toEqual([7]);
-            expect(result.current.savedPosts).toEqual([9]);
+            expect(result.current.likedPosts).toEqual(['7']);
+            expect(result.current.savedPosts).toEqual(['9']);
         });
     });
 
@@ -55,11 +55,11 @@ describe('useAppState', () => {
             const { result } = renderHook(() => useAppState(), { wrapper });
 
             act(() => {
-                result.current.toggleJoinGroup(1);
+                result.current.toggleJoinGroup('1');
             });
 
-            expect(result.current.isGroupJoined(1)).toBe(true);
-            expect(result.current.joinedGroups).toContain(1);
+            expect(result.current.isGroupJoined('1')).toBe(true);
+            expect(result.current.joinedGroups).toContain('1');
         });
 
         it('toggleJoinGroup quita un grupo si ya esta unido', () => {
@@ -67,25 +67,25 @@ describe('useAppState', () => {
 
             // Unir y luego salir
             act(() => {
-                result.current.toggleJoinGroup(1);
+                result.current.toggleJoinGroup('1');
             });
             act(() => {
-                result.current.toggleJoinGroup(1);
+                result.current.toggleJoinGroup('1');
             });
 
-            expect(result.current.isGroupJoined(1)).toBe(false);
-            expect(result.current.joinedGroups).not.toContain(1);
+            expect(result.current.isGroupJoined('1')).toBe(false);
+            expect(result.current.joinedGroups).not.toContain('1');
         });
 
         it('persiste grupos en localStorage', () => {
             const { result } = renderHook(() => useAppState(), { wrapper });
 
             act(() => {
-                result.current.toggleJoinGroup(5);
+                result.current.toggleJoinGroup('5');
             });
 
             const stored = JSON.parse(localStorageMock.getItem('vinctus_joined_groups') || '[]');
-            expect(stored).toContain(5);
+            expect(stored).toContain('5');
         });
     });
 
@@ -130,34 +130,34 @@ describe('useAppState', () => {
             const { result } = renderHook(() => useAppState(), { wrapper });
 
             act(() => {
-                result.current.toggleLikePost(1);
+                result.current.toggleLikePost('1');
             });
 
-            expect(result.current.isPostLiked(1)).toBe(true);
+            expect(result.current.isPostLiked('1')).toBe(true);
         });
 
         it('persiste likes en localStorage', () => {
             const { result } = renderHook(() => useAppState(), { wrapper });
 
             act(() => {
-                result.current.toggleLikePost(1);
+                result.current.toggleLikePost('1');
             });
 
             const stored = JSON.parse(localStorageMock.getItem('vinctus_liked_posts') || '[]');
-            expect(stored).toContain(1);
+            expect(stored).toContain('1');
         });
 
         it('toggleLikePost quita el like si ya existe', () => {
             const { result } = renderHook(() => useAppState(), { wrapper });
 
             act(() => {
-                result.current.toggleLikePost(1);
+                result.current.toggleLikePost('1');
             });
             act(() => {
-                result.current.toggleLikePost(1);
+                result.current.toggleLikePost('1');
             });
 
-            expect(result.current.isPostLiked(1)).toBe(false);
+            expect(result.current.isPostLiked('1')).toBe(false);
         });
     });
 
@@ -166,37 +166,37 @@ describe('useAppState', () => {
             const { result } = renderHook(() => useAppState(), { wrapper });
 
             act(() => {
-                result.current.toggleSavePost(1);
+                result.current.toggleSavePost('1');
             });
 
-            expect(result.current.isPostSaved(1)).toBe(true);
+            expect(result.current.isPostSaved('1')).toBe(true);
         });
 
         it('persiste posts guardados en localStorage', () => {
             const { result } = renderHook(() => useAppState(), { wrapper });
 
             act(() => {
-                result.current.toggleSavePost(1);
+                result.current.toggleSavePost('1');
             });
 
             const stored = JSON.parse(localStorageMock.getItem('vinctus_saved_posts') || '[]');
-            expect(stored).toContain(1);
+            expect(stored).toContain('1');
         });
 
         it('toggleSavePost quita un post guardado', () => {
             const { result } = renderHook(() => useAppState(), { wrapper });
 
             act(() => {
-                result.current.toggleSavePost(1);
+                result.current.toggleSavePost('1');
             });
             act(() => {
-                result.current.toggleSavePost(1);
+                result.current.toggleSavePost('1');
             });
 
-            expect(result.current.isPostSaved(1)).toBe(false);
+            expect(result.current.isPostSaved('1')).toBe(false);
 
             const stored = JSON.parse(localStorageMock.getItem('vinctus_saved_posts') || '[]');
-            expect(stored).not.toContain(1);
+            expect(stored).not.toContain('1');
         });
     });
 });

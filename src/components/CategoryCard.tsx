@@ -1,7 +1,12 @@
-import { ArrowRight } from 'lucide-react';
+import type { Category } from '../types';
+
+type CategoryCardProps = {
+    category: Category;
+    onClick: () => void;
+};
 
 // CategoryCard component
-const CategoryCard = ({ category, onClick }) => (
+const CategoryCard = ({ category, onClick }: CategoryCardProps) => (
     <div
         role="button"
         tabIndex={0}
@@ -26,7 +31,7 @@ const CategoryCard = ({ category, onClick }) => (
                 <div className="flex flex-wrap gap-2 opacity-60 group-hover:opacity-100 transition-opacity duration-500">
                     {category.subgroups.map(sub => (
                         <span key={sub.id} className="text-[10px] uppercase tracking-widest text-neutral-500">
-                            {sub.name} &nbsp;â€¢&nbsp;
+                            {sub.name} &nbsp;&bull;&nbsp;
                         </span>
                     ))}
                 </div>

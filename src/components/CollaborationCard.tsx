@@ -1,7 +1,12 @@
 import { ArrowUpRight } from 'lucide-react';
+import type { Collaboration } from '../types';
 
 // CollaborationCard component
-const CollaborationCard = ({ item }) => (
+type CollaborationCardProps = {
+    item: Collaboration;
+};
+
+const CollaborationCard = ({ item }: CollaborationCardProps) => (
     <div className="bg-neutral-900/10 border border-neutral-800 p-8 hover:bg-neutral-900/30 transition-all group cursor-pointer">
         <div className="flex justify-between items-start mb-6">
             <span className="text-[10px] tracking-widest uppercase text-neutral-500 border border-neutral-800 px-2 py-1 rounded-sm">

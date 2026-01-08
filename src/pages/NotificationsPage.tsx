@@ -12,7 +12,7 @@ const NotificationsPage = () => {
                         <button
                             onClick={() => navigate('/user/dr-elena-r')}
                             className="text-white cursor-pointer hover:underline bg-transparent border-none p-0 font-inherit"
-                        >Dr. Elena R.</button> comentÃ³ en tu publicaciÃ³n
+                        >Dr. Elena R.</button> comentó en tu publicación
                     </p>
                     <span className="text-neutral-600 text-xs">Hace 2 horas</span>
                 </div>
@@ -21,12 +21,12 @@ const NotificationsPage = () => {
                         <button
                             onClick={() => navigate('/user/marco-v')}
                             className="text-white cursor-pointer hover:underline bg-transparent border-none p-0 font-inherit"
-                        >Marco V.</button> te mencionÃ³ en un debate
+                        >Marco V.</button> te mencionó en un debate
                     </p>
                     <span className="text-neutral-600 text-xs">Hace 5 horas</span>
                 </div>
                 <div className="p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors">
-                    <p className="text-neutral-400">Tu ensayo recibiÃ³ <span className="text-white">15 nuevas reacciones</span></p>
+                    <p className="text-neutral-400">Tu ensayo recibió <span className="text-white">15 nuevas reacciones</span></p>
                     <span className="text-neutral-600 text-xs">Ayer</span>
                 </div>
             </div>

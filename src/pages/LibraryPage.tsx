@@ -8,34 +8,34 @@ const LibraryPage = () => {
 
     // Datos de carpetas
     const FOLDERS = [
-        { id: 1, name: 'Para despues', count: 9, icon: 'ðŸ“' },
-        { id: 2, name: 'Fisica', count: 12, icon: 'ðŸ“‚' },
-        { id: 3, name: 'Salsa', count: 7, icon: 'ðŸŽµ' },
-        { id: 4, name: 'Ideas de proyectos', count: 4, icon: 'ðŸ’¡' },
-        { id: 5, name: 'Lecturas largas', count: 14, icon: 'ðŸ“š' }
+        { id: 1, name: 'Para después', count: 9, icon: '📁' },
+        { id: 2, name: 'Física', count: 12, icon: '📂' },
+        { id: 3, name: 'Salsa', count: 7, icon: '🎵' },
+        { id: 4, name: 'Ideas de proyectos', count: 4, icon: '💡' },
+        { id: 5, name: 'Lecturas largas', count: 14, icon: '📚' }
     ];
 
     // Datos de recientes
     const RECENTS = [
         {
             id: 1,
-            title: 'Paper sobre orbitas exoplanetarias',
-            collection: 'Fisica',
+            title: 'Paper sobre órbitas exoplanetarias',
+            collection: 'Física',
             time: '10 horas',
-            icon: 'ðŸ“„'
+            icon: '📄'
         },
         {
             id: 2,
-            title: 'La magia de Ruben Blades',
+            title: 'La magia de Rubén Blades',
             collection: 'Salsa',
-            time: '1 dia',
+            time: '1 día',
             hasImage: true
         },
         {
             id: 3,
-            title: 'Neuroplasticidad: Una guia esencial',
-            collection: 'Para despues',
-            time: '2 dias',
+            title: 'Neuroplasticidad: Una guía esencial',
+            collection: 'Para después',
+            time: '2 días',
             icon: '#'
         }
     ];
@@ -59,7 +59,7 @@ const LibraryPage = () => {
     }, [searchQuery]);
 
     const handleNewFolder = () => {
-        showToast('Crear carpetas estara disponible pronto', 'info');
+        showToast('Crear carpetas estará disponible pronto', 'info');
     };
 
     return (
@@ -70,16 +70,17 @@ const LibraryPage = () => {
                     Colecciones
                 </h1>
                 <p className="text-neutral-500 font-light text-sm">
-                    Tu archivo personal de lecturas, recursos, musica y mas.
+                    Tu archivo personal de lecturas, recursos, música y más.
                 </p>
             </header>
 
-            {/* Barra de busqueda */}
+            {/* Barra de búsqueda */}
             <div className="mb-8">
                 <div className="relative bg-neutral-900/50 border border-neutral-800 rounded-lg px-5 py-3.5">
                     <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-neutral-600" size={18} />
                     <input
                         type="text"
+                        aria-label="Buscar en colecciones"
                         placeholder="Buscar en colecciones..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -115,6 +116,7 @@ const LibraryPage = () => {
                         {filteredFolders.map(folder => (
                             <div
                                 key={folder.id}
+                                onClick={() => showToast('Abrir carpetas estará disponible pronto', 'info')}
                                 className="bg-neutral-900/30 border border-neutral-800 rounded-lg p-4 cursor-pointer hover:bg-neutral-900/50 hover:border-neutral-700 transition-all group"
                             >
                                 <div className="flex items-start gap-3">
@@ -145,6 +147,7 @@ const LibraryPage = () => {
                         {filteredRecents.map(item => (
                             <div
                                 key={item.id}
+                                onClick={() => showToast('Ver elemento estará disponible pronto', 'info')}
                                 className="flex items-center gap-4 bg-neutral-900/30 border border-neutral-800 rounded-lg p-4 cursor-pointer hover:bg-neutral-900/50 hover:border-neutral-700 transition-all group"
                             >
                                 {/* Icon/Image */}
@@ -163,7 +166,7 @@ const LibraryPage = () => {
                                 {/* Content */}
                                 <div className="flex-1 min-w-0">
                                     <h3 className="text-white font-light text-base truncate group-hover:text-white/90">{item.title}</h3>
-                                    <p className="text-neutral-500 text-xs mt-0.5">Coleccion: {item.collection}</p>
+                                    <p className="text-neutral-500 text-xs mt-0.5">Colección: {item.collection}</p>
                                 </div>
 
                                 {/* Time and arrow */}

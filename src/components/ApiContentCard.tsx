@@ -1,7 +1,35 @@
 import { ExternalLink, User, Heart, MessageSquare, MapPin } from 'lucide-react';
 
+interface ApiContentItem {
+    id: string | number;
+    title?: string;
+    type?: string;
+    link?: string;
+    url?: string;
+    summary?: string;
+    authors?: string;
+    published?: string;
+    time?: string;
+    score?: number;
+    comments?: number;
+    cover?: string | null;
+    firstPublished?: number | string;
+    thumbnail?: string | null;
+    species?: string;
+    scientificName?: string;
+    location?: string;
+    photo?: string | null;
+    observer?: string;
+    artist?: string;
+}
+
+type ApiContentCardProps = {
+    item: ApiContentItem;
+    type: string;
+};
+
 // Generic card for API content - clicking opens the source link
-const ApiContentCard = ({ item, type }) => {
+const ApiContentCard = ({ item, type }: ApiContentCardProps) => {
     // Get the appropriate link based on type
     const getLink = () => {
         switch (type) {

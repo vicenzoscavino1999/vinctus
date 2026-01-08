@@ -11,12 +11,13 @@ import {
 } from '../components';
 import { useApiContent } from '../hooks';
 import { CATEGORIES } from '../data';
+import type { Subgroup } from '../types';
 
 const CategoryPage = () => {
     const { categoryId } = useParams();
     const navigate = useNavigate();
     const [viewMode, setViewMode] = useState('live');
-    const [selectedSubgroup, setSelectedSubgroup] = useState(null);
+    const [selectedSubgroup, setSelectedSubgroup] = useState<Subgroup | null>(null);
     const { showToast } = useToast();
 
     // Reset selectedSubgroup when category changes
@@ -27,11 +28,14 @@ const CategoryPage = () => {
     const category = CATEGORIES.find(c => c.id === categoryId);
 
     // Get API query from selected subgroup or default to first one
-    const apiQuery = selectedSubgroup?.apiQuery || category?.subgroups[0]?.apiQuery || category?.id;
+    const apiQuery = viewMode === 'live'
+        ? (selectedSubgroup?.apiQuery || category?.subgroups[0]?.apiQuery || category?.id || null)
+        : null;
+    const apiSource = viewMode === 'live' ? category?.apiSource || null : null;
 
     // Fetch live content from API with toast notifications
     const { data: liveContent, loading, error } = useApiContent(
-        category?.apiSource,
+        apiSource,
         apiQuery,
         8,
         showToast
@@ -40,7 +44,7 @@ const CategoryPage = () => {
     if (!category) {
         return (
             <div className="py-20 text-center">
-                <p className="text-neutral-500">CategorÃ­a no encontrada</p>
+                <p className="text-neutral-500">Categoría no encontrada</p>
                 <button onClick={() => navigate('/discover')} className="mt-4 text-white underline">Volver</button>
             </div>
         );
@@ -140,7 +144,7 @@ const CategoryPage = () => {
                         <EmptyState
                             icon={Feather}
                             title="Sin contenido disponible"
-                            message="No hay publicaciones en esta categorÃ­a aÃºn. Â¡Vuelve pronto!"
+                            message="No hay publicaciones en esta categoría aún. ¡Vuelve pronto!"
                         />
                     )}
                 </div>
@@ -174,7 +178,7 @@ const CategoryPage = () => {
                         </div>
                     ) : (
                         <div className="py-20 text-center border border-dashed border-neutral-800 rounded-lg">
-                            <p className="text-neutral-500 font-light italic">No hay documentos archivados en esta categorÃ­a aÃºn.</p>
+                            <p className="text-neutral-500 font-light italic">No hay documentos archivados en esta categoría aún.</p>
                         </div>
                     )}
                 </div>

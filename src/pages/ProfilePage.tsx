@@ -8,7 +8,7 @@ const ProfilePage = () => (
                 <div>
                     <h1 className="text-4xl font-serif font-light text-white mb-2">Vicenzo S.</h1>
                     <p className="text-neutral-400 mb-1">Desarrollador & Curioso</p>
-                    <p className="text-neutral-600 text-sm">Lima, PerÃº</p>
+                    <p className="text-neutral-600 text-sm">Lima, Perú</p>
                 </div>
             </div>
             <button className="px-5 py-2.5 border border-neutral-700 text-white hover:bg-neutral-900 transition-colors text-sm">

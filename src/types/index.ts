@@ -16,6 +16,7 @@ export interface LibraryItem {
     title: string;
     author: string;
     type?: string;
+    category?: string;
     readTime: string;
 }
 
@@ -37,7 +38,7 @@ export interface Category {
 // ============================================
 
 export interface FeedPost {
-    id: number;
+    id: string;
     author: string;
     role: string;
     isExpert: boolean;
@@ -57,13 +58,13 @@ export interface PostAuthor {
 }
 
 export interface PostGroup {
-    id: number;
+    id: string;
     name: string;
     icon: string;
 }
 
 export interface PostDetail {
-    id: number;
+    id: string;
     title: string;
     content: string;
     author: PostAuthor;
@@ -80,21 +81,21 @@ export interface PostDetail {
 // ============================================
 
 export interface RecentPost {
-    id: number;
+    id: string;
     title: string;
     author: string;
     time: string;
 }
 
 export interface Member {
-    id: number;
+    id: string;
     name: string;
     role: string;
     posts: number;
 }
 
 export interface GroupDetail {
-    id: number;
+    id: string;
     name: string;
     description: string;
     members: number;
@@ -110,7 +111,7 @@ export interface GroupDetail {
 // ============================================
 
 export interface Collaboration {
-    id: number;
+    id: string;
     title: string;
     context: string;
     author: string;
@@ -123,7 +124,7 @@ export interface Collaboration {
 // ============================================
 
 export interface EventItem {
-    id: number;
+    id: string;
     title: string;
     date: string;
     location: string;
@@ -135,17 +136,17 @@ export interface EventItem {
 // ============================================
 
 export interface Publication {
-    id: number;
+    id: string;
     group: string;
     category: string;
     categoryId: string;
     image: string;
-    likes: string;
-    comments: string;
+    likes: number;
+    comments: number;
 }
 
 export interface RecommendedGroup {
-    id: number;
+    id: string;
     name: string;
     categoryId: string;
     description: string;
@@ -159,7 +160,7 @@ export interface RecommendedGroup {
 // ============================================
 
 export interface Conversation {
-    id: number;
+    id: string;
     name: string;
     type?: string;
     icon?: string;
@@ -173,14 +174,14 @@ export interface Conversation {
 // ============================================
 
 export interface Folder {
-    id: number;
+    id: string;
     name: string;
     count: number;
     icon: string;
 }
 
 export interface RecentItem {
-    id: number;
+    id: string;
     title: string;
     collection: string;
     time: string;
@@ -193,7 +194,7 @@ export interface RecentItem {
 // ============================================
 
 export interface GlobalLibraryHighlight {
-    id: number;
+    id: string;
     title: string;
     author: string;
     readTime: string;
@@ -205,18 +206,18 @@ export interface GlobalLibraryHighlight {
 // ============================================
 
 export interface AppStateContextType {
-    joinedGroups: number[];
+    joinedGroups: string[];
     savedCategories: string[];
-    likedPosts: number[];
-    savedPosts: number[];
-    toggleJoinGroup: (groupId: number) => void;
+    likedPosts: string[];
+    savedPosts: string[];
+    toggleJoinGroup: (groupId: string) => void;
     toggleSaveCategory: (categoryId: string) => void;
-    toggleLikePost: (postId: number) => void;
-    toggleSavePost: (postId: number) => void;
-    isGroupJoined: (groupId: number) => boolean;
+    toggleLikePost: (postId: string) => void;
+    toggleSavePost: (postId: string) => void;
+    isGroupJoined: (groupId: string) => boolean;
     isCategorySaved: (categoryId: string) => boolean;
-    isPostLiked: (postId: number) => boolean;
-    isPostSaved: (postId: number) => boolean;
+    isPostLiked: (postId: string) => boolean;
+    isPostSaved: (postId: string) => boolean;
 }
 
 // ============================================

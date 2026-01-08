@@ -1,3 +1,24 @@
+import type { ComponentType } from 'react';
+
+type SkeletonContentGridProps = {
+    count?: number;
+};
+
+type SkeletonLineProps = {
+    width?: string;
+};
+
+type EmptyStateProps = {
+    icon?: ComponentType<{ size?: number; strokeWidth?: number }>;
+    title: string;
+    message: string;
+};
+
+type ErrorStateProps = {
+    message: string;
+    onRetry?: () => void;
+};
+
 // Skeleton Loader Components
 export const SkeletonCard = () => (
     <div className="skeleton-card">
@@ -14,7 +35,7 @@ export const SkeletonCard = () => (
     </div>
 );
 
-export const SkeletonContentGrid = ({ count = 4 }) => (
+export const SkeletonContentGrid = ({ count = 4 }: SkeletonContentGridProps) => (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 stagger-premium">
         {Array.from({ length: count }).map((_, i) => (
             <SkeletonCard key={i} />
@@ -22,12 +43,12 @@ export const SkeletonContentGrid = ({ count = 4 }) => (
     </div>
 );
 
-export const SkeletonLine = ({ width = '100%' }) => (
+export const SkeletonLine = ({ width = '100%' }: SkeletonLineProps) => (
     <div className="skeleton-text" style={{ width }} />
 );
 
 // Empty State Component
-export const EmptyState = ({ icon: Icon, title, message }) => (
+export const EmptyState = ({ icon: Icon, title, message }: EmptyStateProps) => (
     <div className="empty-state">
         {Icon && (
             <div className="empty-state-icon">
@@ -40,12 +61,12 @@ export const EmptyState = ({ icon: Icon, title, message }) => (
 );
 
 // Error State Component  
-export const ErrorState = ({ message, onRetry }) => (
+export const ErrorState = ({ message, onRetry }: ErrorStateProps) => (
     <div className="error-state">
         <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
             <span className="text-red-400 text-xl">!</span>
         </div>
-        <h3 className="text-lg font-light text-neutral-400 mb-2">Algo saliÃ³ mal</h3>
+        <h3 className="text-lg font-light text-neutral-400 mb-2">Algo salió mal</h3>
         <p className="text-sm text-neutral-600 mb-4">{message}</p>
         {onRetry && (
             <button

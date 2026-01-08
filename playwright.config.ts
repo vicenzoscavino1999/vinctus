@@ -11,6 +11,7 @@ export default defineConfig({
         baseURL: 'http://localhost:5173',
         trace: 'on-first-retry',
         screenshot: 'only-on-failure',
+        serviceWorkers: 'block',
     },
     projects: [
         {
@@ -19,7 +20,9 @@ export default defineConfig({
         },
     ],
     webServer: {
-        command: 'npm run dev',
+        command: process.env.CI
+            ? 'npm run build && npm run preview -- --port 5173'
+            : 'npm run dev -- --port 5173',
         url: 'http://localhost:5173',
         reuseExistingServer: !process.env.CI,
     },

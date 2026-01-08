@@ -12,13 +12,25 @@ const STORAGE_KEYS = {
     SAVED_POSTS: 'vinctus_saved_posts',
 } as const;
 
+const uniqueValues = (items: string[]): string[] => Array.from(new Set(items));
+
 // Helper to safely parse JSON from localStorage
 const getStoredValue = <T,>(key: string, defaultValue: T): T => {
+    if (typeof window === 'undefined') return defaultValue;
     try {
         const stored = localStorage.getItem(key);
         return stored ? JSON.parse(stored) : defaultValue;
     } catch {
         return defaultValue;
+    }
+};
+
+const setStoredValue = <T,>(key: string, value: T): void => {
+    if (typeof window === 'undefined') return;
+    try {
+        localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+        // ignore storage errors (private mode, quota, SSR)
     }
 };
 
@@ -29,38 +41,39 @@ interface AppStateProviderProps {
 // Provider component
 export const AppStateProvider = ({ children }: AppStateProviderProps) => {
     // Joined groups
-    const [joinedGroups, setJoinedGroups] = useState<number[]>(() =>
-        getStoredValue<number[]>(STORAGE_KEYS.JOINED_GROUPS, [])
+    const [joinedGroups, setJoinedGroups] = useState<string[]>(() =>
+        uniqueValues(getStoredValue<string[]>(STORAGE_KEYS.JOINED_GROUPS, []))
     );
 
     // Saved categories
     const [savedCategories, setSavedCategories] = useState<string[]>(() =>
-        getStoredValue<string[]>(STORAGE_KEYS.SAVED_CATEGORIES, [])
+        uniqueValues(getStoredValue<string[]>(STORAGE_KEYS.SAVED_CATEGORIES, []))
     );
 
     // Liked posts
-    const [likedPosts, setLikedPosts] = useState<number[]>(() =>
-        getStoredValue<number[]>(STORAGE_KEYS.LIKED_POSTS, [])
+    const [likedPosts, setLikedPosts] = useState<string[]>(() =>
+        uniqueValues(getStoredValue<string[]>(STORAGE_KEYS.LIKED_POSTS, []))
     );
 
     // Saved posts
-    const [savedPosts, setSavedPosts] = useState<number[]>(() =>
-        getStoredValue<number[]>(STORAGE_KEYS.SAVED_POSTS, [])
+    const [savedPosts, setSavedPosts] = useState<string[]>(() =>
+        uniqueValues(getStoredValue<string[]>(STORAGE_KEYS.SAVED_POSTS, []))
     );
 
     // Toggle joined group
-    const toggleJoinGroup = useCallback((groupId: number) => {
+    const toggleJoinGroup = useCallback((groupId: string) => {
         setJoinedGroups(prev => {
             const newJoined = prev.includes(groupId)
                 ? prev.filter(id => id !== groupId)
                 : [...prev, groupId];
-            localStorage.setItem(STORAGE_KEYS.JOINED_GROUPS, JSON.stringify(newJoined));
-            return newJoined;
+            const uniqueJoined = uniqueValues(newJoined);
+            setStoredValue(STORAGE_KEYS.JOINED_GROUPS, uniqueJoined);
+            return uniqueJoined;
         });
     }, []);
 
     // Check if joined
-    const isGroupJoined = useCallback((groupId: number): boolean => {
+    const isGroupJoined = useCallback((groupId: string): boolean => {
         return joinedGroups.includes(groupId);
     }, [joinedGroups]);
 
@@ -70,8 +83,9 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
             const newSaved = prev.includes(categoryId)
                 ? prev.filter(id => id !== categoryId)
                 : [...prev, categoryId];
-            localStorage.setItem(STORAGE_KEYS.SAVED_CATEGORIES, JSON.stringify(newSaved));
-            return newSaved;
+            const uniqueSaved = uniqueValues(newSaved);
+            setStoredValue(STORAGE_KEYS.SAVED_CATEGORIES, uniqueSaved);
+            return uniqueSaved;
         });
     }, []);
 
@@ -81,34 +95,36 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
     }, [savedCategories]);
 
     // Toggle liked post
-    const toggleLikePost = useCallback((postId: number) => {
+    const toggleLikePost = useCallback((postId: string) => {
         setLikedPosts(prev => {
             const newLiked = prev.includes(postId)
                 ? prev.filter(id => id !== postId)
                 : [...prev, postId];
-            localStorage.setItem(STORAGE_KEYS.LIKED_POSTS, JSON.stringify(newLiked));
-            return newLiked;
+            const uniqueLiked = uniqueValues(newLiked);
+            setStoredValue(STORAGE_KEYS.LIKED_POSTS, uniqueLiked);
+            return uniqueLiked;
         });
     }, []);
 
     // Check if post liked
-    const isPostLiked = useCallback((postId: number): boolean => {
+    const isPostLiked = useCallback((postId: string): boolean => {
         return likedPosts.includes(postId);
     }, [likedPosts]);
 
     // Toggle saved post
-    const toggleSavePost = useCallback((postId: number) => {
+    const toggleSavePost = useCallback((postId: string) => {
         setSavedPosts(prev => {
             const newSaved = prev.includes(postId)
                 ? prev.filter(id => id !== postId)
                 : [...prev, postId];
-            localStorage.setItem(STORAGE_KEYS.SAVED_POSTS, JSON.stringify(newSaved));
-            return newSaved;
+            const uniqueSaved = uniqueValues(newSaved);
+            setStoredValue(STORAGE_KEYS.SAVED_POSTS, uniqueSaved);
+            return uniqueSaved;
         });
     }, []);
 
     // Check if post saved
-    const isPostSaved = useCallback((postId: number): boolean => {
+    const isPostSaved = useCallback((postId: string): boolean => {
         return savedPosts.includes(postId);
     }, [savedPosts]);
 

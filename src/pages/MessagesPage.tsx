@@ -17,7 +17,7 @@ const MessagesPage = () => {
                             onClick={() => navigate('/user/marco-v')}
                             className="text-white cursor-pointer hover:underline bg-transparent border-none p-0 font-inherit"
                         >Marco V.</button>
-                        <p className="text-neutral-500 text-sm truncate">Â¿Viste el nuevo paper sobre jazz modal?</p>
+                        <p className="text-neutral-500 text-sm truncate">¿Viste el nuevo paper sobre jazz modal?</p>
                     </div>
                     <span className="text-neutral-600 text-xs">2h</span>
                 </div>
@@ -31,7 +31,7 @@ const MessagesPage = () => {
                             onClick={() => navigate('/user/dr-elena-r')}
                             className="text-white cursor-pointer hover:underline bg-transparent border-none p-0 font-inherit"
                         >Dr. Elena R.</button>
-                        <p className="text-neutral-500 text-sm truncate">Sobre la colaboraciÃ³n del paper...</p>
+                        <p className="text-neutral-500 text-sm truncate">Sobre la colaboración del paper...</p>
                     </div>
                     <span className="text-neutral-600 text-xs">1d</span>
                 </div>

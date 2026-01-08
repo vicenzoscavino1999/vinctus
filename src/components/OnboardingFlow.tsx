@@ -1,38 +1,47 @@
 import { useState } from 'react';
 import { ArrowRight, Check, Sparkles, Users, BookOpen } from 'lucide-react';
 import { CATEGORIES } from '../data';
+import type { OnboardingFlowProps } from '../types';
 
 // Onboarding Flow Component
-const OnboardingFlow = ({ onComplete }) => {
+const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
     const [step, setStep] = useState(0);
-    const [selectedInterests, setSelectedInterests] = useState([]);
-    const [selectedGroups, setSelectedGroups] = useState([]);
+    const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+    const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
 
     // Sample groups for onboarding
     const SAMPLE_GROUPS = [
-        { id: 1, name: 'Exploradores CuÃ¡nticos', members: 2340, icon: 'âš›ï¸' },
-        { id: 2, name: 'Historia Viva', members: 1890, icon: 'ðŸ›ï¸' },
-        { id: 3, name: 'Jazz & Vinilos', members: 956, icon: 'ðŸŽ·' },
-        { id: 4, name: 'FilosofÃ­a ContemporÃ¡nea', members: 1234, icon: 'ðŸ¤”' },
+        { id: 1, name: 'Exploradores Cuánticos', members: 2340, icon: '⚛️' },
+        { id: 2, name: 'Historia Viva', members: 1890, icon: '🏛️' },
+        { id: 3, name: 'Jazz & Vinilos', members: 956, icon: '🎷' },
+        { id: 4, name: 'Filosofía Contemporánea', members: 1234, icon: '🤔' },
     ];
 
-    const toggleInterest = (catId) => {
+    const toggleInterest = (catId: string) => {
         setSelectedInterests(prev =>
             prev.includes(catId) ? prev.filter(id => id !== catId) : [...prev, catId]
         );
     };
 
-    const toggleGroup = (groupId) => {
+    const toggleGroup = (groupId: number) => {
         setSelectedGroups(prev =>
             prev.includes(groupId) ? prev.filter(id => id !== groupId) : [...prev, groupId]
         );
     };
 
+    const safeSetItem = (key: string, value: string): void => {
+        try {
+            localStorage.setItem(key, value);
+        } catch {
+            // ignore storage errors (private mode, quota, SSR)
+        }
+    };
+
     const handleComplete = () => {
         // Persist selections to localStorage
-        localStorage.setItem('vinctus_interests', JSON.stringify(selectedInterests));
-        localStorage.setItem('vinctus_groups', JSON.stringify(selectedGroups));
-        localStorage.setItem('vinctus_onboarding_complete', 'true');
+        safeSetItem('vinctus_interests', JSON.stringify(selectedInterests));
+        safeSetItem('vinctus_groups', JSON.stringify(selectedGroups));
+        safeSetItem('vinctus_onboarding_complete', 'true');
         onComplete();
     };
 
@@ -78,7 +87,7 @@ const OnboardingFlow = ({ onComplete }) => {
                             Una red social basada en lo que realmente te apasiona.
                         </p>
                         <p className="text-neutral-500 text-body-sm max-w-xs">
-                            Conecta con personas que comparten tus intereses mÃ¡s profundos.
+                            Conecta con personas que comparten tus intereses más profundos.
                         </p>
                     </div>
                 )}
@@ -91,7 +100,7 @@ const OnboardingFlow = ({ onComplete }) => {
                                 <BookOpen size={32} className="text-brand-gold" />
                             </div>
                             <h2 className="text-display-sm font-display text-white mb-2">
-                                Â¿QuÃ© te apasiona?
+                                ¿Qué te apasiona?
                             </h2>
                             <p className="text-neutral-500 text-body-sm">
                                 Selecciona al menos 2 intereses
@@ -127,7 +136,7 @@ const OnboardingFlow = ({ onComplete }) => {
                         </div>
 
                         <p className="text-center text-neutral-600 text-xs mt-6">
-                            {selectedInterests.length} de 2 mÃ­nimo seleccionados
+                            {selectedInterests.length} de 2 mínimo seleccionados
                         </p>
                     </div>
                 )}
@@ -140,7 +149,7 @@ const OnboardingFlow = ({ onComplete }) => {
                                 <Users size={32} className="text-brand-gold" />
                             </div>
                             <h2 className="text-display-sm font-display text-white mb-2">
-                                Ãšnete a tu primer grupo
+                                Únete a tu primer grupo
                             </h2>
                             <p className="text-neutral-500 text-body-sm">
                                 Selecciona al menos 1 grupo para empezar

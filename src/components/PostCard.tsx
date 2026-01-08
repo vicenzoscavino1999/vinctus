@@ -1,33 +1,35 @@
 import { Heart, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import type { KeyboardEvent, MouseEvent } from 'react';
 import ExpertBadge from './ExpertBadge';
 import { useAppState } from '../context';
+import type { PostCardProps } from '../types';
 
 // Helper to convert author name to URL slug
-const authorToSlug = (name) => {
+const authorToSlug = (name: string) => {
     return name.toLowerCase().replace(/\s+/g, '-').replace(/\./g, '');
 };
 
 // PostCard component with clickable author and working likes
-const PostCard = ({ post }) => {
+const PostCard = ({ post }: PostCardProps) => {
     const navigate = useNavigate();
     const { isPostLiked, toggleLikePost } = useAppState();
 
     const liked = isPostLiked(post.id);
     const likeCount = liked ? post.likes + 1 : post.likes;
 
-    const handleAuthorClick = (e) => {
+    const handleAuthorClick = (e: MouseEvent<HTMLDivElement> | KeyboardEvent<HTMLDivElement>) => {
         e.stopPropagation();
         const slug = authorToSlug(post.author);
         navigate(`/user/${slug}`);
     };
 
-    const handleLike = (e) => {
+    const handleLike = (e: MouseEvent<HTMLButtonElement>) => {
         e.stopPropagation();
         toggleLikePost(post.id);
     };
 
-    const handleComment = (e) => {
+    const handleComment = (e: MouseEvent<HTMLButtonElement>) => {
         e.stopPropagation();
         // Navigate to post detail for comments
         navigate(`/post/${post.id}`);

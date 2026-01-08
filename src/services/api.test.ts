@@ -9,8 +9,6 @@ import {
 
 // Mock global fetch
 const mockFetch = vi.fn();
-const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
-
 const buildArxivUrl = (category: string, maxResults: number) => {
     const categoryMap: Record<string, string> = {
         physics: 'physics.gen-ph',
@@ -24,7 +22,7 @@ const buildArxivUrl = (category: string, maxResults: number) => {
 
     const query = categoryMap[category] || category;
     const arxivUrl = `https://export.arxiv.org/api/query?search_query=cat:${query}&start=0&max_results=${maxResults}&sortBy=submittedDate&sortOrder=descending`;
-    return `${CORS_PROXY}${encodeURIComponent(arxivUrl)}`;
+    return arxivUrl;
 };
 
 const buildWikipediaUrl = (topic: string) =>
@@ -71,13 +69,12 @@ describe('API Services', () => {
     });
 
     describe('fetchArxivPapers', () => {
-        it('retorna array vacio cuando fetch falla', async () => {
+        it('lanza error cuando fetch falla', async () => {
             mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-            const result = await fetchArxivPapers('physics', 5);
+            await expect(fetchArxivPapers('physics', 5)).rejects.toThrow('Network error');
 
             expect(mockFetch).toHaveBeenCalledWith(buildArxivUrl('physics', 5));
-            expect(result).toEqual([]);
         });
 
         it('parsea correctamente respuesta XML de arXiv', async () => {
@@ -94,6 +91,7 @@ describe('API Services', () => {
       `;
 
             mockFetch.mockResolvedValueOnce({
+                ok: true,
                 text: () => Promise.resolve(mockXml),
             });
 
@@ -107,13 +105,12 @@ describe('API Services', () => {
     });
 
     describe('fetchWikipediaArticles', () => {
-        it('retorna array vacio cuando fetch falla', async () => {
+        it('lanza error cuando fetch falla', async () => {
             mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-            const result = await fetchWikipediaArticles('Ancient_history', 5);
+            await expect(fetchWikipediaArticles('Ancient_history', 5)).rejects.toThrow('Network error');
 
             expect(mockFetch).toHaveBeenCalledWith(buildWikipediaUrl('Ancient_history'));
-            expect(result).toEqual([]);
         });
 
         it('parsea correctamente respuesta JSON de Wikipedia', async () => {
@@ -130,6 +127,7 @@ describe('API Services', () => {
             };
 
             mockFetch.mockResolvedValueOnce({
+                ok: true,
                 json: () => Promise.resolve(mockResponse),
             });
 
@@ -143,23 +141,24 @@ describe('API Services', () => {
     });
 
     describe('fetchHackerNews', () => {
-        it('retorna array vacio cuando fetch falla', async () => {
+        it('lanza error cuando fetch falla', async () => {
             mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-            const result = await fetchHackerNews('top', 5);
+            await expect(fetchHackerNews('top', 5)).rejects.toThrow('Network error');
 
             expect(mockFetch).toHaveBeenCalledWith(buildHackerNewsListUrl('top'));
-            expect(result).toEqual([]);
         });
 
         it('obtiene stories correctamente', async () => {
             // Mock para IDs
             mockFetch.mockResolvedValueOnce({
+                ok: true,
                 json: () => Promise.resolve([1, 2]),
             });
 
             // Mock para cada story
             mockFetch.mockResolvedValueOnce({
+                ok: true,
                 json: () => Promise.resolve({
                     id: 1,
                     title: 'Test Story',
@@ -173,6 +172,7 @@ describe('API Services', () => {
             });
 
             mockFetch.mockResolvedValueOnce({
+                ok: true,
                 json: () => Promise.resolve({
                     id: 2,
                     title: 'Another Story',
@@ -197,13 +197,12 @@ describe('API Services', () => {
     });
 
     describe('fetchBooks', () => {
-        it('retorna array vacio cuando fetch falla', async () => {
+        it('lanza error cuando fetch falla', async () => {
             mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-            const result = await fetchBooks('fiction', 5);
+            await expect(fetchBooks('fiction', 5)).rejects.toThrow('Network error');
 
             expect(mockFetch).toHaveBeenCalledWith(buildBooksUrl('fiction', 5));
-            expect(result).toEqual([]);
         });
 
         it('parsea correctamente respuesta de Open Library', async () => {
@@ -220,6 +219,7 @@ describe('API Services', () => {
             };
 
             mockFetch.mockResolvedValueOnce({
+                ok: true,
                 json: () => Promise.resolve(mockResponse),
             });
 
@@ -234,13 +234,12 @@ describe('API Services', () => {
     });
 
     describe('fetchNatureObservations', () => {
-        it('retorna array vacio cuando fetch falla', async () => {
+        it('lanza error cuando fetch falla', async () => {
             mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-            const result = await fetchNatureObservations('plants', 5);
+            await expect(fetchNatureObservations('plants', 5)).rejects.toThrow('Network error');
 
             expect(mockFetch).toHaveBeenCalledWith(buildNatureUrl('plants', 5));
-            expect(result).toEqual([]);
         });
 
         it('parsea correctamente respuesta de iNaturalist', async () => {
@@ -261,6 +260,7 @@ describe('API Services', () => {
             };
 
             mockFetch.mockResolvedValueOnce({
+                ok: true,
                 json: () => Promise.resolve(mockResponse),
             });
 

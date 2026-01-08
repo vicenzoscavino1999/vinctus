@@ -1,32 +1,59 @@
 import { ChevronLeft, Mail, MoreHorizontal, MapPin, Music, BookOpen } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
+import type { LucideIcon } from 'lucide-react';
+
+type UserCredential = {
+    icon: LucideIcon;
+    label: string;
+    color: string;
+};
+
+type UserContribution = {
+    id: number;
+    title: string;
+    category: string;
+    year: string;
+};
+
+type UserProfile = {
+    id: string;
+    name: string;
+    role: string;
+    location: string;
+    avatar: string | null;
+    initial: string;
+    bio: string;
+    reputation: number;
+    credentials: UserCredential[];
+    contributions: UserContribution[];
+};
 
 // Mock user data - in a real app this would come from an API
-const USERS = {
+const USERS: Record<string, UserProfile> = {
     'marco-v': {
         id: 'marco-v',
         name: 'Marco V.',
-        role: 'MelÃ³mano & Pianista',
+        role: 'Mel\u00F3mano & Pianista',
         location: 'Cali, Colombia',
         avatar: null,
         initial: 'M',
-        bio: 'Investigando las raÃ­ces africanas en la mÃºsica caribeÃ±a. Coleccionista de vinilos y pianista de sesiÃ³n.',
+        bio: 'Investigando las ra\u00EDces africanas en la m\u00FAsica caribe\u00F1a. Coleccionista de vinilos y pianista de sesi\u00F3n.',
         reputation: 85,
         credentials: [
-            { icon: Music, label: 'MÃºsico Verificado', color: 'text-purple-400' }
+            { icon: Music, label: 'M\u00FAsico Verificado', color: 'text-purple-400' }
         ],
         contributions: [
-            { id: 1, title: 'EntropÃ­a y Jazz: Un ensayo', category: 'BIBLIOTECA: MÃšSICA', year: '2023' }
+            { id: 1, title: 'Entrop\u00EDa y Jazz: Un ensayo', category: 'BIBLIOTECA: M\u00DASICA', year: '2023' }
         ]
     },
     'dr-elena-r': {
         id: 'dr-elena-r',
         name: 'Dr. Elena R.',
         role: 'Investigadora',
-        location: 'Madrid, EspaÃ±a',
+        location: 'Madrid, Espa\u00F1a',
         avatar: null,
         initial: 'E',
-        bio: 'FÃ­sica teÃ³rica especializada en gravedad cuÃ¡ntica. Profesora asociada y divulgadora cientÃ­fica.',
+        bio: 'F\u00EDsica te\u00F3rica especializada en gravedad cu\u00E1ntica. Profesora asociada y divulgadora cient\u00EDfica.',
         reputation: 92,
         credentials: [
             { icon: BookOpen, label: 'Experta Verificada', color: 'text-blue-400' }
@@ -42,7 +69,7 @@ const USERS = {
         location: 'Buenos Aires, Argentina',
         avatar: null,
         initial: 'A',
-        bio: 'Ingeniera de ML en startups de IA. Open source contributor. Apasionada por la Ã©tica en tecnologÃ­a.',
+        bio: 'Ingeniera de ML en startups de IA. Open source contributor. Apasionada por la \u00E9tica en tecnolog\u00EDa.',
         reputation: 78,
         credentials: [
             { icon: BookOpen, label: 'Desarrolladora Verificada', color: 'text-green-400' }
@@ -53,25 +80,25 @@ const USERS = {
         id: 'gabriel-m',
         name: 'Gabriel M.',
         role: 'Naturalista',
-        location: 'BogotÃ¡, Colombia',
+        location: 'Bogotá, Colombia',
         avatar: null,
         initial: 'G',
-        bio: 'BiÃ³logo de campo y fotÃ³grafo de naturaleza. Especializado en ornitologÃ­a neotropical.',
+        bio: 'Bi\u00F3logo de campo y fot\u00F3grafo de naturaleza. Especializado en ornitolog\u00EDa neotropical.',
         reputation: 81,
         credentials: [
             { icon: BookOpen, label: 'Naturalista Verificado', color: 'text-emerald-400' }
         ],
         contributions: [
-            { id: 1, title: 'GuÃ­a de Aves del Humedal CÃ³rdoba', category: 'BIBLIOTECA: NATURALEZA', year: '2023' }
+            { id: 1, title: 'Gu\u00EDa de Aves del Humedal C\u00F3rdoba', category: 'BIBLIOTECA: NATURALEZA', year: '2023' }
         ]
     }
 };
 
 const UserProfilePage = () => {
-    const { userId } = useParams();
+    const { userId } = useParams<{ userId: string }>();
     const navigate = useNavigate();
 
-    const user = USERS[userId];
+    const user = userId ? USERS[userId] : undefined;
 
     if (!user) {
         return (
@@ -134,7 +161,7 @@ const UserProfilePage = () => {
                 <div className="md:col-span-1 space-y-8">
                     {/* About me */}
                     <section>
-                        <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">Sobre MÃ­</h2>
+                        <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">Sobre Mí</h2>
                         <p className="text-neutral-400 font-light leading-relaxed">{user.bio}</p>
                     </section>
 
@@ -153,7 +180,7 @@ const UserProfilePage = () => {
 
                     {/* Reputation */}
                     <section>
-                        <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">ReputaciÃ³n</h2>
+                        <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">Reputación</h2>
                         <div className="flex items-center gap-4">
                             <div className="flex-1 h-1 bg-neutral-800 rounded-full overflow-hidden">
                                 <div
@@ -190,7 +217,7 @@ const UserProfilePage = () => {
                         </div>
                     ) : (
                         <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
-                            <p className="text-neutral-600 font-light italic">Sin contribuciones publicadas aÃºn.</p>
+                            <p className="text-neutral-600 font-light italic">Sin contribuciones publicadas aún.</p>
                         </div>
                     )}
                 </div>

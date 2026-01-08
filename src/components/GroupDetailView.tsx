@@ -4,21 +4,22 @@ import { ChevronLeft, Users, MessageCircle, ArrowRight, Check } from 'lucide-rea
 // ===== INTERFACES (EL CONTRATO) =====
 
 export interface RecentPost {
-    id: number;
+    id: string;
     title: string;
     author: string;
     time: string;
 }
 
 export interface TopMember {
-    id: number;
+    id: string;
     name: string;
     role: string;
     posts: number;
 }
 
 export interface GroupData {
-    id: number;
+    id: string;
+    categoryId?: string;
     name: string;
     description: string;
     members: number;
@@ -45,6 +46,7 @@ export interface GroupDetailViewProps {
     onJoinGroup: () => void;
     onGoBack: () => void;
     onNavigateToCategory: () => void;
+    onOpenPost?: (postId: string) => void;
 }
 
 // ===== COMPONENTE VIEW (SOLO UI) =====
@@ -58,6 +60,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
     onJoinGroup,
     onGoBack,
     onNavigateToCategory,
+    onOpenPost,
 }) => {
     // Loading state
     if (isLoading) {
@@ -168,7 +171,18 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
                     {group.recentPosts.map(post => (
                         <div
                             key={post.id}
-                            className="bg-surface-overlay border border-neutral-800/50 rounded-card p-4 flex items-center justify-between card-premium cursor-pointer"
+                            onClick={() => onOpenPost?.(post.id)}
+                            onKeyDown={(event) => {
+                                if (!onOpenPost) return;
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault();
+                                    onOpenPost(post.id);
+                                }
+                            }}
+                            role={onOpenPost ? 'button' : undefined}
+                            tabIndex={onOpenPost ? 0 : undefined}
+                            aria-label={onOpenPost ? `Abrir publicación: ${post.title}` : undefined}
+                            className={`bg-surface-overlay border border-neutral-800/50 rounded-card p-4 flex items-center justify-between card-premium ${onOpenPost ? 'cursor-pointer' : ''}`}
                         >
                             <div>
                                 <p className="text-white font-medium mb-1">{post.title}</p>

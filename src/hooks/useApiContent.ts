@@ -7,14 +7,9 @@ import {
     fetchBooks,
     fetchNatureObservations
 } from '../services/api';
+import type { ToastContextType } from '../types';
 
-interface ApiContentItem {
-    id: string | number;
-    title: string;
-    [key: string]: unknown;
-}
-
-type ShowToastFn = (message: string, type: string) => void;
+type ShowToastFn = ToastContextType['showToast'];
 
 interface UseApiContentReturn {
     data: any[];
@@ -35,6 +30,8 @@ export function useApiContent(
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        let isActive = true;
+
         async function fetchData() {
             setLoading(true);
             setError(null);
@@ -73,25 +70,21 @@ export function useApiContent(
                         result = [];
                 }
 
-                // Check if API returned empty due to silent error
-                if (result.length === 0 && apiSource && apiSource !== 'lastfm') {
-                    // Show subtle toast if available
-                    if (showToast) {
-                        showToast('Conexion limitada - mostrando contenido disponible', 'warning');
-                    }
-                }
-
+                if (!isActive) return;
                 setData(result);
             } catch (err) {
                 const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
+                if (!isActive) return;
                 setError(errorMessage);
                 setData([]);
                 // Show subtle toast notification
-                if (showToast) {
+                if (showToast && isActive) {
                     showToast('Error al cargar contenido', 'error');
                 }
             } finally {
-                setLoading(false);
+                if (isActive) {
+                    setLoading(false);
+                }
             }
         }
 
@@ -100,6 +93,9 @@ export function useApiContent(
         } else {
             setLoading(false);
         }
+        return () => {
+            isActive = false;
+        };
     }, [apiSource, query, limit, showToast]);
 
     return { data, loading, error };

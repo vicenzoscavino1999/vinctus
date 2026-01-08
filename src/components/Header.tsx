@@ -1,7 +1,11 @@
 import { Bell, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-const Header = ({ notificationCount = 0 }) => {
+interface HeaderProps {
+    notificationCount?: number;
+}
+
+const Header = ({ notificationCount = 0 }: HeaderProps) => {
     const navigate = useNavigate();
 
     return (

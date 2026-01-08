@@ -1,7 +1,12 @@
 import { MapPin, User, ArrowRight } from 'lucide-react';
+import type { EventItem } from '../types';
 
 // EventCard component
-const EventCard = ({ event }) => (
+type EventCardProps = {
+    event: EventItem;
+};
+
+const EventCard = ({ event }: EventCardProps) => (
     <div className="flex flex-col bg-neutral-900/20 border border-neutral-800 p-6 hover:bg-neutral-900/40 transition-colors cursor-pointer group">
         <div className="flex justify-between items-start mb-6">
             <div className="flex flex-col">

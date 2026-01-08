@@ -194,7 +194,7 @@ describe('useApiContent Hook', () => {
     });
 
     describe('Datos vacios', () => {
-        it('llama showToast cuando API retorna array vacio', async () => {
+        it('no muestra warning cuando API retorna array vacio', async () => {
             const mockShowToast = vi.fn();
             (fetchArxivPapers as any).mockResolvedValueOnce([]);
 
@@ -206,10 +206,7 @@ describe('useApiContent Hook', () => {
                 expect(result.current.loading).toBe(false);
             });
 
-            expect(mockShowToast).toHaveBeenCalledWith(
-                'Conexion limitada - mostrando contenido disponible',
-                'warning'
-            );
+            expect(mockShowToast).not.toHaveBeenCalled();
         });
     });
 

@@ -21,7 +21,8 @@ test.describe('Flujo de Grupos', () => {
         // Simular usuario autenticado
         await page.goto('/');
         await page.evaluate(() => {
-            localStorage.setItem('vinctus_auth', 'true');
+            localStorage.setItem('vinctus_authenticated', 'true');
+            localStorage.setItem('vinctus_onboarding_complete', 'true');
         });
         await page.reload();
         await page.waitForTimeout(500);
