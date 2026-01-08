@@ -1,63 +1,158 @@
+<p align="center">
+  <img src="docs/screenshots/discover-publications.png" alt="Vinctus UI" width="980" />
+</p>
 # Vinctus
 
-Red social basada en intereses. Conecta con comunidades de ciencia, mÃºsica, historia y mÃ¡s.
+Red social basada en intereses. Conecta con comunidades de ciencia, música, historia y más.
 
-## Objetivo
+## Estado del proyecto
 
-Vinctus es una plataforma que permite a los usuarios unirse a grupos segÃºn sus intereses especÃ­ficos. A diferencia de las redes sociales tradicionales, aquÃ­ las conexiones se forman alrededor de pasiones compartidas.
+MVP de interfaz con datos mock e integraciones públicas. No incluye backend de autenticación real.
 
-## Stack TecnolÃ³gico
+## Características
 
-- **Frontend**: React 19 + Vite 5
-- **Estilos**: Tailwind CSS 3
-- **Iconos**: Lucide React
-- **Animaciones**: tailwindcss-animate
-- **Routing**: React Router DOM
+- Descubrimiento por categorías y subgrupos con búsqueda y filtros.
+- Feed de publicaciones, detalle de post y perfiles de usuario.
+- Grupos con vista de detalle y acciones de unirse/guardar.
+- Onboarding guiado y login de demostración (persistencia en localStorage).
+- Animaciones, skeleton loaders y estados vacíos/errores.
+- Diseño responsive (desktop + mobile) con navegación fija.
 
-## InstalaciÃ³n
+## Capturas
+
+**Descubrir - Intereses**
+
+![Descubrir - Intereses](docs/screenshots/discover-interests.png)
+
+**Descubrir - Grupos recomendados**
+
+![Descubrir - Grupos recomendados](docs/screenshots/discover-groups.png)
+
+**Descubrir - Publicaciones**
+
+![Descubrir - Publicaciones](docs/screenshots/discover-publications.png)
+
+## Diagramas
+
+**Arquitectura (UI y datos)**
+
+```mermaid
+flowchart TD
+  App[App] --> Router[React Router]
+  Router --> Pages[Páginas]
+  Pages --> Components[Componentes UI]
+  Pages --> Hooks[Hooks]
+  Hooks --> ApiHook[useApiContent]
+  ApiHook --> Api[services/api.ts]
+  Api --> Arxiv[arXiv]
+  Api --> Wikipedia[Wikipedia]
+  Api --> HackerNews[Hacker News]
+  Api --> OpenLibrary[Open Library]
+  Api --> iNaturalist[iNaturalist]
+  App --> AppState[AppState]
+  AppState --> LocalStorage[localStorage]
+```
+
+**Flujo de usuario (MVP)**
+
+```mermaid
+flowchart LR
+  Login[Login demo] --> Onboarding[Onboarding] --> Discover[Descubrir]
+  Discover --> Category[Categoría]
+  Discover --> Group[Grupo]
+  Discover --> Post[Post]
+  Discover --> Feed[Conversación]
+  Discover --> Projects[Conexiones]
+  Discover --> Library[Colecciones]
+  Discover --> Profile[Perfil]
+```
+
+## Requisitos
+
+- Node.js >= 20
+- npm
+
+## Instalación y uso
 
 ```bash
-# Clonar el repositorio
-git clone <url-del-repo>
-cd vinctus
-
-# Instalar dependencias
 npm install
-
-# Iniciar servidor de desarrollo
 npm run dev
 ```
 
-## Uso
+Abre `http://localhost:5173`.
 
-Abre `http://localhost:5173` en tu navegador.
+Para previsualizar el build:
 
-### NavegaciÃ³n
+```bash
+npm run build
+npm run preview
+```
 
-- **Descubrir**: Explora categorÃ­as de intereses
-- **ConversaciÃ³n**: Feed de publicaciones recientes
-- **Colaboraciones**: Encuentra proyectos y colaboradores
-- **Archivo**: Biblioteca de conocimiento
-- **Eventos**: Encuentros presenciales y virtuales
+## Scripts útiles
 
-## Estructura del Proyecto
+- `npm run dev` - desarrollo con Vite
+- `npm run build` - build de producción
+- `npm run preview` - preview del build
+- `npm run lint` - ESLint
+- `npm run test` - Vitest en modo watch
+- `npm run test:run` - Vitest en modo CI
+- `npm run test:e2e` - Playwright
+- `npm run typecheck` - TypeScript sin emitir
+- `npm run ci` - lint + build + tests
+
+## Testing
+
+- Unit tests: `npm run test` o `npm run test:run`
+- E2E: `npm run test:e2e`
+
+## Variables de entorno
+
+Copia `.env.example` a `.env.local` y completa lo necesario:
+
+- `VITE_LASTFM_API_KEY` (opcional) - habilita datos reales de música.
+- `VITE_CORS_PROXY` (opcional) - proxy CORS para APIs que lo requieran.
+  - Por defecto: `https://api.allorigins.win/raw?url=`
+  - Actualmente se usa como fallback solo para arXiv.
+  - Para desactivar el proxy, define la variable vacía.
+
+## APIs externas
+
+Se consumen APIs públicas (sin API key) para contenido en vivo:
+
+- arXiv (ciencia)
+- Wikipedia (historia)
+- Hacker News (tecnología)
+- Open Library (literatura)
+- iNaturalist (naturaleza)
+
+Nota: algunas fuentes pueden bloquear CORS; por eso existe el proxy configurable.
+
+## Estructura del proyecto
 
 ```
 vinctus/
-â”œâ”€â”€ src/
-â”‚   â”œâ”€â”€ components/     # Componentes UI reutilizables
-â”‚   â”œâ”€â”€ pages/          # PÃ¡ginas de la aplicaciÃ³n
-â”‚   â”œâ”€â”€ context/        # Estado global (AppState)
-â”‚   â”œâ”€â”€ data/           # Datos mock y constantes
-â”‚   â”œâ”€â”€ hooks/          # Custom hooks
-â”‚   â”œâ”€â”€ App.jsx         # Componente principal
-â”‚   â”œâ”€â”€ main.jsx        # Punto de entrada
-â”‚   â””â”€â”€ index.css       # Estilos globales
-â”œâ”€â”€ public/             # Assets estÃ¡ticos
-â””â”€â”€ index.html          # HTML principal
+|-- src/
+|   |-- components/     # Componentes UI reutilizables
+|   |-- pages/          # Páginas de la aplicación
+|   |-- context/        # Estado global (AppState)
+|   |-- data/           # Datos mock y constantes
+|   |-- hooks/          # Custom hooks
+|   |-- services/       # Servicios de API
+|   |-- App.tsx         # Componente principal
+|   |-- main.tsx        # Punto de entrada
+|   `-- index.css       # Estilos globales
+|-- public/             # Assets estáticos
+`-- index.html          # HTML principal
 ```
+
+## Stack tecnológico
+
+- React 19 + Vite 5
+- TypeScript
+- Tailwind CSS 3 + tailwindcss-animate
+- React Router DOM
+- Vitest + Playwright
 
 ## Licencia
 
 MIT
-
