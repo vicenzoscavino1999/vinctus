@@ -8,16 +8,20 @@ import {
     useEffect,
     useCallback,
     useMemo,
+    useRef,
     type ReactNode
 } from 'react';
 import {
     signInWithPopup,
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
+    signInWithPhoneNumber,
     signOut as firebaseSignOut,
     onAuthStateChanged,
     updateProfile,
-    type User
+    RecaptchaVerifier,
+    type User,
+    type ConfirmationResult
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 
@@ -27,17 +31,22 @@ interface AuthUser {
     email: string | null;
     displayName: string | null;
     photoURL: string | null;
+    phoneNumber: string | null;
 }
 
 interface AuthContextType {
     user: AuthUser | null;
     loading: boolean;
     error: string | null;
+    phoneCodeSent: boolean;
     signInWithGoogle: () => Promise<void>;
     signInWithEmail: (email: string, password: string) => Promise<void>;
     signUpWithEmail: (email: string, password: string, displayName?: string) => Promise<void>;
+    sendPhoneCode: (phoneNumber: string, recaptchaContainerId: string) => Promise<void>;
+    verifyPhoneCode: (code: string) => Promise<void>;
     signOut: () => Promise<void>;
     clearError: () => void;
+    resetPhoneAuth: () => void;
 }
 
 // Create context
@@ -51,24 +60,30 @@ const mapUser = (firebaseUser: User | null): AuthUser | null => {
         email: firebaseUser.email,
         displayName: firebaseUser.displayName,
         photoURL: firebaseUser.photoURL,
+        phoneNumber: firebaseUser.phoneNumber,
     };
 };
 
 // Helper to translate Firebase error codes to Spanish
 const translateError = (code: string): string => {
     const errors: Record<string, string> = {
-        'auth/email-already-in-use': 'Este correo ya est\u00E1 registrado',
-        'auth/invalid-email': 'Correo electr\u00F3nico inv\u00E1lido',
-        'auth/operation-not-allowed': 'Operaci\u00F3n no permitida',
-        'auth/weak-password': 'La contrase\u00F1a debe tener al menos 6 caracteres',
+        'auth/email-already-in-use': 'Este correo ya está registrado',
+        'auth/invalid-email': 'Correo electrónico inválido',
+        'auth/operation-not-allowed': 'Operación no permitida',
+        'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres',
         'auth/user-disabled': 'Esta cuenta ha sido deshabilitada',
         'auth/user-not-found': 'No existe una cuenta con este correo',
-        'auth/wrong-password': 'Contrase\u00F1a incorrecta',
-        'auth/invalid-credential': 'Credenciales inv\u00E1lidas',
-        'auth/too-many-requests': 'Demasiados intentos. Intenta m\u00E1s tarde',
+        'auth/wrong-password': 'Contraseña incorrecta',
+        'auth/invalid-credential': 'Credenciales inválidas',
+        'auth/too-many-requests': 'Demasiados intentos. Intenta más tarde',
         'auth/popup-closed-by-user': 'Ventana cerrada antes de completar',
+        'auth/invalid-phone-number': 'Número de teléfono inválido',
+        'auth/missing-phone-number': 'Ingresa un número de teléfono',
+        'auth/quota-exceeded': 'Límite de SMS excedido. Intenta más tarde',
+        'auth/invalid-verification-code': 'Código de verificación incorrecto',
+        'auth/code-expired': 'El código ha expirado. Solicita uno nuevo',
     };
-    return errors[code] || 'Error de autenticaci\u00F3n';
+    return errors[code] || 'Error de autenticación';
 };
 
 interface AuthProviderProps {
@@ -80,6 +95,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const [user, setUser] = useState<AuthUser | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [phoneCodeSent, setPhoneCodeSent] = useState(false);
+
+    // Store confirmation result for phone auth
+    const confirmationResultRef = useRef<ConfirmationResult | null>(null);
+    const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
 
     // Listen to auth state changes
     useEffect(() => {
@@ -94,6 +114,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     // Clear error
     const clearError = useCallback(() => {
         setError(null);
+    }, []);
+
+    // Reset phone auth state
+    const resetPhoneAuth = useCallback(() => {
+        setPhoneCodeSent(false);
+        confirmationResultRef.current = null;
+        if (recaptchaVerifierRef.current) {
+            recaptchaVerifierRef.current.clear();
+            recaptchaVerifierRef.current = null;
+        }
     }, []);
 
     // Sign in with Google
@@ -138,29 +168,80 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
     }, []);
 
-    // Sign out
-    const signOut = useCallback(async () => {
+    // Send phone verification code
+    const sendPhoneCode = useCallback(async (phoneNumber: string, recaptchaContainerId: string) => {
         setError(null);
         try {
-            await firebaseSignOut(auth);
+            // Clean up previous verifier if exists
+            if (recaptchaVerifierRef.current) {
+                recaptchaVerifierRef.current.clear();
+            }
+
+            // Create new reCAPTCHA verifier
+            recaptchaVerifierRef.current = new RecaptchaVerifier(auth, recaptchaContainerId, {
+                size: 'invisible',
+                callback: () => {
+                    // reCAPTCHA solved
+                },
+            });
+
+            // Send SMS
+            const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifierRef.current);
+            confirmationResultRef.current = confirmationResult;
+            setPhoneCodeSent(true);
+        } catch (err) {
+            const code = (err as { code?: string }).code || '';
+            setError(translateError(code));
+            resetPhoneAuth();
+            throw err;
+        }
+    }, [resetPhoneAuth]);
+
+    // Verify phone code
+    const verifyPhoneCode = useCallback(async (code: string) => {
+        setError(null);
+        if (!confirmationResultRef.current) {
+            setError('Primero solicita un código de verificación');
+            return;
+        }
+        try {
+            await confirmationResultRef.current.confirm(code);
+            resetPhoneAuth();
         } catch (err) {
             const code = (err as { code?: string }).code || '';
             setError(translateError(code));
             throw err;
         }
-    }, []);
+    }, [resetPhoneAuth]);
+
+    // Sign out
+    const signOut = useCallback(async () => {
+        setError(null);
+        try {
+            await firebaseSignOut(auth);
+            resetPhoneAuth();
+        } catch (err) {
+            const code = (err as { code?: string }).code || '';
+            setError(translateError(code));
+            throw err;
+        }
+    }, [resetPhoneAuth]);
 
     // Memoize context value
     const value = useMemo<AuthContextType>(() => ({
         user,
         loading,
         error,
+        phoneCodeSent,
         signInWithGoogle,
         signInWithEmail,
         signUpWithEmail,
+        sendPhoneCode,
+        verifyPhoneCode,
         signOut,
         clearError,
-    }), [user, loading, error, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut, clearError]);
+        resetPhoneAuth,
+    }), [user, loading, error, phoneCodeSent, signInWithGoogle, signInWithEmail, signUpWithEmail, sendPhoneCode, verifyPhoneCode, signOut, clearError, resetPhoneAuth]);
 
     return (
         <AuthContext.Provider value={value}>

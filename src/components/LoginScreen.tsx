@@ -1,10 +1,20 @@
 import { useState } from 'react';
 import { useAuth } from '../context';
 
-type AuthMode = 'login' | 'register';
+type AuthMode = 'login' | 'register' | 'phone';
 
 const LoginScreen = () => {
-    const { signInWithGoogle, signInWithEmail, signUpWithEmail, error: authError, clearError } = useAuth();
+    const {
+        signInWithGoogle,
+        signInWithEmail,
+        signUpWithEmail,
+        sendPhoneCode,
+        verifyPhoneCode,
+        error: authError,
+        clearError,
+        phoneCodeSent,
+        resetPhoneAuth
+    } = useAuth();
     const [mode, setMode] = useState<AuthMode>('login');
     const [isLoading, setIsLoading] = useState(false);
 
@@ -12,6 +22,8 @@ const LoginScreen = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [displayName, setDisplayName] = useState('');
+    const [phoneNumber, setPhoneNumber] = useState('');
+    const [verificationCode, setVerificationCode] = useState('');
 
     const handleGoogleSignIn = async () => {
         setIsLoading(true);
@@ -33,8 +45,30 @@ const LoginScreen = () => {
         try {
             if (mode === 'login') {
                 await signInWithEmail(email, password);
-            } else {
+            } else if (mode === 'register') {
                 await signUpWithEmail(email, password, displayName || undefined);
+            }
+        } catch {
+            // Error handled in AuthContext
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handlePhoneSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsLoading(true);
+        clearError();
+
+        try {
+            if (!phoneCodeSent) {
+                // Format phone number with country code if not present
+                const formattedPhone = phoneNumber.startsWith('+')
+                    ? phoneNumber
+                    : `+51${phoneNumber}`; // Default to Peru (+51)
+                await sendPhoneCode(formattedPhone, 'recaptcha-container');
+            } else {
+                await verifyPhoneCode(verificationCode);
             }
         } catch {
             // Error handled in AuthContext
@@ -49,6 +83,11 @@ const LoginScreen = () => {
         setEmail('');
         setPassword('');
         setDisplayName('');
+        setPhoneNumber('');
+        setVerificationCode('');
+        if (newMode !== 'phone') {
+            resetPhoneAuth();
+        }
     };
 
     return (
@@ -64,85 +103,159 @@ const LoginScreen = () => {
 
             <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
                 {/* Logo */}
-                <div className="mb-12 opacity-90 hover:opacity-100 transition-opacity duration-1000">
+                <div className="mb-10 opacity-90 hover:opacity-100 transition-opacity duration-1000">
                     <img
                         src="/image_fdd620.png"
                         alt="Vinctus Logo"
-                        className="w-auto h-16 md:h-20 object-contain"
+                        className="w-auto h-14 md:h-16 object-contain"
                     />
                 </div>
 
                 {/* Tabs */}
-                <div className="flex w-full mb-8 border-b border-neutral-800">
+                <div className="flex w-full mb-6 border-b border-neutral-800">
                     <button
                         onClick={() => switchMode('login')}
-                        className={`flex-1 pb-3 text-sm tracking-wider uppercase transition-colors ${mode === 'login'
-                            ? 'text-white border-b-2 border-white'
-                            : 'text-neutral-500 hover:text-neutral-300'
+                        className={`flex-1 pb-3 text-xs tracking-wider uppercase transition-colors ${mode === 'login'
+                                ? 'text-white border-b-2 border-white'
+                                : 'text-neutral-500 hover:text-neutral-300'
                             }`}
                     >
-                        Iniciar Sesión
+                        Entrar
                     </button>
                     <button
                         onClick={() => switchMode('register')}
-                        className={`flex-1 pb-3 text-sm tracking-wider uppercase transition-colors ${mode === 'register'
-                            ? 'text-white border-b-2 border-white'
-                            : 'text-neutral-500 hover:text-neutral-300'
+                        className={`flex-1 pb-3 text-xs tracking-wider uppercase transition-colors ${mode === 'register'
+                                ? 'text-white border-b-2 border-white'
+                                : 'text-neutral-500 hover:text-neutral-300'
                             }`}
                     >
-                        Registrarse
+                        Registro
+                    </button>
+                    <button
+                        onClick={() => switchMode('phone')}
+                        className={`flex-1 pb-3 text-xs tracking-wider uppercase transition-colors ${mode === 'phone'
+                                ? 'text-white border-b-2 border-white'
+                                : 'text-neutral-500 hover:text-neutral-300'
+                            }`}
+                    >
+                        Teléfono
                     </button>
                 </div>
 
                 {/* Error message */}
                 {authError && (
-                    <div className="w-full mb-6 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm text-center">
+                    <div className="w-full mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm text-center">
                         {authError}
                     </div>
                 )}
 
+                {/* reCAPTCHA container (invisible) */}
+                <div id="recaptcha-container"></div>
+
                 {/* Email/Password Form */}
-                <form onSubmit={handleEmailSubmit} className="w-full space-y-4 mb-6">
-                    {mode === 'register' && (
+                {(mode === 'login' || mode === 'register') && (
+                    <form onSubmit={handleEmailSubmit} className="w-full space-y-4 mb-6">
+                        {mode === 'register' && (
+                            <input
+                                type="text"
+                                placeholder="Nombre (opcional)"
+                                value={displayName}
+                                onChange={(e) => setDisplayName(e.target.value)}
+                                className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
+                            />
+                        )}
                         <input
-                            type="text"
-                            placeholder="Nombre (opcional)"
-                            value={displayName}
-                            onChange={(e) => setDisplayName(e.target.value)}
+                            type="email"
+                            placeholder="Correo electrónico"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
                             className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
                         />
-                    )}
-                    <input
-                        type="email"
-                        placeholder="Correo electrónico"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
-                    />
-                    <input
-                        type="password"
-                        placeholder="Contraseña"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                        minLength={6}
-                        className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
-                    />
-                    <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="w-full bg-white text-black py-3 px-6 font-medium hover:bg-neutral-100 active:bg-neutral-200 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded"
-                    >
-                        {isLoading ? (
-                            <div className="w-5 h-5 mx-auto border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                        ) : mode === 'login' ? (
-                            'Entrar'
+                        <input
+                            type="password"
+                            placeholder="Contraseña"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            minLength={6}
+                            className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
+                        />
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="w-full bg-white text-black py-3 px-6 font-medium hover:bg-neutral-100 active:bg-neutral-200 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded"
+                        >
+                            {isLoading ? (
+                                <div className="w-5 h-5 mx-auto border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                            ) : mode === 'login' ? (
+                                'Entrar'
+                            ) : (
+                                'Crear Cuenta'
+                            )}
+                        </button>
+                    </form>
+                )}
+
+                {/* Phone Form */}
+                {mode === 'phone' && (
+                    <form onSubmit={handlePhoneSubmit} className="w-full space-y-4 mb-6">
+                        {!phoneCodeSent ? (
+                            <>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500">+51</span>
+                                    <input
+                                        type="tel"
+                                        placeholder="Número de celular"
+                                        value={phoneNumber}
+                                        onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                                        required
+                                        maxLength={9}
+                                        className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 pl-14 pr-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
+                                    />
+                                </div>
+                                <p className="text-neutral-500 text-xs text-center">
+                                    Te enviaremos un código SMS para verificar
+                                </p>
+                            </>
                         ) : (
-                            'Crear Cuenta'
+                            <>
+                                <input
+                                    type="text"
+                                    placeholder="Código de verificación"
+                                    value={verificationCode}
+                                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                                    required
+                                    maxLength={6}
+                                    className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600 text-center tracking-[0.5em] text-lg"
+                                />
+                                <p className="text-neutral-500 text-xs text-center">
+                                    Ingresa el código de 6 dígitos
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => resetPhoneAuth()}
+                                    className="text-neutral-400 text-xs underline hover:text-white"
+                                >
+                                    Cambiar número
+                                </button>
+                            </>
                         )}
-                    </button>
-                </form>
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="w-full bg-white text-black py-3 px-6 font-medium hover:bg-neutral-100 active:bg-neutral-200 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded"
+                        >
+                            {isLoading ? (
+                                <div className="w-5 h-5 mx-auto border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                            ) : !phoneCodeSent ? (
+                                'Enviar Código'
+                            ) : (
+                                'Verificar'
+                            )}
+                        </button>
+                    </form>
+                )}
 
                 {/* Divider */}
                 <div className="w-full flex items-center gap-4 mb-6">
@@ -180,7 +293,7 @@ const LoginScreen = () => {
                 </button>
 
                 {/* Footer note */}
-                <p className="text-center pt-8 text-neutral-600 text-[10px] font-light uppercase tracking-wider">
+                <p className="text-center pt-6 text-neutral-600 text-[10px] font-light uppercase tracking-wider">
                     Conecta con comunidades de tu interés
                 </p>
             </div>
