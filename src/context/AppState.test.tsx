@@ -3,6 +3,44 @@ import { renderHook, act } from '@testing-library/react';
 import { AppStateProvider, useAppState } from '../context/AppState';
 import type { ReactNode } from 'react';
 
+// Mock useAuth to return null user (anonymous)
+vi.mock('../context/AuthContext', async () => {
+    const actual = await vi.importActual('../context/AuthContext');
+    return {
+        ...actual,
+        useAuth: () => ({
+            user: null,
+            loading: false,
+            error: null,
+            phoneCodeSent: false,
+            signInWithGoogle: vi.fn(),
+            signInWithEmail: vi.fn(),
+            signUpWithEmail: vi.fn(),
+            sendPhoneCode: vi.fn(),
+            verifyPhoneCode: vi.fn(),
+            signOut: vi.fn(),
+            clearError: vi.fn(),
+            resetPhoneAuth: vi.fn(),
+        }),
+    };
+});
+
+// Mock Firestore functions
+vi.mock('../lib/firestore', () => ({
+    joinGroupWithSync: vi.fn(() => Promise.resolve()),
+    leaveGroupWithSync: vi.fn(() => Promise.resolve()),
+    likePostWithSync: vi.fn(() => Promise.resolve()),
+    unlikePostWithSync: vi.fn(() => Promise.resolve()),
+    savePostWithSync: vi.fn(() => Promise.resolve()),
+    unsavePostWithSync: vi.fn(() => Promise.resolve()),
+    saveCategoryWithSync: vi.fn(() => Promise.resolve()),
+    unsaveCategoryWithSync: vi.fn(() => Promise.resolve()),
+    subscribeToUserMemberships: vi.fn(() => () => { }),
+    subscribeToSavedCategories: vi.fn(() => () => { }),
+    subscribeToLikedPosts: vi.fn(() => () => { }),
+    subscribeToSavedPosts: vi.fn(() => () => { }),
+}));
+
 // Mock localStorage
 const localStorageMock = (() => {
     let store: Record<string, string> = {};
@@ -14,9 +52,9 @@ const localStorageMock = (() => {
     };
 })();
 
-// Wrapper para proveer contexto
+// Wrapper para proveer contexto (anonymous user uses localStorage)
 const wrapper = ({ children }: { children: ReactNode }) => (
-    <AppStateProvider>{ children } </AppStateProvider>
+    <AppStateProvider>{children}</AppStateProvider>
 );
 
 describe('useAppState', () => {

@@ -1,10 +1,38 @@
-import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
+// AppState Context - Integrates with Firestore for authenticated users
+// Features: real-time sync, optimistic UI with rollback, localStorage fallback
+
+import {
+    createContext,
+    useContext,
+    useState,
+    useCallback,
+    useMemo,
+    useEffect,
+    type ReactNode
+} from 'react';
 import type { AppStateContextType } from '../types';
+import { useAuth } from './AuthContext';
+import {
+    // Firestore operations
+    joinGroupWithSync,
+    leaveGroupWithSync,
+    likePostWithSync,
+    unlikePostWithSync,
+    savePostWithSync,
+    unsavePostWithSync,
+    saveCategoryWithSync,
+    unsaveCategoryWithSync,
+    // Real-time subscriptions
+    subscribeToUserMemberships,
+    subscribeToSavedCategories,
+    subscribeToLikedPosts,
+    subscribeToSavedPosts,
+} from '../lib/firestore';
 
 // Create the context with proper typing
 const AppStateContext = createContext<AppStateContextType | null>(null);
 
-// LocalStorage keys
+// LocalStorage keys (fallback for anonymous users)
 const STORAGE_KEYS = {
     JOINED_GROUPS: 'vinctus_joined_groups',
     SAVED_CATEGORIES: 'vinctus_saved_categories',
@@ -40,95 +68,186 @@ interface AppStateProviderProps {
 
 // Provider component
 export const AppStateProvider = ({ children }: AppStateProviderProps) => {
-    // Joined groups
+    const { user } = useAuth();
+    const uid = user?.uid;
+
+    // State
     const [joinedGroups, setJoinedGroups] = useState<string[]>(() =>
         uniqueValues(getStoredValue<string[]>(STORAGE_KEYS.JOINED_GROUPS, []))
     );
-
-    // Saved categories
     const [savedCategories, setSavedCategories] = useState<string[]>(() =>
         uniqueValues(getStoredValue<string[]>(STORAGE_KEYS.SAVED_CATEGORIES, []))
     );
-
-    // Liked posts
     const [likedPosts, setLikedPosts] = useState<string[]>(() =>
         uniqueValues(getStoredValue<string[]>(STORAGE_KEYS.LIKED_POSTS, []))
     );
-
-    // Saved posts
     const [savedPosts, setSavedPosts] = useState<string[]>(() =>
         uniqueValues(getStoredValue<string[]>(STORAGE_KEYS.SAVED_POSTS, []))
     );
 
-    // Toggle joined group
-    const toggleJoinGroup = useCallback((groupId: string) => {
-        setJoinedGroups(prev => {
-            const newJoined = prev.includes(groupId)
-                ? prev.filter(id => id !== groupId)
-                : [...prev, groupId];
-            const uniqueJoined = uniqueValues(newJoined);
-            setStoredValue(STORAGE_KEYS.JOINED_GROUPS, uniqueJoined);
-            return uniqueJoined;
-        });
-    }, []);
+    // ==================== Firestore Real-time Sync ====================
 
-    // Check if joined
+    useEffect(() => {
+        if (!uid) {
+            // Anonymous user - use localStorage (already loaded in initial state)
+            return;
+        }
+
+        // Subscribe to real-time updates from Firestore
+        const unsubMemberships = subscribeToUserMemberships(uid, (groupIds) => {
+            setJoinedGroups(groupIds);
+        });
+
+        const unsubCategories = subscribeToSavedCategories(uid, (catIds) => {
+            setSavedCategories(catIds);
+        });
+
+        const unsubLikes = subscribeToLikedPosts(uid, (postIds) => {
+            setLikedPosts(postIds);
+        });
+
+        const unsubSaved = subscribeToSavedPosts(uid, (postIds) => {
+            setSavedPosts(postIds);
+        });
+
+        // Cleanup subscriptions on logout or unmount
+        return () => {
+            unsubMemberships();
+            unsubCategories();
+            unsubLikes();
+            unsubSaved();
+        };
+    }, [uid]);
+
+    // ==================== Optimistic UI Helpers ====================
+
+    /**
+     * Execute action with optimistic update and rollback on failure
+     */
+    const executeOptimistic = async <T,>(
+        setState: React.Dispatch<React.SetStateAction<T>>,
+        optimisticValue: T,
+        rollbackValue: T,
+        action: () => Promise<void>,
+        storageKey?: string
+    ): Promise<void> => {
+        // Optimistic update
+        setState(optimisticValue);
+
+        // Update localStorage for anonymous users
+        if (!uid && storageKey) {
+            setStoredValue(storageKey, optimisticValue);
+        }
+
+        try {
+            // Execute Firestore action (only for authenticated users)
+            if (uid) {
+                await action();
+            }
+        } catch (error) {
+            // Rollback on failure
+            console.error('Action failed, rolling back:', error);
+            setState(rollbackValue);
+            if (!uid && storageKey) {
+                setStoredValue(storageKey, rollbackValue);
+            }
+        }
+    };
+
+    // ==================== Group Actions ====================
+
+    const toggleJoinGroup = useCallback((groupId: string) => {
+        const isJoined = joinedGroups.includes(groupId);
+        const optimistic = isJoined
+            ? joinedGroups.filter(id => id !== groupId)
+            : [...joinedGroups, groupId];
+
+        executeOptimistic(
+            setJoinedGroups,
+            uniqueValues(optimistic),
+            joinedGroups,
+            () => uid
+                ? (isJoined ? leaveGroupWithSync(groupId, uid) : joinGroupWithSync(groupId, uid))
+                : Promise.resolve(),
+            STORAGE_KEYS.JOINED_GROUPS
+        );
+    }, [joinedGroups, uid]);
+
     const isGroupJoined = useCallback((groupId: string): boolean => {
         return joinedGroups.includes(groupId);
     }, [joinedGroups]);
 
-    // Toggle saved category
-    const toggleSaveCategory = useCallback((categoryId: string) => {
-        setSavedCategories(prev => {
-            const newSaved = prev.includes(categoryId)
-                ? prev.filter(id => id !== categoryId)
-                : [...prev, categoryId];
-            const uniqueSaved = uniqueValues(newSaved);
-            setStoredValue(STORAGE_KEYS.SAVED_CATEGORIES, uniqueSaved);
-            return uniqueSaved;
-        });
-    }, []);
+    // ==================== Category Actions ====================
 
-    // Check if category saved
+    const toggleSaveCategory = useCallback((categoryId: string) => {
+        const isSaved = savedCategories.includes(categoryId);
+        const optimistic = isSaved
+            ? savedCategories.filter(id => id !== categoryId)
+            : [...savedCategories, categoryId];
+
+        executeOptimistic(
+            setSavedCategories,
+            uniqueValues(optimistic),
+            savedCategories,
+            () => uid
+                ? (isSaved ? unsaveCategoryWithSync(categoryId, uid) : saveCategoryWithSync(categoryId, uid))
+                : Promise.resolve(),
+            STORAGE_KEYS.SAVED_CATEGORIES
+        );
+    }, [savedCategories, uid]);
+
     const isCategorySaved = useCallback((categoryId: string): boolean => {
         return savedCategories.includes(categoryId);
     }, [savedCategories]);
 
-    // Toggle liked post
-    const toggleLikePost = useCallback((postId: string) => {
-        setLikedPosts(prev => {
-            const newLiked = prev.includes(postId)
-                ? prev.filter(id => id !== postId)
-                : [...prev, postId];
-            const uniqueLiked = uniqueValues(newLiked);
-            setStoredValue(STORAGE_KEYS.LIKED_POSTS, uniqueLiked);
-            return uniqueLiked;
-        });
-    }, []);
+    // ==================== Like Actions ====================
 
-    // Check if post liked
+    const toggleLikePost = useCallback((postId: string) => {
+        const isLiked = likedPosts.includes(postId);
+        const optimistic = isLiked
+            ? likedPosts.filter(id => id !== postId)
+            : [...likedPosts, postId];
+
+        executeOptimistic(
+            setLikedPosts,
+            uniqueValues(optimistic),
+            likedPosts,
+            () => uid
+                ? (isLiked ? unlikePostWithSync(postId, uid) : likePostWithSync(postId, uid))
+                : Promise.resolve(),
+            STORAGE_KEYS.LIKED_POSTS
+        );
+    }, [likedPosts, uid]);
+
     const isPostLiked = useCallback((postId: string): boolean => {
         return likedPosts.includes(postId);
     }, [likedPosts]);
 
-    // Toggle saved post
-    const toggleSavePost = useCallback((postId: string) => {
-        setSavedPosts(prev => {
-            const newSaved = prev.includes(postId)
-                ? prev.filter(id => id !== postId)
-                : [...prev, postId];
-            const uniqueSaved = uniqueValues(newSaved);
-            setStoredValue(STORAGE_KEYS.SAVED_POSTS, uniqueSaved);
-            return uniqueSaved;
-        });
-    }, []);
+    // ==================== Save Post Actions ====================
 
-    // Check if post saved
+    const toggleSavePost = useCallback((postId: string) => {
+        const isSaved = savedPosts.includes(postId);
+        const optimistic = isSaved
+            ? savedPosts.filter(id => id !== postId)
+            : [...savedPosts, postId];
+
+        executeOptimistic(
+            setSavedPosts,
+            uniqueValues(optimistic),
+            savedPosts,
+            () => uid
+                ? (isSaved ? unsavePostWithSync(postId, uid) : savePostWithSync(postId, uid))
+                : Promise.resolve(),
+            STORAGE_KEYS.SAVED_POSTS
+        );
+    }, [savedPosts, uid]);
+
     const isPostSaved = useCallback((postId: string): boolean => {
         return savedPosts.includes(postId);
     }, [savedPosts]);
 
-    // Memoize context value to prevent unnecessary re-renders
+    // ==================== Context Value ====================
+
     const value = useMemo<AppStateContextType>(() => ({
         // Groups
         joinedGroups,
@@ -173,4 +292,3 @@ export const useAppState = (): AppStateContextType => {
 };
 
 export default AppStateContext;
-
