@@ -14,7 +14,7 @@ vi.mock('firebase/auth', () => ({
     getAuth: vi.fn(() => ({})),
     signInWithPopup: vi.fn(),
     signOut: vi.fn(),
-    onAuthStateChanged: vi.fn((auth, callback) => {
+    onAuthStateChanged: vi.fn((_auth, callback) => {
         // Immediately call with null user for tests
         callback(null);
         return () => { }; // unsubscribe function
