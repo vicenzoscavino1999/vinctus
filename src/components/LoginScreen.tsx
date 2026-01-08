@@ -90,6 +90,14 @@ const LoginScreen = () => {
         }
     };
 
+    const showPhoneOption = () => {
+        switchMode('phone');
+    };
+
+    const backToMainAuth = () => {
+        switchMode('login');
+    };
+
     return (
         <div className="min-h-screen bg-bg flex flex-col items-center justify-center relative overflow-hidden p-6">
             {/* Efecto de luz ambiental */}
@@ -111,189 +119,221 @@ const LoginScreen = () => {
                     />
                 </div>
 
-                {/* Tabs */}
-                <div className="flex w-full mb-6 border-b border-neutral-800">
-                    <button
-                        onClick={() => switchMode('login')}
-                        className={`flex-1 pb-3 text-xs tracking-wider uppercase transition-colors ${mode === 'login'
-                                ? 'text-white border-b-2 border-white'
-                                : 'text-neutral-500 hover:text-neutral-300'
-                            }`}
-                    >
-                        Entrar
-                    </button>
-                    <button
-                        onClick={() => switchMode('register')}
-                        className={`flex-1 pb-3 text-xs tracking-wider uppercase transition-colors ${mode === 'register'
-                                ? 'text-white border-b-2 border-white'
-                                : 'text-neutral-500 hover:text-neutral-300'
-                            }`}
-                    >
-                        Registro
-                    </button>
-                    <button
-                        onClick={() => switchMode('phone')}
-                        className={`flex-1 pb-3 text-xs tracking-wider uppercase transition-colors ${mode === 'phone'
-                                ? 'text-white border-b-2 border-white'
-                                : 'text-neutral-500 hover:text-neutral-300'
-                            }`}
-                    >
-                        Teléfono
-                    </button>
-                </div>
-
-                {/* Error message */}
-                {authError && (
-                    <div className="w-full mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm text-center">
-                        {authError}
-                    </div>
-                )}
-
                 {/* reCAPTCHA container (invisible) */}
                 <div id="recaptcha-container"></div>
 
-                {/* Email/Password Form */}
-                {(mode === 'login' || mode === 'register') && (
-                    <form onSubmit={handleEmailSubmit} className="w-full space-y-4 mb-6">
-                        {mode === 'register' && (
-                            <input
-                                type="text"
-                                placeholder="Nombre (opcional)"
-                                value={displayName}
-                                onChange={(e) => setDisplayName(e.target.value)}
-                                className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
-                            />
-                        )}
-                        <input
-                            type="email"
-                            placeholder="Correo electrónico"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                            className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
-                        />
-                        <input
-                            type="password"
-                            placeholder="Contraseña"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                            minLength={6}
-                            className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
-                        />
+                {/* Phone Auth View (Alternative Access) */}
+                {mode === 'phone' ? (
+                    <div className="w-full">
+                        {/* Back button */}
                         <button
-                            type="submit"
-                            disabled={isLoading}
-                            className="w-full bg-white text-black py-3 px-6 font-medium hover:bg-neutral-100 active:bg-neutral-200 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded"
+                            onClick={backToMainAuth}
+                            className="mb-6 text-neutral-500 text-sm hover:text-white transition-colors flex items-center gap-2"
                         >
-                            {isLoading ? (
-                                <div className="w-5 h-5 mx-auto border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                            ) : mode === 'login' ? (
-                                'Entrar'
-                            ) : (
-                                'Crear Cuenta'
-                            )}
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                            Volver
                         </button>
-                    </form>
-                )}
 
-                {/* Phone Form */}
-                {mode === 'phone' && (
-                    <form onSubmit={handlePhoneSubmit} className="w-full space-y-4 mb-6">
-                        {!phoneCodeSent ? (
-                            <>
-                                <div className="relative">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500">+51</span>
+                        {/* Elegant message */}
+                        <div className="text-center mb-8">
+                            <h2 className="text-white font-serif text-xl mb-3">Acceso Alternativo</h2>
+                            <p className="text-neutral-500 text-sm leading-relaxed">
+                                Si tienes problemas con tu correo o cuenta de Google,
+                                puedes acceder con tu número de teléfono.
+                            </p>
+                        </div>
+
+                        <form onSubmit={handlePhoneSubmit} className="w-full space-y-4 mb-6">
+                            {!phoneCodeSent ? (
+                                <>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500">+51</span>
+                                        <input
+                                            type="tel"
+                                            placeholder="Número de celular"
+                                            value={phoneNumber}
+                                            onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                                            required
+                                            maxLength={9}
+                                            className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 pl-14 pr-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
+                                        />
+                                    </div>
+                                    <p className="text-neutral-600 text-xs text-center italic">
+                                        Recibirás un código SMS para verificar tu identidad
+                                    </p>
+                                </>
+                            ) : (
+                                <>
                                     <input
-                                        type="tel"
-                                        placeholder="Número de celular"
-                                        value={phoneNumber}
-                                        onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                                        type="text"
+                                        placeholder="Código de 6 dígitos"
+                                        value={verificationCode}
+                                        onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
                                         required
-                                        maxLength={9}
-                                        className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 pl-14 pr-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
+                                        maxLength={6}
+                                        className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600 text-center tracking-[0.5em] text-lg"
                                     />
+                                    <div className="text-center">
+                                        <p className="text-neutral-600 text-xs">
+                                            Código enviado a +51{phoneNumber}
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => resetPhoneAuth()}
+                                            className="text-neutral-400 text-xs underline hover:text-white mt-2"
+                                        >
+                                            Cambiar número
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* Error message */}
+                            {authError && (
+                                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm text-center">
+                                    {authError}
                                 </div>
-                                <p className="text-neutral-500 text-xs text-center">
-                                    Te enviaremos un código SMS para verificar
-                                </p>
-                            </>
-                        ) : (
-                            <>
+                            )}
+
+                            <button
+                                type="submit"
+                                disabled={isLoading}
+                                className="w-full bg-neutral-800 text-white py-3 px-6 font-medium hover:bg-neutral-700 active:bg-neutral-600 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded border border-neutral-700"
+                            >
+                                {isLoading ? (
+                                    <div className="w-5 h-5 mx-auto border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                ) : !phoneCodeSent ? (
+                                    'Enviar Código SMS'
+                                ) : (
+                                    'Verificar y Entrar'
+                                )}
+                            </button>
+                        </form>
+                    </div>
+                ) : (
+                    <>
+                        {/* Main Auth View */}
+                        {/* Tabs */}
+                        <div className="flex w-full mb-6 border-b border-neutral-800">
+                            <button
+                                onClick={() => switchMode('login')}
+                                className={`flex-1 pb-3 text-sm tracking-wider uppercase transition-colors ${mode === 'login'
+                                        ? 'text-white border-b-2 border-white'
+                                        : 'text-neutral-500 hover:text-neutral-300'
+                                    }`}
+                            >
+                                Entrar
+                            </button>
+                            <button
+                                onClick={() => switchMode('register')}
+                                className={`flex-1 pb-3 text-sm tracking-wider uppercase transition-colors ${mode === 'register'
+                                        ? 'text-white border-b-2 border-white'
+                                        : 'text-neutral-500 hover:text-neutral-300'
+                                    }`}
+                            >
+                                Registro
+                            </button>
+                        </div>
+
+                        {/* Error message */}
+                        {authError && (
+                            <div className="w-full mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm text-center">
+                                {authError}
+                            </div>
+                        )}
+
+                        {/* Email/Password Form */}
+                        <form onSubmit={handleEmailSubmit} className="w-full space-y-4 mb-6">
+                            {mode === 'register' && (
                                 <input
                                     type="text"
-                                    placeholder="Código de verificación"
-                                    value={verificationCode}
-                                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
-                                    required
-                                    maxLength={6}
-                                    className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600 text-center tracking-[0.5em] text-lg"
+                                    placeholder="Nombre (opcional)"
+                                    value={displayName}
+                                    onChange={(e) => setDisplayName(e.target.value)}
+                                    className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
                                 />
-                                <p className="text-neutral-500 text-xs text-center">
-                                    Ingresa el código de 6 dígitos
-                                </p>
-                                <button
-                                    type="button"
-                                    onClick={() => resetPhoneAuth()}
-                                    className="text-neutral-400 text-xs underline hover:text-white"
-                                >
-                                    Cambiar número
-                                </button>
-                            </>
-                        )}
-                        <button
-                            type="submit"
-                            disabled={isLoading}
-                            className="w-full bg-white text-black py-3 px-6 font-medium hover:bg-neutral-100 active:bg-neutral-200 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded"
-                        >
-                            {isLoading ? (
-                                <div className="w-5 h-5 mx-auto border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                            ) : !phoneCodeSent ? (
-                                'Enviar Código'
-                            ) : (
-                                'Verificar'
                             )}
+                            <input
+                                type="email"
+                                placeholder="Correo electrónico"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required
+                                className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
+                            />
+                            <input
+                                type="password"
+                                placeholder="Contraseña"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                minLength={6}
+                                className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
+                            />
+                            <button
+                                type="submit"
+                                disabled={isLoading}
+                                className="w-full bg-white text-black py-3 px-6 font-medium hover:bg-neutral-100 active:bg-neutral-200 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded"
+                            >
+                                {isLoading ? (
+                                    <div className="w-5 h-5 mx-auto border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                                ) : mode === 'login' ? (
+                                    'Entrar'
+                                ) : (
+                                    'Crear Cuenta'
+                                )}
+                            </button>
+                        </form>
+
+                        {/* Divider */}
+                        <div className="w-full flex items-center gap-4 mb-6">
+                            <div className="flex-1 h-px bg-neutral-800" />
+                            <span className="text-neutral-600 text-xs uppercase tracking-wider">o</span>
+                            <div className="flex-1 h-px bg-neutral-800" />
+                        </div>
+
+                        {/* Google Sign-In */}
+                        <button
+                            onClick={handleGoogleSignIn}
+                            disabled={isLoading}
+                            className="w-full flex items-center justify-center gap-3 bg-neutral-900 text-white py-3 px-6 border border-neutral-800 hover:bg-neutral-800 active:bg-neutral-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded"
+                        >
+                            {/* Google Icon */}
+                            <svg className="w-5 h-5" viewBox="0 0 24 24">
+                                <path
+                                    fill="#4285F4"
+                                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                                />
+                                <path
+                                    fill="#34A853"
+                                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                                />
+                                <path
+                                    fill="#FBBC05"
+                                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                                />
+                                <path
+                                    fill="#EA4335"
+                                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                                />
+                            </svg>
+                            <span className="text-sm">Continuar con Google</span>
                         </button>
-                    </form>
+
+                        {/* Subtle phone option link */}
+                        <button
+                            onClick={showPhoneOption}
+                            className="mt-8 text-neutral-600 text-xs hover:text-neutral-400 transition-colors"
+                        >
+                            ¿Problemas para acceder? <span className="underline">Usar teléfono</span>
+                        </button>
+                    </>
                 )}
 
-                {/* Divider */}
-                <div className="w-full flex items-center gap-4 mb-6">
-                    <div className="flex-1 h-px bg-neutral-800" />
-                    <span className="text-neutral-600 text-xs uppercase tracking-wider">o</span>
-                    <div className="flex-1 h-px bg-neutral-800" />
-                </div>
-
-                {/* Google Sign-In */}
-                <button
-                    onClick={handleGoogleSignIn}
-                    disabled={isLoading}
-                    className="w-full flex items-center justify-center gap-3 bg-neutral-900 text-white py-3 px-6 border border-neutral-800 hover:bg-neutral-800 active:bg-neutral-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded"
-                >
-                    {/* Google Icon */}
-                    <svg className="w-5 h-5" viewBox="0 0 24 24">
-                        <path
-                            fill="#4285F4"
-                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                        />
-                        <path
-                            fill="#34A853"
-                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                        />
-                        <path
-                            fill="#FBBC05"
-                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                        />
-                        <path
-                            fill="#EA4335"
-                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                        />
-                    </svg>
-                    <span className="text-sm">Continuar con Google</span>
-                </button>
-
                 {/* Footer note */}
-                <p className="text-center pt-6 text-neutral-600 text-[10px] font-light uppercase tracking-wider">
+                <p className="text-center pt-6 text-neutral-700 text-[10px] font-light uppercase tracking-wider">
                     Conecta con comunidades de tu interés
                 </p>
             </div>
