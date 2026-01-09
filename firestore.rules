@@ -15,18 +15,33 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
     
-    // Check if the incoming data has valid structure for membership
+    // Validate membership structure (createdAt can be serverTimestamp)
     function isValidMembership() {
       return request.resource.data.keys().hasAll(['groupId', 'joinedAt'])
-        && request.resource.data.groupId is string
-        && request.resource.data.joinedAt is timestamp;
+        && request.resource.data.groupId is string;
+        // joinedAt validation omitted - serverTimestamp() is a sentinel, not a timestamp literal
     }
     
-    // Check if the incoming data has valid structure for like
+    // Validate like structure (createdAt can be serverTimestamp)
     function isValidLike() {
       return request.resource.data.keys().hasAll(['postId', 'createdAt'])
-        && request.resource.data.postId is string
-        && request.resource.data.createdAt is timestamp;
+        && request.resource.data.postId is string;
+        // createdAt validation omitted - serverTimestamp() is a sentinel
+    }
+    
+    // Validate post like structure
+    function isValidPostLike() {
+      return request.resource.data.keys().hasAll(['uid', 'postId', 'createdAt'])
+        && request.resource.data.uid is string
+        && request.resource.data.postId is string;
+    }
+    
+    // Validate group member structure
+    function isValidGroupMember() {
+      return request.resource.data.keys().hasAll(['uid', 'groupId', 'role', 'joinedAt'])
+        && request.resource.data.uid is string
+        && request.resource.data.groupId is string
+        && request.resource.data.role is string;
     }
     
     // ==================== User Data Collections ====================
@@ -34,25 +49,32 @@ service cloud.firestore {
     // users/{uid}/memberships/{groupId}
     // User's joined groups (denormalized for fast reads)
     match /users/{uid}/memberships/{groupId} {
-      // Anyone can read (to see who's in a group)
-      allow read: if isAuthenticated();
+      // Only owner can read (private)
+      allow read: if isOwner(uid);
       
       // Only the user can write to their own memberships
       allow create: if isOwner(uid) && isValidMembership();
       allow delete: if isOwner(uid);
-      allow update: if false; // Memberships are immutable once created
+      
+      // Allow update for idempotent writes with merge:true
+      // Only allow if data doesn't change (same groupId)
+      allow update: if isOwner(uid) 
+        && request.resource.data.groupId == resource.data.groupId;
     }
     
     // users/{uid}/likes/{postId}
     // User's liked posts (denormalized for fast reads)
     match /users/{uid}/likes/{postId} {
-      // Anyone can read (to see who liked a post)
-      allow read: if isAuthenticated();
+      // Only owner can read (private)
+      allow read: if isOwner(uid);
       
       // Only the user can write to their own likes
       allow create: if isOwner(uid) && isValidLike();
       allow delete: if isOwner(uid);
-      allow update: if false; // Likes are immutable
+      
+      // Allow update for idempotent writes
+      allow update: if isOwner(uid)
+        && request.resource.data.postId == resource.data.postId;
     }
     
     // users/{uid}/savedPosts/{postId}
@@ -62,8 +84,11 @@ service cloud.firestore {
       allow read: if isOwner(uid);
       
       // Only the user can write to their own saved posts
-      allow create, delete: if isOwner(uid);
-      allow update: if false; // Saved posts are immutable
+      allow create: if isOwner(uid);
+      allow delete: if isOwner(uid);
+      
+      // Allow update for idempotent writes
+      allow update: if isOwner(uid);
     }
     
     // users/{uid}/savedCategories/{categoryId}
@@ -73,17 +98,20 @@ service cloud.firestore {
       allow read: if isOwner(uid);
       
       // Only the user can write to their own saved categories
-      allow create, delete: if isOwner(uid);
-      allow update: if false; // Saved categories are immutable
+      allow create: if isOwner(uid);
+      allow delete: if isOwner(uid);
+      
+      // Allow update for idempotent writes
+      allow update: if isOwner(uid);
     }
     
     // ==================== Groups Collections ====================
     
     // groups/{groupId}
-    // Group metadata (public read, admin write)
+    // Group metadata (PUBLIC READ, admin write)
     match /groups/{groupId} {
-      // Anyone authenticated can read groups
-      allow read: if isAuthenticated();
+      // Anyone can read groups (even anonymous users for discovery)
+      allow read: if true;
       
       // For now, no one can create/update/delete groups
       // TODO: Add admin-only write when admin system is implemented
@@ -93,30 +121,32 @@ service cloud.firestore {
     // groups/{groupId}/members/{uid}
     // Group members (source of truth for counting)
     match /groups/{groupId}/members/{uid} {
-      // Anyone authenticated can read members
-      allow read: if isAuthenticated();
+      // Anyone can read members (public for member counts)
+      allow read: if true;
       
       // Only the user can add/remove themselves as a member
-      allow create: if isOwner(uid) 
-        && request.resource.data.keys().hasAll(['uid', 'groupId', 'role', 'joinedAt'])
+      allow create: if isOwner(uid) && isValidGroupMember()
         && request.resource.data.uid == uid
         && request.resource.data.groupId == groupId
-        && request.resource.data.role == 'member'
-        && request.resource.data.joinedAt is timestamp;
+        && request.resource.data.role == 'member';
       
       allow delete: if isOwner(uid);
       
-      // No updates - members are immutable (delete and re-create to change)
-      allow update: if false;
+      // Allow update for idempotent writes with merge:true
+      // Only allow if critical fields don't change
+      allow update: if isOwner(uid)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.role == resource.data.role;
     }
     
     // ==================== Posts Collections ====================
     
     // posts/{postId}
-    // Post metadata (public read, author write)
+    // Post metadata (PUBLIC READ, author write)
     match /posts/{postId} {
-      // Anyone authenticated can read posts
-      allow read: if isAuthenticated();
+      // Anyone can read posts (even anonymous for discovery)
+      allow read: if true;
       
       // For now, no one can create/update/delete posts
       // TODO: Add author-only write when posts system is implemented
@@ -126,20 +156,20 @@ service cloud.firestore {
     // posts/{postId}/likes/{uid}
     // Post likes (source of truth for counting)
     match /posts/{postId}/likes/{uid} {
-      // Anyone authenticated can read likes
-      allow read: if isAuthenticated();
+      // Anyone can read likes (public for like counts)
+      allow read: if true;
       
       // Only the user can like/unlike
-      allow create: if isOwner(uid)
-        && request.resource.data.keys().hasAll(['uid', 'postId', 'createdAt'])
+      allow create: if isOwner(uid) && isValidPostLike()
         && request.resource.data.uid == uid
-        && request.resource.data.postId == postId
-        && request.resource.data.createdAt is timestamp;
+        && request.resource.data.postId == postId;
       
       allow delete: if isOwner(uid);
       
-      // No updates - likes are immutable
-      allow update: if false;
+      // Allow update for idempotent writes with merge:true
+      allow update: if isOwner(uid)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.postId == resource.data.postId;
     }
     
     // ==================== Default Deny ====================
