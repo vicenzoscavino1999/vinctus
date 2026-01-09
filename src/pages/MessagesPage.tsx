@@ -1,44 +1,163 @@
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import {
+    subscribeToConversations,
+    subscribeToMessages,
+    sendMessage,
+    markConversationRead,
+    type ConversationRead,
+    type MessageRead
+} from '../lib/firestore';
 
-const MessagesPage = () => {
-    const navigate = useNavigate();
+export default function MessagesPage() {
+    const { user } = useAuth();
+    const [conversations, setConversations] = useState<ConversationRead[]>([]);
+    const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+    const [messages, setMessages] = useState<MessageRead[]>([]);
+    const [newMessage, setNewMessage] = useState('');
+    const [loading, setLoading] = useState(true);
+
+    // Subscribe to conversations
+    useEffect(() => {
+        if (!user) return;
+
+        const unsubscribe = subscribeToConversations(user.uid, (convs) => {
+            setConversations(convs);
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [user]);
+
+    // Subscribe to messages of selected conversation
+    useEffect(() => {
+        if (!selectedConversationId) return;
+
+        const unsubscribe = subscribeToMessages(selectedConversationId, (msgs) => {
+            setMessages(msgs.reverse()); // Reverse to show oldest first
+        });
+
+        return () => unsubscribe();
+    }, [selectedConversationId]);
+
+    // Mark as read when opening conversation
+    useEffect(() => {
+        if (!selectedConversationId || !user) return;
+
+        markConversationRead(selectedConversationId, user.uid);
+    }, [selectedConversationId, user]);
+
+    const handleSendMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newMessage.trim() || !selectedConversationId || !user) return;
+
+        const text = newMessage.trim();
+        setNewMessage('');
+
+        await sendMessage(selectedConversationId, user.uid, text);
+    };
+
+    if (loading) {
+        return (
+            <div className="page-profile pt-10 max-w-6xl mx-auto">
+                <div className="text-center text-neutral-500">Cargando conversaciones...</div>
+            </div>
+        );
+    }
 
     return (
-        <div className="page-profile pt-10 max-w-2xl mx-auto">
+        <div className="page-profile pt-10 max-w-6xl mx-auto">
             <h1 className="text-3xl font-serif font-light text-white mb-8">Mensajes</h1>
-            <div className="space-y-2">
-                <div className="flex items-center gap-4 p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors cursor-pointer">
-                    <button
-                        onClick={() => navigate('/user/marco-v')}
-                        className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 hover:ring-2 hover:ring-neutral-600 transition-all border-none"
-                    >M</button>
-                    <div className="flex-1">
-                        <button
-                            onClick={() => navigate('/user/marco-v')}
-                            className="text-white cursor-pointer hover:underline bg-transparent border-none p-0 font-inherit"
-                        >Marco V.</button>
-                        <p className="text-neutral-500 text-sm truncate">¿Viste el nuevo paper sobre jazz modal?</p>
+
+            <div className="flex gap-6 h-[calc(100vh-200px)]">
+                {/* Conversations List */}
+                <div className="w-80 border border-neutral-800 rounded-lg overflow-hidden flex flex-col bg-neutral-900/20">
+                    <div className="p-4 border-b border-neutral-800">
+                        <h2 className="text-lg font-medium text-white">Conversaciones</h2>
                     </div>
-                    <span className="text-neutral-600 text-xs">2h</span>
+                    <div className="flex-1 overflow-y-auto">
+                        {conversations.length === 0 ? (
+                            <div className="p-6 text-center text-neutral-500">
+                                No hay conversaciones aún
+                            </div>
+                        ) : (
+                            conversations.map((conv) => (
+                                <button
+                                    key={conv.id}
+                                    onClick={() => setSelectedConversationId(conv.id)}
+                                    className={`w-full p-4 text-left border-b border-neutral-800 hover:bg-neutral-800/30 transition ${selectedConversationId === conv.id ? 'bg-neutral-800/50' : ''
+                                        }`}
+                                >
+                                    <div className="font-medium text-white truncate">
+                                        {conv.type === 'group' ? `Grupo: ${conv.groupId}` : 'Mensaje Directo'}
+                                    </div>
+                                    {conv.lastMessage && (
+                                        <div className="text-sm text-neutral-500 truncate mt-1">
+                                            {conv.lastMessage.text}
+                                        </div>
+                                    )}
+                                </button>
+                            ))
+                        )}
+                    </div>
                 </div>
-                <div className="flex items-center gap-4 p-4 border border-neutral-800 hover:bg-neutral-900/30 transition-colors cursor-pointer">
-                    <button
-                        onClick={() => navigate('/user/dr-elena-r')}
-                        className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 hover:ring-2 hover:ring-neutral-600 transition-all border-none"
-                    >E</button>
-                    <div className="flex-1">
-                        <button
-                            onClick={() => navigate('/user/dr-elena-r')}
-                            className="text-white cursor-pointer hover:underline bg-transparent border-none p-0 font-inherit"
-                        >Dr. Elena R.</button>
-                        <p className="text-neutral-500 text-sm truncate">Sobre la colaboración del paper...</p>
-                    </div>
-                    <span className="text-neutral-600 text-xs">1d</span>
+
+                {/* Chat View */}
+                <div className="flex-1 border border-neutral-800 rounded-lg overflow-hidden flex flex-col bg-neutral-900/20">
+                    {!selectedConversationId ? (
+                        <div className="flex items-center justify-center h-full text-neutral-500">
+                            Selecciona una conversación para empezar a chatear
+                        </div>
+                    ) : (
+                        <>
+                            {/* Messages */}
+                            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                                {messages.map((msg) => (
+                                    <div
+                                        key={msg.id}
+                                        className={`flex ${msg.senderId === user?.uid ? 'justify-end' : 'justify-start'}`}
+                                    >
+                                        <div
+                                            className={`max-w-md px-4 py-3 rounded-2xl ${msg.senderId === user?.uid
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'bg-neutral-800 text-neutral-100'
+                                                }`}
+                                        >
+                                            <div className="text-sm leading-relaxed">{msg.text}</div>
+                                            <div className="text-xs opacity-60 mt-2">
+                                                {new Date(msg.createdAt).toLocaleTimeString('es-ES', {
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Input */}
+                            <form onSubmit={handleSendMessage} className="p-4 border-t border-neutral-800">
+                                <div className="flex gap-3">
+                                    <input
+                                        type="text"
+                                        value={newMessage}
+                                        onChange={(e) => setNewMessage(e.target.value)}
+                                        placeholder="Escribe un mensaje..."
+                                        className="flex-1 px-4 py-3 bg-neutral-800 border border-neutral-700 rounded-full text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={!newMessage.trim()}
+                                        className="px-6 py-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition font-medium"
+                                    >
+                                        Enviar
+                                    </button>
+                                </div>
+                            </form>
+                        </>
+                    )}
                 </div>
             </div>
         </div>
     );
-};
-
-export default MessagesPage;
-
+}
