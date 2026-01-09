@@ -179,6 +179,58 @@ service cloud.firestore {
         && request.resource.data.postId == postId;  // Must match path
     }
     
+    // ==================== Messaging Collections ====================
+    
+    // Helper: Check if user can access conversation
+    function canAccessConversation(conversationId) {
+      let conv = get(/databases/$(database)/documents/conversations/$(conversationId));
+      return conv.data.type == "direct"
+        ? exists(/databases/$(database)/documents/conversations/$(conversationId)/members/$(request.auth.uid))
+        : exists(/databases/$(database)/documents/groups/$(conv.data.groupId)/members/$(request.auth.uid));
+    }
+    
+    // conversations/{conversationId}
+    match /conversations/{conversationId} {
+      allow read: if isAuthenticated() && canAccessConversation(conversationId);
+      
+      // Restrict creation (no spam conversations)
+      allow create: if isAuthenticated()
+        && request.resource.data.type in ['direct', 'group']
+        && (request.resource.data.type == 'direct' 
+            || (request.resource.data.type == 'group' 
+                && exists(/databases/$(database)/documents/groups/$(request.resource.data.groupId)/members/$(request.auth.uid))));
+      
+      allow update: if isAuthenticated() && canAccessConversation(conversationId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'updatedAt']);
+      
+      // Members (restrict updates)
+      match /members/{uid} {
+        allow read: if isAuthenticated() && canAccessConversation(conversationId);
+        allow create: if isAuthenticated() && request.auth.uid == uid;
+        allow update: if isAuthenticated() 
+          && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastReadClientAt', 'lastReadAt', 'muted'])
+          && request.resource.data.role == resource.data.role;  // No self-promotion
+        allow delete: if isAuthenticated() && request.auth.uid == uid;
+      }
+      
+      // Messages
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && canAccessConversation(conversationId);
+        allow create: if isAuthenticated() 
+          && canAccessConversation(conversationId)
+          && request.resource.data.senderId == request.auth.uid;
+      }
+      
+      // Typing
+      match /typing/{uid} {
+        allow read: if isAuthenticated() && canAccessConversation(conversationId);
+        allow write: if isAuthenticated() 
+          && request.auth.uid == uid
+          && canAccessConversation(conversationId);
+      }
+    }
+    
     // ==================== Default Deny ====================
     
     // Deny all other paths by default

@@ -619,3 +619,305 @@ export const createOptimisticUnlike = (
     optimisticValue: currentLikes.filter(id => id !== postId),
     rollbackValue: currentLikes,
 });
+
+// ==================== Messaging Types (Read) ====================
+
+export interface ConversationRead {
+    id: string;
+    type: 'direct' | 'group';
+    groupId?: string;
+    lastMessage: {
+        text: string;
+        senderId: string;
+        createdAt: Date;
+        clientCreatedAt: number;
+    } | null;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+export interface ConversationMemberRead {
+    uid: string;
+    role: 'member' | 'admin';
+    joinedAt: Date;
+    lastReadClientAt: number;
+    lastReadAt: Date;
+    muted: boolean;
+}
+
+export interface MessageRead {
+    id: string;
+    senderId: string;
+    text: string;
+    createdAt: Date;
+    clientCreatedAt: number;
+    clientId: string;
+}
+
+export interface TypingIndicatorRead {
+    uid: string;
+    isTyping: boolean;
+    updatedAt: Date;
+}
+
+// ==================== Messaging Types (Write) ====================
+
+export interface ConversationWrite {
+    type: 'direct' | 'group';
+    groupId?: string;
+    lastMessage: {
+        text: string;
+        senderId: string;
+        createdAt: FieldValue;
+        clientCreatedAt: number;
+    } | null;
+    createdAt: FieldValue;
+    updatedAt: FieldValue;
+}
+
+export interface ConversationMemberWrite {
+    uid: string;
+    role: 'member' | 'admin';
+    joinedAt: FieldValue;
+    lastReadClientAt: number;
+    lastReadAt: FieldValue;
+    muted: boolean;
+}
+
+export interface MessageWrite {
+    senderId: string;
+    text: string;
+    createdAt: FieldValue;
+    clientCreatedAt: number;
+    clientId: string;
+}
+
+export interface TypingIndicatorWrite {
+    isTyping: boolean;
+    updatedAt: FieldValue;
+}
+
+// ==================== Messaging Functions ====================
+
+/**
+ * Get or create a direct conversation between two users
+ * IDs are deterministic: dm_${sortedUids}
+ */
+export const getOrCreateDirectConversation = async (uid1: string, uid2: string): Promise<string> => {
+    const conversationId = `dm_${[uid1, uid2].sort().join('_')}`;
+    const convRef = doc(db, 'conversations', conversationId);
+
+    const batch = writeBatch(db);
+
+    // Create conversation (idempotent)
+    batch.set(convRef, {
+        type: 'direct',
+        lastMessage: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+    } as ConversationWrite, { merge: false });
+
+    // Create member docs (idempotent)
+    batch.set(doc(db, `conversations/${conversationId}/members`, uid1), {
+        uid: uid1,
+        role: 'member',
+        joinedAt: serverTimestamp(),
+        lastReadClientAt: Date.now(),
+        lastReadAt: serverTimestamp(),
+        muted: false
+    } as ConversationMemberWrite, { merge: false });
+
+    batch.set(doc(db, `conversations/${conversationId}/members`, uid2), {
+        uid: uid2,
+        role: 'member',
+        joinedAt: serverTimestamp(),
+        lastReadClientAt: Date.now(),
+        lastReadAt: serverTimestamp(),
+        muted: false
+    } as ConversationMemberWrite, { merge: false });
+
+    await batch.commit();
+    return conversationId;
+};
+
+/**
+ * Get or create a group conversation
+ * ID: grp_${groupId}
+ */
+export const getOrCreateGroupConversation = async (groupId: string, uid: string): Promise<string> => {
+    const conversationId = `grp_${groupId}`;
+    const convRef = doc(db, 'conversations', conversationId);
+
+    const batch = writeBatch(db);
+
+    // Create conversation (idempotent)
+    batch.set(convRef, {
+        type: 'group',
+        groupId,
+        lastMessage: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+    } as ConversationWrite, { merge: false });
+
+    // Create member doc for current user
+    batch.set(doc(db, `conversations/${conversationId}/members`, uid), {
+        uid,
+        role: 'member',
+        joinedAt: serverTimestamp(),
+        lastReadClientAt: Date.now(),
+        lastReadAt: serverTimestamp(),
+        muted: false
+    } as ConversationMemberWrite, { merge: false });
+
+    await batch.commit();
+    return conversationId;
+};
+
+/**
+ * Send a message to a conversation
+ * Uses deterministic clientId for offline dedup
+ */
+export const sendMessage = async (conversationId: string, uid: string, text: string): Promise<void> => {
+    const clientId = `${uid}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const messageRef = doc(db, `conversations/${conversationId}/messages`, clientId);
+    const convRef = doc(db, 'conversations', conversationId);
+
+    const batch = writeBatch(db);
+
+    // Message (deterministic ID = offline dedup)
+    batch.set(messageRef, {
+        senderId: uid,
+        text,
+        createdAt: serverTimestamp(),
+        clientCreatedAt: Date.now(),
+        clientId
+    } as MessageWrite, { merge: false });
+
+    // Update lastMessage
+    batch.update(convRef, {
+        lastMessage: {
+            text,
+            senderId: uid,
+            createdAt: serverTimestamp(),
+            clientCreatedAt: Date.now()
+        },
+        updatedAt: serverTimestamp()
+    });
+
+    await batch.commit();
+};
+
+/**
+ * Subscribe to conversations for a user
+ * Note: Since we can't query across subcollections easily,
+ * we subscribe to all conversations and filter on client
+ */
+export const subscribeToConversations = (
+    uid: string,
+    callback: (conversations: ConversationRead[]) => void
+): Unsubscribe => {
+    // Subscribe to all conversations (limited approach for MVP)
+    // In production, use a Cloud Function to maintain user's conversation list
+    const q = query(
+        collection(db, 'conversations'),
+        orderBy('updatedAt', 'desc'),
+        limit(100)
+    );
+
+    return onSnapshot(q, async (snapshot) => {
+        const conversations = [];
+
+        for (const convDoc of snapshot.docs) {
+            const data = convDoc.data();
+
+            // Check if user is a member
+            const memberDoc = await getDoc(doc(db, `conversations/${convDoc.id}/members`, uid));
+            if (!memberDoc.exists()) continue;
+
+            conversations.push({
+                id: convDoc.id,
+                type: data.type,
+                groupId: data.groupId,
+                lastMessage: data.lastMessage ? {
+                    ...data.lastMessage,
+                    createdAt: toDate(data.lastMessage.createdAt) || new Date()
+                } : null,
+                createdAt: toDate(data.createdAt) || new Date(),
+                updatedAt: toDate(data.updatedAt) || new Date()
+            } as ConversationRead);
+        }
+
+        callback(conversations);
+    });
+};
+
+/**
+ * Subscribe to messages in a conversation
+ * Ordered by clientCreatedAt (offline-safe)
+ */
+export const subscribeToMessages = (
+    conversationId: string,
+    callback: (messages: MessageRead[]) => void
+): Unsubscribe => {
+    const q = query(
+        collection(db, `conversations/${conversationId}/messages`),
+        orderBy('clientCreatedAt', 'desc'),
+        limit(50)
+    );
+
+    return onSnapshot(q, (snapshot) => {
+        const messages = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                senderId: data.senderId,
+                text: data.text,
+                createdAt: toDate(data.createdAt) || new Date(),
+                clientCreatedAt: data.clientCreatedAt,
+                clientId: data.clientId
+            } as MessageRead;
+        });
+        callback(messages);
+    });
+};
+
+/**
+ * Mark conversation as read
+ */
+export const markConversationRead = async (conversationId: string, uid: string): Promise<void> => {
+    await writeBatch(db).update(doc(db, `conversations/${conversationId}/members`, uid), {
+        lastReadClientAt: Date.now(),
+        lastReadAt: serverTimestamp()
+    }).commit();
+};
+
+/**
+ * Set typing indicator (call from UI with throttle)
+ */
+export const setTyping = async (conversationId: string, uid: string, isTyping: boolean): Promise<void> => {
+    const typingRef = doc(db, `conversations/${conversationId}/typing`, uid);
+    await writeBatch(db).set(typingRef, {
+        isTyping,
+        updatedAt: serverTimestamp()
+    } as TypingIndicatorWrite, { merge: false }).commit();
+};
+
+/**
+ * Subscribe to typing indicators
+ */
+export const subscribeToTyping = (
+    conversationId: string,
+    callback: (typing: TypingIndicatorRead[]) => void
+): Unsubscribe => {
+    const q = query(collection(db, `conversations/${conversationId}/typing`));
+
+    return onSnapshot(q, (snapshot) => {
+        const typingList = snapshot.docs.map(doc => ({
+            uid: doc.id,
+            ...doc.data(),
+            updatedAt: toDate(doc.data().updatedAt) || new Date()
+        })) as TypingIndicatorRead[];
+        callback(typingList.filter(t => t.isTyping));
+    });
+};
+
