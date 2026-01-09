@@ -1,12 +1,14 @@
 /**
  * Vinctus Cloud Functions
- * Production-ready atomic counters and triggers
+ * Production-ready atomic counters and triggers with deduplication
  * 
  * Features:
  * - Atomic memberCount for groups
  * - Atomic likesCount for posts
  * - Cascade cleanup on delete
- * - Error handling and logging
+ * - Event deduplication (at-least-once safety)
+ * - Atomic decrement with negative prevention
+ * - Parent existence checks
  */
 
 import * as functions from "firebase-functions";
@@ -17,7 +19,99 @@ admin.initializeApp();
 const db = admin.firestore();
 
 // ==========================================================
-// 📈 GROUP MEMBER COUNTERS (Atomic)
+// 🛡️ DEDUPLICATION HELPER
+// ==========================================================
+
+/**
+ * Execute increment with event deduplication
+ * Prevents double-counting on retry
+ */
+async function deduplicatedIncrement(
+    eventId: string,
+    docRef: admin.firestore.DocumentReference,
+    field: string,
+    delta: number
+): Promise<void> {
+    const dedupRef = db.collection("_dedup_events").doc(eventId);
+
+    await db.runTransaction(async (tx) => {
+        const dedupDoc = await tx.get(dedupRef);
+
+        // If already processed, skip
+        if (dedupDoc.exists) {
+            functions.logger.info("Event already processed, skipping", { eventId });
+            return;
+        }
+
+        // Mark as processed and increment
+        tx.create(dedupRef, {
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            processedAt: new Date().toISOString()
+        });
+        tx.update(docRef, {
+            [field]: admin.firestore.FieldValue.increment(delta),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+    });
+}
+
+/**
+ * Execute decrement with deduplication and negative prevention
+ * Prevents double-counting and going below zero
+ */
+async function deduplicatedDecrement(
+    eventId: string,
+    docRef: admin.firestore.DocumentReference,
+    field: string
+): Promise<void> {
+    const dedupRef = db.collection("_dedup_events").doc(eventId);
+
+    await db.runTransaction(async (tx) => {
+        const dedupDoc = await tx.get(dedupRef);
+
+        // If already processed, skip
+        if (dedupDoc.exists) {
+            functions.logger.info("Event already processed, skipping", { eventId });
+            return;
+        }
+
+        // Check current value atomically
+        const parentDoc = await tx.get(docRef);
+
+        // If parent doesn't exist, skip (already deleted)
+        if (!parentDoc.exists) {
+            functions.logger.warn("Parent document doesn't exist, skipping decrement", {
+                path: docRef.path
+            });
+            return;
+        }
+
+        const currentValue = (parentDoc.data()?.[field] ?? 0) as number;
+
+        // Only decrement if > 0
+        if (currentValue <= 0) {
+            functions.logger.warn("Counter already at 0, skipping decrement", {
+                path: docRef.path,
+                field,
+                currentValue
+            });
+            return;
+        }
+
+        // Mark as processed and decrement
+        tx.create(dedupRef, {
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            processedAt: new Date().toISOString()
+        });
+        tx.update(docRef, {
+            [field]: currentValue - 1,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+    });
+}
+
+// ==========================================================
+// 📈 GROUP MEMBER COUNTERS (With Deduplication)
 // ==========================================================
 
 /**
@@ -28,29 +122,27 @@ export const onGroupMemberCreated = functions.firestore
     .document("groups/{groupId}/members/{userId}")
     .onCreate(async (snap, context) => {
         const { groupId, userId } = context.params;
+        const eventId = context.eventId;
 
         try {
             functions.logger.info("Member joined group", {
                 groupId,
                 userId,
-                timestamp: admin.firestore.FieldValue.serverTimestamp()
+                eventId
             });
 
-            // Atomic increment - handles concurrent joins safely
-            await db.doc(`groups/${groupId}`).update({
-                memberCount: admin.firestore.FieldValue.increment(1),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            });
+            const groupRef = db.doc(`groups/${groupId}`);
+            await deduplicatedIncrement(eventId, groupRef, "memberCount", 1);
 
-            functions.logger.info("Member count incremented", { groupId });
+            functions.logger.info("Member count incremented", { groupId, eventId });
         } catch (error) {
             functions.logger.error("Failed to increment member count", {
                 groupId,
                 userId,
+                eventId,
                 error: error instanceof Error ? error.message : String(error)
             });
             // Don't throw - we don't want to fail the user's join action
-            // The count will be slightly off but can be recalculated later
         }
     });
 
@@ -62,34 +154,27 @@ export const onGroupMemberDeleted = functions.firestore
     .document("groups/{groupId}/members/{userId}")
     .onDelete(async (snap, context) => {
         const { groupId, userId } = context.params;
+        const eventId = context.eventId;
 
         try {
-            functions.logger.info("Member left group", { groupId, userId });
+            functions.logger.info("Member left group", { groupId, userId, eventId });
 
-            // Get current count to prevent negative values
-            const groupDoc = await db.doc(`groups/${groupId}`).get();
-            const currentCount = groupDoc.data()?.memberCount || 0;
+            const groupRef = db.doc(`groups/${groupId}`);
+            await deduplicatedDecrement(eventId, groupRef, "memberCount");
 
-            if (currentCount > 0) {
-                await db.doc(`groups/${groupId}`).update({
-                    memberCount: admin.firestore.FieldValue.increment(-1),
-                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
-                });
-                functions.logger.info("Member count decremented", { groupId });
-            } else {
-                functions.logger.warn("Member count already at 0", { groupId });
-            }
+            functions.logger.info("Member count decremented", { groupId, eventId });
         } catch (error) {
             functions.logger.error("Failed to decrement member count", {
                 groupId,
                 userId,
+                eventId,
                 error: error instanceof Error ? error.message : String(error)
             });
         }
     });
 
 // ==========================================================
-// ❤️ POST LIKE COUNTERS (Atomic)
+// ❤️ POST LIKE COUNTERS (With Deduplication)
 // ==========================================================
 
 /**
@@ -100,20 +185,20 @@ export const onPostLikeCreated = functions.firestore
     .document("posts/{postId}/likes/{userId}")
     .onCreate(async (snap, context) => {
         const { postId, userId } = context.params;
+        const eventId = context.eventId;
 
         try {
-            functions.logger.info("Post liked", { postId, userId });
+            functions.logger.info("Post liked", { postId, userId, eventId });
 
-            await db.doc(`posts/${postId}`).update({
-                likesCount: admin.firestore.FieldValue.increment(1),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            });
+            const postRef = db.doc(`posts/${postId}`);
+            await deduplicatedIncrement(eventId, postRef, "likesCount", 1);
 
-            functions.logger.info("Likes count incremented", { postId });
+            functions.logger.info("Likes count incremented", { postId, eventId });
         } catch (error) {
             functions.logger.error("Failed to increment likes count", {
                 postId,
                 userId,
+                eventId,
                 error: error instanceof Error ? error.message : String(error)
             });
         }
@@ -127,33 +212,27 @@ export const onPostLikeDeleted = functions.firestore
     .document("posts/{postId}/likes/{userId}")
     .onDelete(async (snap, context) => {
         const { postId, userId } = context.params;
+        const eventId = context.eventId;
 
         try {
-            functions.logger.info("Post unliked", { postId, userId });
+            functions.logger.info("Post unliked", { postId, userId, eventId });
 
-            const postDoc = await db.doc(`posts/${postId}`).get();
-            const currentCount = postDoc.data()?.likesCount || 0;
+            const postRef = db.doc(`posts/${postId}`);
+            await deduplicatedDecrement(eventId, postRef, "likesCount");
 
-            if (currentCount > 0) {
-                await db.doc(`posts/${postId}`).update({
-                    likesCount: admin.firestore.FieldValue.increment(-1),
-                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
-                });
-                functions.logger.info("Likes count decremented", { postId });
-            } else {
-                functions.logger.warn("Likes count already at 0", { postId });
-            }
+            functions.logger.info("Likes count decremented", { postId, eventId });
         } catch (error) {
             functions.logger.error("Failed to decrement likes count", {
                 postId,
                 userId,
+                eventId,
                 error: error instanceof Error ? error.message : String(error)
             });
         }
     });
 
 // ==========================================================
-// 🧹 CASCADE CLEANUP (Optional but Recommended)
+// 🧹 CASCADE CLEANUP (Safe - Won't Trigger Decrements)
 // ==========================================================
 
 /**
