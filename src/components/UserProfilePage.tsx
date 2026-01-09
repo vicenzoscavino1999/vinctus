@@ -1,6 +1,9 @@
 import { ChevronLeft, Mail, MoreHorizontal, MapPin, Music, BookOpen } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { getOrCreateDirectConversation } from '../lib/firestore';
 
 type UserCredential = {
     icon: LucideIcon;
@@ -97,8 +100,27 @@ const USERS: Record<string, UserProfile> = {
 const UserProfilePage = () => {
     const { userId } = useParams<{ userId: string }>();
     const navigate = useNavigate();
+    const { user: currentUser } = useAuth();
+    const [sendingMessage, setSendingMessage] = useState(false);
 
     const user = userId ? USERS[userId] : undefined;
+
+    const handleSendMessage = async () => {
+        if (!currentUser || !userId) return;
+
+        setSendingMessage(true);
+        try {
+            // Create or get existing conversation
+            const conversationId = await getOrCreateDirectConversation(currentUser.uid, userId);
+            // Navigate to messages page with conversation selected
+            navigate(`/messages?conversation=${conversationId}`);
+        } catch (error) {
+            console.error('Error creating conversation:', error);
+            alert('Error al crear la conversación');
+        } finally {
+            setSendingMessage(false);
+        }
+    };
 
     if (!user) {
         return (
@@ -145,9 +167,13 @@ const UserProfilePage = () => {
 
                 {/* Action buttons */}
                 <div className="flex items-center gap-3">
-                    <button className="flex items-center gap-2 px-5 py-2.5 border border-neutral-700 text-white hover:bg-neutral-900 transition-colors text-sm">
+                    <button
+                        onClick={handleSendMessage}
+                        disabled={sendingMessage || !currentUser}
+                        className="flex items-center gap-2 px-5 py-2.5 border border-neutral-700 text-white hover:bg-neutral-900 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
                         <Mail size={16} />
-                        Contactar
+                        {sendingMessage ? 'Abriendo chat...' : 'Enviar Mensaje'}
                     </button>
                     <button className="p-2.5 border border-neutral-700 text-neutral-500 hover:text-white hover:bg-neutral-900 transition-colors">
                         <MoreHorizontal size={16} />

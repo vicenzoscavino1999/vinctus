@@ -41,12 +41,14 @@ export interface GroupDetailViewProps {
     group: GroupData | null;
     category: CategoryInfo | null;
     isJoined: boolean;
+    openingChat: boolean;
 
     // Callbacks
     onJoinGroup: () => void;
     onGoBack: () => void;
     onNavigateToCategory: () => void;
     onOpenPost?: (postId: string) => void;
+    onOpenGroupChat: () => void;
 }
 
 // ===== COMPONENTE VIEW (SOLO UI) =====
@@ -57,10 +59,12 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
     group,
     category,
     isJoined,
+    openingChat,
     onJoinGroup,
     onGoBack,
     onNavigateToCategory,
     onOpenPost,
+    onOpenGroupChat,
 }) => {
     // Loading state
     if (isLoading) {
@@ -152,6 +156,14 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
                             }`}
                     >
                         {isJoined ? <><Check size={18} /> Unido</> : 'Unirme al grupo'}
+                    </button>
+                    <button
+                        onClick={onOpenGroupChat}
+                        disabled={openingChat}
+                        className="px-5 py-3 rounded-button bg-neutral-800 border border-neutral-700 text-white hover:bg-neutral-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <MessageCircle size={18} />
+                        {openingChat ? 'Abriendo...' : 'Chat'}
                     </button>
                     {category && (
                         <button

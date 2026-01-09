@@ -1,8 +1,11 @@
 import { useParams, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { useAppState } from '../context';
+import { useAuth } from '../context/AuthContext';
 import { CATEGORIES } from '../data';
 import { GroupDetailView, GroupData, CategoryInfo } from './GroupDetailView';
 import { useToast } from './Toast';
+import { getOrCreateGroupConversation } from '../lib/firestore';
 
 // ===== DATOS MOCK (en app real, vendría de API/Firebase) =====
 
@@ -88,6 +91,8 @@ export const GroupDetailContainer = () => {
     const navigate = useNavigate();
     const { isGroupJoined, toggleJoinGroup } = useAppState();
     const { showToast } = useToast();
+    const { user } = useAuth();
+    const [openingChat, setOpeningChat] = useState(false);
 
     // Obtener ID y datos
     const groupIdStr = groupId || '';
@@ -133,6 +138,21 @@ export const GroupDetailContainer = () => {
         showToast('Detalle de publicación estará disponible pronto', 'info');
     };
 
+    const handleOpenGroupChat = async () => {
+        if (!user || !groupIdStr) return;
+
+        setOpeningChat(true);
+        try {
+            const conversationId = await getOrCreateGroupConversation(groupIdStr, user.uid);
+            navigate(`/messages?conversation=${conversationId}`);
+        } catch (error) {
+            console.error('Error opening group chat:', error);
+            showToast('Error al abrir el chat del grupo', 'error');
+        } finally {
+            setOpeningChat(false);
+        }
+    };
+
     // ===== RENDER VIEW CON PROPS =====
 
     return (
@@ -142,10 +162,12 @@ export const GroupDetailContainer = () => {
             group={group}
             category={category}
             isJoined={isJoined}
+            openingChat={openingChat}
             onJoinGroup={handleJoinGroup}
             onGoBack={handleGoBack}
             onNavigateToCategory={handleNavigateToCategory}
             onOpenPost={handleOpenPost}
+            onOpenGroupChat={handleOpenGroupChat}
         />
     );
 };
