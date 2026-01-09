@@ -709,15 +709,15 @@ export const getOrCreateDirectConversation = async (uid1: string, uid2: string):
 
     const batch = writeBatch(db);
 
-    // Create conversation (idempotent)
+    // Create conversation (idempotent - merge prevents overwriting)
     batch.set(convRef, {
         type: 'direct',
         lastMessage: null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-    } as ConversationWrite, { merge: false });
+    } as ConversationWrite, { merge: true });
 
-    // Create member docs (idempotent)
+    // Create member docs (idempotent - merge prevents overwriting)
     batch.set(doc(db, `conversations/${conversationId}/members`, uid1), {
         uid: uid1,
         role: 'member',
@@ -725,7 +725,7 @@ export const getOrCreateDirectConversation = async (uid1: string, uid2: string):
         lastReadClientAt: Date.now(),
         lastReadAt: serverTimestamp(),
         muted: false
-    } as ConversationMemberWrite, { merge: false });
+    } as ConversationMemberWrite, { merge: true });
 
     batch.set(doc(db, `conversations/${conversationId}/members`, uid2), {
         uid: uid2,
@@ -734,7 +734,7 @@ export const getOrCreateDirectConversation = async (uid1: string, uid2: string):
         lastReadClientAt: Date.now(),
         lastReadAt: serverTimestamp(),
         muted: false
-    } as ConversationMemberWrite, { merge: false });
+    } as ConversationMemberWrite, { merge: true });
 
     await batch.commit();
     return conversationId;
@@ -750,16 +750,16 @@ export const getOrCreateGroupConversation = async (groupId: string, uid: string)
 
     const batch = writeBatch(db);
 
-    // Create conversation (idempotent)
+    // Create conversation (idempotent - merge prevents overwriting)
     batch.set(convRef, {
         type: 'group',
         groupId,
         lastMessage: null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-    } as ConversationWrite, { merge: false });
+    } as ConversationWrite, { merge: true });
 
-    // Create member doc for current user
+    // Create member doc for current user (merge prevents overwriting)
     batch.set(doc(db, `conversations/${conversationId}/members`, uid), {
         uid,
         role: 'member',
@@ -767,7 +767,7 @@ export const getOrCreateGroupConversation = async (groupId: string, uid: string)
         lastReadClientAt: Date.now(),
         lastReadAt: serverTimestamp(),
         muted: false
-    } as ConversationMemberWrite, { merge: false });
+    } as ConversationMemberWrite, { merge: true });
 
     await batch.commit();
     return conversationId;

@@ -42,6 +42,7 @@ export interface GroupDetailViewProps {
     category: CategoryInfo | null;
     isJoined: boolean;
     openingChat: boolean;
+    isAuthenticated: boolean;
 
     // Callbacks
     onJoinGroup: () => void;
@@ -60,6 +61,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
     category,
     isJoined,
     openingChat,
+    isAuthenticated,
     onJoinGroup,
     onGoBack,
     onNavigateToCategory,
@@ -159,8 +161,9 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
                     </button>
                     <button
                         onClick={onOpenGroupChat}
-                        disabled={openingChat}
+                        disabled={openingChat || !isAuthenticated}
                         className="px-5 py-3 rounded-button bg-neutral-800 border border-neutral-700 text-white hover:bg-neutral-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={!isAuthenticated ? 'Debes iniciar sesión para chatear' : ''}
                     >
                         <MessageCircle size={18} />
                         {openingChat ? 'Abriendo...' : 'Chat'}

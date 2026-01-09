@@ -163,6 +163,7 @@ export const GroupDetailContainer = () => {
             category={category}
             isJoined={isJoined}
             openingChat={openingChat}
+            isAuthenticated={!!user}
             onJoinGroup={handleJoinGroup}
             onGoBack={handleGoBack}
             onNavigateToCategory={handleNavigateToCategory}

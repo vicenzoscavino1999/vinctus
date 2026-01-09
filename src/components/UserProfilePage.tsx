@@ -105,12 +105,17 @@ const UserProfilePage = () => {
 
     const user = userId ? USERS[userId] : undefined;
 
+
+    // WARNING: This page uses mock data with slug IDs (e.g. "marco-v")
+    // In production, this should use real Firebase UIDs
+    // TODO: Replace with real user data from Firestore users collection
     const handleSendMessage = async () => {
         if (!currentUser || !userId) return;
 
         setSendingMessage(true);
         try {
-            // Create or get existing conversation
+            // FIXME: userId here is a slug ("marco-v"), not a real Firebase UID
+            // This will create conversations with incorrect IDs until real user data is integrated
             const conversationId = await getOrCreateDirectConversation(currentUser.uid, userId);
             // Navigate to messages page with conversation selected
             navigate(`/messages?conversation=${conversationId}`);
