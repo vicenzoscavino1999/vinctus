@@ -1,0 +1,152 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ==================== Helper Functions ====================
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user is the owner of the resource
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+    
+    // Check if the incoming data has valid structure for membership
+    function isValidMembership() {
+      return request.resource.data.keys().hasAll(['groupId', 'joinedAt'])
+        && request.resource.data.groupId is string
+        && request.resource.data.joinedAt is timestamp;
+    }
+    
+    // Check if the incoming data has valid structure for like
+    function isValidLike() {
+      return request.resource.data.keys().hasAll(['postId', 'createdAt'])
+        && request.resource.data.postId is string
+        && request.resource.data.createdAt is timestamp;
+    }
+    
+    // ==================== User Data Collections ====================
+    
+    // users/{uid}/memberships/{groupId}
+    // User's joined groups (denormalized for fast reads)
+    match /users/{uid}/memberships/{groupId} {
+      // Anyone can read (to see who's in a group)
+      allow read: if isAuthenticated();
+      
+      // Only the user can write to their own memberships
+      allow create: if isOwner(uid) && isValidMembership();
+      allow delete: if isOwner(uid);
+      allow update: if false; // Memberships are immutable once created
+    }
+    
+    // users/{uid}/likes/{postId}
+    // User's liked posts (denormalized for fast reads)
+    match /users/{uid}/likes/{postId} {
+      // Anyone can read (to see who liked a post)
+      allow read: if isAuthenticated();
+      
+      // Only the user can write to their own likes
+      allow create: if isOwner(uid) && isValidLike();
+      allow delete: if isOwner(uid);
+      allow update: if false; // Likes are immutable
+    }
+    
+    // users/{uid}/savedPosts/{postId}
+    // User's saved posts (private)
+    match /users/{uid}/savedPosts/{postId} {
+      // Only the user can read their own saved posts
+      allow read: if isOwner(uid);
+      
+      // Only the user can write to their own saved posts
+      allow create, delete: if isOwner(uid);
+      allow update: if false; // Saved posts are immutable
+    }
+    
+    // users/{uid}/savedCategories/{categoryId}
+    // User's saved categories (private)
+    match /users/{uid}/savedCategories/{categoryId} {
+      // Only the user can read their own saved categories
+      allow read: if isOwner(uid);
+      
+      // Only the user can write to their own saved categories
+      allow create, delete: if isOwner(uid);
+      allow update: if false; // Saved categories are immutable
+    }
+    
+    // ==================== Groups Collections ====================
+    
+    // groups/{groupId}
+    // Group metadata (public read, admin write)
+    match /groups/{groupId} {
+      // Anyone authenticated can read groups
+      allow read: if isAuthenticated();
+      
+      // For now, no one can create/update/delete groups
+      // TODO: Add admin-only write when admin system is implemented
+      allow write: if false;
+    }
+    
+    // groups/{groupId}/members/{uid}
+    // Group members (source of truth for counting)
+    match /groups/{groupId}/members/{uid} {
+      // Anyone authenticated can read members
+      allow read: if isAuthenticated();
+      
+      // Only the user can add/remove themselves as a member
+      allow create: if isOwner(uid) 
+        && request.resource.data.keys().hasAll(['uid', 'groupId', 'role', 'joinedAt'])
+        && request.resource.data.uid == uid
+        && request.resource.data.groupId == groupId
+        && request.resource.data.role == 'member'
+        && request.resource.data.joinedAt is timestamp;
+      
+      allow delete: if isOwner(uid);
+      
+      // No updates - members are immutable (delete and re-create to change)
+      allow update: if false;
+    }
+    
+    // ==================== Posts Collections ====================
+    
+    // posts/{postId}
+    // Post metadata (public read, author write)
+    match /posts/{postId} {
+      // Anyone authenticated can read posts
+      allow read: if isAuthenticated();
+      
+      // For now, no one can create/update/delete posts
+      // TODO: Add author-only write when posts system is implemented
+      allow write: if false;
+    }
+    
+    // posts/{postId}/likes/{uid}
+    // Post likes (source of truth for counting)
+    match /posts/{postId}/likes/{uid} {
+      // Anyone authenticated can read likes
+      allow read: if isAuthenticated();
+      
+      // Only the user can like/unlike
+      allow create: if isOwner(uid)
+        && request.resource.data.keys().hasAll(['uid', 'postId', 'createdAt'])
+        && request.resource.data.uid == uid
+        && request.resource.data.postId == postId
+        && request.resource.data.createdAt is timestamp;
+      
+      allow delete: if isOwner(uid);
+      
+      // No updates - likes are immutable
+      allow update: if false;
+    }
+    
+    // ==================== Default Deny ====================
+    
+    // Deny all other paths by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
