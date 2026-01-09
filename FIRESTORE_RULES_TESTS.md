@@ -18,6 +18,8 @@ Estos son los tests mínimos que **DEBEN** pasar/fallar para validar las Securit
 | 8 | Usuario anónimo lee grupos | `groups/group1` | No | ✅ Allow |
 | 9 | Usuario anónimo lee posts | `posts/post1` | No | ✅ Allow |
 | 10 | Usuario anónimo lee members | `groups/group1/members/A` | No | ✅ Allow |
+| 11 | **Usuario A hace update idempotente a su like** | `users/A/likes/post1` | Si (uid: A) | ✅ Allow |
+| 12 | **Usuario A hace update idempotente a su membership** | `groups/group1/members/A` | Si (uid: A) | ✅ Allow |
 
 ### ❌ Tests que DEBEN FALLAR
 
@@ -31,6 +33,8 @@ Estos son los tests mínimos que **DEBEN** pasar/fallar para validar las Securit
 | 6 | Usuario A lee savedCategories de B | `users/B/savedCategories/cat1` | Si (uid: A) | ❌ Deny |
 | 7 | Usuario anónimo crea like | `users/anon/likes/post1` | No | ❌ Deny |
 | 8 | Usuario anónimo crea membership | `users/anon/memberships/group1` | No | ❌ Deny |
+| 9 | **Usuario A intenta cambiar role a admin** | `groups/group1/members/A` | Si (uid: A) | ❌ Deny |
+| 10 | **Usuario A intenta escribir uid=B en su doc** | `posts/post1/likes/A` | Si (uid: A) | ❌ Deny |
 
 ## Cómo Ejecutar los Tests
 

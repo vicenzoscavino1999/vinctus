@@ -216,13 +216,13 @@ export const joinGroupWithSync = async (groupId: string, uid: string): Promise<v
         groupId,
         role: 'member',
         joinedAt: serverTimestamp(),
-    } as GroupMemberWrite);
+    } as GroupMemberWrite, { merge: false });
 
     // User index
     batch.set(membershipRef, {
         groupId,
         joinedAt: serverTimestamp(),
-    } as UserMembershipWrite);
+    } as UserMembershipWrite, { merge: false });
 
     await batch.commit();
 };
@@ -269,13 +269,13 @@ export const likePostWithSync = async (postId: string, uid: string): Promise<voi
         uid,
         postId,
         createdAt: serverTimestamp(),
-    } as PostLikeWrite);
+    } as PostLikeWrite, { merge: false });
 
     // User index (for quick "my likes" queries)
     batch.set(userLikeRef, {
         postId,
         createdAt: serverTimestamp(),
-    } as UserLikeWrite);
+    } as UserLikeWrite, { merge: false });
 
     await batch.commit();
 };
@@ -312,7 +312,7 @@ export const savePostWithSync = async (postId: string, uid: string): Promise<voi
     batch.set(doc(db, 'users', uid, 'savedPosts', postId), {
         postId,
         createdAt: serverTimestamp(),
-    } as SavedPostWrite);
+    } as SavedPostWrite, { merge: false });
     await batch.commit();
 };
 
@@ -343,7 +343,7 @@ export const saveCategoryWithSync = async (categoryId: string, uid: string): Pro
     batch.set(doc(db, 'users', uid, 'savedCategories', categoryId), {
         categoryId,
         createdAt: serverTimestamp(),
-    } as SavedCategoryWrite);
+    } as SavedCategoryWrite, { merge: false });
     await batch.commit();
 };
 
@@ -527,6 +527,19 @@ export const seedGroups = async (
 
 /**
  * Clear all user data (chunked for users with many items)
+ * 
+ * ⚠️ WARNING: This is for TESTING ONLY!
+ * 
+ * Production issues:
+ * - Only deletes user-side data (users/{uid}/...)
+ * - Does NOT delete source-of-truth data (groups/{gid}/members/{uid}, posts/{pid}/likes/{uid})
+ * - Leaves "zombie" data in Firestore
+ * - Security Rules should prevent users from calling this on other UIDs
+ * 
+ * For production account deletion:
+ * - Use Cloud Function with onUserDeleted trigger (Firebase Auth)
+ * - Admin SDK can delete both sides of dual-write
+ * - See: functions/src/index.ts (TODO: implement onUserDeleted)
  */
 export const clearUserData = async (uid: string): Promise<void> => {
     const collections = ['memberships', 'likes', 'savedPosts', 'savedCategories'];

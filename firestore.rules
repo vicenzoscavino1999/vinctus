@@ -15,33 +15,37 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
     
-    // Validate membership structure (createdAt can be serverTimestamp)
-    function isValidMembership() {
+    // Validate membership structure against path and auth
+    function isValidMembershipCreate(groupId) {
       return request.resource.data.keys().hasAll(['groupId', 'joinedAt'])
-        && request.resource.data.groupId is string;
-        // joinedAt validation omitted - serverTimestamp() is a sentinel, not a timestamp literal
+        && request.resource.data.groupId == groupId;  // Must match path
     }
     
-    // Validate like structure (createdAt can be serverTimestamp)
-    function isValidLike() {
+    // Validate like structure against path
+    function isValidUserLikeCreate(postId) {
       return request.resource.data.keys().hasAll(['postId', 'createdAt'])
-        && request.resource.data.postId is string;
-        // createdAt validation omitted - serverTimestamp() is a sentinel
+        && request.resource.data.postId == postId;  // Must match path
     }
     
-    // Validate post like structure
-    function isValidPostLike() {
+    // Validate post like structure against path and auth
+    function isValidPostLikeCreate(postId, uid) {
       return request.resource.data.keys().hasAll(['uid', 'postId', 'createdAt'])
-        && request.resource.data.uid is string
-        && request.resource.data.postId is string;
+        && request.resource.data.uid == uid  // Must match path
+        && request.resource.data.postId == postId;  // Must match path
     }
     
-    // Validate group member structure
-    function isValidGroupMember() {
+    // Validate group member structure against path and auth
+    function isValidGroupMemberCreate(groupId, uid) {
       return request.resource.data.keys().hasAll(['uid', 'groupId', 'role', 'joinedAt'])
-        && request.resource.data.uid is string
-        && request.resource.data.groupId is string
-        && request.resource.data.role is string;
+        && request.resource.data.uid == uid  // Must match path AND auth
+        && request.resource.data.groupId == groupId  // Must match path
+        && request.resource.data.role == 'member';  // Must be 'member' (no self-promotion)
+    }
+    
+    // Prevent role escalation on update
+    function cannotEscalateRole() {
+      return !request.resource.data.keys().hasAny(['role'])
+        || request.resource.data.role == resource.data.role;
     }
     
     // ==================== User Data Collections ====================
@@ -53,13 +57,12 @@ service cloud.firestore {
       allow read: if isOwner(uid);
       
       // Only the user can write to their own memberships
-      allow create: if isOwner(uid) && isValidMembership();
+      allow create: if isOwner(uid) && isValidMembershipCreate(groupId);
       allow delete: if isOwner(uid);
       
-      // Allow update for idempotent writes with merge:true
-      // Only allow if data doesn't change (same groupId)
+      // Update only if data doesn't change (idempotent writes)
       allow update: if isOwner(uid) 
-        && request.resource.data.groupId == resource.data.groupId;
+        && request.resource.data.groupId == groupId;  // Prevent spoofing
     }
     
     // users/{uid}/likes/{postId}
@@ -69,12 +72,12 @@ service cloud.firestore {
       allow read: if isOwner(uid);
       
       // Only the user can write to their own likes
-      allow create: if isOwner(uid) && isValidLike();
+      allow create: if isOwner(uid) && isValidUserLikeCreate(postId);
       allow delete: if isOwner(uid);
       
-      // Allow update for idempotent writes
+      // Update only if data doesn't change (idempotent writes)
       allow update: if isOwner(uid)
-        && request.resource.data.postId == resource.data.postId;
+        && request.resource.data.postId == postId;  // Prevent spoofing
     }
     
     // users/{uid}/savedPosts/{postId}
@@ -87,8 +90,9 @@ service cloud.firestore {
       allow create: if isOwner(uid);
       allow delete: if isOwner(uid);
       
-      // Allow update for idempotent writes
-      allow update: if isOwner(uid);
+      // Update only if postId doesn't change
+      allow update: if isOwner(uid)
+        && request.resource.data.postId == postId;
     }
     
     // users/{uid}/savedCategories/{categoryId}
@@ -101,8 +105,9 @@ service cloud.firestore {
       allow create: if isOwner(uid);
       allow delete: if isOwner(uid);
       
-      // Allow update for idempotent writes
-      allow update: if isOwner(uid);
+      // Update only if categoryId doesn't change
+      allow update: if isOwner(uid)
+        && request.resource.data.categoryId == categoryId;
     }
     
     // ==================== Groups Collections ====================
@@ -125,19 +130,19 @@ service cloud.firestore {
       allow read: if true;
       
       // Only the user can add/remove themselves as a member
-      allow create: if isOwner(uid) && isValidGroupMember()
-        && request.resource.data.uid == uid
-        && request.resource.data.groupId == groupId
-        && request.resource.data.role == 'member';
+      // Critical: Validate against BOTH path and auth
+      allow create: if isOwner(uid) 
+        && isValidGroupMemberCreate(groupId, uid)
+        && request.resource.data.uid == request.auth.uid;  // Triple check
       
       allow delete: if isOwner(uid);
       
-      // Allow update for idempotent writes with merge:true
-      // Only allow if critical fields don't change
+      // Update ONLY if critical fields don't change AND no role escalation
       allow update: if isOwner(uid)
-        && request.resource.data.uid == resource.data.uid
-        && request.resource.data.groupId == resource.data.groupId
-        && request.resource.data.role == resource.data.role;
+        && request.resource.data.uid == uid  // Must match path
+        && request.resource.data.uid == request.auth.uid  // Must match auth
+        && request.resource.data.groupId == groupId  // Must match path
+        && cannotEscalateRole();  // Cannot change role
     }
     
     // ==================== Posts Collections ====================
@@ -160,16 +165,18 @@ service cloud.firestore {
       allow read: if true;
       
       // Only the user can like/unlike
-      allow create: if isOwner(uid) && isValidPostLike()
-        && request.resource.data.uid == uid
-        && request.resource.data.postId == postId;
+      // Critical: Validate against BOTH path and auth
+      allow create: if isOwner(uid) 
+        && isValidPostLikeCreate(postId, uid)
+        && request.resource.data.uid == request.auth.uid;  // Triple check
       
       allow delete: if isOwner(uid);
       
-      // Allow update for idempotent writes with merge:true
+      // Update ONLY if critical fields don't change
       allow update: if isOwner(uid)
-        && request.resource.data.uid == resource.data.uid
-        && request.resource.data.postId == resource.data.postId;
+        && request.resource.data.uid == uid  // Must match path
+        && request.resource.data.uid == request.auth.uid  // Must match auth
+        && request.resource.data.postId == postId;  // Must match path
     }
     
     // ==================== Default Deny ====================
