@@ -62,10 +62,9 @@ const LoginScreen = () => {
 
         try {
             if (!phoneCodeSent) {
-                // Format phone number with country code if not present
-                const formattedPhone = phoneNumber.startsWith('+')
-                    ? phoneNumber
-                    : `+51${phoneNumber}`; // Default to Peru (+51)
+                // Format phone number with Peru country code (+51)
+                // Input is always digits-only (9 chars max) due to sanitization on line 157
+                const formattedPhone = `+51${phoneNumber}`;
                 await sendPhoneCode(formattedPhone, 'recaptcha-container');
             } else {
                 await verifyPhoneCode(verificationCode);
@@ -220,8 +219,8 @@ const LoginScreen = () => {
                             <button
                                 onClick={() => switchMode('login')}
                                 className={`flex-1 pb-3 text-sm tracking-wider uppercase transition-colors ${mode === 'login'
-                                        ? 'text-white border-b-2 border-white'
-                                        : 'text-neutral-500 hover:text-neutral-300'
+                                    ? 'text-white border-b-2 border-white'
+                                    : 'text-neutral-500 hover:text-neutral-300'
                                     }`}
                             >
                                 Entrar
@@ -229,8 +228,8 @@ const LoginScreen = () => {
                             <button
                                 onClick={() => switchMode('register')}
                                 className={`flex-1 pb-3 text-sm tracking-wider uppercase transition-colors ${mode === 'register'
-                                        ? 'text-white border-b-2 border-white'
-                                        : 'text-neutral-500 hover:text-neutral-300'
+                                    ? 'text-white border-b-2 border-white'
+                                    : 'text-neutral-500 hover:text-neutral-300'
                                     }`}
                             >
                                 Registro

@@ -20,7 +20,9 @@ const DiscoverPage = () => {
     const userInterests = useMemo(() => {
         try {
             const stored = localStorage.getItem('vinctus_interests');
-            return stored ? JSON.parse(stored) : [];
+            const parsed = stored ? JSON.parse(stored) : [];
+            // Ensure it's always an array to prevent .length/.includes errors
+            return Array.isArray(parsed) ? parsed : [];
         } catch {
             return [];
         }
