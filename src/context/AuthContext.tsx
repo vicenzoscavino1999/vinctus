@@ -23,7 +23,8 @@ import {
     type User,
     type ConfirmationResult
 } from 'firebase/auth';
-import { auth, googleProvider } from '../lib/firebase';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, googleProvider, db } from '../lib/firebase';
 
 // Types
 interface AuthUser {
@@ -62,6 +63,76 @@ const mapUser = (firebaseUser: User | null): AuthUser | null => {
         photoURL: firebaseUser.photoURL,
         phoneNumber: firebaseUser.phoneNumber,
     };
+};
+
+const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
+    try {
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        const snapshot = await getDoc(userRef);
+
+        const displayName = firebaseUser.displayName ?? null;
+        const displayNameLowercase = displayName ? displayName.toLowerCase() : null;
+        const photoURL = firebaseUser.photoURL ?? null;
+        const email = firebaseUser.email ?? null;
+        const phoneNumber = firebaseUser.phoneNumber ?? null;
+
+        if (!snapshot.exists()) {
+            await setDoc(userRef, {
+                uid: firebaseUser.uid,
+                displayName,
+                displayNameLowercase,
+                email,
+                photoURL,
+                phoneNumber,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            });
+        } else {
+            const data = snapshot.data() as {
+                displayName?: string | null;
+                displayNameLowercase?: string | null;
+                photoURL?: string | null;
+                email?: string | null;
+                phoneNumber?: string | null;
+            };
+            const updates: Record<string, unknown> = {};
+
+            if (data.displayName !== displayName) {
+                updates.displayName = displayName;
+            }
+
+            if (data.displayNameLowercase !== displayNameLowercase) {
+                updates.displayNameLowercase = displayNameLowercase;
+            }
+
+            if (data.photoURL !== photoURL) {
+                updates.photoURL = photoURL;
+            }
+
+            if (data.email !== email) {
+                updates.email = email;
+            }
+
+            if (data.phoneNumber !== phoneNumber) {
+                updates.phoneNumber = phoneNumber;
+            }
+
+            if (Object.keys(updates).length > 0) {
+                updates.updatedAt = serverTimestamp();
+                await setDoc(userRef, updates, { merge: true });
+            }
+        }
+
+        await setDoc(doc(db, 'users_public', firebaseUser.uid), {
+            uid: firebaseUser.uid,
+            displayName,
+            displayNameLowercase,
+            photoURL,
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+    } catch (error) {
+        console.error('Error ensuring user profile:', error);
+    }
 };
 
 // Helper to translate Firebase error codes to Spanish
@@ -106,6 +177,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
             setUser(mapUser(firebaseUser));
             setLoading(false);
+            if (firebaseUser) {
+                void ensureUserProfile(firebaseUser);
+            }
         });
 
         return () => unsubscribe();
@@ -158,7 +232,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             // Update display name if provided
             if (displayName && result.user) {
                 await updateProfile(result.user, { displayName });
-                // Re-fetch user to get updated profile
+            }
+            if (result.user) {
+                await ensureUserProfile(result.user);
                 setUser(mapUser(result.user));
             }
         } catch (err) {

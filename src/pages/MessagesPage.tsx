@@ -97,15 +97,15 @@ export default function MessagesPage() {
 
     if (loading) {
         return (
-            <div className="page-profile pt-10 max-w-6xl mx-auto">
+            <div className="page-feed pt-10 max-w-6xl mx-auto">
                 <div className="text-center text-neutral-500">Cargando conversaciones...</div>
             </div>
         );
     }
 
     return (
-        <div className="page-profile pt-10 max-w-6xl mx-auto">
-            <h1 className="text-3xl font-serif font-light text-white mb-8">Mensajes</h1>
+        <div className="page-feed pt-10 max-w-6xl mx-auto">
+            <h1 className="text-3xl font-serif font-light text-white mb-8">Dialogos</h1>
 
             <div className="flex gap-6 h-[calc(100vh-200px)]">
                 {/* Conversations List */}
@@ -148,7 +148,7 @@ export default function MessagesPage() {
                 <div className="flex-1 border border-neutral-800 rounded-lg overflow-hidden flex flex-col bg-neutral-900/20">
                     {!selectedConversationId ? (
                         <div className="flex items-center justify-center h-full text-neutral-500">
-                            Selecciona una conversación para empezar a chatear
+                            Selecciona una conversacion para empezar a chatear
                         </div>
                     ) : (
                         <>

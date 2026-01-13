@@ -296,54 +296,69 @@ export const onGroupDeleted = functions.firestore
     });
 
 /**
- * Clean up subcollections when a post is deleted
+ * Clean up subcollections and media when a post is deleted
+ * - Deletes all media files from Storage
+ * - Deletes likes subcollection (using recursiveDelete for >500 docs)
+ * - Deletes comments subcollection (future-proofing)
  * Trigger: onDelete posts/{postId}
  */
 export const onPostDeleted = functions.firestore
     .document("posts/{postId}")
     .onDelete(async (snap, context) => {
         const { postId } = context.params;
+        const data = snap.data();
 
         try {
-            functions.logger.info("Post deleted, cleaning up likes", { postId });
+            functions.logger.info("Post deleted, cleaning up", { postId });
 
+            // 1. Delete media files from Storage
+            const media = (data?.media || []) as Array<{ path: string }>;
+            if (media.length > 0) {
+                const bucket = admin.storage().bucket();
+                const deletePromises = media.map(async (item) => {
+                    try {
+                        await bucket.file(item.path).delete();
+                        functions.logger.info("Deleted media file", { path: item.path });
+                    } catch (error) {
+                        functions.logger.warn("Failed to delete media file (may not exist)", {
+                            path: item.path,
+                            error: error instanceof Error ? error.message : String(error)
+                        });
+                    }
+                });
+                await Promise.all(deletePromises);
+            }
+
+            // 2. Delete likes subcollection (handles >500 docs with recursiveDelete)
             const likesRef = db.collection(`posts/${postId}/likes`);
-            const likesSnapshot = await likesRef.get();
-
-            if (likesSnapshot.empty) {
-                functions.logger.info("No likes to clean up", { postId });
-                return;
+            try {
+                await db.recursiveDelete(likesRef);
+                functions.logger.info("Deleted likes subcollection", { postId });
+            } catch (error) {
+                functions.logger.error("Failed to delete likes subcollection", {
+                    postId,
+                    error: error instanceof Error ? error.message : String(error)
+                });
             }
 
-            const batchSize = 450;
-            const batches: admin.firestore.WriteBatch[] = [];
-            let currentBatch = db.batch();
-            let operationCount = 0;
-
-            likesSnapshot.docs.forEach((doc) => {
-                currentBatch.delete(doc.ref);
-                operationCount++;
-
-                if (operationCount === batchSize) {
-                    batches.push(currentBatch);
-                    currentBatch = db.batch();
-                    operationCount = 0;
-                }
-            });
-
-            if (operationCount > 0) {
-                batches.push(currentBatch);
+            // 3. Delete comments subcollection (future-proofing)
+            const commentsRef = db.collection(`posts/${postId}/comments`);
+            try {
+                await db.recursiveDelete(commentsRef);
+                functions.logger.info("Deleted comments subcollection", { postId });
+            } catch (error) {
+                functions.logger.error("Failed to delete comments subcollection", {
+                    postId,
+                    error: error instanceof Error ? error.message : String(error)
+                });
             }
 
-            await Promise.all(batches.map(batch => batch.commit()));
-
-            functions.logger.info("Likes cleaned up", {
+            functions.logger.info("Post cleanup complete", {
                 postId,
-                totalDeleted: likesSnapshot.size,
-                batchCount: batches.length
+                mediaCount: media.length
             });
         } catch (error) {
-            functions.logger.error("Failed to clean up post likes", {
+            functions.logger.error("Failed to clean up post", {
                 postId,
                 error: error instanceof Error ? error.message : String(error)
             });

@@ -1,4 +1,4 @@
-import { Bell, MessageSquare } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface HeaderProps {
@@ -33,15 +33,6 @@ const Header = ({ notificationCount = 0 }: HeaderProps) => {
                     {notificationCount > 0 && (
                         <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />
                     )}
-                </button>
-
-                {/* Messages */}
-                <button
-                    onClick={() => navigate('/messages')}
-                    className="p-2.5 text-neutral-400 hover:text-white transition-colors"
-                    aria-label="Mensajes"
-                >
-                    <MessageSquare size={22} strokeWidth={1.5} />
                 </button>
             </div>
         </header>

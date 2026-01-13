@@ -49,6 +49,21 @@ service cloud.firestore {
     }
     
     // ==================== User Data Collections ====================
+
+    // users/{uid}
+    // User profile document
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create, update, delete: if isOwner(uid);
+    }
+
+    // users_public/{uid}
+    // Public user profile for search
+    match /users_public/{uid} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isOwner(uid);
+    }
+
     
     // users/{uid}/memberships/{groupId}
     // User's joined groups (denormalized for fast reads)
@@ -147,15 +162,117 @@ service cloud.firestore {
     
     // ==================== Posts Collections ====================
     
+    // ==================== Post Validation Functions ====================
+    
+    // Validate author fields match the user's actual profile (NULL SAFE)
+    function isValidAuthorInfo() {
+      let profileDoc = get(/databases/$(database)/documents/users_public/$(request.auth.uid));
+      let data = request.resource.data;
+      
+      // Profile document must exist and have valid fields
+      return profileDoc != null
+        && profileDoc.data != null
+        && profileDoc.data.displayName is string
+        && profileDoc.data.displayName.size() > 0
+        && profileDoc.data.username is string
+        && profileDoc.data.username.size() > 0
+        && data.authorId == request.auth.uid
+        && data.authorName == profileDoc.data.displayName
+        && data.authorUsername == profileDoc.data.username
+        && (data.authorPhoto == profileDoc.data.photoURL || data.authorPhoto == null);
+    }
+    
+    // Validate a single media item with postId binding
+    function isValidMediaItem(item, postId) {
+      // Image: path must be images/, contentType must be image/*
+      let isValidImage = item.type == 'image'
+        && item.path.matches('posts/' + request.auth.uid + '/' + postId + '/images/[^/]+')
+        && item.contentType.matches('image/.*');
+      
+      // Video: path must be videos/, contentType must be video/*
+      let isValidVideo = item.type == 'video'
+        && item.path.matches('posts/' + request.auth.uid + '/' + postId + '/videos/[^/]+')
+        && item.contentType.matches('video/.*');
+      
+      return item.keys().hasOnly(['url', 'path', 'type', 'contentType', 'width', 'height'])
+        && item.url is string
+        && item.url.size() > 0
+        && item.url.size() <= 500
+        && item.path is string
+        && item.path.size() <= 300
+        && item.type in ['image', 'video']
+        && item.contentType is string
+        && item.contentType.size() <= 50
+        && (isValidImage || isValidVideo);
+    }
+    
+    // Validate all media items in the array (no nulls allowed)
+    function isValidMediaArray(media, postId) {
+      return media.size() >= 0
+        && media.size() <= 10
+        && (media.size() == 0 || isValidMediaItem(media[0], postId))
+        && (media.size() <= 1 || isValidMediaItem(media[1], postId))
+        && (media.size() <= 2 || isValidMediaItem(media[2], postId))
+        && (media.size() <= 3 || isValidMediaItem(media[3], postId))
+        && (media.size() <= 4 || isValidMediaItem(media[4], postId))
+        && (media.size() <= 5 || isValidMediaItem(media[5], postId))
+        && (media.size() <= 6 || isValidMediaItem(media[6], postId))
+        && (media.size() <= 7 || isValidMediaItem(media[7], postId))
+        && (media.size() <= 8 || isValidMediaItem(media[8], postId))
+        && (media.size() <= 9 || isValidMediaItem(media[9], postId));
+    }
+    
+    // Validate post structure on create
+    function isValidPostCreate(postId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['authorId', 'authorName', 'authorUsername', 'authorPhoto', 'content', 'media', 'groupId', 'categoryId', 'likeCount', 'commentCount', 'createdAt', 'updatedAt'])
+        && isValidAuthorInfo()
+        && data.content is string
+        && data.content.size() > 0
+        && data.content.size() <= 5000
+        && data.media is list
+        && isValidMediaArray(data.media, postId)
+        && (data.groupId == null || (data.groupId is string && data.groupId.size() <= 100))
+        && (data.categoryId == null || (data.categoryId is string && data.categoryId.size() <= 100))
+        && data.likeCount is int
+        && data.likeCount == 0
+        && data.commentCount is int
+        && data.commentCount == 0
+        && data.createdAt == request.time
+        && data.updatedAt == null;
+    }
+    
+    // Validate post update (only content and media can change)
+    function isValidPostUpdate(postId) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['content', 'media', 'updatedAt'])
+        && request.resource.data.content is string
+        && request.resource.data.content.size() > 0
+        && request.resource.data.content.size() <= 5000
+        && request.resource.data.media is list
+        && isValidMediaArray(request.resource.data.media, postId)
+        && request.resource.data.updatedAt == request.time;
+    }
+    
+    // Check if user is the post author
+    function isPostAuthor() {
+      return resource.data.authorId == request.auth.uid;
+    }
+    
     // posts/{postId}
     // Post metadata (PUBLIC READ, author write)
     match /posts/{postId} {
       // Anyone can read posts (even anonymous for discovery)
       allow read: if true;
       
-      // For now, no one can create/update/delete posts
-      // TODO: Add author-only write when posts system is implemented
-      allow write: if false;
+      // Only authenticated users can create posts with valid author info
+      allow create: if isAuthenticated() && isValidPostCreate(postId);
+      
+      // Only the author can update their posts
+      allow update: if isAuthenticated() && isPostAuthor() && isValidPostUpdate(postId);
+      
+      // Only the author can delete their posts
+      allow delete: if isAuthenticated() && isPostAuthor();
     }
     
     // posts/{postId}/likes/{uid}

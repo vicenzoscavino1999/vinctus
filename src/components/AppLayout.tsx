@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { Compass, Hash, User, BookOpen, Briefcase, MoreHorizontal, Settings, LogOut } from 'lucide-react';
+import { Compass, Hash, User, BookOpen, Briefcase, MoreHorizontal, Settings, LogOut, Search } from 'lucide-react';
 
 import Header from './Header';
 import SidebarItem from './SidebarItem';
@@ -14,6 +14,7 @@ const UserProfilePage = lazy(() => import('./UserProfilePage'));
 
 // Lazy loaded pages
 const DiscoverPage = lazy(() => import('../pages/DiscoverPage'));
+const UserSearchPage = lazy(() => import('../pages/UserSearchPage'));
 const CategoryPage = lazy(() => import('../pages/CategoryPage'));
 const FeedPage = lazy(() => import('../pages/FeedPage'));
 const ProjectsPage = lazy(() => import('../pages/ProjectsPage'));
@@ -111,6 +112,7 @@ const Sidebar = ({ activeTab, onNavigate }: NavProps) => (
     <Logo />
     <nav className="flex flex-col space-y-4">
       <SidebarItem icon={Compass} active={activeTab === 'discover'} onClick={() => onNavigate('/discover')} tooltip="Descubrir" />
+      <SidebarItem icon={Search} active={activeTab === 'search'} onClick={() => onNavigate('/search')} tooltip="Buscar" />
       <SidebarItem icon={Hash} active={activeTab === 'feed'} onClick={() => onNavigate('/feed')} tooltip="Conversación" />
       <SidebarItem icon={Briefcase} active={activeTab === 'projects'} onClick={() => onNavigate('/projects')} tooltip="Conexiones" />
       <SidebarItem icon={BookOpen} active={activeTab === 'library'} onClick={() => onNavigate('/library')} tooltip="Colecciones" />
@@ -134,6 +136,7 @@ const MobileNav = ({ activeTab, onNavigate }: NavProps) => {
   return (
     <div className="md:hidden fixed bottom-0 w-full bg-bg/95 backdrop-blur-md border-t border-neutral-900 flex justify-around px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] z-50">
       <button onClick={() => onNavigate('/discover')} aria-label="Descubrir" className={`p-2.5 ${activeTab === 'discover' ? 'text-white' : 'text-neutral-600'}`}><Compass size={24} strokeWidth={1} /></button>
+      <button onClick={() => onNavigate('/search')} aria-label="Buscar" className={`p-2.5 ${activeTab === 'search' ? 'text-white' : 'text-neutral-600'}`}><Search size={24} strokeWidth={1} /></button>
       <button onClick={() => onNavigate('/feed')} aria-label="Diálogos" className={`p-2.5 ${activeTab === 'feed' ? 'text-white' : 'text-neutral-600'}`}><Hash size={24} strokeWidth={1} /></button>
       <button onClick={() => onNavigate('/projects')} aria-label="Conexiones" className={`p-2.5 ${activeTab === 'projects' ? 'text-white' : 'text-neutral-600'}`}><Briefcase size={24} strokeWidth={1} /></button>
       <button onClick={() => onNavigate('/library')} aria-label="Colecciones" className={`p-2.5 ${activeTab === 'library' ? 'text-white' : 'text-neutral-600'}`}><BookOpen size={24} strokeWidth={1} /></button>
@@ -151,6 +154,7 @@ const AppLayout = () => {
   const getActiveTab = () => {
     if (pathname.startsWith('/category')) return 'discover';
     if (pathname === '/discover' || pathname === '/') return 'discover';
+    if (pathname === '/search') return 'search';
     if (pathname === '/feed') return 'feed';
     if (pathname === '/projects') return 'projects';
     if (pathname === '/library') return 'library';
@@ -178,6 +182,7 @@ const AppLayout = () => {
               <Routes>
                 <Route path="/" element={<DiscoverPage />} />
                 <Route path="/discover" element={<DiscoverPage />} />
+                <Route path="/search" element={<UserSearchPage />} />
                 <Route path="/category/:categoryId" element={<CategoryPage />} />
                 <Route path="/feed" element={<FeedPage />} />
                 <Route path="/projects" element={<ProjectsPage />} />

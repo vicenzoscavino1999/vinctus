@@ -7,4 +7,4 @@ export { default as LibraryPage } from './LibraryPage';
 export { default as ProfilePage } from './ProfilePage';
 export { default as NotificationsPage } from './NotificationsPage';
 export { default as MessagesPage } from './MessagesPage';
-
+export { default as UserSearchPage } from './UserSearchPage';

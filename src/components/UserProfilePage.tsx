@@ -122,7 +122,7 @@ const UserProfilePage = () => {
         try {
             const conversationId = await getOrCreateDirectConversation(currentUser.uid, user.uid);
             // Navigate to messages page with conversation selected
-            navigate(`/messages?conversation=${conversationId}`);
+            navigate(`/feed?conversation=${conversationId}`);
         } catch (error) {
             console.error('Error creating conversation:', error);
             alert('Error al crear la conversaci?n');

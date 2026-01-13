@@ -1,0 +1,81 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // Strict image type validation
+    function isValidImageType() {
+      return request.resource.contentType in [
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'image/webp'
+      ];
+    }
+    
+    // Strict video type validation
+    function isValidVideoType() {
+      return request.resource.contentType in [
+        'video/mp4',
+        'video/webm',
+        'video/quicktime'
+      ];
+    }
+    
+    function isUnderImageSizeLimit() {
+      return request.resource.size < 10 * 1024 * 1024; // 10MB
+    }
+    
+    function isUnderVideoSizeLimit() {
+      return request.resource.size < 100 * 1024 * 1024; // 100MB
+    }
+    
+    // CRITICAL: resource == null prevents overwrite
+    // NOTE: Requires Object Versioning enabled on bucket
+    // Run: gsutil versioning set on gs://vinctus-daf32.appspot.com
+    function isNewFile() {
+      return resource == null;
+    }
+    
+    // Post images: posts/{userId}/{postId}/images/{filename}
+    match /posts/{userId}/{postId}/images/{filename} {
+      allow read: if true;
+      
+      allow create: if isAuthenticated()
+        && isOwner(userId)
+        && isNewFile()
+        && isValidImageType()
+        && isUnderImageSizeLimit();
+      
+      allow delete: if isAuthenticated() && isOwner(userId);
+      allow update: if false;
+    }
+    
+    // Post videos: posts/{userId}/{postId}/videos/{filename}
+    match /posts/{userId}/{postId}/videos/{filename} {
+      allow read: if true;
+      
+      allow create: if isAuthenticated()
+        && isOwner(userId)
+        && isNewFile()
+        && isValidVideoType()
+        && isUnderVideoSizeLimit();
+      
+      allow delete: if isAuthenticated() && isOwner(userId);
+      allow update: if false;
+    }
+    
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

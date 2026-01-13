@@ -144,7 +144,7 @@ export const GroupDetailContainer = () => {
         setOpeningChat(true);
         try {
             const conversationId = await getOrCreateGroupConversation(groupIdStr, user.uid);
-            navigate(`/messages?conversation=${conversationId}`);
+            navigate(`/feed?conversation=${conversationId}`);
         } catch (error) {
             console.error('Error opening group chat:', error);
             showToast('Error al abrir el chat del grupo', 'error');
