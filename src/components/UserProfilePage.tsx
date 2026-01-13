@@ -1,137 +1,184 @@
-import { ChevronLeft, Mail, MoreHorizontal, MapPin, Music, BookOpen } from 'lucide-react';
+import { ChevronLeft, MapPin, BookOpen, UserPlus, Check, Clock, Loader2 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useState } from 'react';
-import type { LucideIcon } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getOrCreateDirectConversation } from '../lib/firestore';
-
-type UserCredential = {
-    icon: LucideIcon;
-    label: string;
-    color: string;
-};
-
-type UserContribution = {
-    id: number;
-    title: string;
-    category: string;
-    year: string;
-};
-
-type UserProfile = {
-    id: string;
-    uid?: string;
-    name: string;
-    role: string;
-    location: string;
-    avatar: string | null;
-    initial: string;
-    bio: string;
-    reputation: number;
-    credentials: UserCredential[];
-    contributions: UserContribution[];
-};
-
-// Mock user data - in a real app this would come from an API
-const USERS: Record<string, UserProfile> = {
-    'marco-v': {
-        id: 'marco-v',
-        name: 'Marco V.',
-        role: 'Mel\u00F3mano & Pianista',
-        location: 'Cali, Colombia',
-        avatar: null,
-        initial: 'M',
-        bio: 'Investigando las ra\u00EDces africanas en la m\u00FAsica caribe\u00F1a. Coleccionista de vinilos y pianista de sesi\u00F3n.',
-        reputation: 85,
-        credentials: [
-            { icon: Music, label: 'M\u00FAsico Verificado', color: 'text-purple-400' }
-        ],
-        contributions: [
-            { id: 1, title: 'Entrop\u00EDa y Jazz: Un ensayo', category: 'BIBLIOTECA: M\u00DASICA', year: '2023' }
-        ]
-    },
-    'dr-elena-r': {
-        id: 'dr-elena-r',
-        name: 'Dr. Elena R.',
-        role: 'Investigadora',
-        location: 'Madrid, Espa\u00F1a',
-        avatar: null,
-        initial: 'E',
-        bio: 'F\u00EDsica te\u00F3rica especializada en gravedad cu\u00E1ntica. Profesora asociada y divulgadora cient\u00EDfica.',
-        reputation: 92,
-        credentials: [
-            { icon: BookOpen, label: 'Experta Verificada', color: 'text-blue-400' }
-        ],
-        contributions: [
-            { id: 1, title: 'Paradojas del Horizonte de Eventos', category: 'BIBLIOTECA: CIENCIA', year: '2024' }
-        ]
-    },
-    'ada-l': {
-        id: 'ada-l',
-        name: 'Ada L.',
-        role: 'Desarrolladora',
-        location: 'Buenos Aires, Argentina',
-        avatar: null,
-        initial: 'A',
-        bio: 'Ingeniera de ML en startups de IA. Open source contributor. Apasionada por la \u00E9tica en tecnolog\u00EDa.',
-        reputation: 78,
-        credentials: [
-            { icon: BookOpen, label: 'Desarrolladora Verificada', color: 'text-green-400' }
-        ],
-        contributions: []
-    },
-    'gabriel-m': {
-        id: 'gabriel-m',
-        name: 'Gabriel M.',
-        role: 'Naturalista',
-        location: 'Bogotá, Colombia',
-        avatar: null,
-        initial: 'G',
-        bio: 'Bi\u00F3logo de campo y fot\u00F3grafo de naturaleza. Especializado en ornitolog\u00EDa neotropical.',
-        reputation: 81,
-        credentials: [
-            { icon: BookOpen, label: 'Naturalista Verificado', color: 'text-emerald-400' }
-        ],
-        contributions: [
-            { id: 1, title: 'Gu\u00EDa de Aves del Humedal C\u00F3rdoba', category: 'BIBLIOTECA: NATURALEZA', year: '2023' }
-        ]
-    }
-};
+import { useToast } from './Toast';
+import {
+    getUserProfile,
+    getFriendshipStatus,
+    sendFriendRequest,
+    acceptFriendRequest,
+    cancelFriendRequest,
+    type UserProfileRead
+} from '../lib/firestore';
 
 const UserProfilePage = () => {
     const { userId } = useParams<{ userId: string }>();
     const navigate = useNavigate();
     const { user: currentUser } = useAuth();
-    const [sendingMessage, setSendingMessage] = useState(false);
+    const { showToast } = useToast();
 
-    const user = userId ? USERS[userId] : undefined;
+    const [profile, setProfile] = useState<UserProfileRead | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [friendStatus, setFriendStatus] = useState<'none' | 'friends' | 'pending_sent' | 'pending_received'>('none');
+    const [requestId, setRequestId] = useState<string | undefined>();
+    const [actionLoading, setActionLoading] = useState(false);
 
-
-    // WARNING: This page uses mock data with slug IDs (e.g. "marco-v")
-    // In production, this should use real Firebase UIDs
-    // TODO: Replace with real user data from Firestore users collection
-    const handleSendMessage = async () => {
-        if (!currentUser || !user) return;
-
-        if (!user.uid) {
-            alert('Chat no disponible para perfiles de prueba.');
+    // Load user profile
+    useEffect(() => {
+        if (!userId) {
+            setLoading(false);
             return;
         }
 
-        setSendingMessage(true);
+        const loadProfile = async () => {
+            setLoading(true);
+            try {
+                const userProfile = await getUserProfile(userId);
+                setProfile(userProfile);
+
+                // Get friendship status if logged in
+                if (currentUser && userProfile) {
+                    const status = await getFriendshipStatus(currentUser.uid, userId);
+                    setFriendStatus(status.status);
+                    setRequestId(status.requestId);
+                }
+            } catch (error) {
+                console.error('Error loading profile:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        void loadProfile();
+    }, [userId, currentUser]);
+
+    const handleSendRequest = async () => {
+        if (!currentUser || !userId) return;
+
+        setActionLoading(true);
         try {
-            const conversationId = await getOrCreateDirectConversation(currentUser.uid, user.uid);
-            // Navigate to messages page with conversation selected
-            navigate(`/feed?conversation=${conversationId}`);
-        } catch (error) {
-            console.error('Error creating conversation:', error);
-            alert('Error al crear la conversaci?n');
+            await sendFriendRequest(
+                currentUser.uid,
+                userId,
+                currentUser.displayName,
+                currentUser.photoURL
+            );
+            setFriendStatus('pending_sent');
+            showToast('Solicitud enviada', 'success');
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Error al enviar solicitud';
+            showToast(message, 'error');
         } finally {
-            setSendingMessage(false);
+            setActionLoading(false);
         }
     };
 
-    if (!user) {
+    const handleAcceptRequest = async () => {
+        if (!requestId) return;
+
+        setActionLoading(true);
+        try {
+            await acceptFriendRequest(requestId);
+            setFriendStatus('friends');
+            showToast('¡Ahora son amigos!', 'success');
+        } catch {
+            showToast('Error al aceptar solicitud', 'error');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleCancelRequest = async () => {
+        if (!requestId) return;
+
+        setActionLoading(true);
+        try {
+            await cancelFriendRequest(requestId);
+            setFriendStatus('none');
+            setRequestId(undefined);
+            showToast('Solicitud cancelada', 'info');
+        } catch {
+            showToast('Error al cancelar solicitud', 'error');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const renderFriendButton = () => {
+        if (!currentUser || currentUser.uid === userId) return null;
+
+        switch (friendStatus) {
+            case 'friends':
+                return (
+                    <span className="flex items-center gap-2 px-5 py-2.5 text-green-400 text-sm">
+                        <Check size={16} />
+                        Amigos
+                    </span>
+                );
+            case 'pending_sent':
+                return (
+                    <button
+                        onClick={handleCancelRequest}
+                        disabled={actionLoading}
+                        className="flex items-center gap-2 px-5 py-2.5 border border-amber-500/50 text-amber-400 hover:bg-amber-500/10 transition-colors text-sm disabled:opacity-50 rounded-lg"
+                    >
+                        {actionLoading ? (
+                            <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                            <>
+                                <Clock size={16} />
+                                Pendiente
+                            </>
+                        )}
+                    </button>
+                );
+            case 'pending_received':
+                return (
+                    <button
+                        onClick={handleAcceptRequest}
+                        disabled={actionLoading}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-green-500/20 border border-green-500/50 text-green-400 hover:bg-green-500/30 transition-colors text-sm disabled:opacity-50 rounded-lg"
+                    >
+                        {actionLoading ? (
+                            <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                            <>
+                                <Check size={16} />
+                                Aceptar solicitud
+                            </>
+                        )}
+                    </button>
+                );
+            default:
+                return (
+                    <button
+                        onClick={handleSendRequest}
+                        disabled={actionLoading}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-medium hover:from-amber-400 hover:to-amber-500 transition-all text-sm disabled:opacity-50 rounded-lg"
+                    >
+                        {actionLoading ? (
+                            <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                            <>
+                                <UserPlus size={16} />
+                                Añadir amigo
+                            </>
+                        )}
+                    </button>
+                );
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="page-profile flex items-center justify-center h-[60vh]">
+                <Loader2 size={32} className="animate-spin text-amber-500" />
+            </div>
+        );
+    }
+
+    if (!profile) {
         return (
             <div className="page-profile flex flex-col items-center justify-center h-[60vh] text-neutral-600">
                 <p className="font-serif italic text-lg mb-4">Usuario no encontrado</p>
@@ -140,53 +187,47 @@ const UserProfilePage = () => {
         );
     }
 
+    const initial = profile.displayName?.charAt(0).toUpperCase() || '?';
+
     return (
-        <div className="page-profile pt-8 max-w-4xl mx-auto">
+        <div className="page-profile pt-8 max-w-4xl mx-auto pb-20">
             {/* Back button */}
             <button
                 onClick={() => navigate(-1)}
                 className="group flex items-center text-neutral-500 hover:text-neutral-300 mb-8 transition-colors text-xs tracking-widest uppercase"
             >
                 <ChevronLeft size={14} className="mr-2 group-hover:-translate-x-1 transition-transform" />
-                Volver al Feed
+                Volver
             </button>
 
             {/* Profile header */}
-            <header className="flex items-start justify-between mb-12 pb-8 border-b border-neutral-900">
+            <header className="flex flex-col md:flex-row items-start justify-between mb-12 pb-8 border-b border-neutral-900 gap-6">
                 <div className="flex items-center gap-6">
                     {/* Avatar */}
-                    <div className="w-24 h-24 rounded-full bg-neutral-800 flex items-center justify-center text-3xl font-serif text-neutral-400">
-                        {user.avatar ? (
-                            <img src={user.avatar} alt={user.name} className="w-full h-full rounded-full object-cover" />
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-amber-500/20 to-amber-600/20 border border-amber-500/30 flex items-center justify-center text-3xl font-serif text-amber-500 overflow-hidden">
+                        {profile.photoURL ? (
+                            <img src={profile.photoURL} alt={profile.displayName || 'Usuario'} className="w-full h-full rounded-full object-cover" />
                         ) : (
-                            user.initial
+                            initial
                         )}
                     </div>
 
                     {/* Name and info */}
                     <div>
-                        <h1 className="text-4xl font-serif font-light text-white mb-2">{user.name}</h1>
-                        <p className="text-neutral-400 mb-1">{user.role}</p>
+                        <h1 className="text-3xl md:text-4xl font-serif font-light text-white mb-2">
+                            {profile.displayName || 'Usuario'}
+                        </h1>
+                        <p className="text-neutral-400 mb-1">{profile.role || 'Nuevo miembro'}</p>
                         <p className="text-neutral-600 text-sm flex items-center">
                             <MapPin size={12} className="mr-1" />
-                            {user.location}
+                            {profile.location || 'Sin ubicación'}
                         </p>
                     </div>
                 </div>
 
                 {/* Action buttons */}
                 <div className="flex items-center gap-3">
-                    <button
-                        onClick={handleSendMessage}
-                        disabled={sendingMessage || !currentUser}
-                        className="flex items-center gap-2 px-5 py-2.5 border border-neutral-700 text-white hover:bg-neutral-900 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <Mail size={16} />
-                        {sendingMessage ? 'Abriendo chat...' : 'Enviar Mensaje'}
-                    </button>
-                    <button className="p-2.5 border border-neutral-700 text-neutral-500 hover:text-white hover:bg-neutral-900 transition-colors">
-                        <MoreHorizontal size={16} />
-                    </button>
+                    {renderFriendButton()}
                 </div>
             </header>
 
@@ -197,20 +238,11 @@ const UserProfilePage = () => {
                     {/* About me */}
                     <section>
                         <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">Sobre Mí</h2>
-                        <p className="text-neutral-400 font-light leading-relaxed">{user.bio}</p>
-                    </section>
-
-                    {/* Credentials */}
-                    <section>
-                        <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">Credenciales</h2>
-                        <div className="space-y-2">
-                            {user.credentials.map((cred, idx) => (
-                                <div key={idx} className="flex items-center gap-2 text-sm">
-                                    <cred.icon size={16} className={cred.color} />
-                                    <span className="text-neutral-300">{cred.label}</span>
-                                </div>
-                            ))}
-                        </div>
+                        {profile.bio ? (
+                            <p className="text-neutral-400 font-light leading-relaxed">{profile.bio}</p>
+                        ) : (
+                            <p className="text-neutral-600 font-light italic">Sin biografía aún.</p>
+                        )}
                     </section>
 
                     {/* Reputation */}
@@ -219,12 +251,23 @@ const UserProfilePage = () => {
                         <div className="flex items-center gap-4">
                             <div className="flex-1 h-1 bg-neutral-800 rounded-full overflow-hidden">
                                 <div
-                                    className="h-full bg-gradient-to-r from-neutral-600 to-white rounded-full transition-all duration-500"
-                                    style={{ width: `${user.reputation}%` }}
+                                    className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full transition-all duration-500"
+                                    style={{ width: `${profile.reputation || 0}%` }}
                                 />
                             </div>
-                            <span className="text-neutral-400 text-lg font-light">{user.reputation}</span>
+                            <span className="text-neutral-400 text-lg font-light">{profile.reputation || 0}</span>
                         </div>
+                    </section>
+
+                    {/* Member since */}
+                    <section>
+                        <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">Miembro desde</h2>
+                        <p className="text-neutral-400 text-sm">
+                            {profile.createdAt?.toLocaleDateString('es-ES', {
+                                year: 'numeric',
+                                month: 'long'
+                            }) || 'Fecha desconocida'}
+                        </p>
                     </section>
                 </div>
 
@@ -232,29 +275,10 @@ const UserProfilePage = () => {
                 <div className="md:col-span-2">
                     <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-6">Portafolio & Contribuciones</h2>
 
-                    {user.contributions.length > 0 ? (
-                        <div className="space-y-3">
-                            {user.contributions.map(item => (
-                                <div
-                                    key={item.id}
-                                    className="flex items-center gap-4 p-5 border border-neutral-800 hover:border-neutral-700 hover:bg-neutral-900/30 transition-all cursor-pointer group"
-                                >
-                                    <BookOpen size={20} className="text-neutral-600 group-hover:text-neutral-400" />
-                                    <div className="flex-1">
-                                        <span className="text-[10px] tracking-widest text-neutral-600 uppercase">{item.category}</span>
-                                        <h3 className="text-lg text-neutral-200 font-serif font-light group-hover:text-white transition-colors">
-                                            {item.title}
-                                        </h3>
-                                    </div>
-                                    <span className="text-neutral-600 text-sm">{item.year}</span>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
-                            <p className="text-neutral-600 font-light italic">Sin contribuciones publicadas aún.</p>
-                        </div>
-                    )}
+                    <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
+                        <BookOpen size={32} strokeWidth={0.5} className="mx-auto mb-4 text-neutral-600" />
+                        <p className="text-neutral-600 font-light italic">Sin contribuciones publicadas aún.</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -262,4 +286,3 @@ const UserProfilePage = () => {
 };
 
 export default UserProfilePage;
-
