@@ -1,10 +1,11 @@
 import { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { Compass, Hash, User, BookOpen, Briefcase, MoreHorizontal, Settings, LogOut, Search } from 'lucide-react';
+import { Compass, Hash, User, BookOpen, Briefcase, MoreHorizontal, Settings, LogOut, Search, Plus } from 'lucide-react';
 
 import Header from './Header';
 import SidebarItem from './SidebarItem';
 import PageLoader from './PageLoader';
+import CreatePostModal from './CreatePostModal';
 import { useAuth } from '../context/AuthContext';
 
 // Lazy loaded components
@@ -31,11 +32,16 @@ type NavProps = {
   onNavigate: (path: string) => void;
 };
 
-// Logo component
-const Logo = () => (
-  <div className="w-14 h-14 flex items-center justify-center mb-16 opacity-90 hover:opacity-100 transition-opacity">
-    <img src="/image_fdd620.png" alt="Logo" className="w-full h-full object-contain" />
-  </div>
+// Create Post button component
+const CreatePostButton = ({ onClick }: { onClick: () => void }) => (
+  <button
+    onClick={onClick}
+    className="w-14 h-14 flex items-center justify-center mb-16 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black shadow-lg shadow-amber-500/20 hover:shadow-amber-500/40 transition-all duration-300 hover:scale-105"
+    aria-label="Crear publicación"
+    title="Crear publicación"
+  >
+    <Plus size={28} strokeWidth={2} />
+  </button>
 );
 
 // More Menu Component
@@ -107,9 +113,9 @@ const MoreMenu = ({ onNavigate }: { onNavigate: (path: string) => void }) => {
 };
 
 // Sidebar component
-const Sidebar = ({ activeTab, onNavigate }: NavProps) => (
+const Sidebar = ({ activeTab, onNavigate, onCreatePost }: NavProps & { onCreatePost: () => void }) => (
   <aside className="hidden md:flex w-20 flex-col items-center py-12 fixed h-full z-20 border-r border-neutral-900/50 bg-bg">
-    <Logo />
+    <CreatePostButton onClick={onCreatePost} />
     <nav className="flex flex-col space-y-4">
       <SidebarItem icon={Compass} active={activeTab === 'discover'} onClick={() => onNavigate('/discover')} tooltip="Descubrir" />
       <SidebarItem icon={Search} active={activeTab === 'search'} onClick={() => onNavigate('/search')} tooltip="Buscar" />
@@ -150,6 +156,7 @@ const AppLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const pathname = location.pathname;
+  const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
 
   const getActiveTab = () => {
     if (pathname.startsWith('/category')) return 'discover';
@@ -167,12 +174,16 @@ const AppLayout = () => {
     return 'discover';
   };
 
+  const handleCreatePost = () => {
+    setIsCreatePostOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-bg text-neutral-200 font-sans selection:bg-white/20 selection:text-white overflow-x-hidden">
       <div className="fixed inset-0 opacity-[0.03] pointer-events-none z-0 mix-blend-overlay" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} />
 
       <div className="flex h-screen relative z-10">
-        <Sidebar activeTab={getActiveTab()} onNavigate={navigate} />
+        <Sidebar activeTab={getActiveTab()} onNavigate={navigate} onCreatePost={handleCreatePost} />
         <MobileNav activeTab={getActiveTab()} onNavigate={navigate} />
         <Header />
 
@@ -200,6 +211,12 @@ const AppLayout = () => {
           </div>
         </main>
       </div>
+
+      {/* Create Post Modal */}
+      <CreatePostModal
+        isOpen={isCreatePostOpen}
+        onClose={() => setIsCreatePostOpen(false)}
+      />
     </div>
   );
 };
