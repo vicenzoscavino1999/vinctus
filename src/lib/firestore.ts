@@ -79,6 +79,30 @@ export interface PublicUserRead {
     photoURL: string | null;
 }
 
+// Extended user profile data
+export interface UserProfileRead {
+    uid: string;
+    displayName: string | null;
+    displayNameLowercase: string | null;
+    photoURL: string | null;
+    email: string | null;
+    bio: string | null;
+    role: string | null;
+    location: string | null;
+    username: string | null;
+    reputation: number;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+export interface UserProfileUpdate {
+    displayName?: string;
+    bio?: string;
+    role?: string;
+    location?: string;
+    username?: string;
+}
+
 // ==================== Write Types (to Firestore) ====================
 
 export interface GroupMemberWrite {
@@ -1266,4 +1290,116 @@ export async function updatePost(
  */
 export async function deletePost(postId: string): Promise<void> {
     await deleteDoc(doc(postsCollection, postId));
+}
+
+// ==================== User Profile Functions ====================
+
+/**
+ * Get user profile by UID
+ */
+export async function getUserProfile(uid: string): Promise<UserProfileRead | null> {
+    const userDoc = await getDoc(doc(db, 'users', uid));
+    if (!userDoc.exists()) return null;
+
+    const data = userDoc.data();
+    return {
+        uid: data.uid || uid,
+        displayName: data.displayName || null,
+        displayNameLowercase: data.displayNameLowercase || null,
+        photoURL: data.photoURL || null,
+        email: data.email || null,
+        bio: data.bio || null,
+        role: data.role || null,
+        location: data.location || null,
+        username: data.username || null,
+        reputation: data.reputation || 0,
+        createdAt: toDate(data.createdAt) || new Date(),
+        updatedAt: toDate(data.updatedAt) || new Date()
+    };
+}
+
+/**
+ * Update user profile
+ * Updates both 'users' (private) and 'users_public' (public) collections
+ */
+export async function updateUserProfile(
+    uid: string,
+    updates: UserProfileUpdate
+): Promise<void> {
+    const batch = writeBatch(db);
+
+    // Build updates object
+    const userUpdates: Record<string, unknown> = {
+        updatedAt: serverTimestamp()
+    };
+    const publicUpdates: Record<string, unknown> = {
+        updatedAt: serverTimestamp()
+    };
+
+    if (updates.displayName !== undefined) {
+        userUpdates.displayName = updates.displayName;
+        userUpdates.displayNameLowercase = updates.displayName.toLowerCase();
+        publicUpdates.displayName = updates.displayName;
+        publicUpdates.displayNameLowercase = updates.displayName.toLowerCase();
+    }
+
+    if (updates.bio !== undefined) {
+        userUpdates.bio = updates.bio;
+    }
+
+    if (updates.role !== undefined) {
+        userUpdates.role = updates.role;
+    }
+
+    if (updates.location !== undefined) {
+        userUpdates.location = updates.location;
+    }
+
+    if (updates.username !== undefined) {
+        userUpdates.username = updates.username;
+        publicUpdates.username = updates.username;
+    }
+
+    // Update private user doc
+    batch.set(doc(db, 'users', uid), userUpdates, { merge: true });
+
+    // Update public user doc (only public fields)
+    batch.set(doc(db, 'users_public', uid), publicUpdates, { merge: true });
+
+    await batch.commit();
+}
+
+/**
+ * Subscribe to user profile changes
+ */
+export function subscribeToUserProfile(
+    uid: string,
+    onData: (profile: UserProfileRead | null) => void,
+    onError?: (error: Error) => void
+): Unsubscribe {
+    return onSnapshot(
+        doc(db, 'users', uid),
+        (snapshot) => {
+            if (!snapshot.exists()) {
+                onData(null);
+                return;
+            }
+            const data = snapshot.data();
+            onData({
+                uid: data.uid || uid,
+                displayName: data.displayName || null,
+                displayNameLowercase: data.displayNameLowercase || null,
+                photoURL: data.photoURL || null,
+                email: data.email || null,
+                bio: data.bio || null,
+                role: data.role || null,
+                location: data.location || null,
+                username: data.username || null,
+                reputation: data.reputation || 0,
+                createdAt: toDate(data.createdAt) || new Date(),
+                updatedAt: toDate(data.updatedAt) || new Date()
+            });
+        },
+        onError
+    );
 }

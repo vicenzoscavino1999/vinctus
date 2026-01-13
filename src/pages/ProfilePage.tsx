@@ -1,8 +1,10 @@
-import { useState } from 'react';
-import { Settings, Search, ArrowRight, FolderPlus, BookOpen, MapPin, Mail, Edit3 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Settings, Search, ArrowRight, FolderPlus, BookOpen, MapPin, Mail, Edit3, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
+import { subscribeToUserProfile, type UserProfileRead } from '../lib/firestore';
+import EditProfileModal from '../components/EditProfileModal';
 
 const ProfilePage = () => {
     const navigate = useNavigate();
@@ -10,24 +12,44 @@ const ProfilePage = () => {
     const { showToast } = useToast();
     const [searchQuery, setSearchQuery] = useState('');
     const [activeSection, setActiveSection] = useState<'profile' | 'collections'>('profile');
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [profile, setProfile] = useState<UserProfileRead | null>(null);
+    const [loadingProfile, setLoadingProfile] = useState(true);
 
-    // User profile data (from Firebase Auth + defaults for new users)
-    const displayName = user?.displayName || 'Usuario';
-    const email = user?.email || '';
+    // Subscribe to user profile
+    useEffect(() => {
+        if (!user) {
+            setLoadingProfile(false);
+            return;
+        }
+
+        setLoadingProfile(true);
+        const unsubscribe = subscribeToUserProfile(
+            user.uid,
+            (profileData) => {
+                setProfile(profileData);
+                setLoadingProfile(false);
+            },
+            (error) => {
+                console.error('Error loading profile:', error);
+                setLoadingProfile(false);
+            }
+        );
+
+        return () => unsubscribe();
+    }, [user]);
+
+    // Display values (from profile or fallback to auth user)
+    const displayName = profile?.displayName || user?.displayName || 'Usuario';
+    const email = profile?.email || user?.email || '';
     const initial = displayName.charAt(0).toUpperCase();
-    const photoURL = user?.photoURL || null;
+    const photoURL = profile?.photoURL || user?.photoURL || null;
+    const role = profile?.role || 'Nuevo miembro';
+    const location = profile?.location || 'Sin ubicación';
+    const bio = profile?.bio || '';
+    const reputation = profile?.reputation || 0;
 
-    // Default profile data for new users (editable later)
-    const userProfile = {
-        role: 'Nuevo miembro',
-        location: 'Sin ubicación',
-        bio: 'Aún no has añadido una biografía. ¡Cuéntale al mundo sobre ti!',
-        reputation: 0,
-        credentials: [] as { label: string; color: string }[],
-        contributions: [] as { id: number; title: string; category: string; year: string }[]
-    };
-
-    // Collections mock data
+    // Collections mock data (to be replaced with real data later)
     const FOLDERS = [
         { id: 1, name: 'Para después', count: 9, icon: '📁' },
         { id: 2, name: 'Física', count: 12, icon: '📂' },
@@ -58,8 +80,20 @@ const ProfilePage = () => {
     };
 
     const handleEditProfile = () => {
-        showToast('Editar perfil estará disponible pronto', 'info');
+        setIsEditModalOpen(true);
     };
+
+    const handleProfileSaved = () => {
+        showToast('Perfil actualizado', 'success');
+    };
+
+    if (loadingProfile) {
+        return (
+            <div className="page-profile pt-8 max-w-4xl mx-auto flex items-center justify-center min-h-[50vh]">
+                <Loader2 size={32} className="animate-spin text-amber-500" />
+            </div>
+        );
+    }
 
     return (
         <div className="page-profile pt-8 max-w-4xl mx-auto pb-32">
@@ -67,7 +101,7 @@ const ProfilePage = () => {
             <header className="flex items-start justify-between mb-12 pb-8 border-b border-neutral-900">
                 <div className="flex items-center gap-6">
                     {/* Avatar */}
-                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-amber-500/20 to-amber-600/20 border border-amber-500/30 flex items-center justify-center text-3xl font-serif text-amber-500">
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-amber-500/20 to-amber-600/20 border border-amber-500/30 flex items-center justify-center text-3xl font-serif text-amber-500 overflow-hidden">
                         {photoURL ? (
                             <img src={photoURL} alt={displayName} className="w-full h-full rounded-full object-cover" />
                         ) : (
@@ -78,10 +112,10 @@ const ProfilePage = () => {
                     {/* Name and info */}
                     <div>
                         <h1 className="text-4xl font-serif font-light text-white mb-2">{displayName}</h1>
-                        <p className="text-neutral-400 mb-1">{userProfile.role}</p>
+                        <p className="text-neutral-400 mb-1">{role}</p>
                         <p className="text-neutral-600 text-sm flex items-center">
                             <MapPin size={12} className="mr-1" />
-                            {userProfile.location}
+                            {location}
                         </p>
                     </div>
                 </div>
@@ -138,29 +172,20 @@ const ProfilePage = () => {
                         {/* About me */}
                         <section>
                             <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">Sobre Mí</h2>
-                            <p className="text-neutral-400 font-light leading-relaxed italic">{userProfile.bio}</p>
-                            <button
-                                onClick={handleEditProfile}
-                                className="mt-3 text-amber-500 text-sm hover:text-amber-400 transition-colors"
-                            >
-                                + Añadir biografía
-                            </button>
-                        </section>
-
-                        {/* Credentials */}
-                        <section>
-                            <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">Credenciales</h2>
-                            {userProfile.credentials.length > 0 ? (
-                                <div className="space-y-2">
-                                    {userProfile.credentials.map((cred, idx) => (
-                                        <div key={idx} className="flex items-center gap-2 text-sm">
-                                            <BookOpen size={16} className={cred.color} />
-                                            <span className="text-neutral-300">{cred.label}</span>
-                                        </div>
-                                    ))}
-                                </div>
+                            {bio ? (
+                                <p className="text-neutral-400 font-light leading-relaxed">{bio}</p>
                             ) : (
-                                <p className="text-neutral-600 text-sm italic">Sin credenciales aún</p>
+                                <>
+                                    <p className="text-neutral-500 font-light leading-relaxed italic">
+                                        Aún no has añadido una biografía. ¡Cuéntale al mundo sobre ti!
+                                    </p>
+                                    <button
+                                        onClick={handleEditProfile}
+                                        className="mt-3 text-amber-500 text-sm hover:text-amber-400 transition-colors"
+                                    >
+                                        + Añadir biografía
+                                    </button>
+                                </>
                             )}
                         </section>
 
@@ -171,10 +196,10 @@ const ProfilePage = () => {
                                 <div className="flex-1 h-1 bg-neutral-800 rounded-full overflow-hidden">
                                     <div
                                         className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full transition-all duration-500"
-                                        style={{ width: `${userProfile.reputation}%` }}
+                                        style={{ width: `${reputation}%` }}
                                     />
                                 </div>
-                                <span className="text-neutral-400 text-lg font-light">{userProfile.reputation}</span>
+                                <span className="text-neutral-400 text-lg font-light">{reputation}</span>
                             </div>
                             <p className="text-neutral-600 text-xs mt-2">Contribuye para aumentar tu reputación</p>
                         </section>
@@ -193,36 +218,16 @@ const ProfilePage = () => {
                     <div className="md:col-span-2">
                         <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-6">Portafolio & Contribuciones</h2>
 
-                        {userProfile.contributions.length > 0 ? (
-                            <div className="space-y-3">
-                                {userProfile.contributions.map(item => (
-                                    <div
-                                        key={item.id}
-                                        className="flex items-center gap-4 p-5 border border-neutral-800 hover:border-neutral-700 hover:bg-neutral-900/30 transition-all cursor-pointer group rounded-lg"
-                                    >
-                                        <BookOpen size={20} className="text-neutral-600 group-hover:text-neutral-400" />
-                                        <div className="flex-1">
-                                            <span className="text-[10px] tracking-widest text-neutral-600 uppercase">{item.category}</span>
-                                            <h3 className="text-lg text-neutral-200 font-serif font-light group-hover:text-white transition-colors">
-                                                {item.title}
-                                            </h3>
-                                        </div>
-                                        <span className="text-neutral-600 text-sm">{item.year}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
-                                <BookOpen size={32} strokeWidth={0.5} className="mx-auto mb-4 text-neutral-600" />
-                                <p className="text-neutral-500 font-light italic mb-4">Sin contribuciones publicadas aún.</p>
-                                <button
-                                    onClick={() => showToast('Crear contenido estará disponible pronto', 'info')}
-                                    className="text-amber-500 text-sm hover:text-amber-400 transition-colors"
-                                >
-                                    + Publicar tu primera contribución
-                                </button>
-                            </div>
-                        )}
+                        <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
+                            <BookOpen size={32} strokeWidth={0.5} className="mx-auto mb-4 text-neutral-600" />
+                            <p className="text-neutral-500 font-light italic mb-4">Sin contribuciones publicadas aún.</p>
+                            <button
+                                onClick={() => showToast('Crear contenido estará disponible pronto', 'info')}
+                                className="text-amber-500 text-sm hover:text-amber-400 transition-colors"
+                            >
+                                + Publicar tu primera contribución
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -328,6 +333,13 @@ const ProfilePage = () => {
                     </section>
                 </div>
             )}
+
+            {/* Edit Profile Modal */}
+            <EditProfileModal
+                isOpen={isEditModalOpen}
+                onClose={() => setIsEditModalOpen(false)}
+                onSave={handleProfileSaved}
+            />
         </div>
     );
 };
