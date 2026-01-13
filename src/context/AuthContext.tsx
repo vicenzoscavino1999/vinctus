@@ -13,6 +13,8 @@ import {
 } from 'react';
 import {
     signInWithPopup,
+    signInWithRedirect,
+    getRedirectResult,
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
     signInWithPhoneNumber,
@@ -185,6 +187,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         return () => unsubscribe();
     }, []);
 
+    // Handle redirect result (for mobile/PWA Google sign-in)
+    useEffect(() => {
+        const handleRedirectResult = async () => {
+            try {
+                const result = await getRedirectResult(auth);
+                if (result?.user) {
+                    await ensureUserProfile(result.user);
+                }
+            } catch (err) {
+                const code = (err as { code?: string }).code || '';
+                setError(translateError(code));
+            }
+        };
+        void handleRedirectResult();
+    }, []);
+
     // Clear error
     const clearError = useCallback(() => {
         setError(null);
@@ -200,17 +218,35 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
     }, []);
 
-    // Sign in with Google
+    // Detect if running as PWA or on mobile
+    const isMobileOrPWA = useCallback(() => {
+        // Check if running as standalone PWA
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+            || (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+
+        // Check if mobile device
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+        return isStandalone || isMobile;
+    }, []);
+
+    // Sign in with Google (uses redirect on mobile/PWA, popup on desktop)
     const signInWithGoogle = useCallback(async () => {
         setError(null);
         try {
-            await signInWithPopup(auth, googleProvider);
+            if (isMobileOrPWA()) {
+                // Use redirect for mobile/PWA - better compatibility
+                await signInWithRedirect(auth, googleProvider);
+            } else {
+                // Use popup for desktop - faster UX
+                await signInWithPopup(auth, googleProvider);
+            }
         } catch (err) {
             const code = (err as { code?: string }).code || '';
             setError(translateError(code));
             throw err;
         }
-    }, []);
+    }, [isMobileOrPWA]);
 
     // Sign in with email/password
     const signInWithEmail = useCallback(async (email: string, password: string) => {
