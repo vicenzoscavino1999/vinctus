@@ -218,35 +218,37 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
     }, []);
 
-    // Detect if running as PWA or on mobile
-    const isMobileOrPWA = useCallback(() => {
-        // Check if running as standalone PWA
-        const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-            || (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-
-        // Check if mobile device
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-        return isStandalone || isMobile;
-    }, []);
-
-    // Sign in with Google (uses redirect on mobile/PWA, popup on desktop)
+    // Sign in with Google
+    // Strategy: Try popup first (works on most browsers including Safari)
+    // If popup is blocked or fails, fall back to redirect
     const signInWithGoogle = useCallback(async () => {
         setError(null);
         try {
-            if (isMobileOrPWA()) {
-                // Use redirect for mobile/PWA - better compatibility
-                await signInWithRedirect(auth, googleProvider);
-            } else {
-                // Use popup for desktop - faster UX
-                await signInWithPopup(auth, googleProvider);
-            }
+            // Try popup first - works better on Safari/iOS than redirect
+            await signInWithPopup(auth, googleProvider);
         } catch (err) {
-            const code = (err as { code?: string }).code || '';
-            setError(translateError(code));
+            const error = err as { code?: string };
+
+            // If popup was blocked or closed, try redirect as fallback
+            if (error.code === 'auth/popup-blocked' ||
+                error.code === 'auth/popup-closed-by-user' ||
+                error.code === 'auth/cancelled-popup-request') {
+                try {
+                    // Fallback to redirect
+                    await signInWithRedirect(auth, googleProvider);
+                    return; // Redirect will handle the rest
+                } catch (redirectErr) {
+                    const redirectCode = (redirectErr as { code?: string }).code || '';
+                    setError(translateError(redirectCode));
+                    throw redirectErr;
+                }
+            }
+
+            // For other errors, show the error message
+            setError(translateError(error.code || ''));
             throw err;
         }
-    }, [isMobileOrPWA]);
+    }, []);
 
     // Sign in with email/password
     const signInWithEmail = useCallback(async (email: string, password: string) => {
