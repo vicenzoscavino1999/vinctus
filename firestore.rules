@@ -64,6 +64,33 @@ service cloud.firestore {
       allow create, update, delete: if isOwner(uid);
     }
 
+    // friend_requests/{requestId}
+    // Friend request system
+    match /friend_requests/{requestId} {
+      // Users can read requests they sent or received
+      allow read: if isAuthenticated() 
+        && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
+      
+      // Users can create requests where they are the sender
+      allow create: if isAuthenticated()
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUid != request.auth.uid
+        && request.resource.data.keys().hasAll(['fromUid', 'toUid', 'status', 'createdAt', 'updatedAt'])
+        && request.resource.data.status == 'pending';
+      
+      // Sender can update to re-send (if rejected), receiver can accept/reject
+      allow update: if isAuthenticated()
+        && (
+          // Sender can update status back to pending (re-send after rejection)
+          (resource.data.fromUid == request.auth.uid && request.resource.data.status == 'pending')
+          ||
+          // Receiver can accept or reject
+          (resource.data.toUid == request.auth.uid && request.resource.data.status in ['accepted', 'rejected'])
+        );
+      
+      // Sender can delete (cancel) their request
+      allow delete: if isAuthenticated() && resource.data.fromUid == request.auth.uid;
+    }
     
     // users/{uid}/memberships/{groupId}
     // User's joined groups (denormalized for fast reads)
