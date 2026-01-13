@@ -183,7 +183,7 @@ const AppLayout = () => {
       <div className="flex h-screen relative z-10">
         <Sidebar activeTab={getActiveTab()} onNavigate={navigate} onCreatePost={handleCreatePost} />
         <MobileNav activeTab={getActiveTab()} onNavigate={navigate} />
-        <Header />
+        <Header onCreatePost={handleCreatePost} />
 
         <main className="flex-1 md:ml-20 pt-[calc(4rem+env(safe-area-inset-top))] md:pt-16 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-6 px-4 md:px-16 overflow-y-auto scrollbar-hide">
           <div className="max-w-5xl mx-auto">
