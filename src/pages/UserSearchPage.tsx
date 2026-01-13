@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast';
 import {
     getOrCreateDirectConversation,
     searchUsersByDisplayName,
+    getRecentUsers,
     sendFriendRequest,
     getFriendshipStatus,
     acceptFriendRequest,
@@ -28,9 +29,42 @@ export default function UserSearchPage() {
     const { showToast } = useToast();
     const [queryText, setQueryText] = useState('');
     const [results, setResults] = useState<UserWithStatus[]>([]);
+    const [suggestedUsers, setSuggestedUsers] = useState<UserWithStatus[]>([]);
     const [loading, setLoading] = useState(false);
+    const [loadingSuggested, setLoadingSuggested] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+    // Load suggested users on mount
+    useEffect(() => {
+        const loadSuggested = async () => {
+            setLoadingSuggested(true);
+            try {
+                const users = await getRecentUsers(15, user?.uid);
+
+                // Get friendship status for each
+                const usersWithStatus: UserWithStatus[] = await Promise.all(
+                    users.map(async (item) => {
+                        if (!user) return { ...item, friendStatus: 'none' as FriendStatus };
+                        try {
+                            const status = await getFriendshipStatus(user.uid, item.uid);
+                            return { ...item, friendStatus: status.status, requestId: status.requestId };
+                        } catch {
+                            return { ...item, friendStatus: 'none' as FriendStatus };
+                        }
+                    })
+                );
+
+                setSuggestedUsers(usersWithStatus);
+            } catch (err) {
+                console.error('Error loading suggested users:', err);
+            } finally {
+                setLoadingSuggested(false);
+            }
+        };
+
+        void loadSuggested();
+    }, [user]);
 
     useEffect(() => {
         const trimmed = queryText.trim();
@@ -275,7 +309,7 @@ export default function UserSearchPage() {
 
             {showHint && (
                 <div className="text-center text-neutral-500 text-sm mb-4">
-                    Escribe al menos 2 letras para buscar.
+                    {loadingSuggested ? 'Cargando usuarios...' : 'Usuarios sugeridos'}
                 </div>
             )}
 
@@ -289,7 +323,9 @@ export default function UserSearchPage() {
                 {!loading && !error && trimmedQuery.length >= MIN_QUERY_LENGTH && results.length === 0 && (
                     <div className="p-6 text-center text-neutral-500">No hay resultados.</div>
                 )}
-                {!loading && !error && results.map((result) => {
+
+                {/* Show search results or suggested users */}
+                {!loading && !error && (trimmedQuery.length >= MIN_QUERY_LENGTH ? results : suggestedUsers).map((result) => {
                     const initial = result.displayName ? result.displayName.charAt(0).toUpperCase() : '?';
                     return (
                         <div
@@ -297,7 +333,7 @@ export default function UserSearchPage() {
                             className="flex items-center gap-4 bg-neutral-900/20 border border-neutral-800/50 rounded-lg p-4"
                         >
                             <div
-                                className="w-12 h-12 rounded-full bg-neutral-800/80 flex items-center justify-center text-lg font-medium text-neutral-300 cursor-pointer hover:ring-2 hover:ring-amber-500/50 transition-all"
+                                className="w-12 h-12 rounded-full bg-neutral-800/80 flex items-center justify-center text-lg font-medium text-neutral-300 cursor-pointer hover:ring-2 hover:ring-amber-500/50 transition-all overflow-hidden"
                                 onClick={() => navigate(`/user/${result.uid}`)}
                             >
                                 {result.photoURL ? (
@@ -325,6 +361,13 @@ export default function UserSearchPage() {
                         </div>
                     );
                 })}
+
+                {/* Empty state for suggested users */}
+                {showHint && !loadingSuggested && suggestedUsers.length === 0 && (
+                    <div className="p-6 text-center text-neutral-500">
+                        No hay usuarios registrados aún.
+                    </div>
+                )}
             </div>
         </div>
     );
