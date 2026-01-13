@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { Compass, Hash, User, BookOpen, Briefcase, MoreHorizontal, Settings, LogOut, Search, Plus } from 'lucide-react';
+import { Compass, Hash, User, Briefcase, MoreHorizontal, Settings, LogOut, Search, Plus } from 'lucide-react';
 
 import Header from './Header';
 import SidebarItem from './SidebarItem';
@@ -121,7 +121,6 @@ const Sidebar = ({ activeTab, onNavigate, onCreatePost }: NavProps & { onCreateP
       <SidebarItem icon={Search} active={activeTab === 'search'} onClick={() => onNavigate('/search')} tooltip="Buscar" />
       <SidebarItem icon={Hash} active={activeTab === 'feed'} onClick={() => onNavigate('/feed')} tooltip="Conversación" />
       <SidebarItem icon={Briefcase} active={activeTab === 'projects'} onClick={() => onNavigate('/projects')} tooltip="Conexiones" />
-      <SidebarItem icon={BookOpen} active={activeTab === 'library'} onClick={() => onNavigate('/library')} tooltip="Colecciones" />
     </nav>
     <div className="mt-auto mb-4 flex flex-col items-center gap-4">
       <SidebarItem icon={User} active={activeTab === 'profile'} onClick={() => onNavigate('/profile')} tooltip="Perfil" />
@@ -145,7 +144,6 @@ const MobileNav = ({ activeTab, onNavigate }: NavProps) => {
       <button onClick={() => onNavigate('/search')} aria-label="Buscar" className={`p-2.5 ${activeTab === 'search' ? 'text-white' : 'text-neutral-600'}`}><Search size={24} strokeWidth={1} /></button>
       <button onClick={() => onNavigate('/feed')} aria-label="Diálogos" className={`p-2.5 ${activeTab === 'feed' ? 'text-white' : 'text-neutral-600'}`}><Hash size={24} strokeWidth={1} /></button>
       <button onClick={() => onNavigate('/projects')} aria-label="Conexiones" className={`p-2.5 ${activeTab === 'projects' ? 'text-white' : 'text-neutral-600'}`}><Briefcase size={24} strokeWidth={1} /></button>
-      <button onClick={() => onNavigate('/library')} aria-label="Colecciones" className={`p-2.5 ${activeTab === 'library' ? 'text-white' : 'text-neutral-600'}`}><BookOpen size={24} strokeWidth={1} /></button>
       <button onClick={() => onNavigate('/profile')} aria-label="Perfil" className={`p-2.5 ${activeTab === 'profile' ? 'text-white' : 'text-neutral-600'}`}><User size={24} strokeWidth={1} /></button>
     </div>
   );
