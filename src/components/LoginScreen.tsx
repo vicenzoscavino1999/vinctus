@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useAuth } from '../context';
 
 type AuthMode = 'login' | 'register' | 'phone';
@@ -37,7 +37,7 @@ const LoginScreen = () => {
         }
     };
 
-    const handleEmailSubmit = async (e: React.FormEvent) => {
+    const handleEmailSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
         clearError();
@@ -55,7 +55,7 @@ const LoginScreen = () => {
         }
     };
 
-    const handlePhoneSubmit = async (e: React.FormEvent) => {
+    const handlePhoneSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
         clearError();

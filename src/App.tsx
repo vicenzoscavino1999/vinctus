@@ -1,9 +1,9 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
-import { LoginScreen, ToastProvider } from './components';
-import AppLayout from './components/AppLayout';
+import LoginScreen from './components/LoginScreen';
 import PageLoader from './components/PageLoader';
+import { ToastProvider } from './components/Toast';
 import { AppStateProvider, AuthProvider, useAuth } from './context';
 
 const getStoredItem = (key: string): string | null => {
@@ -25,6 +25,7 @@ const setStoredItem = (key: string, value: string): void => {
 };
 
 const OnboardingFlow = lazy(() => import('./components/OnboardingFlow'));
+const AppLayout = lazy(() => import('./components/AppLayout'));
 
 // Inner app that uses auth context
 function AppContent() {
@@ -58,13 +59,15 @@ function AppContent() {
   }
 
   return (
-    <BrowserRouter>
-      <AppStateProvider>
-        <ToastProvider>
-          <AppLayout />
-        </ToastProvider>
-      </AppStateProvider>
-    </BrowserRouter>
+    <Suspense fallback={<PageLoader />}>
+      <BrowserRouter>
+        <AppStateProvider>
+          <ToastProvider>
+            <AppLayout />
+          </ToastProvider>
+        </AppStateProvider>
+      </BrowserRouter>
+    </Suspense>
   );
 }
 

@@ -103,5 +103,23 @@ export default defineConfig({
             }
         })
     ],
+    build: {
+        rollupOptions: {
+            output: {
+                manualChunks: (id) => {
+                    if (id.includes('node_modules')) {
+                        if (id.includes('firebase')) return 'firebase';
+                        if (id.includes('lucide-react')) return 'icons';
+                        if (id.includes('react')) return 'react';
+                        return 'vendor';
+                    }
+                    if (id.includes('/src/data/') || id.includes('\\src\\data\\')) {
+                        return 'data';
+                    }
+                    return undefined;
+                },
+            },
+        },
+    },
 });
 

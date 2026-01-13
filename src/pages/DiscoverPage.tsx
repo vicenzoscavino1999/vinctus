@@ -85,7 +85,7 @@ const DiscoverPage = () => {
         }
 
         return result;
-    }, [searchQuery, filters]);
+    }, [searchQuery, filters, userInterests]);
 
     const handleSearch = (e: ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;

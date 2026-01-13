@@ -8,7 +8,6 @@ export { default as LibraryItem } from './LibraryItem';
 export { default as EventCard } from './EventCard';
 export { default as ApiContentCard } from './ApiContentCard';
 export { default as Header } from './Header';
-export { default as AppLayout } from './AppLayout';
 export { default as PageLoader } from './PageLoader';
 export { default as UserProfilePage } from './UserProfilePage';
 export { default as LoginScreen } from './LoginScreen';

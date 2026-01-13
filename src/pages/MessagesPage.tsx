@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useSearchParams } from 'react-router-dom';
 import {
     subscribeToConversations,
     subscribeToMessages,
@@ -16,15 +17,42 @@ export default function MessagesPage() {
     const [messages, setMessages] = useState<MessageRead[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const [searchParams, setSearchParams] = useSearchParams();
+    const conversationParam = searchParams.get('conversation');
+
+    useEffect(() => {
+        if (conversationParam && conversationParam !== selectedConversationId) {
+            setSelectedConversationId(conversationParam);
+        }
+    }, [conversationParam, selectedConversationId]);
 
     // Subscribe to conversations
     useEffect(() => {
-        if (!user) return;
-
-        const unsubscribe = subscribeToConversations(user.uid, (convs) => {
-            setConversations(convs);
+        if (!user) {
+            setConversations([]);
             setLoading(false);
-        });
+            setError('Necesitas iniciar sesion para ver mensajes.');
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+
+        const unsubscribe = subscribeToConversations(
+            user.uid,
+            (convs) => {
+                setConversations(convs);
+                setLoading(false);
+            },
+            (err) => {
+                console.error('Error loading conversations:', err);
+                setConversations([]);
+                setLoading(false);
+                setError('No se pudieron cargar conversaciones.');
+            }
+        );
 
         return () => unsubscribe();
     }, [user]);
@@ -47,7 +75,17 @@ export default function MessagesPage() {
         markConversationRead(selectedConversationId, user.uid);
     }, [selectedConversationId, user]);
 
-    const handleSendMessage = async (e: React.FormEvent) => {
+    const handleSelectConversation = (conversationId: string) => {
+        setSelectedConversationId(conversationId);
+
+        if (conversationId !== conversationParam) {
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.set('conversation', conversationId);
+            setSearchParams(nextParams, { replace: true });
+        }
+    };
+
+    const handleSendMessage = async (e: FormEvent) => {
         e.preventDefault();
         if (!newMessage.trim() || !selectedConversationId || !user) return;
 
@@ -76,15 +114,19 @@ export default function MessagesPage() {
                         <h2 className="text-lg font-medium text-white">Conversaciones</h2>
                     </div>
                     <div className="flex-1 overflow-y-auto">
-                        {conversations.length === 0 ? (
+                        {error ? (
+                            <div className="p-6 text-center text-red-400">
+                                {error}
+                            </div>
+                        ) : conversations.length === 0 ? (
                             <div className="p-6 text-center text-neutral-500">
-                                No hay conversaciones aún
+                                No hay conversaciones aun
                             </div>
                         ) : (
                             conversations.map((conv) => (
                                 <button
                                     key={conv.id}
-                                    onClick={() => setSelectedConversationId(conv.id)}
+                                    onClick={() => handleSelectConversation(conv.id)}
                                     className={`w-full p-4 text-left border-b border-neutral-800 hover:bg-neutral-800/30 transition ${selectedConversationId === conv.id ? 'bg-neutral-800/50' : ''
                                         }`}
                                 >

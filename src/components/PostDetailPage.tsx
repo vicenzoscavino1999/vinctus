@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Heart, MessageCircle, Bookmark, Share2, User } from 'lucide-react';
 import { useAppState } from '../context';
@@ -193,7 +192,15 @@ const PostDetailPage = () => {
     const navigate = useNavigate();
 
     const postIdStr = postId || '';
-    const isValidId = !!postIdStr && !!POSTS_DATA[postIdStr];
+    const post = POSTS_DATA[postIdStr];
+    const isValidId = !!post;
+
+    // Use AppState for persistence
+    const { isPostLiked, toggleLikePost, isPostSaved, toggleSavePost } = useAppState();
+    const liked = post ? isPostLiked(postIdStr) : false;
+    const saved = post ? isPostSaved(postIdStr) : false;
+    const postLikes = post?.likes ?? 0;
+    const likeCount = postLikes + (liked ? 1 : 0);
 
     // If invalid ID, show error state
     if (!isValidId) {
@@ -210,22 +217,8 @@ const PostDetailPage = () => {
         );
     }
 
-    const post = POSTS_DATA[postIdStr];
-
-    // Use AppState for persistence
-    const { isPostLiked, toggleLikePost, isPostSaved, toggleSavePost } = useAppState();
-    const liked = isPostLiked(postIdStr);
-    const saved = isPostSaved(postIdStr);
-    const [likeCount, setLikeCount] = useState(post.likes);
-
-    // Reset like count when postId changes
-    useEffect(() => {
-        setLikeCount(post.likes + (liked ? 1 : 0));
-    }, [postId, post.likes, liked]);
-
     const handleLike = () => {
         toggleLikePost(postIdStr);
-        setLikeCount(prev => liked ? prev - 1 : prev + 1);
     };
 
     const handleSave = () => {

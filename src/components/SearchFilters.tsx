@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { X } from 'lucide-react';
 import { CATEGORIES } from '../data';
 
@@ -46,7 +46,7 @@ const SearchFilters = ({ isOpen, onClose, filters, onApply }: SearchFiltersProps
     }, [isOpen, handleKeyDown]);
 
     // Focus trap - keep focus within modal
-    const handleTabKey = (e: React.KeyboardEvent) => {
+    const handleTabKey = (e: ReactKeyboardEvent) => {
         if (e.key !== 'Tab' || !panelRef.current) return;
 
         const focusableElements = panelRef.current.querySelectorAll<HTMLElement>(

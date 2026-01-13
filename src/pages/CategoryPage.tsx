@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Hash, ArrowRight, Feather } from 'lucide-react';
 import {
@@ -11,21 +11,17 @@ import {
 } from '../components';
 import { useApiContent } from '../hooks';
 import { CATEGORIES } from '../data';
-import type { Subgroup } from '../types';
 
 const CategoryPage = () => {
     const { categoryId } = useParams();
     const navigate = useNavigate();
     const [viewMode, setViewMode] = useState('live');
-    const [selectedSubgroup, setSelectedSubgroup] = useState<Subgroup | null>(null);
+    const [selectedSubgroupId, setSelectedSubgroupId] = useState<string | null>(null);
     const { showToast } = useToast();
 
-    // Reset selectedSubgroup when category changes
-    useEffect(() => {
-        setSelectedSubgroup(null);
-    }, [categoryId]);
-
     const category = CATEGORIES.find(c => c.id === categoryId);
+    const selectedSubgroup = category?.subgroups.find(subgroup => subgroup.id === selectedSubgroupId) || null;
+    const activeSubgroupId = selectedSubgroup?.id || category?.subgroups[0]?.id || null;
 
     // Get API query from selected subgroup or default to first one
     const apiQuery = viewMode === 'live'
@@ -106,8 +102,8 @@ const CategoryPage = () => {
                         {category.subgroups.map((group) => (
                             <button
                                 key={group.id}
-                                onClick={() => setSelectedSubgroup(group)}
-                                className={`text-xs px-4 py-2 rounded-full border transition-colors ${(selectedSubgroup?.id || category.subgroups[0].id) === group.id
+                                onClick={() => setSelectedSubgroupId(group.id)}
+                                className={`text-xs px-4 py-2 rounded-full border transition-colors ${activeSubgroupId === group.id
                                     ? 'bg-white text-black border-white'
                                     : 'border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-white'
                                     }`}

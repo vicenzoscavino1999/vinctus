@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Search, ArrowRight, FolderPlus } from 'lucide-react';
 import { useToast } from '../components/Toast';
 
@@ -41,22 +41,19 @@ const LibraryPage = () => {
     ];
 
     // Filter folders and recents based on search query
-    const filteredFolders = useMemo(() => {
-        if (!searchQuery.trim()) return FOLDERS;
-        const query = searchQuery.toLowerCase();
-        return FOLDERS.filter(folder =>
-            folder.name.toLowerCase().includes(query)
+    const filteredFolders = !searchQuery.trim()
+        ? FOLDERS
+        : FOLDERS.filter(folder =>
+            folder.name.toLowerCase().includes(searchQuery.toLowerCase())
         );
-    }, [searchQuery]);
 
-    const filteredRecents = useMemo(() => {
-        if (!searchQuery.trim()) return RECENTS;
-        const query = searchQuery.toLowerCase();
-        return RECENTS.filter(item =>
-            item.title.toLowerCase().includes(query) ||
-            item.collection.toLowerCase().includes(query)
-        );
-    }, [searchQuery]);
+    const filteredRecents = !searchQuery.trim()
+        ? RECENTS
+        : RECENTS.filter(item => {
+            const query = searchQuery.toLowerCase();
+            return item.title.toLowerCase().includes(query) ||
+                item.collection.toLowerCase().includes(query);
+        });
 
     const handleNewFolder = () => {
         showToast('Crear carpetas estará disponible pronto', 'info');

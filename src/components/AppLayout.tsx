@@ -1,10 +1,11 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { Compass, Hash, User, BookOpen, Briefcase } from 'lucide-react';
+import { Compass, Hash, User, BookOpen, Briefcase, MoreHorizontal, Settings, LogOut } from 'lucide-react';
 
 import Header from './Header';
 import SidebarItem from './SidebarItem';
 import PageLoader from './PageLoader';
+import { useAuth } from '../context/AuthContext';
 
 // Lazy loaded components
 const GroupDetailPage = lazy(() => import('./GroupDetailPage'));
@@ -21,6 +22,9 @@ const ProfilePage = lazy(() => import('../pages/ProfilePage'));
 const NotificationsPage = lazy(() => import('../pages/NotificationsPage'));
 const MessagesPage = lazy(() => import('../pages/MessagesPage'));
 
+// Settings page (lazy loaded)
+const SettingsPage = lazy(() => import('../pages/SettingsPage'));
+
 type NavProps = {
   activeTab: string;
   onNavigate: (path: string) => void;
@@ -33,6 +37,74 @@ const Logo = () => (
   </div>
 );
 
+// More Menu Component
+const MoreMenu = ({ onNavigate }: { onNavigate: (path: string) => void }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const { signOut } = useAuth();
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      // Auth state change will handle redirect, but we can force it too if needed
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`p-3 rounded-xl transition-all duration-200 group flex items-center justify-center
+          ${isOpen ? 'bg-white/10 text-white' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}
+        aria-label="Más opciones"
+        title="Más opciones"
+      >
+        <MoreHorizontal size={24} strokeWidth={1.5} className="group-hover:scale-105 transition-transform duration-200" />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-full ml-4 bottom-0 w-48 bg-[#1A1A1A] border border-neutral-800 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-50">
+          <div className="py-1">
+            <button
+              onClick={() => {
+                onNavigate('/settings');
+                setIsOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-neutral-300 hover:bg-white/5 hover:text-white flex items-center gap-3 transition-colors"
+            >
+              <Settings size={18} />
+              Configuración
+            </button>
+            <div className="h-px bg-neutral-800 my-1" />
+            <button
+              onClick={handleSignOut}
+              className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 flex items-center gap-3 transition-colors"
+            >
+              <LogOut size={18} />
+              Cerrar sesión
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Sidebar component
 const Sidebar = ({ activeTab, onNavigate }: NavProps) => (
   <aside className="hidden md:flex w-20 flex-col items-center py-12 fixed h-full z-20 border-r border-neutral-900/50 bg-bg">
@@ -43,22 +115,32 @@ const Sidebar = ({ activeTab, onNavigate }: NavProps) => (
       <SidebarItem icon={Briefcase} active={activeTab === 'projects'} onClick={() => onNavigate('/projects')} tooltip="Conexiones" />
       <SidebarItem icon={BookOpen} active={activeTab === 'library'} onClick={() => onNavigate('/library')} tooltip="Colecciones" />
     </nav>
-    <div className="mt-auto mb-4">
+    <div className="mt-auto mb-4 flex flex-col items-center gap-4">
       <SidebarItem icon={User} active={activeTab === 'profile'} onClick={() => onNavigate('/profile')} tooltip="Perfil" />
+      <MoreMenu onNavigate={onNavigate} />
     </div>
   </aside>
 );
 
 // Mobile navigation
-const MobileNav = ({ activeTab, onNavigate }: NavProps) => (
-  <div className="md:hidden fixed bottom-0 w-full bg-bg/95 backdrop-blur-md border-t border-neutral-900 flex justify-around px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] z-50">
-    <button onClick={() => onNavigate('/discover')} aria-label="Descubrir" className={`p-2.5 ${activeTab === 'discover' ? 'text-white' : 'text-neutral-600'}`}><Compass size={24} strokeWidth={1} /></button>
-    <button onClick={() => onNavigate('/feed')} aria-label="Diálogos" className={`p-2.5 ${activeTab === 'feed' ? 'text-white' : 'text-neutral-600'}`}><Hash size={24} strokeWidth={1} /></button>
-    <button onClick={() => onNavigate('/projects')} aria-label="Conexiones" className={`p-2.5 ${activeTab === 'projects' ? 'text-white' : 'text-neutral-600'}`}><Briefcase size={24} strokeWidth={1} /></button>
-    <button onClick={() => onNavigate('/library')} aria-label="Colecciones" className={`p-2.5 ${activeTab === 'library' ? 'text-white' : 'text-neutral-600'}`}><BookOpen size={24} strokeWidth={1} /></button>
-    <button onClick={() => onNavigate('/profile')} aria-label="Perfil" className={`p-2.5 ${activeTab === 'profile' ? 'text-white' : 'text-neutral-600'}`}><User size={24} strokeWidth={1} /></button>
-  </div>
-);
+const MobileNav = ({ activeTab, onNavigate }: NavProps) => {
+  // For mobile we might want a different implementation of MoreMenu (e.g. drawer)
+  // For now, let's keep it simple or maybe just add the profile link as the last item
+  // and put settings inside the profile page or a dedicated settings tab if requested.
+  // The user specifically asked for "a button in the functions part", implying the sidebar.
+  // Let's add it to mobile too as a drawer trigger or similar if needed, but for now standard nav.
+
+  // Changing the request to fit mobile: usually "More" is the last item.
+  return (
+    <div className="md:hidden fixed bottom-0 w-full bg-bg/95 backdrop-blur-md border-t border-neutral-900 flex justify-around px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] z-50">
+      <button onClick={() => onNavigate('/discover')} aria-label="Descubrir" className={`p-2.5 ${activeTab === 'discover' ? 'text-white' : 'text-neutral-600'}`}><Compass size={24} strokeWidth={1} /></button>
+      <button onClick={() => onNavigate('/feed')} aria-label="Diálogos" className={`p-2.5 ${activeTab === 'feed' ? 'text-white' : 'text-neutral-600'}`}><Hash size={24} strokeWidth={1} /></button>
+      <button onClick={() => onNavigate('/projects')} aria-label="Conexiones" className={`p-2.5 ${activeTab === 'projects' ? 'text-white' : 'text-neutral-600'}`}><Briefcase size={24} strokeWidth={1} /></button>
+      <button onClick={() => onNavigate('/library')} aria-label="Colecciones" className={`p-2.5 ${activeTab === 'library' ? 'text-white' : 'text-neutral-600'}`}><BookOpen size={24} strokeWidth={1} /></button>
+      <button onClick={() => onNavigate('/profile')} aria-label="Perfil" className={`p-2.5 ${activeTab === 'profile' ? 'text-white' : 'text-neutral-600'}`}><User size={24} strokeWidth={1} /></button>
+    </div>
+  );
+};
 
 // Main App Layout
 const AppLayout = () => {
@@ -100,7 +182,7 @@ const AppLayout = () => {
                 <Route path="/feed" element={<FeedPage />} />
                 <Route path="/projects" element={<ProjectsPage />} />
                 <Route path="/library" element={<LibraryPage />} />
-
+                <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/user/:userId" element={<UserProfilePage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />

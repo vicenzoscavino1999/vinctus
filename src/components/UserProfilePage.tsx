@@ -20,6 +20,7 @@ type UserContribution = {
 
 type UserProfile = {
     id: string;
+    uid?: string;
     name: string;
     role: string;
     location: string;
@@ -110,18 +111,21 @@ const UserProfilePage = () => {
     // In production, this should use real Firebase UIDs
     // TODO: Replace with real user data from Firestore users collection
     const handleSendMessage = async () => {
-        if (!currentUser || !userId) return;
+        if (!currentUser || !user) return;
+
+        if (!user.uid) {
+            alert('Chat no disponible para perfiles de prueba.');
+            return;
+        }
 
         setSendingMessage(true);
         try {
-            // FIXME: userId here is a slug ("marco-v"), not a real Firebase UID
-            // This will create conversations with incorrect IDs until real user data is integrated
-            const conversationId = await getOrCreateDirectConversation(currentUser.uid, userId);
+            const conversationId = await getOrCreateDirectConversation(currentUser.uid, user.uid);
             // Navigate to messages page with conversation selected
             navigate(`/messages?conversation=${conversationId}`);
         } catch (error) {
             console.error('Error creating conversation:', error);
-            alert('Error al crear la conversación');
+            alert('Error al crear la conversaci?n');
         } finally {
             setSendingMessage(false);
         }

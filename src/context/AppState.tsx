@@ -8,7 +8,9 @@ import {
     useCallback,
     useMemo,
     useEffect,
-    type ReactNode
+    type ReactNode,
+    type Dispatch,
+    type SetStateAction
 } from 'react';
 import type { AppStateContextType } from '../types';
 import { useAuth } from './AuthContext';
@@ -124,35 +126,38 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
     /**
      * Execute action with optimistic update and rollback on failure
      */
-    const executeOptimistic = async <T,>(
-        setState: React.Dispatch<React.SetStateAction<T>>,
-        optimisticValue: T,
-        rollbackValue: T,
-        action: () => Promise<void>,
-        storageKey?: string
-    ): Promise<void> => {
-        // Optimistic update
-        setState(optimisticValue);
+    const executeOptimistic = useCallback(
+        async function executeOptimistic<T>(
+            setState: Dispatch<SetStateAction<T>>,
+            optimisticValue: T,
+            rollbackValue: T,
+            action: () => Promise<void>,
+            storageKey?: string
+        ): Promise<void> {
+            // Optimistic update
+            setState(optimisticValue);
 
-        // Update localStorage for anonymous users
-        if (!uid && storageKey) {
-            setStoredValue(storageKey, optimisticValue);
-        }
-
-        try {
-            // Execute Firestore action (only for authenticated users)
-            if (uid) {
-                await action();
-            }
-        } catch (error) {
-            // Rollback on failure
-            console.error('Action failed, rolling back:', error);
-            setState(rollbackValue);
+            // Update localStorage for anonymous users
             if (!uid && storageKey) {
-                setStoredValue(storageKey, rollbackValue);
+                setStoredValue(storageKey, optimisticValue);
             }
-        }
-    };
+
+            try {
+                // Execute Firestore action (only for authenticated users)
+                if (uid) {
+                    await action();
+                }
+            } catch (error) {
+                // Rollback on failure
+                console.error('Action failed, rolling back:', error);
+                setState(rollbackValue);
+                if (!uid && storageKey) {
+                    setStoredValue(storageKey, rollbackValue);
+                }
+            }
+        },
+        [uid]
+    );
 
     // ==================== Group Actions ====================
 
@@ -171,7 +176,7 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
                 : Promise.resolve(),
             STORAGE_KEYS.JOINED_GROUPS
         );
-    }, [joinedGroups, uid]);
+    }, [joinedGroups, uid, executeOptimistic]);
 
     const isGroupJoined = useCallback((groupId: string): boolean => {
         return joinedGroups.includes(groupId);
@@ -194,7 +199,7 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
                 : Promise.resolve(),
             STORAGE_KEYS.SAVED_CATEGORIES
         );
-    }, [savedCategories, uid]);
+    }, [savedCategories, uid, executeOptimistic]);
 
     const isCategorySaved = useCallback((categoryId: string): boolean => {
         return savedCategories.includes(categoryId);
@@ -217,7 +222,7 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
                 : Promise.resolve(),
             STORAGE_KEYS.LIKED_POSTS
         );
-    }, [likedPosts, uid]);
+    }, [likedPosts, uid, executeOptimistic]);
 
     const isPostLiked = useCallback((postId: string): boolean => {
         return likedPosts.includes(postId);
@@ -240,7 +245,7 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
                 : Promise.resolve(),
             STORAGE_KEYS.SAVED_POSTS
         );
-    }, [savedPosts, uid]);
+    }, [savedPosts, uid, executeOptimistic]);
 
     const isPostSaved = useCallback((postId: string): boolean => {
         return savedPosts.includes(postId);

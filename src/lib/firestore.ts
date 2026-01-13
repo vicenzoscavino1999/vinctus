@@ -665,6 +665,7 @@ export interface TypingIndicatorRead {
 export interface ConversationWrite {
     type: 'direct' | 'group';
     groupId?: string;
+    memberIds?: string[];
     lastMessage: {
         text: string;
         senderId: string;
@@ -704,18 +705,22 @@ export interface TypingIndicatorWrite {
  * IDs are deterministic: dm_${sortedUids}
  */
 export const getOrCreateDirectConversation = async (uid1: string, uid2: string): Promise<string> => {
-    const conversationId = `dm_${[uid1, uid2].sort().join('_')}`;
+    const memberIds = [uid1, uid2].sort();
+    const conversationId = `dm_${memberIds.join('_')}`;
     const convRef = doc(db, 'conversations', conversationId);
 
-    const batch = writeBatch(db);
-
-    // Create conversation (idempotent - merge prevents overwriting)
-    batch.set(convRef, {
+    // Ensure conversation doc exists before member writes (rules use memberIds)
+    const convBatch = writeBatch(db);
+    convBatch.set(convRef, {
         type: 'direct',
+        memberIds,
         lastMessage: null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
     } as ConversationWrite, { merge: true });
+    await convBatch.commit();
+
+    const batch = writeBatch(db);
 
     // Create member docs (idempotent - merge prevents overwriting)
     batch.set(doc(db, `conversations/${conversationId}/members`, uid1), {
@@ -748,16 +753,18 @@ export const getOrCreateGroupConversation = async (groupId: string, uid: string)
     const conversationId = `grp_${groupId}`;
     const convRef = doc(db, 'conversations', conversationId);
 
-    const batch = writeBatch(db);
-
-    // Create conversation (idempotent - merge prevents overwriting)
-    batch.set(convRef, {
+    // Ensure conversation doc exists before member writes (rules rely on it)
+    const convBatch = writeBatch(db);
+    convBatch.set(convRef, {
         type: 'group',
         groupId,
         lastMessage: null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
     } as ConversationWrite, { merge: true });
+    await convBatch.commit();
+
+    const batch = writeBatch(db);
 
     // Create member doc for current user (merge prevents overwriting)
     batch.set(doc(db, `conversations/${conversationId}/members`, uid), {
@@ -814,7 +821,8 @@ export const sendMessage = async (conversationId: string, uid: string, text: str
  */
 export const subscribeToConversations = (
     uid: string,
-    callback: (conversations: ConversationRead[]) => void
+    callback: (conversations: ConversationRead[]) => void,
+    onError?: (error: unknown) => void
 ): Unsubscribe => {
     // Subscribe to all conversations (limited approach for MVP)
     // In production, use a Cloud Function to maintain user's conversation list
@@ -824,31 +832,46 @@ export const subscribeToConversations = (
         limit(100)
     );
 
-    return onSnapshot(q, async (snapshot) => {
-        const conversations = [];
-
-        for (const convDoc of snapshot.docs) {
-            const data = convDoc.data();
-
-            // Check if user is a member
-            const memberDoc = await getDoc(doc(db, `conversations/${convDoc.id}/members`, uid));
-            if (!memberDoc.exists()) continue;
-
-            conversations.push({
-                id: convDoc.id,
-                type: data.type,
-                groupId: data.groupId,
-                lastMessage: data.lastMessage ? {
-                    ...data.lastMessage,
-                    createdAt: toDate(data.lastMessage.createdAt) || new Date()
-                } : null,
-                createdAt: toDate(data.createdAt) || new Date(),
-                updatedAt: toDate(data.updatedAt) || new Date()
-            } as ConversationRead);
+    const handleError = (error: unknown) => {
+        console.error('Error subscribing to conversations:', error);
+        if (onError) {
+            onError(error);
         }
+    };
 
-        callback(conversations);
-    });
+    return onSnapshot(
+        q,
+        async (snapshot) => {
+            try {
+                const conversations = [];
+
+                for (const convDoc of snapshot.docs) {
+                    const data = convDoc.data();
+
+                    // Check if user is a member
+                    const memberDoc = await getDoc(doc(db, `conversations/${convDoc.id}/members`, uid));
+                    if (!memberDoc.exists()) continue;
+
+                    conversations.push({
+                        id: convDoc.id,
+                        type: data.type,
+                        groupId: data.groupId,
+                        lastMessage: data.lastMessage ? {
+                            ...data.lastMessage,
+                            createdAt: toDate(data.lastMessage.createdAt) || new Date()
+                        } : null,
+                        createdAt: toDate(data.createdAt) || new Date(),
+                        updatedAt: toDate(data.updatedAt) || new Date()
+                    } as ConversationRead);
+                }
+
+                callback(conversations);
+            } catch (error) {
+                handleError(error);
+            }
+        },
+        handleError
+    );
 };
 
 /**
