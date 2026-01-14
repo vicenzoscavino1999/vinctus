@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { Compass, Hash, User, Briefcase, MoreHorizontal, Settings, LogOut, Search, Plus } from 'lucide-react';
+import { Compass, Hash, User, Briefcase, MoreHorizontal, Settings, LogOut, Search } from 'lucide-react';
 
 import Header from './Header';
 import SidebarItem from './SidebarItem';
@@ -31,18 +31,6 @@ type NavProps = {
   activeTab: string;
   onNavigate: (path: string) => void;
 };
-
-// Create Post button component
-const CreatePostButton = ({ onClick }: { onClick: () => void }) => (
-  <button
-    onClick={onClick}
-    className="w-14 h-14 flex items-center justify-center mb-16 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black shadow-lg shadow-amber-500/20 hover:shadow-amber-500/40 transition-all duration-300 hover:scale-105"
-    aria-label="Crear publicación"
-    title="Crear publicación"
-  >
-    <Plus size={28} strokeWidth={2} />
-  </button>
-);
 
 // More Menu Component
 const MoreMenu = ({ onNavigate }: { onNavigate: (path: string) => void }) => {
@@ -113,16 +101,16 @@ const MoreMenu = ({ onNavigate }: { onNavigate: (path: string) => void }) => {
 };
 
 // Sidebar component
-const Sidebar = ({ activeTab, onNavigate, onCreatePost }: NavProps & { onCreatePost: () => void }) => (
+const Sidebar = ({ activeTab, onNavigate }: NavProps) => (
   <aside className="hidden md:flex w-20 flex-col items-center py-12 fixed h-full z-20 border-r border-neutral-900/50 bg-bg">
     {/* Logo at top */}
     <button
       onClick={() => onNavigate('/discover')}
-      className="w-14 h-14 flex items-center justify-center mb-16 text-white hover:text-amber-500 transition-colors"
+      className="w-14 h-14 flex items-center justify-center mb-16 hover:opacity-80 transition-opacity"
       aria-label="Inicio"
       title="Inicio"
     >
-      <img src="/logo.svg" alt="Vinctus" className="w-10 h-10" />
+      <img src="/logo-vinctus.png" alt="Vinctus" className="w-12 h-12" />
     </button>
     <nav className="flex flex-col space-y-4">
       <SidebarItem icon={Compass} active={activeTab === 'discover'} onClick={() => onNavigate('/discover')} tooltip="Descubrir" />
@@ -131,7 +119,6 @@ const Sidebar = ({ activeTab, onNavigate, onCreatePost }: NavProps & { onCreateP
       <SidebarItem icon={Briefcase} active={activeTab === 'projects'} onClick={() => onNavigate('/projects')} tooltip="Conexiones" />
     </nav>
     <div className="mt-auto mb-4 flex flex-col items-center gap-4">
-      <CreatePostButton onClick={onCreatePost} />
       <SidebarItem icon={User} active={activeTab === 'profile'} onClick={() => onNavigate('/profile')} tooltip="Perfil" />
       <MoreMenu onNavigate={onNavigate} />
     </div>
@@ -191,7 +178,7 @@ const AppLayout = () => {
       <div className="fixed inset-0 opacity-[0.03] pointer-events-none z-0 mix-blend-overlay" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} />
 
       <div className="flex h-screen relative z-10">
-        <Sidebar activeTab={getActiveTab()} onNavigate={navigate} onCreatePost={handleCreatePost} />
+        <Sidebar activeTab={getActiveTab()} onNavigate={navigate} />
         <MobileNav activeTab={getActiveTab()} onNavigate={navigate} />
         <Header onCreatePost={handleCreatePost} />
 
