@@ -166,7 +166,7 @@ const AppLayout = () => {
     if (pathname === '/profile') return 'profile';
     if (pathname === '/notifications') return 'profile';
     if (pathname === '/messages') return 'feed';
-    if (pathname.startsWith('/user/')) return 'profile';
+    if (pathname.startsWith('/user/')) return 'search';
     if (pathname.startsWith('/group/')) return 'discover';
     if (pathname.startsWith('/post/')) return 'discover';
     return 'discover';
