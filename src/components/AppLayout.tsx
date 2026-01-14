@@ -115,7 +115,15 @@ const MoreMenu = ({ onNavigate }: { onNavigate: (path: string) => void }) => {
 // Sidebar component
 const Sidebar = ({ activeTab, onNavigate, onCreatePost }: NavProps & { onCreatePost: () => void }) => (
   <aside className="hidden md:flex w-20 flex-col items-center py-12 fixed h-full z-20 border-r border-neutral-900/50 bg-bg">
-    <CreatePostButton onClick={onCreatePost} />
+    {/* Logo at top */}
+    <button
+      onClick={() => onNavigate('/discover')}
+      className="w-14 h-14 flex items-center justify-center mb-16 text-white hover:text-amber-500 transition-colors"
+      aria-label="Inicio"
+      title="Inicio"
+    >
+      <img src="/logo.svg" alt="Vinctus" className="w-10 h-10" />
+    </button>
     <nav className="flex flex-col space-y-4">
       <SidebarItem icon={Compass} active={activeTab === 'discover'} onClick={() => onNavigate('/discover')} tooltip="Descubrir" />
       <SidebarItem icon={Search} active={activeTab === 'search'} onClick={() => onNavigate('/search')} tooltip="Buscar" />
@@ -123,6 +131,7 @@ const Sidebar = ({ activeTab, onNavigate, onCreatePost }: NavProps & { onCreateP
       <SidebarItem icon={Briefcase} active={activeTab === 'projects'} onClick={() => onNavigate('/projects')} tooltip="Conexiones" />
     </nav>
     <div className="mt-auto mb-4 flex flex-col items-center gap-4">
+      <CreatePostButton onClick={onCreatePost} />
       <SidebarItem icon={User} active={activeTab === 'profile'} onClick={() => onNavigate('/profile')} tooltip="Perfil" />
       <MoreMenu onNavigate={onNavigate} />
     </div>
