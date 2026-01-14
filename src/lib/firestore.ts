@@ -1324,25 +1324,59 @@ export async function deletePost(postId: string): Promise<void> {
 
 /**
  * Get user profile by UID
+ * Handles multiple scenarios:
+ * - User exists in private 'users' collection
+ * - User only exists in public 'users_public' collection
+ * - Permission denied on 'users' collection (fallback to public)
+ * - Missing fields in 'users' (complement with 'users_public')
  */
 export async function getUserProfile(uid: string): Promise<UserProfileRead | null> {
-    const userDoc = await getDoc(doc(db, 'users', uid));
-    if (!userDoc.exists()) return null;
+    let privateData = null;
+    let publicData = null;
 
-    const data = userDoc.data();
+    // 1. Try private collection (might fail with permission-denied)
+    try {
+        const userDoc = await getDoc(doc(db, 'users', uid));
+        if (userDoc.exists()) {
+            privateData = userDoc.data();
+        }
+    } catch (error: any) {
+        // Log permission-denied for debugging
+        if (error?.code === 'permission-denied') {
+            console.log('[getUserProfile] Permission denied for users/' + uid + ', falling back to public');
+        }
+    }
+
+    // 2. Load public data (always, for fallback or complementing)
+    try {
+        const publicDoc = await getDoc(doc(db, 'users_public', uid));
+        if (publicDoc.exists()) {
+            publicData = publicDoc.data();
+        }
+    } catch (error) {
+        console.error('[getUserProfile] Error loading public data:', error);
+    }
+
+    // 3. If neither exists, user not found
+    if (!privateData && !publicData) {
+        console.log('[getUserProfile] User not found in users or users_public: ' + uid);
+        return null;
+    }
+
+    // 4. Merge data (private first, complement with public)
     return {
-        uid: data.uid || uid,
-        displayName: data.displayName || null,
-        displayNameLowercase: data.displayNameLowercase || null,
-        photoURL: data.photoURL || null,
-        email: data.email || null,
-        bio: data.bio || null,
-        role: data.role || null,
-        location: data.location || null,
-        username: data.username || null,
-        reputation: data.reputation || 0,
-        createdAt: toDate(data.createdAt) || new Date(),
-        updatedAt: toDate(data.updatedAt) || new Date()
+        uid: uid,
+        displayName: privateData?.displayName ?? publicData?.displayName ?? null,
+        displayNameLowercase: privateData?.displayNameLowercase ?? publicData?.displayNameLowercase ?? null,
+        photoURL: privateData?.photoURL ?? publicData?.photoURL ?? null,
+        email: privateData?.email ?? null,
+        bio: privateData?.bio ?? null,
+        role: privateData?.role ?? null,
+        location: privateData?.location ?? null,
+        username: privateData?.username ?? publicData?.username ?? null,
+        reputation: privateData?.reputation ?? 0,
+        createdAt: toDate(privateData?.createdAt ?? publicData?.createdAt) ?? new Date(),
+        updatedAt: toDate(privateData?.updatedAt ?? publicData?.updatedAt) ?? new Date()
     };
 }
 
