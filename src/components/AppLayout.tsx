@@ -164,6 +164,7 @@ const AppLayout = () => {
     if (pathname === '/projects') return 'projects';
     if (pathname === '/library') return 'library';
     if (pathname === '/profile') return 'profile';
+    if (pathname === '/settings') return 'profile';
     if (pathname === '/notifications') return 'profile';
     if (pathname === '/messages') return 'feed';
     if (pathname.startsWith('/user/')) return 'search';
