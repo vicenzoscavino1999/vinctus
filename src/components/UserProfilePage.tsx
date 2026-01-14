@@ -1,4 +1,4 @@
-import { ChevronLeft, MapPin, BookOpen, UserPlus, Check, Clock, Loader2 } from 'lucide-react';
+import { ChevronLeft, MapPin, BookOpen, UserPlus, Check, Clock, Loader2, MessageCircle } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,7 @@ import {
     sendFriendRequest,
     acceptFriendRequest,
     cancelFriendRequest,
+    getOrCreateDirectConversation,
     type UserProfileRead
 } from '../lib/firestore';
 
@@ -105,16 +106,40 @@ const UserProfilePage = () => {
         }
     };
 
+    const handleSendMessage = async () => {
+        if (!currentUser || !userId) return;
+
+        setActionLoading(true);
+        try {
+            const conversationId = await getOrCreateDirectConversation(currentUser.uid, userId);
+            navigate(`/messages?conversation=${conversationId}`);
+        } catch {
+            showToast('Error al crear conversación', 'error');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     const renderFriendButton = () => {
         if (!currentUser || currentUser.uid === userId) return null;
 
         switch (friendStatus) {
             case 'friends':
                 return (
-                    <span className="flex items-center gap-2 px-5 py-2.5 text-green-400 text-sm">
-                        <Check size={16} />
-                        Amigos
-                    </span>
+                    <>
+                        <button
+                            onClick={handleSendMessage}
+                            disabled={actionLoading}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-neutral-800 border border-neutral-700 text-white hover:bg-neutral-700 transition-colors text-sm disabled:opacity-50 rounded-lg"
+                        >
+                            <MessageCircle size={16} />
+                            Mensaje
+                        </button>
+                        <span className="flex items-center gap-2 px-5 py-2.5 text-green-400 text-sm">
+                            <Check size={16} />
+                            Amigos
+                        </span>
+                    </>
                 );
             case 'pending_sent':
                 return (
