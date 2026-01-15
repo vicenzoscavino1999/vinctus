@@ -661,6 +661,7 @@ export interface ConversationRead {
     id: string;
     type: 'direct' | 'group';
     groupId?: string;
+    memberIds?: string[];
     lastMessage: {
         text: string;
         senderId: string;
@@ -744,39 +745,46 @@ export const getOrCreateDirectConversation = async (uid1: string, uid2: string):
     const conversationId = `dm_${memberIds.join('_')}`;
     const convRef = doc(db, 'conversations', conversationId);
 
-    // Ensure conversation doc exists before member writes (rules use memberIds)
-    const convBatch = writeBatch(db);
-    convBatch.set(convRef, {
-        type: 'direct',
-        memberIds,
-        lastMessage: null,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-    } as ConversationWrite, { merge: true });
-    await convBatch.commit();
+    const convSnap = await getDoc(convRef);
+    if (!convSnap.exists()) {
+        await setDoc(convRef, {
+            type: 'direct',
+            memberIds,
+            lastMessage: null,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        } as ConversationWrite, { merge: false });
+    }
 
-    const batch = writeBatch(db);
+    const memberRef1 = doc(db, `conversations/${conversationId}/members`, uid1);
+    const memberRef2 = doc(db, `conversations/${conversationId}/members`, uid2);
+    const [memberSnap1, memberSnap2] = await Promise.all([
+        getDoc(memberRef1),
+        getDoc(memberRef2)
+    ]);
 
-    // Create member docs (idempotent - merge prevents overwriting)
-    batch.set(doc(db, `conversations/${conversationId}/members`, uid1), {
-        uid: uid1,
-        role: 'member',
-        joinedAt: serverTimestamp(),
-        lastReadClientAt: Date.now(),
-        lastReadAt: serverTimestamp(),
-        muted: false
-    } as ConversationMemberWrite, { merge: true });
+    if (!memberSnap1.exists()) {
+        await setDoc(memberRef1, {
+            uid: uid1,
+            role: 'member',
+            joinedAt: serverTimestamp(),
+            lastReadClientAt: Date.now(),
+            lastReadAt: serverTimestamp(),
+            muted: false
+        } as ConversationMemberWrite, { merge: false });
+    }
 
-    batch.set(doc(db, `conversations/${conversationId}/members`, uid2), {
-        uid: uid2,
-        role: 'member',
-        joinedAt: serverTimestamp(),
-        lastReadClientAt: Date.now(),
-        lastReadAt: serverTimestamp(),
-        muted: false
-    } as ConversationMemberWrite, { merge: true });
+    if (!memberSnap2.exists()) {
+        await setDoc(memberRef2, {
+            uid: uid2,
+            role: 'member',
+            joinedAt: serverTimestamp(),
+            lastReadClientAt: Date.now(),
+            lastReadAt: serverTimestamp(),
+            muted: false
+        } as ConversationMemberWrite, { merge: false });
+    }
 
-    await batch.commit();
     return conversationId;
 };
 
@@ -788,30 +796,30 @@ export const getOrCreateGroupConversation = async (groupId: string, uid: string)
     const conversationId = `grp_${groupId}`;
     const convRef = doc(db, 'conversations', conversationId);
 
-    // Ensure conversation doc exists before member writes (rules rely on it)
-    const convBatch = writeBatch(db);
-    convBatch.set(convRef, {
-        type: 'group',
-        groupId,
-        lastMessage: null,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-    } as ConversationWrite, { merge: true });
-    await convBatch.commit();
+    const convSnap = await getDoc(convRef);
+    if (!convSnap.exists()) {
+        await setDoc(convRef, {
+            type: 'group',
+            groupId,
+            lastMessage: null,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        } as ConversationWrite, { merge: false });
+    }
 
-    const batch = writeBatch(db);
+    const memberRef = doc(db, `conversations/${conversationId}/members`, uid);
+    const memberSnap = await getDoc(memberRef);
+    if (!memberSnap.exists()) {
+        await setDoc(memberRef, {
+            uid,
+            role: 'member',
+            joinedAt: serverTimestamp(),
+            lastReadClientAt: Date.now(),
+            lastReadAt: serverTimestamp(),
+            muted: false
+        } as ConversationMemberWrite, { merge: false });
+    }
 
-    // Create member doc for current user (merge prevents overwriting)
-    batch.set(doc(db, `conversations/${conversationId}/members`, uid), {
-        uid,
-        role: 'member',
-        joinedAt: serverTimestamp(),
-        lastReadClientAt: Date.now(),
-        lastReadAt: serverTimestamp(),
-        muted: false
-    } as ConversationMemberWrite, { merge: true });
-
-    await batch.commit();
     return conversationId;
 };
 
@@ -859,14 +867,6 @@ export const subscribeToConversations = (
     callback: (conversations: ConversationRead[]) => void,
     onError?: (error: unknown) => void
 ): Unsubscribe => {
-    // Subscribe to all conversations (limited approach for MVP)
-    // In production, use a Cloud Function to maintain user's conversation list
-    const q = query(
-        collection(db, 'conversations'),
-        orderBy('updatedAt', 'desc'),
-        limit(100)
-    );
-
     const handleError = (error: unknown) => {
         console.error('Error subscribing to conversations:', error);
         if (onError) {
@@ -874,39 +874,31 @@ export const subscribeToConversations = (
         }
     };
 
-    return onSnapshot(
-        q,
-        async (snapshot) => {
-            try {
-                const conversations = [];
-
-                for (const convDoc of snapshot.docs) {
-                    const data = convDoc.data();
-
-                    // Check if user is a member
-                    const memberDoc = await getDoc(doc(db, `conversations/${convDoc.id}/members`, uid));
-                    if (!memberDoc.exists()) continue;
-
-                    conversations.push({
-                        id: convDoc.id,
-                        type: data.type,
-                        groupId: data.groupId,
-                        lastMessage: data.lastMessage ? {
-                            ...data.lastMessage,
-                            createdAt: toDate(data.lastMessage.createdAt) || new Date()
-                        } : null,
-                        createdAt: toDate(data.createdAt) || new Date(),
-                        updatedAt: toDate(data.updatedAt) || new Date()
-                    } as ConversationRead);
-                }
-
-                callback(conversations);
-            } catch (error) {
-                handleError(error);
-            }
-        },
-        handleError
+    const q = query(
+        collection(db, 'conversations'),
+        where('memberIds', 'array-contains', uid),
+        limit(100)
     );
+
+    return onSnapshot(q, (snapshot) => {
+        const conversations = snapshot.docs.map((convDoc) => {
+            const data = convDoc.data();
+            return {
+                id: convDoc.id,
+                type: data.type,
+                groupId: data.groupId,
+                memberIds: data.memberIds || undefined,
+                lastMessage: data.lastMessage ? {
+                    ...data.lastMessage,
+                    createdAt: toDate(data.lastMessage.createdAt) || new Date()
+                } : null,
+                createdAt: toDate(data.createdAt) || new Date(),
+                updatedAt: toDate(data.updatedAt) || new Date()
+            } as ConversationRead;
+        }).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+
+        callback(conversations);
+    }, handleError);
 };
 
 /**

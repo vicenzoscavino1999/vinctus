@@ -370,27 +370,26 @@ service cloud.firestore {
     // ==================== Messaging Collections ====================
     
     // Helper: Check if user can access conversation
-    function isDirectConversationMember(conv, uid) {
-      return conv.data.type == "direct"
-        && conv.data.memberIds is list
-        && conv.data.memberIds.hasAny([uid]);
+    function isConversationParticipantData(convData, uid) {
+      return convData != null
+        && (
+          (convData.type == "direct"
+            && convData.memberIds is list
+            && convData.memberIds.hasAny([uid]))
+          || (convData.type == "group"
+            && convData.groupId is string
+            && exists(/databases/$(database)/documents/groups/$(convData.groupId)/members/$(uid)))
+        );
     }
     
-    function isGroupConversationMember(conv, uid) {
-      return conv.data.type == "group"
-        && conv.data.groupId is string
-        && exists(/databases/$(database)/documents/groups/$(conv.data.groupId)/members/$(uid));
-    }
-    
-    function isConversationParticipant(conversationId, uid) {
-      let conv = get(/databases/$(database)/documents/conversations/$(conversationId));
-      return conv.data != null
-        && (isDirectConversationMember(conv, uid) || isGroupConversationMember(conv, uid));
+    function canAccessConversationData(convData) {
+      return isAuthenticated()
+        && isConversationParticipantData(convData, request.auth.uid);
     }
     
     function canAccessConversation(conversationId) {
-      return isAuthenticated()
-        && isConversationParticipant(conversationId, request.auth.uid);
+      let conv = get(/databases/$(database)/documents/conversations/$(conversationId));
+      return isConversationParticipantData(conv.data, request.auth.uid);
     }
     
     function canCreateConversationMember(conversationId, uid) {
@@ -414,7 +413,7 @@ service cloud.firestore {
     
     // conversations/{conversationId}
     match /conversations/{conversationId} {
-      allow read: if isAuthenticated() && canAccessConversation(conversationId);
+      allow read: if canAccessConversationData(resource.data);
       
       // Restrict creation (no spam conversations)
       allow create: if isAuthenticated()
@@ -427,7 +426,7 @@ service cloud.firestore {
               && request.resource.data.groupId is string
               && exists(/databases/$(database)/documents/groups/$(request.resource.data.groupId)/members/$(request.auth.uid)));
       
-      allow update: if isAuthenticated() && canAccessConversation(conversationId)
+      allow update: if canAccessConversationData(resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'updatedAt']);
       
       // Members (restrict updates)

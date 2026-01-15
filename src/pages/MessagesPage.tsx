@@ -8,6 +8,7 @@ import {
     sendMessage,
     markConversationRead,
     getGroup,
+    getUserProfile,
     type ConversationRead,
     type MessageRead
 } from '../lib/firestore';
@@ -44,14 +45,49 @@ export default function MessagesPage() {
     const [activeTab, setActiveTab] = useState<'groups' | 'private'>('groups');
     const [searchQuery, setSearchQuery] = useState('');
     const [groupInfoCache, setGroupInfoCache] = useState<Record<string, GroupInfo>>({});
+    const [directInfoCache, setDirectInfoCache] = useState<Record<string, { name: string; photoURL: string | null }>>({});
 
     const [searchParams, setSearchParams] = useSearchParams();
     const conversationParam = searchParams.get('conversation');
 
+    const parseDirectMemberIds = (conversationId: string): string[] | null => {
+        if (!conversationId.startsWith('dm_')) return null;
+        const parts = conversationId.slice(3).split('_');
+        return parts.length >= 2 ? parts : null;
+    };
+
+    const getOtherMemberId = (conv: ConversationRead): string | null => {
+        if (!user || conv.type !== 'direct') return null;
+        const memberIds = conv.memberIds ?? parseDirectMemberIds(conv.id);
+        if (!memberIds) return null;
+        return memberIds.find((id) => id !== user.uid) ?? null;
+    };
+
     useEffect(() => {
-        if (conversationParam && conversationParam !== selectedConversationId) {
+        if (!conversationParam) return;
+        if (conversationParam !== selectedConversationId) {
             setSelectedConversationId(conversationParam);
         }
+
+        const isGroupConversation = conversationParam.startsWith('grp_');
+        const memberIds = !isGroupConversation ? parseDirectMemberIds(conversationParam) : null;
+        setActiveTab(isGroupConversation ? 'groups' : 'private');
+
+        setConversations((prev) => {
+            if (prev.some((conv) => conv.id === conversationParam)) return prev;
+            return [
+                {
+                    id: conversationParam,
+                    type: isGroupConversation ? 'group' : 'direct',
+                    groupId: isGroupConversation ? conversationParam.replace('grp_', '') : undefined,
+                    memberIds: memberIds ?? undefined,
+                    lastMessage: null,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                } as ConversationRead,
+                ...prev
+            ];
+        });
     }, [conversationParam, selectedConversationId]);
 
     // Subscribe to conversations
@@ -91,7 +127,6 @@ export default function MessagesPage() {
             },
             (err) => {
                 console.error('Error loading conversations:', err);
-                setConversations([]);
                 setLoading(false);
                 setError('No se pudieron cargar conversaciones.');
             }
@@ -99,6 +134,42 @@ export default function MessagesPage() {
 
         return () => unsubscribe();
     }, [user]);
+
+    useEffect(() => {
+        if (!user || conversations.length === 0) return;
+
+        const missingIds = new Set<string>();
+        for (const conv of conversations) {
+            if (conv.type !== 'direct') continue;
+            const otherId = getOtherMemberId(conv);
+            if (otherId && !directInfoCache[otherId]) {
+                missingIds.add(otherId);
+            }
+        }
+
+        if (missingIds.size === 0) return;
+
+        missingIds.forEach((uid) => {
+            void (async () => {
+                try {
+                    const profile = await getUserProfile(uid);
+                    if (!profile) return;
+                    setDirectInfoCache((prev) => {
+                        if (prev[uid]) return prev;
+                        return {
+                            ...prev,
+                            [uid]: {
+                                name: profile.displayName ?? 'Usuario',
+                                photoURL: profile.photoURL ?? null
+                            }
+                        };
+                    });
+                } catch (err) {
+                    console.error('Error fetching user profile:', err);
+                }
+            })();
+        });
+    }, [conversations, user, directInfoCache]);
 
     // Subscribe to messages of selected conversation
     useEffect(() => {
@@ -148,19 +219,36 @@ export default function MessagesPage() {
         if (!matchesTab) return false;
 
         if (searchQuery.trim()) {
-            const groupInfo = conv.groupId ? groupInfoCache[conv.groupId] : null;
-            const name = groupInfo?.name || conv.groupId || 'Mensaje Directo';
+            const name = getConversationName(conv);
             return name.toLowerCase().includes(searchQuery.toLowerCase());
         }
         return true;
     });
 
     const selectedConversation = conversations.find(c => c.id === selectedConversationId);
+    const fallbackConversation = selectedConversationId && !selectedConversation
+        ? {
+            id: selectedConversationId,
+            type: selectedConversationId.startsWith('grp_') ? 'group' : 'direct',
+            groupId: selectedConversationId.startsWith('grp_') ? selectedConversationId.replace('grp_', '') : undefined,
+            memberIds: selectedConversationId.startsWith('dm_') ? (parseDirectMemberIds(selectedConversationId) ?? undefined) : undefined,
+            lastMessage: null,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        } as ConversationRead
+        : null;
+    const activeConversation = selectedConversation ?? fallbackConversation;
 
     // Get conversation display name
     const getConversationName = (conv: ConversationRead): string => {
         if (conv.type === 'group' && conv.groupId) {
             return groupInfoCache[conv.groupId]?.name || conv.groupId;
+        }
+        if (conv.type === 'direct') {
+            const otherId = getOtherMemberId(conv);
+            if (otherId) {
+                return directInfoCache[otherId]?.name || 'Mensaje Directo';
+            }
         }
         return 'Mensaje Directo';
     };
@@ -174,7 +262,7 @@ export default function MessagesPage() {
     }
 
     // Chat View (when conversation is selected)
-    if (selectedConversationId && selectedConversation) {
+    if (selectedConversationId && activeConversation) {
         return (
             <div className="page-feed pt-0 max-w-3xl mx-auto h-[calc(100vh-120px)] flex flex-col">
                 {/* Chat Header */}
@@ -189,8 +277,8 @@ export default function MessagesPage() {
                         <Users size={18} className="text-amber-500" />
                     </div>
                     <div className="flex-1">
-                        <h2 className="text-white font-medium">{getConversationName(selectedConversation)}</h2>
-                        {selectedConversation.type === 'group' && (
+                        <h2 className="text-white font-medium">{getConversationName(activeConversation)}</h2>
+                        {activeConversation.type === 'group' && (
                             <span className="text-xs text-neutral-500">Grupo</span>
                         )}
                     </div>
