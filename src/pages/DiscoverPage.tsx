@@ -1,6 +1,6 @@
 import { useState, useMemo, type ChangeEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, BookOpen, Check, ArrowRight, Filter } from 'lucide-react';
+import { Search, BookOpen, Check, ArrowRight, Filter, Users } from 'lucide-react';
 import { SearchFilters } from '../components';
 import { useAppState } from '../context';
 import { CATEGORIES, PUBLICATIONS, RECOMMENDED_GROUPS } from '../data';
@@ -359,6 +359,18 @@ const DiscoverPage = () => {
                             </div>
                         </div>
                     ))}
+                </div>
+
+                {/* Community feed link */}
+                <div className="mt-8 flex justify-center">
+                    <button
+                        onClick={() => navigate('/feed')}
+                        className="group flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-amber-500/10 to-amber-600/10 border border-amber-500/30 rounded-lg text-amber-400 hover:border-amber-500/50 hover:bg-amber-500/20 transition-all"
+                    >
+                        <Users size={20} />
+                        <span className="font-medium">Ver publicaciones de la comunidad</span>
+                        <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                    </button>
                 </div>
             </section>
         </div>
