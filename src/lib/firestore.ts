@@ -6,6 +6,7 @@ import {
     doc,
     getDoc,
     getDocs,
+    getCountFromServer,
     setDoc,
     updateDoc,
     deleteDoc,
@@ -336,6 +337,71 @@ export const isPostLiked = async (postId: string, uid: string): Promise<boolean>
     const docSnap = await getDoc(doc(db, 'posts', postId, 'likes', uid));
     return docSnap.exists();
 };
+
+// ==================== Post Comments ====================
+
+export interface PostCommentRead {
+    id: string;
+    postId: string;
+    authorId: string;
+    authorSnapshot: {
+        displayName: string;
+        photoURL: string | null;
+    };
+    text: string;
+    createdAt: Date;
+}
+
+export async function addPostComment(
+    postId: string,
+    authorId: string,
+    authorSnapshot: { displayName: string; photoURL: string | null },
+    text: string
+): Promise<string> {
+    const commentRef = doc(collection(db, 'posts', postId, 'comments'));
+    await setDoc(commentRef, {
+        postId,
+        authorId,
+        authorSnapshot,
+        text,
+        createdAt: serverTimestamp()
+    });
+    return commentRef.id;
+}
+
+export async function getPostComments(postId: string, limitCount = 50): Promise<PostCommentRead[]> {
+    const q = query(
+        collection(db, 'posts', postId, 'comments'),
+        orderBy('createdAt', 'desc'),
+        limit(limitCount)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        const createdAt = toDate(data.createdAt) || new Date();
+        return {
+            id: docSnap.id,
+            postId: data.postId || postId,
+            authorId: data.authorId || '',
+            authorSnapshot: {
+                displayName: data.authorSnapshot?.displayName || 'Usuario',
+                photoURL: data.authorSnapshot?.photoURL || null
+            },
+            text: data.text || '',
+            createdAt
+        } as PostCommentRead;
+    });
+}
+
+export async function getPostCommentCount(postId: string): Promise<number> {
+    const snapshot = await getCountFromServer(collection(db, 'posts', postId, 'comments'));
+    return snapshot.data().count;
+}
+
+export async function getPostLikeCount(postId: string): Promise<number> {
+    const snapshot = await getCountFromServer(collection(db, 'posts', postId, 'likes'));
+    return snapshot.data().count;
+}
 
 // ==================== Saved Posts (Offline-First) ====================
 
@@ -1896,6 +1962,27 @@ export async function sendCollaborationRequest(input: {
     });
 
     return requestRef.id;
+}
+
+export async function deleteCollaboration(authorId: string, collaborationId: string): Promise<void> {
+    const pendingQuery = query(
+        collection(db, 'collaboration_requests'),
+        where('collaborationId', '==', collaborationId),
+        where('toUid', '==', authorId),
+        where('status', '==', 'pending')
+    );
+    const pendingSnapshot = await getDocs(pendingQuery);
+
+    const batch = writeBatch(db);
+    pendingSnapshot.docs.forEach((docSnap) => {
+        batch.update(docSnap.ref, {
+            status: 'rejected',
+            updatedAt: serverTimestamp()
+        });
+    });
+
+    batch.delete(doc(db, 'collaborations', collaborationId));
+    await batch.commit();
 }
 
 export async function getPendingCollaborationRequests(uid: string): Promise<CollaborationRequestRead[]> {

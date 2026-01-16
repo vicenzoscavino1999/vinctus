@@ -4,7 +4,7 @@ import { getCollaborations, type CollaborationRead } from '../lib/firestore';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
 import CreateCollaborationModal from '../components/CreateCollaborationModal';
-import CollaborationRequestModal from '../components/CollaborationRequestModal';
+import CollaborationDetailModal from '../components/CollaborationDetailModal';
 
 const formatRelativeTime = (date: Date): string => {
     const diffMs = Date.now() - date.getTime();
@@ -44,7 +44,7 @@ const ProjectsPage = () => {
     const [collaborationsLoading, setCollaborationsLoading] = useState(true);
     const [collaborationsError, setCollaborationsError] = useState<string | null>(null);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
-    const [requestingCollaboration, setRequestingCollaboration] = useState<CollaborationRead | null>(null);
+    const [selectedCollaboration, setSelectedCollaboration] = useState<CollaborationRead | null>(null);
     const [requestedIds, setRequestedIds] = useState<string[]>([]);
 
     // Datos de eventos
@@ -75,18 +75,6 @@ const ProjectsPage = () => {
             return;
         }
         setIsCreateOpen(true);
-    };
-
-    const handleRequestClick = (item: CollaborationRead) => {
-        if (!user) {
-            showToast('Inicia sesion para enviar solicitudes', 'info');
-            return;
-        }
-        if (user.uid === item.authorId) {
-            showToast('No puedes solicitar tu propio proyecto', 'info');
-            return;
-        }
-        setRequestingCollaboration(item);
     };
 
     const handleRequestSent = (collaborationId: string) => {
@@ -139,7 +127,7 @@ const ProjectsPage = () => {
                         return (
                             <div
                                 key={item.id}
-                                onClick={() => showToast('Detalle de colaboraciones estara disponible pronto', 'info')}
+                                onClick={() => setSelectedCollaboration(item)}
                                 className="bg-neutral-900/20 border border-neutral-800/50 rounded-lg p-6 mb-4 cursor-pointer hover:bg-neutral-900/40 hover:border-neutral-700 transition-all group"
                             >
                                 <div className="flex items-start justify-between mb-4">
@@ -169,7 +157,7 @@ const ProjectsPage = () => {
                                         <button
                                             onClick={(event) => {
                                                 event.stopPropagation();
-                                                handleRequestClick(item);
+                                                setSelectedCollaboration(item);
                                             }}
                                             disabled={isOwn || isRequested}
                                             className="text-xs uppercase tracking-widest px-3 py-1.5 rounded-full border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -228,13 +216,18 @@ const ProjectsPage = () => {
                     loadCollaborations();
                 }}
             />
-            <CollaborationRequestModal
-                isOpen={!!requestingCollaboration}
-                collaboration={requestingCollaboration}
-                onClose={() => setRequestingCollaboration(null)}
-                onSent={(collaborationId) => {
+            <CollaborationDetailModal
+                isOpen={!!selectedCollaboration}
+                collaboration={selectedCollaboration}
+                isRequested={selectedCollaboration ? requestedIds.includes(selectedCollaboration.id) : false}
+                onClose={() => setSelectedCollaboration(null)}
+                onRequestSent={(collaborationId) => {
                     handleRequestSent(collaborationId);
-                    setRequestingCollaboration(null);
+                    setSelectedCollaboration(null);
+                }}
+                onDeleted={() => {
+                    setSelectedCollaboration(null);
+                    loadCollaborations();
                 }}
             />
         </div>

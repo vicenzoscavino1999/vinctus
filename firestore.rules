@@ -333,6 +333,18 @@ service cloud.firestore {
         && isValidMediaArray(request.resource.data.media, postId)
         && request.resource.data.updatedAt == request.time;
     }
+
+    // Validate comment create
+    function isValidPostCommentCreate(postId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['postId', 'authorId', 'authorSnapshot', 'text', 'createdAt'])
+        && data.postId == postId
+        && isValidAuthorSnapshot()
+        && data.text is string
+        && data.text.size() > 0
+        && data.text.size() <= 1000
+        && data.createdAt == request.time;
+    }
     
     // Check if user is the post author
     function isPostAuthor() {
@@ -360,8 +372,8 @@ service cloud.firestore {
     // posts/{postId}/likes/{uid}
     // Post likes (source of truth for counting)
     match /posts/{postId}/likes/{uid} {
-      // Only the user can read their own like (private)
-      allow read: if isOwner(uid);
+      // Likes are public for counts
+      allow read: if true;
       
       // Only the user can like/unlike
       // Critical: Validate against BOTH path and auth
@@ -376,6 +388,14 @@ service cloud.firestore {
         && request.resource.data.uid == uid  // Must match path
         && request.resource.data.uid == request.auth.uid  // Must match auth
         && request.resource.data.postId == postId;  // Must match path
+    }
+
+    // posts/{postId}/comments/{commentId}
+    match /posts/{postId}/comments/{commentId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidPostCommentCreate(postId);
+      allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+      allow update: if false;
     }
 
     // ==================== Collaborations Collections ====================

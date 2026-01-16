@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
+import { Bookmark, Heart, Link2, MessageCircle } from 'lucide-react';
 import {
     collection,
+    doc,
+    getDoc,
     getDocs,
     limit,
     orderBy,
@@ -9,6 +12,20 @@ import {
     type DocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/Toast';
+import PostCommentsModal from '../components/PostCommentsModal';
+import {
+    getPostCommentCount,
+    getPostLikeCount,
+    isPostLiked,
+    isPostSaved,
+    likePostWithSync,
+    savePostWithSync,
+    unlikePostWithSync,
+    unsavePostWithSync
+} from '../lib/firestore';
 
 // Post type with BOTH schemas (new + legacy) for compatibility
 type Post = {
@@ -26,15 +43,68 @@ type Post = {
     authorPhoto?: string | null;
 
     // Common
-    media: { type: 'image'; url: string; path: string }[];
-    createdAt: any;
+    media?: { type: 'image' | 'video'; url: string; path: string }[];
+    createdAt?: any;
+};
+
+type PostSummary = {
+    postId: string;
+    authorName: string;
+    authorPhoto: string | null;
+    text: string;
+    imageUrl: string | null;
+};
+
+const toDate = (value: any): Date | null => {
+    if (!value) return null;
+    if (value.toDate) return value.toDate();
+    if (value instanceof Date) return value;
+    return null;
+};
+
+const formatRelativeTime = (value: any): string => {
+    const date = toDate(value);
+    if (!date) return 'Ahora';
+    const diffMs = Date.now() - date.getTime();
+    if (!Number.isFinite(diffMs) || diffMs < 0) return 'Ahora';
+    const minutes = Math.floor(diffMs / 60000);
+    if (minutes < 1) return 'Ahora';
+    if (minutes < 60) return `Hace ${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `Hace ${hours} h`;
+    const days = Math.floor(hours / 24);
+    return `Hace ${days} d`;
+};
+
+const buildPostSummary = (post: Post): PostSummary => {
+    const displayText = post.text ?? post.content ?? '';
+    const authorName = post.authorSnapshot?.displayName ?? post.authorName ?? 'Usuario';
+    const authorPhoto = post.authorSnapshot?.photoURL ?? post.authorPhoto ?? null;
+    const imageUrl = post.media?.[0]?.url ?? null;
+
+    return {
+        postId: post.postId,
+        authorName,
+        authorPhoto,
+        text: displayText,
+        imageUrl
+    };
 };
 
 const FeedPage = () => {
+    const location = useLocation();
+    const { user } = useAuth();
+    const { showToast } = useToast();
     const [posts, setPosts] = useState<Post[]>([]);
     const [lastVisible, setLastVisible] = useState<DocumentSnapshot | null>(null);
     const [loadingMore, setLoadingMore] = useState(false);
     const [loadingInitial, setLoadingInitial] = useState(true);
+    const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
+    const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
+    const [likedByUser, setLikedByUser] = useState<Record<string, boolean>>({});
+    const [savedByUser, setSavedByUser] = useState<Record<string, boolean>>({});
+    const [activePost, setActivePost] = useState<PostSummary | null>(null);
+    const postFromSearch = new URLSearchParams(location.search).get('post');
 
     // Initial load with getDocs (NO realtime to avoid pagination conflicts)
     useEffect(() => {
@@ -60,6 +130,30 @@ const FeedPage = () => {
 
         loadInitial();
     }, []);
+
+    useEffect(() => {
+        if (!postFromSearch || activePost?.postId === postFromSearch) return;
+        const existing = posts.find((post) => post.postId === postFromSearch);
+        if (existing) {
+            setActivePost(buildPostSummary(existing));
+            return;
+        }
+
+        const loadById = async () => {
+            try {
+                const docSnap = await getDoc(doc(db, 'posts', postFromSearch));
+                if (!docSnap.exists()) return;
+                const data = docSnap.data() as any;
+                const post = { ...data, postId: docSnap.id } as Post;
+                if (post.status && post.status !== 'ready') return;
+                setActivePost(buildPostSummary(post));
+            } catch (error) {
+                console.error('Error loading post by id:', error);
+            }
+        };
+
+        loadById();
+    }, [postFromSearch, posts, activePost?.postId]);
 
     // Load more posts (pagination)
     const loadMore = async () => {
@@ -96,6 +190,147 @@ const FeedPage = () => {
         }
     };
 
+    useEffect(() => {
+        if (posts.length === 0) return;
+        let isActive = true;
+
+        const pendingCounts = posts.filter(
+            (post) => likeCounts[post.postId] === undefined || commentCounts[post.postId] === undefined
+        );
+        const pendingLikes = user
+            ? posts.filter((post) => likedByUser[post.postId] === undefined)
+            : [];
+        const pendingSaves = user
+            ? posts.filter((post) => savedByUser[post.postId] === undefined)
+            : [];
+
+        if (pendingCounts.length === 0 && pendingLikes.length === 0 && pendingSaves.length === 0) {
+            return;
+        }
+
+        const loadMetrics = async () => {
+            try {
+                const likeUpdates: Record<string, number> = {};
+                const commentUpdates: Record<string, number> = {};
+                await Promise.all(
+                    pendingCounts.map(async (post) => {
+                        const [likesCount, commentsCount] = await Promise.all([
+                            getPostLikeCount(post.postId),
+                            getPostCommentCount(post.postId)
+                        ]);
+                        likeUpdates[post.postId] = likesCount;
+                        commentUpdates[post.postId] = commentsCount;
+                    })
+                );
+
+                const likedUpdates: Record<string, boolean> = {};
+                const savedUpdates: Record<string, boolean> = {};
+
+                if (user) {
+                    await Promise.all(
+                        pendingLikes.map(async (post) => {
+                            likedUpdates[post.postId] = await isPostLiked(post.postId, user.uid);
+                        })
+                    );
+
+                    await Promise.all(
+                        pendingSaves.map(async (post) => {
+                            savedUpdates[post.postId] = await isPostSaved(post.postId, user.uid);
+                        })
+                    );
+                }
+
+                if (!isActive) return;
+                if (Object.keys(likeUpdates).length > 0) {
+                    setLikeCounts((prev) => ({ ...prev, ...likeUpdates }));
+                }
+                if (Object.keys(commentUpdates).length > 0) {
+                    setCommentCounts((prev) => ({ ...prev, ...commentUpdates }));
+                }
+                if (Object.keys(likedUpdates).length > 0) {
+                    setLikedByUser((prev) => ({ ...prev, ...likedUpdates }));
+                }
+                if (Object.keys(savedUpdates).length > 0) {
+                    setSavedByUser((prev) => ({ ...prev, ...savedUpdates }));
+                }
+            } catch (error) {
+                console.error('Error loading post metrics:', error);
+            }
+        };
+
+        loadMetrics();
+
+        return () => {
+            isActive = false;
+        };
+    }, [posts, user?.uid, likeCounts, commentCounts, likedByUser, savedByUser]);
+
+    const handleToggleLike = async (postId: string) => {
+        if (!user) {
+            showToast('Inicia sesion para dar like', 'info');
+            return;
+        }
+
+        const currentlyLiked = likedByUser[postId];
+        try {
+            if (currentlyLiked) {
+                await unlikePostWithSync(postId, user.uid);
+            } else {
+                await likePostWithSync(postId, user.uid);
+            }
+            setLikedByUser((prev) => ({ ...prev, [postId]: !currentlyLiked }));
+            setLikeCounts((prev) => ({
+                ...prev,
+                [postId]: Math.max(0, (prev[postId] ?? 0) + (currentlyLiked ? -1 : 1))
+            }));
+        } catch (error) {
+            console.error('Error toggling like:', error);
+            showToast('No se pudo actualizar el like', 'error');
+        }
+    };
+
+    const handleToggleSave = async (postId: string) => {
+        if (!user) {
+            showToast('Inicia sesion para guardar posts', 'info');
+            return;
+        }
+
+        const currentlySaved = savedByUser[postId];
+        try {
+            if (currentlySaved) {
+                await unsavePostWithSync(postId, user.uid);
+            } else {
+                await savePostWithSync(postId, user.uid);
+            }
+            setSavedByUser((prev) => ({ ...prev, [postId]: !currentlySaved }));
+        } catch (error) {
+            console.error('Error toggling save:', error);
+            showToast('No se pudo actualizar el guardado', 'error');
+        }
+    };
+
+    const handleCopyLink = async (postId: string) => {
+        const url = `${window.location.origin}/feed?post=${postId}`;
+        try {
+            if (navigator?.clipboard?.writeText) {
+                await navigator.clipboard.writeText(url);
+            } else {
+                const textarea = document.createElement('textarea');
+                textarea.value = url;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+            }
+            showToast('Enlace copiado', 'success');
+        } catch (error) {
+            console.error('Error copying link:', error);
+            showToast('No se pudo copiar el enlace', 'error');
+        }
+    };
+
     return (
         <div className="p-4 md:p-8">
             {loadingInitial ? (
@@ -103,52 +338,127 @@ const FeedPage = () => {
             ) : posts.length === 0 ? (
                 <div className="text-sm text-neutral-500 text-center py-8">No hay posts todavía.</div>
             ) : (
-                <div className="space-y-4 max-w-2xl mx-auto">
+                <div className="space-y-6 max-w-3xl mx-auto">
                     {posts.map((p) => {
-                        // FALLBACK READS: Support both new and legacy schemas
-                        const displayText = p.text ?? p.content ?? '';
-                        const authorName = p.authorSnapshot?.displayName ?? p.authorName ?? 'Usuario';
-                        const authorPhoto = p.authorSnapshot?.photoURL ?? p.authorPhoto ?? null;
+                        const summary = buildPostSummary(p);
+                        const displayText = summary.text;
+                        const authorName = summary.authorName;
+                        const authorPhoto = summary.authorPhoto;
                         const authorInitial = authorName.charAt(0).toUpperCase();
+                        const imageUrl = summary.imageUrl;
+                        const timeLabel = formatRelativeTime(p.createdAt);
+                        const likeCount = likeCounts[p.postId] ?? 0;
+                        const commentCount = commentCounts[p.postId] ?? 0;
+                        const isLiked = likedByUser[p.postId] ?? false;
+                        const isSaved = savedByUser[p.postId] ?? false;
 
                         return (
-                            <div key={p.postId} className="bg-[#1a1a1a] border border-neutral-800 rounded-xl p-4">
-                                {/* Author info */}
-                                <div className="flex items-center gap-3 mb-3">
-                                    {authorPhoto ? (
-                                        <img
-                                            src={authorPhoto}
-                                            alt={authorName}
-                                            className="w-10 h-10 rounded-full object-cover"
-                                        />
-                                    ) : (
-                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-black font-medium">
-                                            {authorInitial}
+                            <div
+                                key={p.postId}
+                                onClick={() => setActivePost(summary)}
+                                className="relative overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900/50 cursor-pointer"
+                            >
+                                {imageUrl ? (
+                                    <img
+                                        src={imageUrl}
+                                        alt={displayText || 'Publicacion de la comunidad'}
+                                        className="absolute inset-0 w-full h-full object-cover"
+                                    />
+                                ) : (
+                                    <div className="absolute inset-0 bg-gradient-to-br from-neutral-900 via-neutral-800 to-black" />
+                                )}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10" />
+
+                                <div className="relative z-10 p-6 pr-16 min-h-[220px] flex flex-col justify-between">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            {authorPhoto ? (
+                                                <img
+                                                    src={authorPhoto}
+                                                    alt={authorName}
+                                                    className="w-10 h-10 rounded-full object-cover"
+                                                />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-black font-medium">
+                                                    {authorInitial}
+                                                </div>
+                                            )}
+                                            <div>
+                                                <p className="text-white text-sm font-medium">{authorName}</p>
+                                                <p className="text-xs text-neutral-300">Comunidad - {timeLabel}</p>
+                                            </div>
                                         </div>
-                                    )}
-                                    <div>
-                                        <p className="text-white font-medium">{authorName}</p>
+                                        <button
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                handleCopyLink(p.postId);
+                                            }}
+                                            className="p-2 rounded-full bg-black/40 text-neutral-200 hover:text-white hover:bg-black/60 transition-colors"
+                                            aria-label="Copiar enlace"
+                                        >
+                                            <Link2 size={18} />
+                                        </button>
+                                    </div>
+
+                                    <div className="mt-6">
+                                        <h3 className="text-xl md:text-2xl font-serif text-white leading-snug line-clamp-3">
+                                            {displayText || 'Publicacion de la comunidad'}
+                                        </h3>
+                                    </div>
+
+                                    <div className="flex items-center justify-between mt-6 text-xs text-neutral-300">
+                                        <span>Desliza para ver mas -&gt;</span>
+                                        <button
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                setActivePost(summary);
+                                            }}
+                                            className="flex items-center gap-2 text-neutral-200 hover:text-white transition-colors"
+                                        >
+                                            <MessageCircle size={14} />
+                                            Comentar
+                                        </button>
                                     </div>
                                 </div>
 
-                                {/* Text content */}
-                                {displayText && <div className="text-neutral-200 mb-3 whitespace-pre-wrap">{displayText}</div>}
-
-                                {/* Media grid */}
-                                {p.media?.length > 0 && (
-                                    <div className={`grid gap-2 ${p.media.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
-                                        {p.media.map((m, i) => (
-                                            <img
-                                                key={i}
-                                                src={m.url}
-                                                alt={`media-${i}`}
-                                                className="w-full h-64 object-cover rounded-lg"
-                                            />
-                                        ))}
-                                    </div>
-                                )}
+                                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-4 z-10">
+                                    <button
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            handleToggleLike(p.postId);
+                                        }}
+                                        className="flex flex-col items-center gap-1 text-neutral-200/80 hover:text-white transition-colors"
+                                        aria-label="Dar like"
+                                    >
+                                        <Heart size={20} fill={isLiked ? 'currentColor' : 'none'} />
+                                        <span className="text-xs">{likeCount}</span>
+                                    </button>
+                                    <button
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            setActivePost(summary);
+                                        }}
+                                        className="flex flex-col items-center gap-1 text-neutral-200/80 hover:text-white transition-colors"
+                                        aria-label="Comentarios"
+                                    >
+                                        <MessageCircle size={20} />
+                                        <span className="text-xs">{commentCount}</span>
+                                    </button>
+                                    <button
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            handleToggleSave(p.postId);
+                                        }}
+                                        className={
+                                            `flex flex-col items-center gap-1 transition-colors ${isSaved ? 'text-amber-300' : 'text-neutral-200/80 hover:text-white'}`
+                                        }
+                                        aria-label="Guardar"
+                                    >
+                                        <Bookmark size={20} fill={isSaved ? 'currentColor' : 'none'} />
+                                    </button>
+                                </div>
                             </div>
-                        )
+                        );
                     })}
                 </div>
             )}
@@ -165,6 +475,18 @@ const FeedPage = () => {
                     </button>
                 </div>
             )}
+
+            <PostCommentsModal
+                isOpen={!!activePost}
+                post={activePost}
+                onClose={() => setActivePost(null)}
+                onCommentAdded={(postId) => {
+                    setCommentCounts((prev) => ({
+                        ...prev,
+                        [postId]: (prev[postId] ?? 0) + 1
+                    }));
+                }}
+            />
         </div>
     );
 };
