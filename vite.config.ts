@@ -21,8 +21,8 @@ export default defineConfig({
                 description: 'Conecta con comunidades que comparten tus pasiones',
                 theme_color: '#0a0a0a',
                 background_color: '#0a0a0a',
-                display: 'standalone',
-                orientation: 'portrait',
+                display: 'minimal-ui',
+                orientation: 'any',
                 scope: '/',
                 start_url: '/',
                 icons: [
