@@ -9,8 +9,11 @@ import { AppStateProvider, AuthProvider, useAuth } from './context';
 const getStoredItem = (key: string): string | null => {
   if (typeof window === 'undefined') return null;
   try {
+    // Check if localStorage is accessible (can be blocked in private mode)
+    if (!window.localStorage) return null;
     return window.localStorage.getItem(key);
   } catch {
+    // localStorage blocked or quota exceeded
     return null;
   }
 };
@@ -18,9 +21,11 @@ const getStoredItem = (key: string): string | null => {
 const setStoredItem = (key: string, value: string): void => {
   if (typeof window === 'undefined') return;
   try {
+    // Check if localStorage is accessible (can be blocked in private mode)
+    if (!window.localStorage) return;
     window.localStorage.setItem(key, value);
   } catch {
-    // ignore storage errors (private mode, quota, SSR)
+    // localStorage blocked or quota exceeded - fail silently
   }
 };
 
