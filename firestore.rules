@@ -288,7 +288,10 @@ service cloud.firestore {
     // Validate post structure on create (uploading workflow)
     function isValidPostCreateUploading(postId) {
       let data = request.resource.data;
-      return data.keys().hasOnly(['postId', 'authorId', 'authorSnapshot', 'text', 'media', 'status', 'createdAt', 'updatedAt'])
+      return data.keys().hasOnly([
+          'postId', 'authorId', 'authorSnapshot', 'text', 'media', 'status', 'createdAt', 'updatedAt',
+          'content', 'authorName', 'authorUsername', 'authorPhoto', 'groupId', 'categoryId', 'likeCount', 'commentCount'
+        ])
         && data.postId == postId
         && isValidAuthorSnapshot()
         && data.text is string
@@ -298,7 +301,15 @@ service cloud.firestore {
         && data.media.size() == 0
         && data.status == 'uploading'
         && data.createdAt == request.time
-        && data.updatedAt == null;
+        && data.updatedAt == null
+        && (!data.keys().hasAny(['content']) || (data.content is string && data.content.size() > 0 && data.content.size() <= 5000 && data.content == data.text))
+        && (!data.keys().hasAny(['authorName']) || (data.authorName is string && data.authorName.size() > 0))
+        && (!data.keys().hasAny(['authorUsername']) || (data.authorUsername is string && data.authorUsername.size() > 0))
+        && (!data.keys().hasAny(['authorPhoto']) || (data.authorPhoto == null || data.authorPhoto is string))
+        && (!data.keys().hasAny(['groupId']) || (data.groupId == null || (data.groupId is string && data.groupId.size() <= 100)))
+        && (!data.keys().hasAny(['categoryId']) || (data.categoryId == null || (data.categoryId is string && data.categoryId.size() <= 100)))
+        && (!data.keys().hasAny(['likeCount']) || (data.likeCount is int && data.likeCount == 0))
+        && (!data.keys().hasAny(['commentCount']) || (data.commentCount is int && data.commentCount == 0));
     }
     
     // Validate post update (only content and media can change)
@@ -365,6 +376,122 @@ service cloud.firestore {
         && request.resource.data.uid == uid  // Must match path
         && request.resource.data.uid == request.auth.uid  // Must match auth
         && request.resource.data.postId == postId;  // Must match path
+    }
+
+    // ==================== Collaborations Collections ====================
+
+    function isValidTagArray(tags) {
+      return tags is list
+        && tags.size() <= 6
+        && (tags.size() == 0 || (tags[0] is string && tags[0].size() > 0 && tags[0].size() <= 40))
+        && (tags.size() <= 1 || (tags[1] is string && tags[1].size() > 0 && tags[1].size() <= 40))
+        && (tags.size() <= 2 || (tags[2] is string && tags[2].size() > 0 && tags[2].size() <= 40))
+        && (tags.size() <= 3 || (tags[3] is string && tags[3].size() > 0 && tags[3].size() <= 40))
+        && (tags.size() <= 4 || (tags[4] is string && tags[4].size() > 0 && tags[4].size() <= 40))
+        && (tags.size() <= 5 || (tags[5] is string && tags[5].size() > 0 && tags[5].size() <= 40));
+    }
+
+    function isValidCollaborationData() {
+      let data = request.resource.data;
+      return data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 120
+        && data.context is string
+        && data.context.size() > 0
+        && data.context.size() <= 120
+        && data.seekingRole is string
+        && data.seekingRole.size() > 0
+        && data.seekingRole.size() <= 80
+        && data.mode in ['virtual', 'presencial']
+        && (data.location == null || (data.location is string && data.location.size() > 0 && data.location.size() <= 120))
+        && data.level in ['principiante', 'intermedio', 'experto']
+        && (data.topic == null || (data.topic is string && data.topic.size() > 0 && data.topic.size() <= 160))
+        && isValidTagArray(data.tags)
+        && data.status in ['open', 'closed'];
+    }
+
+    function isValidCollaborationCreate() {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'title', 'context', 'seekingRole', 'mode', 'location', 'level', 'topic', 'tags',
+          'authorId', 'authorSnapshot', 'status', 'createdAt', 'updatedAt'
+        ])
+        && isValidAuthorSnapshot()
+        && isValidCollaborationData()
+        && data.status == 'open'
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function isValidCollaborationUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly([
+          'title', 'context', 'seekingRole', 'mode', 'location', 'level', 'topic', 'tags', 'status', 'updatedAt'
+        ])
+        && isValidAuthorSnapshot()
+        && isValidCollaborationData()
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    function isValidCollaborationRequestCreate() {
+      let data = request.resource.data;
+      let collab = get(/databases/$(database)/documents/collaborations/$(data.collaborationId));
+      return data.keys().hasOnly([
+          'collaborationId', 'collaborationTitle', 'fromUid', 'toUid', 'status', 'message',
+          'fromUserName', 'fromUserPhoto', 'createdAt', 'updatedAt'
+        ])
+        && data.collaborationId is string
+        && data.collaborationId.size() > 0
+        && data.collaborationTitle is string
+        && data.collaborationTitle.size() > 0
+        && data.collaborationTitle.size() <= 140
+        && data.fromUid == request.auth.uid
+        && data.toUid is string
+        && data.toUid.size() > 0
+        && data.toUid != request.auth.uid
+        && data.status == 'pending'
+        && (data.message == null || (data.message is string && data.message.size() > 0 && data.message.size() <= 1000))
+        && (data.fromUserName == null || (data.fromUserName is string && data.fromUserName.size() > 0 && data.fromUserName.size() <= 80))
+        && (data.fromUserPhoto == null || data.fromUserPhoto is string)
+        && data.createdAt == request.time
+        && data.updatedAt == request.time
+        && collab != null
+        && collab.data != null
+        && collab.data.authorId == data.toUid
+        && collab.data.status == 'open';
+    }
+
+    function isValidCollaborationRequestUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['status', 'updatedAt'])
+        && request.resource.data.status in ['accepted', 'rejected']
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.fromUid == resource.data.fromUid
+        && request.resource.data.toUid == resource.data.toUid
+        && request.resource.data.collaborationId == resource.data.collaborationId
+        && request.resource.data.collaborationTitle == resource.data.collaborationTitle;
+    }
+
+    // collaborations/{collaborationId}
+    // Collaboration posts (PUBLIC READ, author write)
+    match /collaborations/{collaborationId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidCollaborationCreate();
+      allow update: if isAuthenticated() && resource.data.authorId == request.auth.uid
+        && isValidCollaborationUpdate();
+      allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+    }
+
+    // collaboration_requests/{requestId}
+    // Requests to join a collaboration (private)
+    match /collaboration_requests/{requestId} {
+      allow read: if isAuthenticated()
+        && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
+      allow create: if isAuthenticated() && isValidCollaborationRequestCreate();
+      allow update: if isAuthenticated() && resource.data.toUid == request.auth.uid
+        && isValidCollaborationRequestUpdate();
+      allow delete: if isAuthenticated() && resource.data.fromUid == request.auth.uid;
     }
     
     // ==================== Messaging Collections ====================

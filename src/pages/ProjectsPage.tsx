@@ -1,9 +1,51 @@
+import { useEffect, useState } from 'react';
 import { User, ArrowRight, Plus } from 'lucide-react';
-import { COLLABORATIONS } from '../data';
+import { getCollaborations, type CollaborationRead } from '../lib/firestore';
 import { useToast } from '../components/Toast';
+import { useAuth } from '../context/AuthContext';
+import CreateCollaborationModal from '../components/CreateCollaborationModal';
+import CollaborationRequestModal from '../components/CollaborationRequestModal';
+
+const formatRelativeTime = (date: Date): string => {
+    const diffMs = Date.now() - date.getTime();
+    if (!Number.isFinite(diffMs) || diffMs < 0) return 'Ahora';
+    const minutes = Math.floor(diffMs / 60000);
+    if (minutes < 1) return 'Ahora';
+    if (minutes < 60) return `Hace ${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `Hace ${hours} h`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `Hace ${days} d`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `Hace ${months} mes${months === 1 ? '' : 'es'}`;
+    const years = Math.floor(months / 12);
+    return `Hace ${years} a`;
+};
+
+const buildCollaborationTags = (item: CollaborationRead): string[] => {
+    const trimmed = (item.tags || [])
+        .filter((tag) => typeof tag === 'string')
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0);
+    if (trimmed.length > 0) return trimmed.slice(0, 3);
+
+    const tags: string[] = [];
+    if (item.location) tags.push(item.location);
+    tags.push(item.mode === 'virtual' ? 'Virtual' : 'Presencial');
+    const levelLabel = item.level === 'experto' ? 'Nivel Experto' : item.level === 'intermedio' ? 'Nivel Intermedio' : 'Nivel Principiante';
+    tags.push(levelLabel);
+    return tags.slice(0, 3);
+};
 
 const ProjectsPage = () => {
     const { showToast } = useToast();
+    const { user } = useAuth();
+    const [collaborations, setCollaborations] = useState<CollaborationRead[]>([]);
+    const [collaborationsLoading, setCollaborationsLoading] = useState(true);
+    const [collaborationsError, setCollaborationsError] = useState<string | null>(null);
+    const [isCreateOpen, setIsCreateOpen] = useState(false);
+    const [requestingCollaboration, setRequestingCollaboration] = useState<CollaborationRead | null>(null);
+    const [requestedIds, setRequestedIds] = useState<string[]>([]);
 
     // Datos de eventos
     const EVENTS_DATA = [
@@ -13,9 +55,47 @@ const ProjectsPage = () => {
         { id: 4, day: '5', month: 'FEB', title: 'Observación de Aves', location: 'Bogotá, Humedal Córdoba', attendees: 25 }
     ];
 
-    const handlePublishProject = () => {
-        showToast('Publicar proyectos estará disponible pronto', 'info');
+    const loadCollaborations = async () => {
+        try {
+            setCollaborationsError(null);
+            setCollaborationsLoading(true);
+            const data = await getCollaborations();
+            setCollaborations(data);
+        } catch (error) {
+            console.error('Error loading collaborations:', error);
+            setCollaborationsError('No se pudieron cargar colaboraciones.');
+        } finally {
+            setCollaborationsLoading(false);
+        }
     };
+
+    const handlePublishProject = () => {
+        if (!user) {
+            showToast('Inicia sesion para publicar proyectos', 'info');
+            return;
+        }
+        setIsCreateOpen(true);
+    };
+
+    const handleRequestClick = (item: CollaborationRead) => {
+        if (!user) {
+            showToast('Inicia sesion para enviar solicitudes', 'info');
+            return;
+        }
+        if (user.uid === item.authorId) {
+            showToast('No puedes solicitar tu propio proyecto', 'info');
+            return;
+        }
+        setRequestingCollaboration(item);
+    };
+
+    const handleRequestSent = (collaborationId: string) => {
+        setRequestedIds((prev) => (prev.includes(collaborationId) ? prev : [...prev, collaborationId]));
+    };
+
+    useEffect(() => {
+        loadCollaborations();
+    }, []);
 
     return (
         <div className="page-projects pb-32">
@@ -42,39 +122,67 @@ const ProjectsPage = () => {
             <section className="mb-10">
                 <h2 className="text-heading-lg font-display font-normal text-white mb-6">Colaboraciones</h2>
 
-                {COLLABORATIONS.map(item => (
-                    <div
-                        key={item.id}
-                        onClick={() => showToast('Detalle de colaboraciones estará disponible pronto', 'info')}
-                        className="bg-neutral-900/20 border border-neutral-800/50 rounded-lg p-6 mb-4 cursor-pointer hover:bg-neutral-900/40 hover:border-neutral-700 transition-all group"
-                    >
-                        <div className="flex items-start justify-between mb-4">
-                            <span className="text-[10px] uppercase tracking-widest text-neutral-500 border border-neutral-700 px-2 py-1 rounded">
-                                {item.context}
-                            </span>
-                            <span className="text-neutral-600 text-xs">{item.time}</span>
-                        </div>
+                {collaborationsLoading ? (
+                    <div className="text-sm text-neutral-500 text-center py-8">Cargando colaboraciones...</div>
+                ) : collaborationsError ? (
+                    <div className="text-sm text-red-400 text-center py-8">{collaborationsError}</div>
+                ) : collaborations.length === 0 ? (
+                    <div className="text-sm text-neutral-500 text-center py-8">No hay colaboraciones todavia.</div>
+                ) : (
+                    collaborations.map(item => {
+                        const tags = buildCollaborationTags(item);
+                        const displayTime = formatRelativeTime(item.createdAt);
+                        const isOwn = user?.uid === item.authorId;
+                        const isRequested = requestedIds.includes(item.id);
+                        const requestLabel = isOwn ? 'Tu proyecto' : isRequested ? 'Solicitud enviada' : 'Solicitar';
 
-                        <h3 className="text-xl md:text-2xl text-white font-serif font-light mb-2 group-hover:text-white/90">
-                            {item.title}
-                        </h3>
-
-                        <p className="text-neutral-500 text-sm mb-4">
-                            Por <span className="text-amber-200/80">{item.author}</span>
-                        </p>
-
-                        <div className="flex items-center justify-between">
-                            <div className="flex flex-wrap gap-2">
-                                {item.tags.map(tag => (
-                                    <span key={tag} className="text-[10px] text-neutral-500 bg-neutral-800/50 px-2 py-1 rounded">
-                                        {tag}
+                        return (
+                            <div
+                                key={item.id}
+                                onClick={() => showToast('Detalle de colaboraciones estara disponible pronto', 'info')}
+                                className="bg-neutral-900/20 border border-neutral-800/50 rounded-lg p-6 mb-4 cursor-pointer hover:bg-neutral-900/40 hover:border-neutral-700 transition-all group"
+                            >
+                                <div className="flex items-start justify-between mb-4">
+                                    <span className="text-[10px] uppercase tracking-widest text-neutral-500 border border-neutral-700 px-2 py-1 rounded">
+                                        {item.context}
                                     </span>
-                                ))}
+                                    <span className="text-neutral-600 text-xs">{displayTime}</span>
+                                </div>
+
+                                <h3 className="text-xl md:text-2xl text-white font-serif font-light mb-2 group-hover:text-white/90">
+                                    {item.title}
+                                </h3>
+
+                                <p className="text-neutral-500 text-sm mb-4">
+                                    Por <span className="text-amber-200/80">{item.authorSnapshot.displayName}</span>
+                                </p>
+
+                                <div className="flex items-center justify-between">
+                                    <div className="flex flex-wrap gap-2">
+                                        {tags.map(tag => (
+                                            <span key={tag} className="text-[10px] text-neutral-500 bg-neutral-800/50 px-2 py-1 rounded">
+                                                {tag}
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <button
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                handleRequestClick(item);
+                                            }}
+                                            disabled={isOwn || isRequested}
+                                            className="text-xs uppercase tracking-widest px-3 py-1.5 rounded-full border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {requestLabel}
+                                        </button>
+                                        <ArrowRight size={16} className="text-neutral-600 group-hover:text-white transition-colors" />
+                                    </div>
+                                </div>
                             </div>
-                            <ArrowRight size={16} className="text-neutral-600 group-hover:text-white transition-colors" />
-                        </div>
-                    </div>
-                ))}
+                        );
+                    })
+                )}
             </section>
 
             {/* Encuentros */}
@@ -111,6 +219,24 @@ const ProjectsPage = () => {
                     ))}
                 </div>
             </section>
+
+            <CreateCollaborationModal
+                isOpen={isCreateOpen}
+                onClose={() => setIsCreateOpen(false)}
+                onCreated={() => {
+                    setIsCreateOpen(false);
+                    loadCollaborations();
+                }}
+            />
+            <CollaborationRequestModal
+                isOpen={!!requestingCollaboration}
+                collaboration={requestingCollaboration}
+                onClose={() => setRequestingCollaboration(null)}
+                onSent={(collaborationId) => {
+                    handleRequestSent(collaborationId);
+                    setRequestingCollaboration(null);
+                }}
+            />
         </div>
     );
 };
