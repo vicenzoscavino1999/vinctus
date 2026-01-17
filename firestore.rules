@@ -518,12 +518,13 @@ service cloud.firestore {
     
     // Helper: Check if user can access conversation
     function isConversationParticipantData(convData, uid) {
+      let hasType = convData != null && convData.keys().hasAny(['type']);
       return convData != null
         && (
-          (convData.type == "direct"
+          ((convData.type == "direct" || !hasType)
             && convData.memberIds is list
             && convData.memberIds.hasAny([uid]))
-          || (convData.type == "group"
+          || ((convData.type == "group" || !hasType)
             && convData.groupId is string
             && exists(/databases/$(database)/documents/groups/$(convData.groupId)/members/$(uid)))
         );
@@ -541,15 +542,18 @@ service cloud.firestore {
     
     function canCreateConversationMember(conversationId, uid) {
       let conv = get(/databases/$(database)/documents/conversations/$(conversationId));
+      let hasType = conv.data != null && conv.data.keys().hasAny(['type']);
       return conv.data != null
-        && (conv.data.type == "direct"
-          ? conv.data.memberIds is list
+        && (
+          ((conv.data.type == "direct" || !hasType)
+            && conv.data.memberIds is list
             && conv.data.memberIds.hasAny([request.auth.uid])
-            && conv.data.memberIds.hasAny([uid])
-          : conv.data.type == "group"
+            && conv.data.memberIds.hasAny([uid]))
+          || ((conv.data.type == "group" || !hasType)
             && conv.data.groupId is string
             && request.auth.uid == uid
-            && exists(/databases/$(database)/documents/groups/$(conv.data.groupId)/members/$(uid)));
+            && exists(/databases/$(database)/documents/groups/$(conv.data.groupId)/members/$(uid)))
+        );
     }
     
     function isValidConversationMemberCreate(uid) {

@@ -811,15 +811,29 @@ export const getOrCreateDirectConversation = async (uid1: string, uid2: string):
     const conversationId = `dm_${memberIds.join('_')}`;
     const convRef = doc(db, 'conversations', conversationId);
 
-    const convSnap = await getDoc(convRef);
-    if (!convSnap.exists()) {
-        await setDoc(convRef, {
-            type: 'direct',
-            memberIds,
-            lastMessage: null,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-        } as ConversationWrite, { merge: false });
+    let convExists = false;
+    try {
+        const convSnap = await getDoc(convRef);
+        convExists = convSnap.exists();
+    } catch (error) {
+        console.warn('Conversation read blocked, attempting create:', error);
+    }
+
+    if (!convExists) {
+        try {
+            await setDoc(convRef, {
+                type: 'direct',
+                memberIds,
+                lastMessage: null,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            } as ConversationWrite, { merge: false });
+        } catch (error) {
+            const code = (error as { code?: string })?.code;
+            if (code !== 'permission-denied') {
+                throw error;
+            }
+        }
     }
 
     const memberRef1 = doc(db, `conversations/${conversationId}/members`, uid1);
@@ -862,15 +876,29 @@ export const getOrCreateGroupConversation = async (groupId: string, uid: string)
     const conversationId = `grp_${groupId}`;
     const convRef = doc(db, 'conversations', conversationId);
 
-    const convSnap = await getDoc(convRef);
-    if (!convSnap.exists()) {
-        await setDoc(convRef, {
-            type: 'group',
-            groupId,
-            lastMessage: null,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-        } as ConversationWrite, { merge: false });
+    let convExists = false;
+    try {
+        const convSnap = await getDoc(convRef);
+        convExists = convSnap.exists();
+    } catch (error) {
+        console.warn('Group conversation read blocked, attempting create:', error);
+    }
+
+    if (!convExists) {
+        try {
+            await setDoc(convRef, {
+                type: 'group',
+                groupId,
+                lastMessage: null,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            } as ConversationWrite, { merge: false });
+        } catch (error) {
+            const code = (error as { code?: string })?.code;
+            if (code !== 'permission-denied') {
+                throw error;
+            }
+        }
     }
 
     const memberRef = doc(db, `conversations/${conversationId}/members`, uid);
@@ -1001,10 +1029,31 @@ export const subscribeToMessages = (
  * Mark conversation as read
  */
 export const markConversationRead = async (conversationId: string, uid: string): Promise<void> => {
-    await writeBatch(db).update(doc(db, `conversations/${conversationId}/members`, uid), {
-        lastReadClientAt: Date.now(),
-        lastReadAt: serverTimestamp()
-    }).commit();
+    const memberRef = doc(db, `conversations/${conversationId}/members`, uid);
+    try {
+        await writeBatch(db).update(memberRef, {
+            lastReadClientAt: Date.now(),
+            lastReadAt: serverTimestamp()
+        }).commit();
+    } catch (error) {
+        const code = (error as { code?: string })?.code;
+        if (code !== 'not-found') {
+            console.error('Error marking conversation read:', error);
+            return;
+        }
+        try {
+            await setDoc(memberRef, {
+                uid,
+                role: 'member',
+                joinedAt: serverTimestamp(),
+                lastReadClientAt: Date.now(),
+                lastReadAt: serverTimestamp(),
+                muted: false
+            } as ConversationMemberWrite, { merge: false });
+        } catch (createError) {
+            console.error('Error creating conversation member:', createError);
+        }
+    }
 };
 
 /**

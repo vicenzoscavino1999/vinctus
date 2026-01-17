@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { useAuth } from '../context';
 
-type AuthMode = 'login' | 'register' | 'phone';
+type AuthMode = 'login' | 'register' | 'phone' | 'forgot_password';
 
 const LoginScreen = () => {
     const {
         signInWithGoogle,
         signInWithEmail,
         signUpWithEmail,
+        resetPassword,
         sendPhoneCode,
         verifyPhoneCode,
         error: authError,
@@ -17,6 +18,7 @@ const LoginScreen = () => {
     } = useAuth();
     const [mode, setMode] = useState<AuthMode>('login');
     const [isLoading, setIsLoading] = useState(false);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
     // Form state
     const [email, setEmail] = useState('');
@@ -28,6 +30,7 @@ const LoginScreen = () => {
     const handleGoogleSignIn = async () => {
         setIsLoading(true);
         clearError();
+        setSuccessMessage(null);
         try {
             await signInWithGoogle();
         } catch {
@@ -41,12 +44,19 @@ const LoginScreen = () => {
         e.preventDefault();
         setIsLoading(true);
         clearError();
+        setSuccessMessage(null);
 
         try {
             if (mode === 'login') {
                 await signInWithEmail(email, password);
             } else if (mode === 'register') {
                 await signUpWithEmail(email, password, displayName || undefined);
+                setSuccessMessage('¡Cuenta creada! Revisa tu correo para verificar tu cuenta.');
+                // Optional: switch to login mod or auto-login (already handled by context)
+            } else if (mode === 'forgot_password') {
+                await resetPassword(email);
+                setSuccessMessage('Si el correo existe, recibirás un enlace para recuperar tu contraseña.');
+                // Keep them on this screen or switch to login logic
             }
         } catch {
             // Error handled in AuthContext
@@ -59,6 +69,7 @@ const LoginScreen = () => {
         e.preventDefault();
         setIsLoading(true);
         clearError();
+        setSuccessMessage(null);
 
         try {
             if (!phoneCodeSent) {
@@ -79,13 +90,21 @@ const LoginScreen = () => {
     const switchMode = (newMode: AuthMode) => {
         setMode(newMode);
         clearError();
-        setEmail('');
+        setSuccessMessage(null);
         setPassword('');
-        setDisplayName('');
-        setPhoneNumber('');
-        setVerificationCode('');
+        // Don't clear email when switching to forgot password as it might be useful
+        if (newMode === 'login' && mode === 'register') {
+            setEmail('');
+            setDisplayName('');
+        }
+        if (newMode !== 'phone' && newMode !== 'forgot_password') {
+            // Reset phone auth only when leaving phone mode completely not just sub-states if any
+        }
+
         if (newMode !== 'phone') {
             resetPhoneAuth();
+            setPhoneNumber('');
+            setVerificationCode('');
         }
     };
 
@@ -211,6 +230,62 @@ const LoginScreen = () => {
                             </button>
                         </form>
                     </div>
+                ) : mode === 'forgot_password' ? (
+                    <div className="w-full">
+                        {/* Back button */}
+                        <button
+                            onClick={backToMainAuth}
+                            className="mb-6 text-neutral-500 text-sm hover:text-white transition-colors flex items-center gap-2"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                            Volver
+                        </button>
+
+                        <div className="text-center mb-8">
+                            <h2 className="text-white font-serif text-xl mb-3">Recuperar Contraseña</h2>
+                            <p className="text-neutral-500 text-sm leading-relaxed">
+                                Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.
+                            </p>
+                        </div>
+
+                        {/* Success message */}
+                        {successMessage && (
+                            <div className="w-full mb-6 p-3 bg-green-500/10 border border-green-500/30 rounded text-green-400 text-sm text-center">
+                                {successMessage}
+                            </div>
+                        )}
+
+                        {/* Error message */}
+                        {authError && (
+                            <div className="w-full mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm text-center">
+                                {authError}
+                            </div>
+                        )}
+
+                        <form onSubmit={handleEmailSubmit} className="w-full space-y-4 mb-6">
+                            <input
+                                type="email"
+                                placeholder="Correo electrónico"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required
+                                className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
+                            />
+                            <button
+                                type="submit"
+                                disabled={isLoading || !!successMessage}
+                                className="w-full bg-white text-black py-3 px-6 font-medium hover:bg-neutral-100 active:bg-neutral-200 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded"
+                            >
+                                {isLoading ? (
+                                    <div className="w-5 h-5 mx-auto border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                                ) : (
+                                    'Enviar Correo'
+                                )}
+                            </button>
+                        </form>
+                    </div>
                 ) : (
                     <>
                         {/* Main Auth View */}
@@ -235,6 +310,13 @@ const LoginScreen = () => {
                                 Registro
                             </button>
                         </div>
+
+                        {/* Success message */}
+                        {successMessage && (
+                            <div className="w-full mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded text-green-400 text-sm text-center">
+                                {successMessage}
+                            </div>
+                        )}
 
                         {/* Error message */}
                         {authError && (
@@ -271,6 +353,19 @@ const LoginScreen = () => {
                                 minLength={6}
                                 className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
                             />
+
+                            {mode === 'login' && (
+                                <div className="w-full flex justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={() => switchMode('forgot_password')}
+                                        className="text-neutral-500 text-xs hover:text-neutral-300 transition-colors"
+                                    >
+                                        ¿Olvidaste tu contraseña?
+                                    </button>
+                                </div>
+                            )}
+
                             <button
                                 type="submit"
                                 disabled={isLoading}

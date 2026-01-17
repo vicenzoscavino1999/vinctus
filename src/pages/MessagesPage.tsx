@@ -2,6 +2,7 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
 import { Search, ChevronRight, Users, ArrowLeft, Send } from 'lucide-react';
+import { useToast } from '../components/Toast';
 import {
     subscribeToConversations,
     subscribeToMessages,
@@ -36,6 +37,7 @@ interface GroupInfo {
 
 export default function MessagesPage() {
     const { user } = useAuth();
+    const { showToast } = useToast();
     const [conversations, setConversations] = useState<ConversationRead[]>([]);
     const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
     const [messages, setMessages] = useState<MessageRead[]>([]);
@@ -210,7 +212,13 @@ export default function MessagesPage() {
 
         const text = newMessage.trim();
         setNewMessage('');
-        await sendMessage(selectedConversationId, user.uid, text);
+        try {
+            await sendMessage(selectedConversationId, user.uid, text);
+        } catch (err) {
+            console.error('Error sending message:', err);
+            setNewMessage(text);
+            showToast('No se pudo enviar el mensaje.', 'error');
+        }
     };
 
     // Filter conversations by type and search

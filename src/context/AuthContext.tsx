@@ -1,6 +1,3 @@
-// Firebase Authentication Context for Vinctus
-// Provides user state and sign-in/sign-out functions
-
 import {
     createContext,
     useContext,
@@ -21,6 +18,8 @@ import {
     signOut as firebaseSignOut,
     onAuthStateChanged,
     updateProfile,
+    sendPasswordResetEmail,
+    sendEmailVerification,
     RecaptchaVerifier,
     type User,
     type ConfirmationResult
@@ -35,6 +34,7 @@ interface AuthUser {
     displayName: string | null;
     photoURL: string | null;
     phoneNumber: string | null;
+    emailVerified: boolean;
 }
 
 interface AuthContextType {
@@ -45,6 +45,7 @@ interface AuthContextType {
     signInWithGoogle: () => Promise<void>;
     signInWithEmail: (email: string, password: string) => Promise<void>;
     signUpWithEmail: (email: string, password: string, displayName?: string) => Promise<void>;
+    resetPassword: (email: string) => Promise<void>;
     sendPhoneCode: (phoneNumber: string, recaptchaContainerId: string) => Promise<void>;
     verifyPhoneCode: (code: string) => Promise<void>;
     signOut: () => Promise<void>;
@@ -64,6 +65,7 @@ const mapUser = (firebaseUser: User | null): AuthUser | null => {
         displayName: firebaseUser.displayName,
         photoURL: firebaseUser.photoURL,
         phoneNumber: firebaseUser.phoneNumber,
+        emailVerified: firebaseUser.emailVerified
     };
 };
 
@@ -271,10 +273,26 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             if (displayName && result.user) {
                 await updateProfile(result.user, { displayName });
             }
+            // Send email verification
+            if (result.user) {
+                await sendEmailVerification(result.user);
+            }
             if (result.user) {
                 await ensureUserProfile(result.user);
                 setUser(mapUser(result.user));
             }
+        } catch (err) {
+            const code = (err as { code?: string }).code || '';
+            setError(translateError(code));
+            throw err;
+        }
+    }, []);
+
+    // Reset password
+    const resetPassword = useCallback(async (email: string) => {
+        setError(null);
+        try {
+            await sendPasswordResetEmail(auth, email);
         } catch (err) {
             const code = (err as { code?: string }).code || '';
             setError(translateError(code));
@@ -350,12 +368,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         signInWithGoogle,
         signInWithEmail,
         signUpWithEmail,
+        resetPassword,
         sendPhoneCode,
         verifyPhoneCode,
         signOut,
         clearError,
         resetPhoneAuth,
-    }), [user, loading, error, phoneCodeSent, signInWithGoogle, signInWithEmail, signUpWithEmail, sendPhoneCode, verifyPhoneCode, signOut, clearError, resetPhoneAuth]);
+    }), [user, loading, error, phoneCodeSent, signInWithGoogle, signInWithEmail, signUpWithEmail, resetPassword, sendPhoneCode, verifyPhoneCode, signOut, clearError, resetPhoneAuth]);
 
     return (
         <AuthContext.Provider value={value}>
