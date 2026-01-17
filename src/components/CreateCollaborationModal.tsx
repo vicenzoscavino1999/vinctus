@@ -2,16 +2,30 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Loader2, X } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
-import { createCollaboration, type CollaborationLevel, type CollaborationMode } from '../lib/firestore';
+import {
+    createCollaboration,
+    updateCollaboration,
+    type CollaborationLevel,
+    type CollaborationMode,
+    type CollaborationRead
+} from '../lib/firestore';
 import { useToast } from './Toast';
 
 interface CreateCollaborationModalProps {
     isOpen: boolean;
+    editingCollaboration?: CollaborationRead | null;
     onClose: () => void;
     onCreated: () => void;
+    onUpdated?: () => void;
 }
 
-const CreateCollaborationModal = ({ isOpen, onClose, onCreated }: CreateCollaborationModalProps) => {
+const CreateCollaborationModal = ({
+    isOpen,
+    editingCollaboration,
+    onClose,
+    onCreated,
+    onUpdated
+}: CreateCollaborationModalProps) => {
     const { user } = useAuth();
     const { showToast } = useToast();
 
@@ -38,8 +52,22 @@ const CreateCollaborationModal = ({ isOpen, onClose, onCreated }: CreateCollabor
             setTagsInput('');
             setError(null);
             setIsSubmitting(false);
+            return;
         }
-    }, [isOpen]);
+
+        if (editingCollaboration) {
+            setTitle(editingCollaboration.title);
+            setContext(editingCollaboration.context);
+            setSeekingRole(editingCollaboration.seekingRole);
+            setMode(editingCollaboration.mode);
+            setLocation(editingCollaboration.location ?? '');
+            setLevel(editingCollaboration.level);
+            setTopic(editingCollaboration.topic ?? '');
+            setTagsInput(editingCollaboration.tags.join(', '));
+            setError(null);
+            setIsSubmitting(false);
+        }
+    }, [isOpen, editingCollaboration]);
 
     const parsedTags = useMemo(() => {
         return tagsInput
@@ -78,28 +106,40 @@ const CreateCollaborationModal = ({ isOpen, onClose, onCreated }: CreateCollabor
         setIsSubmitting(true);
 
         try {
-            await createCollaboration(
-                user.uid,
-                {
-                    displayName: user.displayName || 'Usuario',
-                    photoURL: user.photoURL || null
-                },
-                {
-                    title: trimmedTitle,
-                    context: trimmedContext,
-                    seekingRole: trimmedRole,
-                    mode,
-                    location: mode === 'presencial' ? trimmedLocation : null,
-                    level,
-                    topic: trimmedTopic ? trimmedTopic : null,
-                    tags: parsedTags
+            const payload = {
+                title: trimmedTitle,
+                context: trimmedContext,
+                seekingRole: trimmedRole,
+                mode,
+                location: mode === 'presencial' ? trimmedLocation : null,
+                level,
+                topic: trimmedTopic ? trimmedTopic : null,
+                tags: parsedTags
+            };
+
+            if (editingCollaboration) {
+                await updateCollaboration(editingCollaboration.id, payload);
+                showToast('Proyecto actualizado', 'success');
+                if (onUpdated) {
+                    onUpdated();
+                } else {
+                    onCreated();
                 }
-            );
-            showToast('Proyecto publicado', 'success');
-            onCreated();
+            } else {
+                await createCollaboration(
+                    user.uid,
+                    {
+                        displayName: user.displayName || 'Usuario',
+                        photoURL: user.photoURL || null
+                    },
+                    payload
+                );
+                showToast('Proyecto publicado', 'success');
+                onCreated();
+            }
         } catch (submitError) {
-            console.error('Error creating collaboration:', submitError);
-            setError('No se pudo publicar el proyecto.');
+            console.error('Error saving collaboration:', submitError);
+            setError(editingCollaboration ? 'No se pudo actualizar el proyecto.' : 'No se pudo publicar el proyecto.');
         } finally {
             setIsSubmitting(false);
         }
@@ -112,7 +152,9 @@ const CreateCollaborationModal = ({ isOpen, onClose, onCreated }: CreateCollabor
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
             <div className="relative w-full max-w-2xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
-                    <h2 className="text-xl font-serif text-white">Publicar proyecto</h2>
+                    <h2 className="text-xl font-serif text-white">
+                        {editingCollaboration ? 'Editar proyecto' : 'Publicar proyecto'}
+                    </h2>
                     <button
                         onClick={onClose}
                         className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
@@ -265,10 +307,10 @@ const CreateCollaborationModal = ({ isOpen, onClose, onCreated }: CreateCollabor
                             {isSubmitting ? (
                                 <>
                                     <Loader2 size={18} className="animate-spin" />
-                                    Publicando...
+                                    Guardando...
                                 </>
                             ) : (
-                                'Publicar'
+                                editingCollaboration ? 'Guardar cambios' : 'Publicar'
                             )}
                         </button>
                     </div>

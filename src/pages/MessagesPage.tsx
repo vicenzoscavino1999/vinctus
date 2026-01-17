@@ -108,6 +108,7 @@ export default function MessagesPage() {
             user.uid,
             (convs) => {
                 setConversations(convs);
+                setError(null);
                 setLoading(false);
 
                 // Fetch group info for group conversations
@@ -392,13 +393,13 @@ export default function MessagesPage() {
             </div>
 
             {/* Error State */}
-            {error && (
+            {error && filteredConversations.length === 0 && (
                 <div className="text-center text-red-400 py-10">{error}</div>
             )}
 
             {/* Conversations List */}
             <div className="space-y-2">
-                {!error && filteredConversations.length === 0 ? (
+                {filteredConversations.length === 0 && !error ? (
                     <div className="text-center text-neutral-500 py-10">
                         {searchQuery ? 'No hay resultados' : `No hay ${activeTab === 'groups' ? 'grupos' : 'mensajes privados'} aún`}
                     </div>

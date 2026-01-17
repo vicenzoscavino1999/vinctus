@@ -1953,6 +1953,23 @@ export async function createCollaboration(
     return collaborationRef.id;
 }
 
+export async function updateCollaboration(
+    collaborationId: string,
+    input: CreateCollaborationInput
+): Promise<void> {
+    await updateDoc(doc(db, 'collaborations', collaborationId), {
+        title: input.title,
+        context: input.context,
+        seekingRole: input.seekingRole,
+        mode: input.mode,
+        location: input.location,
+        level: input.level,
+        topic: input.topic,
+        tags: input.tags,
+        updatedAt: serverTimestamp()
+    });
+}
+
 export type CollaborationRequestStatus = 'pending' | 'accepted' | 'rejected';
 
 export interface CollaborationRequestRead {

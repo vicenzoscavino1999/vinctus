@@ -44,6 +44,7 @@ const ProjectsPage = () => {
     const [collaborationsLoading, setCollaborationsLoading] = useState(true);
     const [collaborationsError, setCollaborationsError] = useState<string | null>(null);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
+    const [editingCollaboration, setEditingCollaboration] = useState<CollaborationRead | null>(null);
     const [selectedCollaboration, setSelectedCollaboration] = useState<CollaborationRead | null>(null);
     const [requestedIds, setRequestedIds] = useState<string[]>([]);
 
@@ -74,6 +75,7 @@ const ProjectsPage = () => {
             showToast('Inicia sesion para publicar proyectos', 'info');
             return;
         }
+        setEditingCollaboration(null);
         setIsCreateOpen(true);
     };
 
@@ -210,9 +212,19 @@ const ProjectsPage = () => {
 
             <CreateCollaborationModal
                 isOpen={isCreateOpen}
-                onClose={() => setIsCreateOpen(false)}
+                editingCollaboration={editingCollaboration}
+                onClose={() => {
+                    setIsCreateOpen(false);
+                    setEditingCollaboration(null);
+                }}
                 onCreated={() => {
                     setIsCreateOpen(false);
+                    setEditingCollaboration(null);
+                    loadCollaborations();
+                }}
+                onUpdated={() => {
+                    setIsCreateOpen(false);
+                    setEditingCollaboration(null);
                     loadCollaborations();
                 }}
             />
@@ -228,6 +240,11 @@ const ProjectsPage = () => {
                 onDeleted={() => {
                     setSelectedCollaboration(null);
                     loadCollaborations();
+                }}
+                onEdit={(collaboration) => {
+                    setSelectedCollaboration(null);
+                    setEditingCollaboration(collaboration);
+                    setIsCreateOpen(true);
                 }}
             />
         </div>

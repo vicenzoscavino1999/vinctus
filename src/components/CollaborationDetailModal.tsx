@@ -16,6 +16,7 @@ interface CollaborationDetailModalProps {
     onClose: () => void;
     onRequestSent: (collaborationId: string) => void;
     onDeleted: () => void;
+    onEdit?: (collaboration: CollaborationRead) => void;
 }
 
 const formatLevel = (level: CollaborationRead['level']): string => {
@@ -34,7 +35,8 @@ const CollaborationDetailModal = ({
     isRequested,
     onClose,
     onRequestSent,
-    onDeleted
+    onDeleted,
+    onEdit
 }: CollaborationDetailModalProps) => {
     const { user } = useAuth();
     const { showToast } = useToast();
@@ -116,6 +118,11 @@ const CollaborationDetailModal = ({
             setIsDeleting(false);
             setConfirmDelete(false);
         }
+    };
+
+    const handleEdit = () => {
+        if (!onEdit) return;
+        onEdit(collaboration);
     };
 
     return (
@@ -242,14 +249,25 @@ const CollaborationDetailModal = ({
                                     </div>
                                 </div>
                             ) : (
-                                <button
-                                    type="button"
-                                    onClick={() => setConfirmDelete(true)}
-                                    className="text-xs uppercase tracking-widest px-3 py-1.5 rounded-full border border-red-500/50 text-red-300 hover:text-white hover:border-red-300 transition-colors flex items-center gap-2"
-                                >
-                                    <Trash2 size={14} />
-                                    Eliminar proyecto
-                                </button>
+                                <div className="flex flex-wrap items-center gap-3">
+                                    {onEdit && (
+                                        <button
+                                            type="button"
+                                            onClick={handleEdit}
+                                            className="text-xs uppercase tracking-widest px-3 py-1.5 rounded-full border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 transition-colors"
+                                        >
+                                            Editar proyecto
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => setConfirmDelete(true)}
+                                        className="text-xs uppercase tracking-widest px-3 py-1.5 rounded-full border border-red-500/50 text-red-300 hover:text-white hover:border-red-300 transition-colors flex items-center gap-2"
+                                    >
+                                        <Trash2 size={14} />
+                                        Eliminar proyecto
+                                    </button>
+                                </div>
                             )}
                         </div>
                     )}
