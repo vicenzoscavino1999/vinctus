@@ -144,11 +144,18 @@ export interface SavedCategoryWrite {
 export interface FirestoreGroup {
     id: string;
     name: string;
-    categoryId: string;
-    memberCount: number;
+    description?: string | null;
+    categoryId?: string | null;
+    visibility?: GroupVisibility;
+    ownerId?: string;
+    iconUrl?: string | null;
+    memberCount?: number;
     apiQuery?: string;
     createdAt?: Date;
+    updatedAt?: Date;
 }
+
+export type GroupVisibility = 'public' | 'private';
 
 // Pagination result
 export interface PaginatedResult<T> {
@@ -203,6 +210,7 @@ export const getGroups = async (): Promise<FirestoreGroup[]> => {
             id: d.id,
             ...data,
             createdAt: toDate(data.createdAt),
+            updatedAt: toDate(data.updatedAt),
         } as FirestoreGroup;
     });
 };
@@ -216,6 +224,7 @@ export const getGroupsByCategory = async (categoryId: string): Promise<Firestore
             id: d.id,
             ...data,
             createdAt: toDate(data.createdAt),
+            updatedAt: toDate(data.updatedAt),
         } as FirestoreGroup;
     });
 };
@@ -228,6 +237,7 @@ export const getGroup = async (groupId: string): Promise<FirestoreGroup | null> 
         id: docSnap.id,
         ...data,
         createdAt: toDate(data.createdAt),
+        updatedAt: toDate(data.updatedAt),
     } as FirestoreGroup;
 };
 
@@ -284,6 +294,251 @@ export const isGroupMember = async (groupId: string, uid: string): Promise<boole
     const docSnap = await getDoc(doc(db, 'groups', groupId, 'members', uid));
     return docSnap.exists();
 };
+
+export interface CreateGroupInput {
+    name: string;
+    description: string;
+    categoryId: string | null;
+    visibility: GroupVisibility;
+    iconUrl: string | null;
+}
+
+export async function createGroup(ownerId: string, input: CreateGroupInput): Promise<string> {
+    const groupRef = doc(collection(db, 'groups'));
+    const memberRef = doc(db, 'groups', groupRef.id, 'members', ownerId);
+    const membershipRef = doc(db, 'users', ownerId, 'memberships', groupRef.id);
+    await setDoc(groupRef, {
+        name: input.name,
+        description: input.description,
+        categoryId: input.categoryId,
+        visibility: input.visibility,
+        ownerId,
+        iconUrl: input.iconUrl,
+        memberCount: 1,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+    });
+
+    try {
+        const batch = writeBatch(db);
+        batch.set(memberRef, {
+            uid: ownerId,
+            groupId: groupRef.id,
+            role: 'admin',
+            joinedAt: serverTimestamp()
+        } as GroupMemberWrite, { merge: false });
+        batch.set(membershipRef, {
+            groupId: groupRef.id,
+            joinedAt: serverTimestamp()
+        } as UserMembershipWrite, { merge: false });
+        await batch.commit();
+    } catch (error) {
+        await deleteDoc(groupRef).catch(() => {});
+        throw error;
+    }
+
+    return groupRef.id;
+}
+
+export async function updateGroup(groupId: string, input: CreateGroupInput): Promise<void> {
+    await updateDoc(doc(db, 'groups', groupId), {
+        name: input.name,
+        description: input.description,
+        categoryId: input.categoryId,
+        visibility: input.visibility,
+        iconUrl: input.iconUrl,
+        updatedAt: serverTimestamp()
+    });
+}
+
+export async function joinPublicGroup(groupId: string, uid: string): Promise<void> {
+    const group = await getGroup(groupId);
+    if (!group) {
+        throw new Error('Grupo no encontrado');
+    }
+    const visibility = group.visibility ?? 'public';
+    if (visibility !== 'public') {
+        throw new Error('Este grupo es privado');
+    }
+    await joinGroupWithSync(groupId, uid);
+}
+
+export type GroupJoinRequestStatus = 'pending' | 'accepted' | 'rejected';
+
+export interface GroupJoinRequestRead {
+    id: string;
+    groupId: string;
+    groupName: string;
+    fromUid: string;
+    toUid: string;
+    status: GroupJoinRequestStatus;
+    message: string | null;
+    fromUserName: string | null;
+    fromUserPhoto: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+export async function sendGroupJoinRequest(input: {
+    groupId: string;
+    groupName: string;
+    fromUid: string;
+    toUid: string;
+    message: string | null;
+    fromUserName: string | null;
+    fromUserPhoto: string | null;
+}): Promise<string> {
+    const existingQuery = query(
+        collection(db, 'group_requests'),
+        where('fromUid', '==', input.fromUid),
+        where('groupId', '==', input.groupId)
+    );
+    const existing = await getDocs(existingQuery);
+
+    if (!existing.empty) {
+        const existingDoc = existing.docs[0];
+        const data = existingDoc.data();
+        if (data.status === 'pending') {
+            throw new Error('Ya enviaste una solicitud para este grupo.');
+        }
+        if (data.status === 'accepted') {
+            throw new Error('Ya eres miembro de este grupo.');
+        }
+    }
+
+    const requestRef = doc(collection(db, 'group_requests'));
+    await setDoc(requestRef, {
+        groupId: input.groupId,
+        groupName: input.groupName,
+        fromUid: input.fromUid,
+        toUid: input.toUid,
+        status: 'pending',
+        message: input.message,
+        fromUserName: input.fromUserName,
+        fromUserPhoto: input.fromUserPhoto,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+    });
+
+    return requestRef.id;
+}
+
+export async function getPendingGroupJoinRequests(ownerId: string): Promise<GroupJoinRequestRead[]> {
+    const q = query(
+        collection(db, 'group_requests'),
+        where('toUid', '==', ownerId),
+        where('status', '==', 'pending'),
+        orderBy('createdAt', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+            id: docSnap.id,
+            groupId: data.groupId,
+            groupName: data.groupName,
+            fromUid: data.fromUid,
+            toUid: data.toUid,
+            status: (data.status as GroupJoinRequestStatus) || 'pending',
+            message: data.message ?? null,
+            fromUserName: data.fromUserName ?? null,
+            fromUserPhoto: data.fromUserPhoto ?? null,
+            createdAt: toDate(data.createdAt) || new Date(),
+            updatedAt: toDate(data.updatedAt) || new Date()
+        } as GroupJoinRequestRead;
+    });
+}
+
+export async function acceptGroupJoinRequest(requestId: string): Promise<void> {
+    const requestRef = doc(db, 'group_requests', requestId);
+    const requestSnap = await getDoc(requestRef);
+    if (!requestSnap.exists()) {
+        throw new Error('Solicitud no encontrada');
+    }
+
+    const data = requestSnap.data();
+    if (data.status !== 'pending') return;
+
+    const groupId = data.groupId as string;
+    const memberUid = data.fromUid as string;
+
+    const memberRef = doc(db, 'groups', groupId, 'members', memberUid);
+    const membershipRef = doc(db, 'users', memberUid, 'memberships', groupId);
+
+    const batch = writeBatch(db);
+    batch.update(requestRef, {
+        status: 'accepted',
+        updatedAt: serverTimestamp()
+    });
+    batch.set(memberRef, {
+        uid: memberUid,
+        groupId,
+        role: 'member',
+        joinedAt: serverTimestamp()
+    } as GroupMemberWrite, { merge: false });
+    batch.set(membershipRef, {
+        groupId,
+        joinedAt: serverTimestamp()
+    } as UserMembershipWrite, { merge: false });
+    await batch.commit();
+}
+
+export async function rejectGroupJoinRequest(requestId: string): Promise<void> {
+    await updateDoc(doc(db, 'group_requests', requestId), {
+        status: 'rejected',
+        updatedAt: serverTimestamp()
+    });
+}
+
+export type GroupJoinStatus = 'member' | 'pending' | 'none';
+
+export async function getGroupJoinStatus(groupId: string, uid: string): Promise<GroupJoinStatus> {
+    const memberSnap = await getDoc(doc(db, 'groups', groupId, 'members', uid));
+    if (memberSnap.exists()) return 'member';
+
+    const reqQuery = query(
+        collection(db, 'group_requests'),
+        where('groupId', '==', groupId),
+        where('fromUid', '==', uid),
+        where('status', '==', 'pending')
+    );
+    const reqSnap = await getDocs(reqQuery);
+    return reqSnap.empty ? 'none' : 'pending';
+}
+
+export async function getGroupMemberCount(groupId: string): Promise<number> {
+    const snap = await getCountFromServer(collection(db, 'groups', groupId, 'members'));
+    return snap.data().count;
+}
+
+export async function getGroupMembers(groupId: string, limitCount: number = DEFAULT_LIMIT): Promise<GroupMemberRead[]> {
+    const q = query(
+        collection(db, 'groups', groupId, 'members'),
+        orderBy('joinedAt', 'desc'),
+        limit(limitCount)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((docSnap) => {
+        const data = docSnap.data() as { groupId?: string; role?: GroupMemberRead['role']; joinedAt?: Timestamp };
+        return {
+            uid: docSnap.id,
+            groupId: data.groupId ?? groupId,
+            role: data.role ?? 'member',
+            joinedAt: data.joinedAt ?? Timestamp.now()
+        };
+    });
+}
+
+export async function getGroupPostsWeekCount(groupId: string): Promise<number> {
+    const weekAgo = Timestamp.fromDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+    const q = query(
+        collection(db, 'posts'),
+        where('groupId', '==', groupId),
+        where('createdAt', '>=', weekAgo)
+    );
+    const snap = await getCountFromServer(q);
+    return snap.data().count;
+}
 
 // ==================== Post Likes (Offline-First writeBatch) ====================
 
@@ -815,6 +1070,26 @@ export const getOrCreateDirectConversation = async (uid1: string, uid2: string):
     try {
         const convSnap = await getDoc(convRef);
         convExists = convSnap.exists();
+        if (convSnap.exists()) {
+            const data = convSnap.data() as { memberIds?: unknown; type?: unknown } | undefined;
+            const memberIdsValue = data?.memberIds;
+            const hasMemberIds = Array.isArray(memberIdsValue) && memberIdsValue.length === 2;
+            const hasType = data?.type === 'direct';
+            if (!hasMemberIds || !hasType) {
+                try {
+                    await updateDoc(convRef, {
+                        memberIds,
+                        type: 'direct',
+                        updatedAt: serverTimestamp()
+                    });
+                } catch (updateError) {
+                    const code = (updateError as { code?: string })?.code;
+                    if (code !== 'permission-denied') {
+                        throw updateError;
+                    }
+                }
+            }
+        }
     } catch (error) {
         console.warn('Conversation read blocked, attempting create:', error);
     }

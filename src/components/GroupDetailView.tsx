@@ -24,6 +24,7 @@ export interface GroupData {
     description: string;
     members: number;
     postsPerWeek: number;
+    iconUrl?: string | null;
     icon: string;
     recentPosts: RecentPost[];
     topMembers: TopMember[];
@@ -41,6 +42,9 @@ export interface GroupDetailViewProps {
     group: GroupData | null;
     category: CategoryInfo | null;
     isJoined: boolean;
+    joinLabel: string;
+    joinDisabled: boolean;
+    canOpenChat: boolean;
     openingChat: boolean;
     isAuthenticated: boolean;
 
@@ -60,6 +64,9 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
     group,
     category,
     isJoined,
+    joinLabel,
+    joinDisabled,
+    canOpenChat,
     openingChat,
     isAuthenticated,
     onJoinGroup,
@@ -133,7 +140,13 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
             {/* Header */}
             <header className="mb-8">
                 <div className="flex items-start gap-4 mb-4">
-                    <span className="text-5xl">{group.icon}</span>
+                    <div className="w-16 h-16 rounded-2xl bg-neutral-800 border border-neutral-700 flex items-center justify-center overflow-hidden">
+                        {group.iconUrl ? (
+                            <img src={group.iconUrl} alt={group.name} className="w-full h-full object-cover" />
+                        ) : (
+                            <span className="text-2xl text-neutral-200">{group.icon}</span>
+                        )}
+                    </div>
                     <div className="flex-1">
                         <h1 className="text-display-sm font-display text-white mb-2">{group.name}</h1>
                         <div className="flex items-center gap-3 text-neutral-500 text-sm">
@@ -154,16 +167,27 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
                 <div className="flex items-center gap-3">
                     <button
                         onClick={onJoinGroup}
-                        className={`flex-1 py-3 rounded-button font-medium text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all btn-premium ${isJoined ? 'bg-brand-gold text-black' : 'bg-neutral-800 text-white hover:bg-neutral-700'
+                        disabled={joinDisabled}
+                        className={`flex-1 py-3 rounded-button font-medium text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all btn-premium ${isJoined
+                            ? 'bg-brand-gold text-black'
+                            : joinDisabled
+                                ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed'
+                                : 'bg-neutral-800 text-white hover:bg-neutral-700'
                             }`}
                     >
-                        {isJoined ? <><Check size={18} /> Unido</> : 'Unirme al grupo'}
+                        {isJoined ? <><Check size={18} /> {joinLabel}</> : joinLabel}
                     </button>
                     <button
                         onClick={onOpenGroupChat}
-                        disabled={openingChat || !isAuthenticated}
+                        disabled={openingChat || !isAuthenticated || !canOpenChat}
                         className="px-5 py-3 rounded-button bg-neutral-800 border border-neutral-700 text-white hover:bg-neutral-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={!isAuthenticated ? 'Debes iniciar sesión para chatear' : ''}
+                        title={
+                            !isAuthenticated
+                                ? 'Debes iniciar sesion para chatear'
+                                : !canOpenChat
+                                    ? 'Unete al grupo para chatear'
+                                    : ''
+                        }
                     >
                         <MessageCircle size={18} />
                         {openingChat ? 'Abriendo...' : 'Chat'}
@@ -183,50 +207,62 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
             <section className="mb-8">
                 <h2 className="text-heading-lg font-display text-white mb-4">Publicaciones recientes</h2>
                 <div className="space-y-3 stagger-premium">
-                    {group.recentPosts.map(post => (
-                        <div
-                            key={post.id}
-                            onClick={() => onOpenPost?.(post.id)}
-                            onKeyDown={(event) => {
-                                if (!onOpenPost) return;
-                                if (event.key === 'Enter' || event.key === ' ') {
-                                    event.preventDefault();
-                                    onOpenPost(post.id);
-                                }
-                            }}
-                            role={onOpenPost ? 'button' : undefined}
-                            tabIndex={onOpenPost ? 0 : undefined}
-                            aria-label={onOpenPost ? `Abrir publicación: ${post.title}` : undefined}
-                            className={`bg-surface-overlay border border-neutral-800/50 rounded-card p-4 flex items-center justify-between card-premium ${onOpenPost ? 'cursor-pointer' : ''}`}
-                        >
-                            <div>
-                                <p className="text-white font-medium mb-1">{post.title}</p>
-                                <p className="text-neutral-500 text-sm">{post.author} · {post.time}</p>
-                            </div>
-                            <ArrowRight size={16} className="text-neutral-600" />
+                    {group.recentPosts.length === 0 ? (
+                        <div className="text-center text-neutral-500 py-6">
+                            Aun no hay publicaciones en este grupo.
                         </div>
-                    ))}
+                    ) : (
+                        group.recentPosts.map(post => (
+                            <div
+                                key={post.id}
+                                onClick={() => onOpenPost?.(post.id)}
+                                onKeyDown={(event) => {
+                                    if (!onOpenPost) return;
+                                    if (event.key === 'Enter' || event.key === ' ') {
+                                        event.preventDefault();
+                                        onOpenPost(post.id);
+                                    }
+                                }}
+                                role={onOpenPost ? 'button' : undefined}
+                                tabIndex={onOpenPost ? 0 : undefined}
+                                aria-label={onOpenPost ? `Abrir publicacion: ${post.title}` : undefined}
+                                className={`bg-surface-overlay border border-neutral-800/50 rounded-card p-4 flex items-center justify-between card-premium ${onOpenPost ? 'cursor-pointer' : ''}`}
+                            >
+                                <div>
+                                    <p className="text-white font-medium mb-1">{post.title}</p>
+                                    <p className="text-neutral-500 text-sm">{post.author} - {post.time}</p>
+                                </div>
+                                <ArrowRight size={16} className="text-neutral-600" />
+                            </div>
+                        ))
+                    )}
                 </div>
             </section>
 
             {/* Top members */}
             <section>
                 <h2 className="text-heading-lg font-display text-white mb-4">Miembros destacados</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {group.topMembers.map(member => (
-                        <div
-                            key={member.id}
-                            className="bg-surface-overlay border border-neutral-800/50 rounded-card p-4 text-center"
-                        >
-                            <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center mx-auto mb-3">
-                                <span className="text-lg">{member.name.charAt(0)}</span>
+                {group.topMembers.length === 0 ? (
+                    <div className="text-center text-neutral-500 py-6">
+                        No hay miembros destacados por ahora.
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {group.topMembers.map(member => (
+                            <div
+                                key={member.id}
+                                className="bg-surface-overlay border border-neutral-800/50 rounded-card p-4 text-center"
+                            >
+                                <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center mx-auto mb-3">
+                                    <span className="text-lg">{member.name.charAt(0)}</span>
+                                </div>
+                                <p className="text-white font-medium">{member.name}</p>
+                                <p className="text-brand-gold text-xs uppercase tracking-wider">{member.role}</p>
+                                <p className="text-neutral-500 text-xs mt-1">{member.posts} posts</p>
                             </div>
-                            <p className="text-white font-medium">{member.name}</p>
-                            <p className="text-brand-gold text-xs uppercase tracking-wider">{member.role}</p>
-                            <p className="text-neutral-500 text-xs mt-1">{member.posts} posts</p>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                )}
             </section>
         </div>
     );

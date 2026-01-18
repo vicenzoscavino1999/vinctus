@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Loader2, MessageCircle, X } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
@@ -41,7 +41,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
     const [error, setError] = useState<string | null>(null);
     const [message, setMessage] = useState('');
 
-    const loadComments = async () => {
+    const loadComments = useCallback(async () => {
         if (!post) return;
         try {
             setError(null);
@@ -54,13 +54,13 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
         } finally {
             setLoading(false);
         }
-    };
+    }, [post]);
 
     useEffect(() => {
         if (!isOpen || !post) return;
         loadComments();
         setMessage('');
-    }, [isOpen, post?.postId]);
+    }, [isOpen, post, loadComments]);
 
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();

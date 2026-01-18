@@ -1,126 +1,231 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
-import { useAppState } from '../context';
+import { useEffect, useState } from 'react';
+
 import { useAuth } from '../context/AuthContext';
 import { CATEGORIES } from '../data';
-import { GroupDetailView, GroupData, CategoryInfo } from './GroupDetailView';
+import {
+    GroupDetailView,
+    type GroupData,
+    type CategoryInfo,
+    type RecentPost,
+    type TopMember
+} from './GroupDetailView';
 import { useToast } from './Toast';
-import { getOrCreateGroupConversation } from '../lib/firestore';
+import {
+    getGroup,
+    getGroupJoinStatus,
+    getGroupMembers,
+    getGroupMemberCount,
+    getGroupPostsWeekCount,
+    getPostsByGroup,
+    getOrCreateGroupConversation,
+    getUserProfile,
+    joinPublicGroup,
+    sendGroupJoinRequest,
+    type FirestoreGroup,
+    type GroupJoinStatus
+} from '../lib/firestore';
 
-// ===== DATOS MOCK (en app real, vendría de API/Firebase) =====
+const formatRelativeTime = (date: Date): string => {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
 
-const GROUPS_DATA: Record<string, GroupData> = {
-    '1': {
-        id: '1',
-        categoryId: 'science',
-        name: 'Exploradores Cuánticos',
-        description: 'Grupo dedicado a discutir los últimos avances en física cuántica, mecánica cuántica y teorías del universo. Compartimos papers, debates y experimentos mentales.',
-        members: 2340,
-        postsPerWeek: 45,
-        icon: '⚛️',
-        recentPosts: [
-            { id: '1', title: 'Nuevo experimento de entrelazamiento', author: 'María L.', time: '2h' },
-            { id: '2', title: 'Discusión: Interpretación de Copenhague vs Many Worlds', author: 'Carlos R.', time: '5h' },
-            { id: '3', title: 'Paper: Quantum Computing Advances 2024', author: 'Ana M.', time: '1d' },
-        ],
-        topMembers: [
-            { id: '1', name: 'María L.', role: 'Admin', posts: 234 },
-            { id: '2', name: 'Carlos R.', role: 'Mod', posts: 189 },
-            { id: '3', name: 'Ana M.', role: 'Miembro', posts: 156 },
-        ]
-    },
-    '2': {
-        id: '2',
-        categoryId: 'history',
-        name: 'Historia Viva',
-        description: 'Exploramos el pasado para entender el presente. Desde la antigüedad clásica hasta la historia contemporánea, compartimos descubrimientos, debates y fuentes primarias.',
-        members: 1890,
-        postsPerWeek: 32,
-        icon: '🏛️',
-        recentPosts: [
-            { id: '1', title: 'Nuevos hallazgos en Pompeya', author: 'Sofía R.', time: '3h' },
-            { id: '2', title: 'Debate: La caída de Roma revisitada', author: 'Miguel A.', time: '6h' },
-        ],
-        topMembers: [
-            { id: '1', name: 'Sofía R.', role: 'Admin', posts: 278 },
-            { id: '2', name: 'Miguel A.', role: 'Mod', posts: 145 },
-        ]
-    },
-    '3': {
-        id: '3',
-        categoryId: 'music',
-        name: 'Jazz & Vinilos',
-        description: 'Para amantes del jazz en todas sus formas. Desde el bebop hasta el jazz fusión contemporáneo. Compartimos vinilos, conciertos y recomendaciones.',
-        members: 956,
-        postsPerWeek: 28,
-        icon: '🎷',
-        recentPosts: [
-            { id: '1', title: 'La magia de Rubén Blades en vivo', author: 'Pedro S.', time: '1h' },
-            { id: '2', title: 'Vinilo del mes: Kind of Blue', author: 'Laura G.', time: '3h' },
-        ],
-        topMembers: [
-            { id: '1', name: 'Pedro S.', role: 'Admin', posts: 312 },
-            { id: '2', name: 'Laura G.', role: 'Miembro', posts: 98 },
-        ]
-    },
-    '4': {
-        id: '4',
-        categoryId: 'literature',
-        name: 'Pensadores Libres',
-        description: 'Un espacio para reflexionar sobre filosofía, existencialismo y las grandes preguntas de la humanidad. Lecturas, debates y escritura creativa.',
-        members: 1234,
-        postsPerWeek: 18,
-        icon: '📚',
-        recentPosts: [
-            { id: '1', title: 'Sartre vs Camus: El absurdo revisitado', author: 'Elena V.', time: '2h' },
-            { id: '2', title: 'Lectura del mes: El Extranjero', author: 'Pablo M.', time: '4h' },
-            { id: '3', title: 'Ensayo: La libertad en tiempos modernos', author: 'Carmen L.', time: '1d' },
-        ],
-        topMembers: [
-            { id: '1', name: 'Elena V.', role: 'Admin', posts: 189 },
-            { id: '2', name: 'Pablo M.', role: 'Mod', posts: 134 },
-            { id: '3', name: 'Carmen L.', role: 'Miembro', posts: 87 },
-        ]
-    }
+    if (diffMins < 1) return 'ahora';
+    if (diffMins < 60) return `${diffMins} min`;
+    if (diffHours < 24) return `${diffHours}h`;
+    if (diffDays < 7) return `${diffDays}d`;
+    return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 };
 
-// ===== COMPONENTE CONTAINER (SOLO LÓGICA) =====
+const formatRole = (role: string): string => {
+    if (role === 'admin') return 'Admin';
+    if (role === 'moderator') return 'Mod';
+    return 'Miembro';
+};
+
+const getPostTitle = (content: string): string => {
+    const trimmed = content.trim();
+    if (!trimmed) return 'Publicacion sin texto';
+    const firstLine = trimmed.split('\n')[0]?.trim() || trimmed;
+    if (firstLine.length <= 90) return firstLine;
+    return `${firstLine.slice(0, 87)}...`;
+};
 
 export const GroupDetailContainer = () => {
     const { groupId } = useParams<{ groupId: string }>();
     const navigate = useNavigate();
-    const { isGroupJoined, toggleJoinGroup } = useAppState();
     const { showToast } = useToast();
     const { user } = useAuth();
+
     const [openingChat, setOpeningChat] = useState(false);
+    const [group, setGroup] = useState<FirestoreGroup | null>(null);
+    const [membersCount, setMembersCount] = useState(0);
+    const [postsPerWeek, setPostsPerWeek] = useState(0);
+    const [recentPosts, setRecentPosts] = useState<RecentPost[]>([]);
+    const [topMembers, setTopMembers] = useState<TopMember[]>([]);
+    const [joinStatus, setJoinStatus] = useState<GroupJoinStatus>('none');
+    const [joinLoading, setJoinLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    // Obtener ID y datos
     const groupIdStr = groupId || '';
-    const isValidId = !!groupIdStr && !!GROUPS_DATA[groupIdStr];
 
-    // En una app real, aquí iría un useEffect con fetch/React Query
-    // Por ahora usamos datos mock síncronos (isLoading siempre false)
-    const isLoading = false;
-    const error: string | null = null;
-    const group: GroupData | null = isValidId ? GROUPS_DATA[groupIdStr] : null;
+    useEffect(() => {
+        let isActive = true;
 
-    // Obtener categoría del grupo (si existe)
+        const loadGroup = async () => {
+            if (!groupIdStr) {
+                setError('Grupo no encontrado.');
+                setIsLoading(false);
+                return;
+            }
+
+            setIsLoading(true);
+            setError(null);
+            setGroup(null);
+            setMembersCount(0);
+            setPostsPerWeek(0);
+            setRecentPosts([]);
+            setTopMembers([]);
+            setJoinStatus('none');
+            setJoinLoading(false);
+
+            try {
+                const groupDoc = await getGroup(groupIdStr);
+                if (!groupDoc) {
+                    setError('Grupo no encontrado.');
+                    setIsLoading(false);
+                    return;
+                }
+
+                const [members, posts, status, postsResult, memberRows] = await Promise.all([
+                    getGroupMemberCount(groupIdStr).catch(() => groupDoc.memberCount ?? 0),
+                    getGroupPostsWeekCount(groupIdStr).catch(() => 0),
+                    user ? getGroupJoinStatus(groupIdStr, user.uid) : Promise.resolve('none' as GroupJoinStatus),
+                    getPostsByGroup(groupIdStr, 3).catch(() => ({ items: [], lastDoc: null, hasMore: false })),
+                    user ? getGroupMembers(groupIdStr, 3).catch(() => []) : Promise.resolve([])
+                ]);
+
+                const recent = postsResult.items.map((post) => ({
+                    id: post.id,
+                    title: getPostTitle(post.content || ''),
+                    author: post.authorName || 'Usuario',
+                    time: formatRelativeTime(post.createdAt.toDate())
+                })) as RecentPost[];
+
+                const topMembersData = await Promise.all(
+                    memberRows.map(async (member) => {
+                        const profile = await getUserProfile(member.uid);
+                        return {
+                            id: member.uid,
+                            name: profile?.displayName ?? 'Usuario',
+                            role: formatRole(member.role),
+                            posts: 0
+                        } as TopMember;
+                    })
+                );
+
+                if (!isActive) return;
+
+                setGroup(groupDoc);
+                setMembersCount(members);
+                setPostsPerWeek(posts);
+                setJoinStatus(status);
+                setRecentPosts(recent);
+                setTopMembers(topMembersData);
+                setIsLoading(false);
+            } catch (loadError) {
+                console.error('Error loading group:', loadError);
+                if (!isActive) return;
+                setError('No se pudo cargar el grupo.');
+                setIsLoading(false);
+            }
+        };
+
+        void loadGroup();
+
+        return () => {
+            isActive = false;
+        };
+    }, [groupIdStr, user]);
+
     const categoryData = group?.categoryId
-        ? CATEGORIES.find(c => c.id === group.categoryId)
+        ? CATEGORIES.find((category) => category.id === group.categoryId)
         : null;
 
     const category: CategoryInfo | null = categoryData
         ? { id: categoryData.id, label: categoryData.label }
         : null;
 
-    // Estado de si está unido
-    const isJoined = isValidId ? isGroupJoined(groupIdStr) : false;
+    const isOwner = !!user && group?.ownerId === user.uid;
+    const isJoined = joinStatus === 'member' || isOwner;
+    const visibility = group?.visibility ?? 'public';
+    const joinLabel = isOwner
+        ? 'Tu grupo'
+        : joinStatus === 'member'
+            ? 'Unido'
+            : joinStatus === 'pending'
+                ? 'Pendiente'
+                : visibility === 'private'
+                    ? 'Solicitar'
+                    : 'Unirme al grupo';
+    const joinDisabled = joinLoading || isOwner || joinStatus !== 'none';
+    const canOpenChat = isJoined || isOwner;
 
-    // ===== CALLBACKS =====
+    const groupData: GroupData | null = group
+        ? {
+            id: group.id,
+            categoryId: group.categoryId ?? undefined,
+            name: group.name,
+            description: group.description ?? '',
+            members: membersCount,
+            postsPerWeek,
+            iconUrl: group.iconUrl ?? null,
+            icon: (group.name || 'G').charAt(0).toUpperCase(),
+            recentPosts,
+            topMembers
+        }
+        : null;
 
-    const handleJoinGroup = () => {
-        if (isValidId) {
-            toggleJoinGroup(groupIdStr);
+    const handleJoinGroup = async () => {
+        if (!user) {
+            showToast('Inicia sesion para unirte a un grupo.', 'info');
+            return;
+        }
+        if (!group) return;
+        if (isOwner || joinStatus !== 'none') return;
+
+        setJoinLoading(true);
+        try {
+            if (visibility === 'public') {
+                await joinPublicGroup(group.id, user.uid);
+                setJoinStatus('member');
+                setMembersCount((prev) => prev + 1);
+                showToast('Te uniste al grupo', 'success');
+            } else {
+                if (!group.ownerId) {
+                    throw new Error('Grupo privado sin owner');
+                }
+                await sendGroupJoinRequest({
+                    groupId: group.id,
+                    groupName: group.name,
+                    fromUid: user.uid,
+                    toUid: group.ownerId,
+                    message: null,
+                    fromUserName: user.displayName || 'Usuario',
+                    fromUserPhoto: user.photoURL || null
+                });
+                setJoinStatus('pending');
+                showToast('Solicitud enviada', 'success');
+            }
+        } catch (joinError) {
+            console.error('Error joining group:', joinError);
+            showToast('No se pudo procesar la solicitud', 'error');
+        } finally {
+            setJoinLoading(false);
         }
     };
 
@@ -135,7 +240,7 @@ export const GroupDetailContainer = () => {
     };
 
     const handleOpenPost = (_postId: string) => {
-        showToast('Detalle de publicación estará disponible pronto', 'info');
+        showToast('Detalle de publicacion estara disponible pronto', 'info');
     };
 
     const handleOpenGroupChat = async () => {
@@ -144,7 +249,7 @@ export const GroupDetailContainer = () => {
         setOpeningChat(true);
         try {
             const conversationId = await getOrCreateGroupConversation(groupIdStr, user.uid);
-            navigate(`/feed?conversation=${conversationId}`);
+            navigate(`/messages?conversation=${conversationId}`);
         } catch (error) {
             console.error('Error opening group chat:', error);
             showToast('Error al abrir el chat del grupo', 'error');
@@ -153,15 +258,16 @@ export const GroupDetailContainer = () => {
         }
     };
 
-    // ===== RENDER VIEW CON PROPS =====
-
     return (
         <GroupDetailView
             isLoading={isLoading}
             error={error}
-            group={group}
+            group={groupData}
             category={category}
             isJoined={isJoined}
+            joinLabel={joinLabel}
+            joinDisabled={joinDisabled}
+            canOpenChat={canOpenChat}
             openingChat={openingChat}
             isAuthenticated={!!user}
             onJoinGroup={handleJoinGroup}

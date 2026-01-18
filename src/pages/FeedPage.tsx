@@ -263,7 +263,7 @@ const FeedPage = () => {
         return () => {
             isActive = false;
         };
-    }, [posts, user?.uid, likeCounts, commentCounts, likedByUser, savedByUser]);
+    }, [posts, user, likeCounts, commentCounts, likedByUser, savedByUser]);
 
     const handleToggleLike = async (postId: string) => {
         if (!user) {

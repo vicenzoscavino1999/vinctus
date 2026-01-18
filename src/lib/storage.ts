@@ -124,3 +124,46 @@ export async function deletePostMedia(path: string): Promise<void> {
 export async function deletePostAllMedia(mediaPaths: string[]): Promise<void> {
     await Promise.all(mediaPaths.map(path => deletePostMedia(path)));
 }
+
+/**
+ * Upload group icon image
+ */
+export function uploadGroupIcon(
+    file: File,
+    ownerId: string,
+    groupId: string,
+    onProgress?: (progress: UploadProgress) => void
+): Promise<{ url: string; path: string }> {
+    return new Promise((resolve, reject) => {
+        const storagePath = `groups/${ownerId}/${groupId}/icon/${Date.now()}.webp`;
+        const storageRef = ref(storage, storagePath);
+        const uploadTask = uploadBytesResumable(storageRef, file);
+
+        uploadTask.on(
+            'state_changed',
+            (snapshot) => {
+                if (onProgress) {
+                    onProgress({
+                        bytesTransferred: snapshot.bytesTransferred,
+                        totalBytes: snapshot.totalBytes
+                    });
+                }
+            },
+            (error) => {
+                console.error('Upload failed:', error);
+                reject(new Error('Error al subir la imagen del grupo'));
+            },
+            async () => {
+                try {
+                    const url = await getDownloadURL(uploadTask.snapshot.ref);
+                    resolve({
+                        url,
+                        path: uploadTask.snapshot.ref.fullPath
+                    });
+                } catch (error) {
+                    reject(error);
+                }
+            }
+        );
+    });
+}

@@ -14,40 +14,39 @@ const ProfilePage = () => {
     const [activeSection, setActiveSection] = useState<'profile' | 'collections'>('profile');
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [profile, setProfile] = useState<UserProfileRead | null>(null);
-    const [loadingProfile, setLoadingProfile] = useState(true);
+    const [profileLoadedUid, setProfileLoadedUid] = useState<string | null>(null);
 
     // Subscribe to user profile
     useEffect(() => {
-        if (!user) {
-            setLoadingProfile(false);
-            return;
-        }
+        if (!user) return;
 
-        setLoadingProfile(true);
         const unsubscribe = subscribeToUserProfile(
             user.uid,
             (profileData) => {
                 setProfile(profileData);
-                setLoadingProfile(false);
+                setProfileLoadedUid(user.uid);
             },
             (error) => {
                 console.error('Error loading profile:', error);
-                setLoadingProfile(false);
+                setProfileLoadedUid(user.uid);
             }
         );
 
         return () => unsubscribe();
     }, [user]);
 
+    const activeProfile = profile && user && profile.uid === user.uid ? profile : null;
+    const loadingProfile = !!user && profileLoadedUid !== user.uid;
+
     // Display values (from profile or fallback to auth user)
-    const displayName = profile?.displayName || user?.displayName || 'Usuario';
-    const email = profile?.email || user?.email || '';
+    const displayName = activeProfile?.displayName || user?.displayName || 'Usuario';
+    const email = activeProfile?.email || user?.email || '';
     const initial = displayName.charAt(0).toUpperCase();
-    const photoURL = profile?.photoURL || user?.photoURL || null;
-    const role = profile?.role || 'Nuevo miembro';
-    const location = profile?.location || 'Sin ubicación';
-    const bio = profile?.bio || '';
-    const reputation = profile?.reputation || 0;
+    const photoURL = activeProfile?.photoURL || user?.photoURL || null;
+    const role = activeProfile?.role || 'Nuevo miembro';
+    const location = activeProfile?.location || 'Sin ubicación';
+    const bio = activeProfile?.bio || '';
+    const reputation = activeProfile?.reputation || 0;
 
     // Collections mock data (to be replaced with real data later)
     const FOLDERS = [

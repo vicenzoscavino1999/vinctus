@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -18,7 +18,7 @@ const NotificationsPage = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const loadRequests = async () => {
+    const loadRequests = useCallback(async () => {
         if (!user) return;
         try {
             setError(null);
@@ -31,12 +31,11 @@ const NotificationsPage = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [user]);
 
     useEffect(() => {
-        if (!user) return;
-        loadRequests();
-    }, [user?.uid]);
+        void loadRequests();
+    }, [loadRequests]);
 
     const handleAccept = async (request: CollaborationRequestRead) => {
         if (!user) return;

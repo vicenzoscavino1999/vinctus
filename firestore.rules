@@ -39,13 +39,22 @@ service cloud.firestore {
       return request.resource.data.keys().hasAll(['uid', 'groupId', 'role', 'joinedAt'])
         && request.resource.data.uid == uid  // Must match path AND auth
         && request.resource.data.groupId == groupId  // Must match path
-        && request.resource.data.role == 'member';  // Must be 'member' (no self-promotion)
+        && request.resource.data.role in ['member', 'moderator', 'admin'];
     }
     
     // Prevent role escalation on update
     function cannotEscalateRole() {
       return !request.resource.data.keys().hasAny(['role'])
         || request.resource.data.role == resource.data.role;
+    }
+
+    function getGroupDoc(groupId) {
+      return get(/databases/$(database)/documents/groups/$(groupId));
+    }
+
+    function canCreateMembershipForUser(uid, groupId) {
+      let group = getGroupDoc(groupId);
+      return group != null && group.data != null && group.data.ownerId == request.auth.uid;
     }
     
     // ==================== User Data Collections ====================
@@ -99,8 +108,9 @@ service cloud.firestore {
       allow read: if isOwner(uid);
       
       // Only the user can write to their own memberships
-      allow create: if isOwner(uid) && isValidMembershipCreate(groupId);
-      allow delete: if isOwner(uid);
+      allow create: if (isOwner(uid) || canCreateMembershipForUser(uid, groupId))
+        && isValidMembershipCreate(groupId);
+      allow delete: if isOwner(uid) || canCreateMembershipForUser(uid, groupId);
       
       // Update only if data doesn't change (idempotent writes)
       allow update: if isOwner(uid) 
@@ -153,38 +163,165 @@ service cloud.firestore {
     }
     
     // ==================== Groups Collections ====================
+
+    function isGroupOwner(groupId) {
+      let group = getGroupDoc(groupId);
+      return group != null && group.data != null && group.data.ownerId == request.auth.uid;
+    }
+
+    function isGroupPublic(groupId) {
+      let group = getGroupDoc(groupId);
+      return group != null && group.data != null && group.data.visibility == 'public';
+    }
+
+    function isValidGroupCreate() {
+      let data = request.resource.data;
+      let hasIcon = data.keys().hasAny(['iconUrl']);
+      let hasCategory = data.keys().hasAny(['categoryId']);
+      let hasMemberCount = data.keys().hasAny(['memberCount']);
+
+      return data.keys().hasOnly([
+          'name', 'description', 'categoryId', 'visibility', 'ownerId', 'iconUrl',
+          'memberCount', 'createdAt', 'updatedAt'
+        ])
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 80
+        && data.description is string
+        && data.description.size() > 0
+        && data.description.size() <= 600
+        && data.visibility in ['public', 'private']
+        && data.ownerId == request.auth.uid
+        && (!hasCategory || data.categoryId == null || (data.categoryId is string && data.categoryId.size() > 0 && data.categoryId.size() <= 80))
+        && (!hasIcon || data.iconUrl == null || (data.iconUrl is string && data.iconUrl.size() > 0 && data.iconUrl.size() <= 500))
+        && (!hasMemberCount || (data.memberCount is int && data.memberCount >= 1))
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function isValidGroupUpdate() {
+      let data = request.resource.data;
+      let changed = data.diff(resource.data).affectedKeys();
+      let hasIcon = data.keys().hasAny(['iconUrl']);
+      let hasCategory = data.keys().hasAny(['categoryId']);
+      let hasMemberCount = data.keys().hasAny(['memberCount']);
+
+      return changed.hasOnly([
+          'name', 'description', 'categoryId', 'visibility', 'iconUrl', 'memberCount', 'updatedAt'
+        ])
+        && data.ownerId == resource.data.ownerId
+        && data.createdAt == resource.data.createdAt
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 80
+        && data.description is string
+        && data.description.size() > 0
+        && data.description.size() <= 600
+        && data.visibility in ['public', 'private']
+        && (!hasCategory || data.categoryId == null || (data.categoryId is string && data.categoryId.size() > 0 && data.categoryId.size() <= 80))
+        && (!hasIcon || data.iconUrl == null || (data.iconUrl is string && data.iconUrl.size() > 0 && data.iconUrl.size() <= 500))
+        && (!hasMemberCount || (data.memberCount is int && data.memberCount >= 1))
+        && data.updatedAt == request.time;
+    }
+
+    function isValidGroupMemberSelfCreate(groupId, uid) {
+      return isValidGroupMemberCreate(groupId, uid)
+        && request.auth.uid == uid
+        && request.resource.data.role == 'member'
+        && isGroupPublic(groupId);
+    }
+
+    function isValidGroupMemberOwnerCreate(groupId, uid) {
+      return isValidGroupMemberCreate(groupId, uid)
+        && isGroupOwner(groupId)
+        && request.resource.data.role in ['member', 'moderator', 'admin'];
+    }
+
+    function isValidGroupMemberRoleUpdate(groupId, uid) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['role'])
+        && request.resource.data.uid == uid
+        && request.resource.data.groupId == groupId
+        && request.resource.data.role in ['member', 'moderator', 'admin'];
+    }
+
+    function isValidGroupJoinRequestCreate() {
+      let data = request.resource.data;
+      let group = getGroupDoc(data.groupId);
+      return data.keys().hasOnly([
+          'groupId', 'groupName', 'fromUid', 'toUid', 'status', 'message',
+          'fromUserName', 'fromUserPhoto', 'createdAt', 'updatedAt'
+        ])
+        && data.groupId is string
+        && data.groupId.size() > 0
+        && data.groupName is string
+        && data.groupName.size() > 0
+        && data.groupName.size() <= 120
+        && data.fromUid == request.auth.uid
+        && data.toUid is string
+        && data.toUid.size() > 0
+        && data.toUid != request.auth.uid
+        && data.status == 'pending'
+        && (data.message == null || (data.message is string && data.message.size() > 0 && data.message.size() <= 1000))
+        && (data.fromUserName == null || (data.fromUserName is string && data.fromUserName.size() > 0 && data.fromUserName.size() <= 80))
+        && (data.fromUserPhoto == null || data.fromUserPhoto is string)
+        && data.createdAt == request.time
+        && data.updatedAt == request.time
+        && group != null
+        && group.data != null
+        && group.data.ownerId == data.toUid
+        && group.data.visibility == 'private';
+    }
+
+    function isValidGroupJoinRequestUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['status', 'updatedAt'])
+        && request.resource.data.status in ['accepted', 'rejected']
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.fromUid == resource.data.fromUid
+        && request.resource.data.toUid == resource.data.toUid
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.groupName == resource.data.groupName;
+    }
     
     // groups/{groupId}
-    // Group metadata (PUBLIC READ, admin write)
+    // Group metadata (PUBLIC READ, owner write)
     match /groups/{groupId} {
       // Anyone can read groups (even anonymous users for discovery)
       allow read: if true;
       
-      // For now, no one can create/update/delete groups
-      // TODO: Add admin-only write when admin system is implemented
-      allow write: if false;
+      allow create: if isAuthenticated() && isValidGroupCreate();
+      allow update: if isAuthenticated() && resource.data.ownerId == request.auth.uid
+        && isValidGroupUpdate();
+      allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
     }
     
     // groups/{groupId}/members/{uid}
     // Group members (source of truth for counting)
     match /groups/{groupId}/members/{uid} {
-      // Only the member can read their own membership (private)
-      allow read: if isOwner(uid);
+      // Allow authenticated reads for member display
+      allow read: if isAuthenticated();
       
-      // Only the user can add/remove themselves as a member
-      // Critical: Validate against BOTH path and auth
-      allow create: if isOwner(uid) 
-        && isValidGroupMemberCreate(groupId, uid)
-        && request.resource.data.uid == request.auth.uid;  // Triple check
+      // Self-join for public groups OR owner adds member (private/public)
+      allow create: if isAuthenticated()
+        && (isValidGroupMemberSelfCreate(groupId, uid) || isValidGroupMemberOwnerCreate(groupId, uid));
       
-      allow delete: if isOwner(uid);
+      allow delete: if isOwner(uid) || isGroupOwner(groupId);
       
-      // Update ONLY if critical fields don't change AND no role escalation
-      allow update: if isOwner(uid)
-        && request.resource.data.uid == uid  // Must match path
-        && request.resource.data.uid == request.auth.uid  // Must match auth
-        && request.resource.data.groupId == groupId  // Must match path
-        && cannotEscalateRole();  // Cannot change role
+      // Owner can adjust roles
+      allow update: if isGroupOwner(groupId)
+        && isValidGroupMemberRoleUpdate(groupId, uid);
+    }
+
+    // group_requests/{requestId}
+    // Requests to join private groups
+    match /group_requests/{requestId} {
+      allow read: if isAuthenticated()
+        && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
+      allow create: if isAuthenticated() && isValidGroupJoinRequestCreate();
+      allow update: if isAuthenticated() && resource.data.toUid == request.auth.uid
+        && isValidGroupJoinRequestUpdate();
+      allow delete: if isAuthenticated() && resource.data.fromUid == request.auth.uid;
     }
     
     // ==================== Posts Collections ====================
@@ -539,6 +676,26 @@ service cloud.firestore {
       let conv = get(/databases/$(database)/documents/conversations/$(conversationId));
       return isConversationParticipantData(conv.data, request.auth.uid);
     }
+
+    function isValidDirectConversationRepair(conversationId) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let memberIds = request.resource.data.memberIds;
+      return isAuthenticated()
+        && conversationId.matches('^dm_.*$')
+        && request.resource.data.type == 'direct'
+        && memberIds is list
+        && memberIds.size() == 2
+        && memberIds[0] is string
+        && memberIds[1] is string
+        && memberIds.hasAny([request.auth.uid])
+        && (
+          conversationId == 'dm_' + memberIds[0] + '_' + memberIds[1]
+          || conversationId == 'dm_' + memberIds[1] + '_' + memberIds[0]
+        )
+        && changed.hasOnly(['memberIds', 'type', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && (!(resource.data.memberIds is list) || resource.data.memberIds.size() != 2 || resource.data.type != 'direct');
+    }
     
     function canCreateConversationMember(conversationId, uid) {
       let conv = get(/databases/$(database)/documents/conversations/$(conversationId));
@@ -577,8 +734,9 @@ service cloud.firestore {
               && request.resource.data.groupId is string
               && exists(/databases/$(database)/documents/groups/$(request.resource.data.groupId)/members/$(request.auth.uid)));
       
-      allow update: if canAccessConversationData(resource.data)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'updatedAt']);
+      allow update: if (canAccessConversationData(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'updatedAt']))
+        || isValidDirectConversationRepair(conversationId);
       
       // Members (restrict updates)
       match /members/{uid} {

@@ -1,18 +1,33 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, ChevronRight, Users, ArrowLeft, Send } from 'lucide-react';
 import { useToast } from '../components/Toast';
 import {
+    acceptGroupJoinRequest,
+    getOrCreateGroupConversation,
+    getGroupJoinStatus,
+    getGroupMemberCount,
+    getGroupPostsWeekCount,
+    getGroups,
+    getPendingGroupJoinRequests,
     subscribeToConversations,
     subscribeToMessages,
+    subscribeToUserMemberships,
     sendMessage,
     markConversationRead,
+    joinPublicGroup,
+    rejectGroupJoinRequest,
+    sendGroupJoinRequest,
     getGroup,
     getUserProfile,
     type ConversationRead,
+    type FirestoreGroup,
+    type GroupJoinStatus,
+    type GroupJoinRequestRead,
     type MessageRead
 } from '../lib/firestore';
+import CreateGroupModal from '../components/CreateGroupModal';
 
 // Helper to format relative time
 const formatRelativeTime = (date: Date): string => {
@@ -29,6 +44,12 @@ const formatRelativeTime = (date: Date): string => {
     return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 };
 
+const parseDirectMemberIds = (conversationId: string): string[] | null => {
+    if (!conversationId.startsWith('dm_')) return null;
+    const parts = conversationId.slice(3).split('_');
+    return parts.length >= 2 ? parts : null;
+};
+
 // Group info cache type
 interface GroupInfo {
     name: string;
@@ -38,6 +59,7 @@ interface GroupInfo {
 export default function MessagesPage() {
     const { user } = useAuth();
     const { showToast } = useToast();
+    const navigate = useNavigate();
     const [conversations, setConversations] = useState<ConversationRead[]>([]);
     const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
     const [messages, setMessages] = useState<MessageRead[]>([]);
@@ -47,23 +69,35 @@ export default function MessagesPage() {
     const [activeTab, setActiveTab] = useState<'groups' | 'private'>('groups');
     const [searchQuery, setSearchQuery] = useState('');
     const [groupInfoCache, setGroupInfoCache] = useState<Record<string, GroupInfo>>({});
+    const groupInfoCacheRef = useRef<Record<string, GroupInfo>>({});
     const [directInfoCache, setDirectInfoCache] = useState<Record<string, { name: string; photoURL: string | null }>>({});
+    const [groups, setGroups] = useState<FirestoreGroup[]>([]);
+    const [groupsLoading, setGroupsLoading] = useState(false);
+    const [groupsError, setGroupsError] = useState<string | null>(null);
+    const [groupStats, setGroupStats] = useState<Record<string, { members: number; postsWeek: number }>>({});
+    const [groupJoinStatusMap, setGroupJoinStatusMap] = useState<Record<string, GroupJoinStatus>>({});
+    const [groupActionLoading, setGroupActionLoading] = useState<string | null>(null);
+    const [memberGroups, setMemberGroups] = useState<FirestoreGroup[]>([]);
+    const [memberGroupsLoading, setMemberGroupsLoading] = useState(false);
+    const [memberGroupsError, setMemberGroupsError] = useState<string | null>(null);
+    const [pendingGroupRequests, setPendingGroupRequests] = useState<GroupJoinRequestRead[]>([]);
+    const [pendingRequestsLoading, setPendingRequestsLoading] = useState(false);
+    const [requestActionLoading, setRequestActionLoading] = useState<string | null>(null);
+    const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
 
     const [searchParams, setSearchParams] = useSearchParams();
     const conversationParam = searchParams.get('conversation');
 
-    const parseDirectMemberIds = (conversationId: string): string[] | null => {
-        if (!conversationId.startsWith('dm_')) return null;
-        const parts = conversationId.slice(3).split('_');
-        return parts.length >= 2 ? parts : null;
-    };
+    useEffect(() => {
+        groupInfoCacheRef.current = groupInfoCache;
+    }, [groupInfoCache]);
 
-    const getOtherMemberId = (conv: ConversationRead): string | null => {
+    const getOtherMemberId = useCallback((conv: ConversationRead): string | null => {
         if (!user || conv.type !== 'direct') return null;
         const memberIds = conv.memberIds ?? parseDirectMemberIds(conv.id);
         if (!memberIds) return null;
         return memberIds.find((id) => id !== user.uid) ?? null;
-    };
+    }, [user]);
 
     useEffect(() => {
         if (!conversationParam) return;
@@ -113,13 +147,13 @@ export default function MessagesPage() {
 
                 // Fetch group info for group conversations
                 convs.forEach(async (conv) => {
-                    if (conv.type === 'group' && conv.groupId && !groupInfoCache[conv.groupId]) {
+                    if (conv.type === 'group' && conv.groupId && !groupInfoCacheRef.current[conv.groupId]) {
                         try {
                             const group = await getGroup(conv.groupId);
                             if (group) {
                                 setGroupInfoCache(prev => ({
                                     ...prev,
-                                    [conv.groupId!]: { name: group.name }
+                                    [conv.groupId!]: { name: group.name, iconUrl: group.iconUrl ?? undefined }
                                 }));
                             }
                         } catch (e) {
@@ -136,6 +170,159 @@ export default function MessagesPage() {
         );
 
         return () => unsubscribe();
+    }, [user]);
+
+    useEffect(() => {
+        if (activeTab !== 'groups') return;
+        let isActive = true;
+
+        const loadGroups = async () => {
+            setGroupsLoading(true);
+            setGroupsError(null);
+            try {
+                const data = await getGroups();
+                const sorted = [...data].sort((a, b) => {
+                    const aTime = a.createdAt ? a.createdAt.getTime() : 0;
+                    const bTime = b.createdAt ? b.createdAt.getTime() : 0;
+                    return bTime - aTime;
+                });
+                if (isActive) {
+                    setGroups(sorted.slice(0, 20));
+                }
+            } catch (loadError) {
+                console.error('Error loading groups:', loadError);
+                if (isActive) {
+                    setGroupsError('No se pudieron cargar grupos.');
+                }
+            } finally {
+                if (isActive) {
+                    setGroupsLoading(false);
+                }
+            }
+        };
+
+        loadGroups();
+
+        return () => {
+            isActive = false;
+        };
+    }, [activeTab]);
+
+    useEffect(() => {
+        const allGroups = [...groups, ...memberGroups];
+        if (allGroups.length === 0) return;
+        let isActive = true;
+        const pending = allGroups.filter((group) => groupStats[group.id] === undefined);
+        if (pending.length === 0) return;
+
+        const loadStats = async () => {
+            try {
+                const updates: Record<string, { members: number; postsWeek: number }> = {};
+                await Promise.all(
+                    pending.map(async (group) => {
+                        const [members, postsWeek] = await Promise.all([
+                            getGroupMemberCount(group.id),
+                            getGroupPostsWeekCount(group.id)
+                        ]);
+                        updates[group.id] = { members, postsWeek };
+                    })
+                );
+                if (isActive) {
+                    setGroupStats((prev) => ({ ...prev, ...updates }));
+                }
+            } catch (statsError) {
+                console.error('Error loading group stats:', statsError);
+            }
+        };
+
+        loadStats();
+
+        return () => {
+            isActive = false;
+        };
+    }, [groups, memberGroups, groupStats]);
+
+    useEffect(() => {
+        if (!user || groups.length === 0) {
+            if (!user) setGroupJoinStatusMap({});
+            return;
+        }
+        let isActive = true;
+        const pending = groups.filter((group) => groupJoinStatusMap[group.id] === undefined);
+        if (pending.length === 0) return;
+
+        const loadStatuses = async () => {
+            try {
+                const updates: Record<string, GroupJoinStatus> = {};
+                await Promise.all(
+                    pending.map(async (group) => {
+                        const status = await getGroupJoinStatus(group.id, user.uid);
+                        updates[group.id] = status;
+                    })
+                );
+                if (isActive) {
+                    setGroupJoinStatusMap((prev) => ({ ...prev, ...updates }));
+                }
+            } catch (statusError) {
+                console.error('Error loading group status:', statusError);
+            }
+        };
+
+        loadStatuses();
+
+        return () => {
+            isActive = false;
+        };
+    }, [groups, user, groupJoinStatusMap]);
+
+    useEffect(() => {
+        if (!user) {
+            setMemberGroups([]);
+            setMemberGroupsError(null);
+            setMemberGroupsLoading(false);
+            return;
+        }
+
+        let isActive = true;
+        let requestId = 0;
+
+        const unsubscribe = subscribeToUserMemberships(user.uid, (groupIds) => {
+            requestId += 1;
+            const currentRequest = requestId;
+            setMemberGroupsLoading(true);
+            setMemberGroupsError(null);
+
+            void (async () => {
+                try {
+                    const groupDocs = await Promise.all(groupIds.map((id) => getGroup(id)));
+                    if (!isActive || currentRequest !== requestId) return;
+                    const resolved = groupDocs.filter(Boolean) as FirestoreGroup[];
+                    setMemberGroups(resolved);
+                    setMemberGroupsLoading(false);
+                    setGroupInfoCache((prev) => {
+                        const updates = { ...prev };
+                        resolved.forEach((group) => {
+                            updates[group.id] = {
+                                name: group.name,
+                                iconUrl: group.iconUrl ?? undefined
+                            };
+                        });
+                        return updates;
+                    });
+                } catch (loadError) {
+                    console.error('Error loading member groups:', loadError);
+                    if (!isActive || currentRequest !== requestId) return;
+                    setMemberGroups([]);
+                    setMemberGroupsError('No se pudieron cargar tus grupos.');
+                    setMemberGroupsLoading(false);
+                }
+            })();
+        });
+
+        return () => {
+            isActive = false;
+            unsubscribe();
+        };
     }, [user]);
 
     useEffect(() => {
@@ -172,7 +359,36 @@ export default function MessagesPage() {
                 }
             })();
         });
-    }, [conversations, user, directInfoCache]);
+    }, [conversations, user, directInfoCache, getOtherMemberId]);
+
+    useEffect(() => {
+        if (!user || activeTab !== 'groups') {
+            setPendingGroupRequests([]);
+            setPendingRequestsLoading(false);
+            return;
+        }
+
+        let isActive = true;
+        setPendingRequestsLoading(true);
+
+        void (async () => {
+            try {
+                const requests = await getPendingGroupJoinRequests(user.uid);
+                if (!isActive) return;
+                setPendingGroupRequests(requests);
+                setPendingRequestsLoading(false);
+            } catch (loadError) {
+                console.error('Error loading group requests:', loadError);
+                if (!isActive) return;
+                setPendingGroupRequests([]);
+                setPendingRequestsLoading(false);
+            }
+        })();
+
+        return () => {
+            isActive = false;
+        };
+    }, [user, activeTab]);
 
     // Subscribe to messages of selected conversation
     useEffect(() => {
@@ -222,31 +438,135 @@ export default function MessagesPage() {
         }
     };
 
-    // Filter conversations by type and search
-    const filteredConversations = conversations.filter(conv => {
-        const matchesTab = activeTab === 'groups' ? conv.type === 'group' : conv.type === 'direct';
-        if (!matchesTab) return false;
-
-        if (searchQuery.trim()) {
-            const name = getConversationName(conv);
-            return name.toLowerCase().includes(searchQuery.toLowerCase());
+    const handleGroupAction = async (group: FirestoreGroup) => {
+        if (!user) {
+            showToast('Inicia sesion para unirte a grupos', 'info');
+            return;
         }
-        return true;
-    });
 
-    const selectedConversation = conversations.find(c => c.id === selectedConversationId);
-    const fallbackConversation = selectedConversationId && !selectedConversation
-        ? {
-            id: selectedConversationId,
-            type: selectedConversationId.startsWith('grp_') ? 'group' : 'direct',
-            groupId: selectedConversationId.startsWith('grp_') ? selectedConversationId.replace('grp_', '') : undefined,
-            memberIds: selectedConversationId.startsWith('dm_') ? (parseDirectMemberIds(selectedConversationId) ?? undefined) : undefined,
-            lastMessage: null,
-            createdAt: new Date(),
-            updatedAt: new Date()
-        } as ConversationRead
-        : null;
-    const activeConversation = selectedConversation ?? fallbackConversation;
+        const status = groupJoinStatusMap[group.id] ?? 'none';
+        const isOwner = group.ownerId && group.ownerId === user.uid;
+        if (isOwner || status === 'member') {
+            navigate(`/group/${group.id}`);
+            return;
+        }
+        if (status === 'pending') {
+            showToast('Solicitud pendiente', 'info');
+            return;
+        }
+
+        setGroupActionLoading(group.id);
+        try {
+            const visibility = group.visibility ?? 'public';
+            if (visibility === 'public') {
+                await joinPublicGroup(group.id, user.uid);
+                setGroupJoinStatusMap((prev) => ({ ...prev, [group.id]: 'member' }));
+                showToast('Te uniste al grupo', 'success');
+            } else {
+                if (!group.ownerId) {
+                    throw new Error('Grupo privado sin owner');
+                }
+                await sendGroupJoinRequest({
+                    groupId: group.id,
+                    groupName: group.name,
+                    fromUid: user.uid,
+                    toUid: group.ownerId,
+                    message: null,
+                    fromUserName: user.displayName || 'Usuario',
+                    fromUserPhoto: user.photoURL || null
+                });
+                setGroupJoinStatusMap((prev) => ({ ...prev, [group.id]: 'pending' }));
+                showToast('Solicitud enviada', 'success');
+            }
+        } catch (actionError) {
+            console.error('Error joining group:', actionError);
+            showToast('No se pudo procesar la solicitud', 'error');
+        } finally {
+            setGroupActionLoading(null);
+        }
+    };
+
+    const getGroupActionLabel = (group: FirestoreGroup): string => {
+        if (user && group.ownerId === user.uid) return 'Tu grupo';
+        const status = groupJoinStatusMap[group.id] ?? 'none';
+        if (status === 'member') return 'Unido';
+        if (status === 'pending') return 'Pendiente';
+        return (group.visibility ?? 'public') === 'public' ? 'Unirme' : 'Solicitar';
+    };
+
+    const getGroupStats = (group: FirestoreGroup): { members: number; postsWeek: number } => {
+        const cached = groupStats[group.id];
+        return {
+            members: cached?.members ?? group.memberCount ?? 0,
+            postsWeek: cached?.postsWeek ?? 0
+        };
+    };
+
+    const handleOpenMemberGroup = async (group: FirestoreGroup) => {
+        if (!user) {
+            showToast('Inicia sesion para abrir el chat', 'info');
+            return;
+        }
+        try {
+            const conversationId = await getOrCreateGroupConversation(group.id, user.uid);
+            handleSelectConversation(conversationId);
+            setActiveTab('groups');
+        } catch (openError) {
+            console.error('Error opening group chat:', openError);
+            showToast('No se pudo abrir el chat del grupo', 'error');
+        }
+    };
+
+    const handleAcceptRequest = async (request: GroupJoinRequestRead) => {
+        setRequestActionLoading(request.id);
+        try {
+            await acceptGroupJoinRequest(request.id);
+            setPendingGroupRequests((prev) => prev.filter((item) => item.id !== request.id));
+            showToast('Solicitud aceptada', 'success');
+        } catch (actionError) {
+            console.error('Error accepting request:', actionError);
+            showToast('No se pudo aceptar la solicitud', 'error');
+        } finally {
+            setRequestActionLoading(null);
+        }
+    };
+
+    const handleRejectRequest = async (request: GroupJoinRequestRead) => {
+        setRequestActionLoading(request.id);
+        try {
+            await rejectGroupJoinRequest(request.id);
+            setPendingGroupRequests((prev) => prev.filter((item) => item.id !== request.id));
+            showToast('Solicitud rechazada', 'info');
+        } catch (actionError) {
+            console.error('Error rejecting request:', actionError);
+            showToast('No se pudo rechazar la solicitud', 'error');
+        } finally {
+            setRequestActionLoading(null);
+        }
+    };
+
+    const handleGroupCreated = (groupId: string) => {
+        setIsCreateGroupOpen(false);
+        void (async () => {
+            try {
+                const created = await getGroup(groupId);
+                if (created) {
+                    setGroups((prev) => {
+                        const next = [created, ...prev.filter((group) => group.id !== created.id)];
+                        return next.slice(0, 20);
+                    });
+                    setGroupInfoCache((prev) => ({
+                        ...prev,
+                        [created.id]: { name: created.name, iconUrl: created.iconUrl ?? undefined }
+                    }));
+                }
+                setGroupJoinStatusMap((prev) => ({ ...prev, [groupId]: 'member' }));
+                setGroupStats((prev) => ({ ...prev, [groupId]: { members: 1, postsWeek: 0 } }));
+            } catch (refreshError) {
+                console.error('Error refreshing group list:', refreshError);
+            }
+        })();
+    };
 
     // Get conversation display name
     const getConversationName = (conv: ConversationRead): string => {
@@ -261,6 +581,42 @@ export default function MessagesPage() {
         }
         return 'Mensaje Directo';
     };
+
+    const filteredMemberGroups = memberGroups.filter((group) => {
+        if (!searchQuery.trim()) return true;
+        return group.name.toLowerCase().includes(searchQuery.toLowerCase());
+    });
+
+    // Filter conversations by type and search
+    const groupConversations = conversations.filter(conv => {
+        if (conv.type !== 'group') return false;
+        if (!searchQuery.trim()) return true;
+        const name = getConversationName(conv);
+        return name.toLowerCase().includes(searchQuery.toLowerCase());
+    });
+
+    const privateConversations = conversations.filter(conv => {
+        if (conv.type !== 'direct') return false;
+        if (!searchQuery.trim()) return true;
+        const name = getConversationName(conv);
+        return name.toLowerCase().includes(searchQuery.toLowerCase());
+    });
+
+    const activeConversations = activeTab === 'groups' ? groupConversations : privateConversations;
+
+    const selectedConversation = conversations.find(c => c.id === selectedConversationId);
+    const fallbackConversation = selectedConversationId && !selectedConversation
+        ? {
+            id: selectedConversationId,
+            type: selectedConversationId.startsWith('grp_') ? 'group' : 'direct',
+            groupId: selectedConversationId.startsWith('grp_') ? selectedConversationId.replace('grp_', '') : undefined,
+            memberIds: selectedConversationId.startsWith('dm_') ? (parseDirectMemberIds(selectedConversationId) ?? undefined) : undefined,
+            lastMessage: null,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        } as ConversationRead
+        : null;
+    const activeConversation = selectedConversation ?? fallbackConversation;
 
     if (loading) {
         return (
@@ -393,18 +749,18 @@ export default function MessagesPage() {
             </div>
 
             {/* Error State */}
-            {error && filteredConversations.length === 0 && (
+            {error && activeConversations.length === 0 && (
                 <div className="text-center text-red-400 py-10">{error}</div>
             )}
 
             {/* Conversations List */}
             <div className="space-y-2">
-                {filteredConversations.length === 0 && !error ? (
+                {activeConversations.length === 0 && !error ? (
                     <div className="text-center text-neutral-500 py-10">
                         {searchQuery ? 'No hay resultados' : `No hay ${activeTab === 'groups' ? 'grupos' : 'mensajes privados'} aún`}
                     </div>
                 ) : (
-                    filteredConversations.map((conv) => {
+                    activeConversations.map((conv) => {
                         const groupInfo = conv.groupId ? groupInfoCache[conv.groupId] : null;
                         const name = getConversationName(conv);
                         const lastMessageTime = conv.lastMessage?.createdAt
@@ -456,6 +812,230 @@ export default function MessagesPage() {
                     })
                 )}
             </div>
+
+            {activeTab === 'groups' && (
+                <div className="mt-10 space-y-10">
+                    {user && (
+                        <section>
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-lg font-light text-white">
+                                    Solicitudes pendientes
+                                </h2>
+                            </div>
+                            {pendingRequestsLoading ? (
+                                <div className="text-center text-neutral-500 py-6">Cargando solicitudes...</div>
+                            ) : pendingGroupRequests.length === 0 ? (
+                                <div className="text-center text-neutral-500 py-6">No hay solicitudes pendientes.</div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {pendingGroupRequests.map((request) => {
+                                        const isProcessing = requestActionLoading === request.id;
+                                        return (
+                                            <div
+                                                key={request.id}
+                                                className="bg-neutral-900/30 border border-neutral-800/50 rounded-xl p-4 flex flex-col gap-3"
+                                            >
+                                                <div className="flex items-start justify-between gap-4">
+                                                    <div className="min-w-0">
+                                                        <p className="text-white font-medium">
+                                                            {request.fromUserName || 'Usuario'}
+                                                        </p>
+                                                        <p className="text-neutral-500 text-sm">
+                                                            Solicita unirse a {request.groupName}
+                                                        </p>
+                                                        {request.message && (
+                                                            <p className="text-neutral-400 text-sm mt-2">
+                                                                &quot;{request.message}&quot;
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            onClick={() => void handleAcceptRequest(request)}
+                                                            disabled={isProcessing}
+                                                            className="px-3 py-1.5 rounded text-xs bg-brand-gold text-black btn-premium disabled:opacity-60 disabled:cursor-not-allowed"
+                                                        >
+                                                            Aceptar
+                                                        </button>
+                                                        <button
+                                                            onClick={() => void handleRejectRequest(request)}
+                                                            disabled={isProcessing}
+                                                            className="px-3 py-1.5 rounded text-xs bg-neutral-800 text-neutral-300 hover:bg-neutral-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                        >
+                                                            Rechazar
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </section>
+                    )}
+
+                    <section>
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-light text-white">
+                                Tus grupos
+                            </h2>
+                            <button
+                                onClick={() => setIsCreateGroupOpen(true)}
+                                className="text-xs uppercase tracking-widest px-4 py-2 rounded-full border border-amber-500/40 text-amber-200 hover:text-amber-100 hover:border-amber-400 transition-colors"
+                            >
+                                + Crear grupo
+                            </button>
+                        </div>
+                        {memberGroupsLoading ? (
+                            <div className="text-center text-neutral-500 py-6">Cargando grupos...</div>
+                        ) : memberGroupsError ? (
+                            <div className="text-center text-red-400 py-6">{memberGroupsError}</div>
+                        ) : filteredMemberGroups.length === 0 ? (
+                            <div className="text-center text-neutral-500 py-6">Aun no tienes grupos.</div>
+                        ) : (
+                            <div className="grid grid-cols-1 gap-4">
+                                {filteredMemberGroups.map((group) => {
+                                    const stats = getGroupStats(group);
+                                    return (
+                                        <div
+                                            key={group.id}
+                                            className="bg-surface-1 border border-neutral-800/50 rounded-lg p-5"
+                                        >
+                                            <div className="flex items-start justify-between gap-4">
+                                                <div className="flex items-start gap-3 min-w-0">
+                                                    <div className="w-12 h-12 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center overflow-hidden">
+                                                        {group.iconUrl ? (
+                                                            <img src={group.iconUrl} alt={group.name} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <Users size={20} className="text-neutral-500" />
+                                                        )}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <h3 className="text-white font-medium text-lg truncate">{group.name}</h3>
+                                                        <p className="text-neutral-500 text-sm mt-1 line-clamp-2">
+                                                            {group.description || 'Sin descripcion.'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => void handleOpenMemberGroup(group)}
+                                                    className="px-3 py-1.5 rounded text-xs bg-neutral-800 text-neutral-200 hover:bg-neutral-700"
+                                                >
+                                                    Chat
+                                                </button>
+                                            </div>
+                                            <div className="flex items-center justify-between pt-3 border-t border-neutral-800/50 mt-4">
+                                                <div className="text-neutral-500 text-xs">
+                                                    {stats.members.toLocaleString('es-ES')} miembros - {stats.postsWeek} posts/semana
+                                                </div>
+                                                <button
+                                                    onClick={() => navigate(`/group/${group.id}`)}
+                                                    className="text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
+                                                >
+                                                    Ver grupo
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </section>
+
+                    <section>
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-light text-white">
+                                <span className="text-neutral-400">Grupos</span> recomendados
+                            </h2>
+                        </div>
+
+                        {groupsLoading ? (
+                            <div className="text-center text-neutral-500 py-6">Cargando grupos...</div>
+                        ) : groupsError ? (
+                            <div className="text-center text-red-400 py-6">{groupsError}</div>
+                        ) : groups.length === 0 ? (
+                            <div className="text-center text-neutral-500 py-6">Aun no hay grupos disponibles.</div>
+                        ) : (
+                            <div className="grid grid-cols-1 gap-4">
+                                {groups.map((group) => {
+                                    const stats = getGroupStats(group);
+                                    const joinLabel = getGroupActionLabel(group);
+                                    const isLoading = groupActionLoading === group.id;
+                                    const actionLabel = isLoading ? 'Procesando...' : joinLabel;
+                                    const isJoined = joinLabel === 'Unido' || joinLabel === 'Tu grupo';
+                                    const isPending = joinLabel === 'Pendiente';
+                                    const visibilityLabel = (group.visibility ?? 'public') === 'public' ? 'Publico' : 'Privado';
+
+                                    return (
+                                        <div
+                                            key={group.id}
+                                            role="button"
+                                            tabIndex={0}
+                                            className="bg-surface-1 border border-neutral-800/50 rounded-lg p-5 cursor-pointer hover:border-neutral-700 transition-colors"
+                                            onClick={() => navigate(`/group/${group.id}`)}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter' || event.key === ' ') {
+                                                    event.preventDefault();
+                                                    navigate(`/group/${group.id}`);
+                                                }
+                                            }}
+                                        >
+                                            <div className="flex items-start justify-between gap-4">
+                                                <div className="flex items-start gap-3 min-w-0">
+                                                    <div className="w-12 h-12 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center overflow-hidden">
+                                                        {group.iconUrl ? (
+                                                            <img src={group.iconUrl} alt={group.name} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <Users size={20} className="text-neutral-500" />
+                                                        )}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <h3 className="text-white font-medium text-lg truncate">{group.name}</h3>
+                                                        <p className="text-neutral-500 text-sm mt-1 line-clamp-2">
+                                                            {group.description || 'Sin descripcion.'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        void handleGroupAction(group);
+                                                    }}
+                                                    disabled={isLoading}
+                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-all btn-premium press-scale ${isJoined
+                                                        ? 'bg-brand-gold text-black'
+                                                        : isPending
+                                                            ? 'bg-neutral-800 text-neutral-500'
+                                                            : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                                                        } ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                                >
+                                                    {actionLabel}
+                                                </button>
+                                            </div>
+
+                                            <div className="flex items-center justify-between pt-3 border-t border-neutral-800/50 mt-4">
+                                                <div className="text-neutral-500 text-xs">
+                                                    {stats.members.toLocaleString('es-ES')} miembros - {stats.postsWeek} posts/semana
+                                                </div>
+                                                <span className="text-[10px] uppercase tracking-wider text-neutral-500">
+                                                    {visibilityLabel}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </section>
+                </div>
+            )}
+
+            <CreateGroupModal
+                isOpen={isCreateGroupOpen}
+                onClose={() => setIsCreateGroupOpen(false)}
+                onCreated={handleGroupCreated}
+            />
         </div>
     );
 }
+
