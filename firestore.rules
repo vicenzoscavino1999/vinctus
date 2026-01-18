@@ -372,6 +372,88 @@ service cloud.firestore {
         && isValidGroupJoinRequestUpdate();
       allow delete: if isAuthenticated() && resource.data.fromUid == request.auth.uid;
     }
+
+    // ==================== Events (Encuentros) ====================
+
+    function canReadEventData(eventData, eventId) {
+      return eventData != null
+        && (eventData.visibility == 'public'
+          || (isAuthenticated()
+            && (eventData.createdBy == request.auth.uid
+              || exists(/databases/$(database)/documents/events/$(eventId)/attendees/$(request.auth.uid)))));
+    }
+
+    function canJoinEvent(eventId) {
+      let event = get(/databases/$(database)/documents/events/$(eventId));
+      return event.data != null
+        && event.data.visibility == 'public';
+    }
+
+    function isValidEventCreate() {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'title', 'description', 'startAt', 'endAt', 'city', 'venue',
+          'capacity', 'visibility', 'createdBy', 'coverUrl', 'createdAt', 'updatedAt'
+        ])
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 120
+        && (data.description == null || (data.description is string && data.description.size() <= 2000))
+        && data.startAt is timestamp
+        && (data.endAt == null || data.endAt is timestamp)
+        && (data.city == null || (data.city is string && data.city.size() <= 80))
+        && (data.venue == null || (data.venue is string && data.venue.size() <= 120))
+        && (data.capacity == null || (data.capacity is int && data.capacity >= 0 && data.capacity <= 100000))
+        && data.visibility in ['public', 'private']
+        && data.createdBy == request.auth.uid
+        && (data.coverUrl == null || data.coverUrl is string)
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function isValidEventUpdate() {
+      let data = request.resource.data;
+      let changed = data.diff(resource.data).affectedKeys();
+      return isAuthenticated()
+        && resource.data.createdBy == request.auth.uid
+        && data.createdBy == resource.data.createdBy
+        && data.createdAt == resource.data.createdAt
+        && changed.hasOnly([
+          'title', 'description', 'startAt', 'endAt', 'city', 'venue',
+          'capacity', 'visibility', 'coverUrl', 'updatedAt'
+        ])
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 120
+        && (data.description == null || (data.description is string && data.description.size() <= 2000))
+        && data.startAt is timestamp
+        && (data.endAt == null || data.endAt is timestamp)
+        && (data.city == null || (data.city is string && data.city.size() <= 80))
+        && (data.venue == null || (data.venue is string && data.venue.size() <= 120))
+        && (data.capacity == null || (data.capacity is int && data.capacity >= 0 && data.capacity <= 100000))
+        && data.visibility in ['public', 'private']
+        && (data.coverUrl == null || data.coverUrl is string)
+        && data.updatedAt == request.time;
+    }
+
+    // events/{eventId}
+    match /events/{eventId} {
+      allow read: if canReadEventData(resource.data, eventId);
+      allow create: if isAuthenticated() && isValidEventCreate();
+      allow update: if isValidEventUpdate();
+      allow delete: if isAuthenticated() && resource.data.createdBy == request.auth.uid;
+
+      match /attendees/{uid} {
+        allow read: if isAuthenticated() && canReadEventData(get(/databases/$(database)/documents/events/$(eventId)).data, eventId);
+        allow create: if isAuthenticated()
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['uid', 'joinedAt'])
+          && request.resource.data.uid == uid
+          && request.resource.data.joinedAt == request.time
+          && canJoinEvent(eventId);
+        allow delete: if isAuthenticated() && request.auth.uid == uid;
+      }
+    }
     
     // ==================== Posts Collections ====================
     

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { Bell, Compass, Hash, User, Briefcase, MoreHorizontal, Settings, LogOut, Search } from 'lucide-react';
+import { Compass, Hash, User, Briefcase, MoreHorizontal, Settings, LogOut, Search } from 'lucide-react';
 
 import Header from './Header';
 import SidebarItem from './SidebarItem';
@@ -115,7 +115,6 @@ const Sidebar = ({ activeTab, onNavigate }: NavProps) => (
     <nav className="flex flex-col space-y-4">
       <SidebarItem icon={Compass} active={activeTab === 'discover'} onClick={() => onNavigate('/discover')} tooltip="Descubrir" />
       <SidebarItem icon={Search} active={activeTab === 'search'} onClick={() => onNavigate('/search')} tooltip="Buscar" />
-      <SidebarItem icon={Bell} active={activeTab === 'notifications'} onClick={() => onNavigate('/notifications')} tooltip="Notificaciones" />
       <SidebarItem icon={Hash} active={activeTab === 'messages'} onClick={() => onNavigate('/messages')} tooltip="Conversación" />
       <SidebarItem icon={Briefcase} active={activeTab === 'projects'} onClick={() => onNavigate('/projects')} tooltip="Conexiones" />
     </nav>

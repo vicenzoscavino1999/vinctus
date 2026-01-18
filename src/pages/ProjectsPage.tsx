@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { User, ArrowRight, Plus } from 'lucide-react';
-import { getCollaborations, type CollaborationRead } from '../lib/firestore';
+import { MapPin, User, ArrowRight, Plus } from 'lucide-react';
+import { getCollaborations, getEventAttendeeCount, getUpcomingEvents, type CollaborationRead, type FirestoreEvent } from '../lib/firestore';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
 import CreateCollaborationModal from '../components/CreateCollaborationModal';
 import CollaborationDetailModal from '../components/CollaborationDetailModal';
+import CreateEventModal from '../components/CreateEventModal';
+import EventDetailModal from '../components/EventDetailModal';
 
 const formatRelativeTime = (date: Date): string => {
     const diffMs = Date.now() - date.getTime();
@@ -37,6 +39,20 @@ const buildCollaborationTags = (item: CollaborationRead): string[] => {
     return tags.slice(0, 3);
 };
 
+const formatEventDate = (value: Date | null): { day: string; month: string } => {
+    if (!value) return { day: '--', month: '--' };
+    const day = value.toLocaleString('es-ES', { day: '2-digit' });
+    const month = value.toLocaleString('es-ES', { month: 'short' })
+        .replace('.', '')
+        .toUpperCase();
+    return { day, month };
+};
+
+const formatEventLocation = (event: FirestoreEvent): string => {
+    const parts = [event.city, event.venue].filter(Boolean) as string[];
+    return parts.length > 0 ? parts.join(', ') : 'Ubicacion por confirmar';
+};
+
 const ProjectsPage = () => {
     const { showToast } = useToast();
     const { user } = useAuth();
@@ -44,17 +60,17 @@ const ProjectsPage = () => {
     const [collaborationsLoading, setCollaborationsLoading] = useState(true);
     const [collaborationsError, setCollaborationsError] = useState<string | null>(null);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
+    const [isCreateEventOpen, setIsCreateEventOpen] = useState(false);
     const [editingCollaboration, setEditingCollaboration] = useState<CollaborationRead | null>(null);
     const [selectedCollaboration, setSelectedCollaboration] = useState<CollaborationRead | null>(null);
     const [requestedIds, setRequestedIds] = useState<string[]>([]);
+    const [selectedEvent, setSelectedEvent] = useState<FirestoreEvent | null>(null);
 
-    // Datos de eventos
-    const EVENTS_DATA = [
-        { id: 1, day: '12', month: 'ENE', title: 'Noche de Vinilos & Charla', location: 'Ciudad de México, Roma Norte', attendees: 34 },
-        { id: 2, day: '15', month: 'FEB', title: 'Simposio de Arqueología', location: 'Lima, Barranco', attendees: 120 },
-        { id: 3, day: '28', month: 'ENE', title: 'Hackathon AI for Good', location: 'Buenos Aires, Palermo', attendees: 85 },
-        { id: 4, day: '5', month: 'FEB', title: 'Observación de Aves', location: 'Bogotá, Humedal Córdoba', attendees: 25 }
-    ];
+    const [events, setEvents] = useState<FirestoreEvent[]>([]);
+    const [eventsLoading, setEventsLoading] = useState(true);
+    const [eventsError, setEventsError] = useState<string | null>(null);
+    const [eventAttendeeCounts, setEventAttendeeCounts] = useState<Record<string, number>>({});
+
 
     const loadCollaborations = async () => {
         try {
@@ -83,9 +99,65 @@ const ProjectsPage = () => {
         setRequestedIds((prev) => (prev.includes(collaborationId) ? prev : [...prev, collaborationId]));
     };
 
+    const handlePublishEvent = () => {
+        if (!user) {
+            showToast('Inicia sesion para publicar encuentros', 'info');
+            return;
+        }
+        setIsCreateEventOpen(true);
+    };
+
+    const loadEvents = async () => {
+        try {
+            setEventsError(null);
+            setEventsLoading(true);
+            setEventAttendeeCounts({});
+            const data = await getUpcomingEvents(12);
+            setEvents(data);
+        } catch (error) {
+            console.error('Error loading events:', error);
+            setEventsError('No se pudieron cargar encuentros.');
+        } finally {
+            setEventsLoading(false);
+        }
+    };
+
     useEffect(() => {
         loadCollaborations();
     }, []);
+
+    useEffect(() => {
+        loadEvents();
+    }, []);
+
+    useEffect(() => {
+        if (events.length === 0) return;
+        const pending = events.filter((event) => eventAttendeeCounts[event.id] === undefined);
+        if (pending.length === 0) return;
+
+        let isActive = true;
+        const loadCounts = async () => {
+            try {
+                const updates: Record<string, number> = {};
+                await Promise.all(
+                    pending.map(async (event) => {
+                        updates[event.id] = await getEventAttendeeCount(event.id);
+                    })
+                );
+                if (isActive) {
+                    setEventAttendeeCounts((prev) => ({ ...prev, ...updates }));
+                }
+            } catch (error) {
+                console.error('Error loading event counts:', error);
+            }
+        };
+
+        loadCounts();
+
+        return () => {
+            isActive = false;
+        };
+    }, [events, eventAttendeeCounts]);
 
     return (
         <div className="page-projects pb-32">
@@ -177,37 +249,60 @@ const ProjectsPage = () => {
 
             {/* Encuentros */}
             <section>
-                <h2 className="text-2xl font-serif font-light text-white mb-6">Encuentros</h2>
-
-                <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 scrollbar-hide">
-                    {EVENTS_DATA.map(event => (
-                        <div
-                            key={event.id}
-                            onClick={() => showToast('Detalle de eventos estará disponible pronto', 'info')}
-                            className="flex-shrink-0 w-[220px] bg-neutral-900/30 border border-neutral-800/50 rounded-lg p-5 cursor-pointer hover:bg-neutral-900/50 hover:border-neutral-700 transition-all group"
-                        >
-                            <div className="flex items-start justify-between mb-6">
-                                <div>
-                                    <span className="text-3xl font-serif text-white font-light">{event.day}</span>
-                                    <span className="text-[10px] text-neutral-500 uppercase tracking-wider block mt-1">{event.month}</span>
-                                </div>
-                                <div className="w-8 h-8 rounded-full border border-neutral-700 flex items-center justify-center group-hover:bg-white group-hover:border-white transition-all">
-                                    <ArrowRight size={14} className="text-neutral-500 group-hover:text-black transition-colors" />
-                                </div>
-                            </div>
-
-                            <h4 className="text-white font-light text-sm mb-3 line-clamp-2 group-hover:text-white/90">{event.title}</h4>
-
-                            <div className="flex items-center gap-1 text-neutral-500 text-xs mb-1">
-                                <span>📍 {event.location}</span>
-                            </div>
-                            <div className="flex items-center gap-1 text-neutral-500 text-xs">
-                                <User size={10} />
-                                <span>{event.attendees}</span>
-                            </div>
-                        </div>
-                    ))}
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+                    <h2 className="text-2xl font-serif font-light text-white">Encuentros</h2>
+                    <button
+                        onClick={handlePublishEvent}
+                        className="text-[11px] bg-brand-gold text-black px-5 py-2 rounded-button btn-premium uppercase tracking-widest font-medium flex items-center gap-2"
+                    >
+                        <Plus size={12} />
+                        Publicar encuentro
+                    </button>
                 </div>
+
+                {eventsLoading ? (
+                    <div className="text-sm text-neutral-500 text-center py-8">Cargando encuentros...</div>
+                ) : eventsError ? (
+                    <div className="text-sm text-red-400 text-center py-8">{eventsError}</div>
+                ) : events.length === 0 ? (
+                    <div className="text-sm text-neutral-500 text-center py-8">No hay encuentros todavia.</div>
+                ) : (
+                    <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 scrollbar-hide">
+                        {events.map((event) => {
+                            const dateParts = formatEventDate(event.startAt);
+                            const locationLabel = formatEventLocation(event);
+                            const attendees = eventAttendeeCounts[event.id] ?? 0;
+                            return (
+                                <div
+                                    key={event.id}
+                                    onClick={() => setSelectedEvent(event)}
+                                    className="flex-shrink-0 w-[220px] bg-neutral-900/30 border border-neutral-800/50 rounded-lg p-5 cursor-pointer hover:bg-neutral-900/50 hover:border-neutral-700 transition-all group"
+                                >
+                                    <div className="flex items-start justify-between mb-6">
+                                        <div>
+                                            <span className="text-3xl font-serif text-white font-light">{dateParts.day}</span>
+                                            <span className="text-[10px] text-neutral-500 uppercase tracking-wider block mt-1">{dateParts.month}</span>
+                                        </div>
+                                        <div className="w-8 h-8 rounded-full border border-neutral-700 flex items-center justify-center group-hover:bg-white group-hover:border-white transition-all">
+                                            <ArrowRight size={14} className="text-neutral-500 group-hover:text-black transition-colors" />
+                                        </div>
+                                    </div>
+
+                                    <h4 className="text-white font-light text-sm mb-3 line-clamp-2 group-hover:text-white/90">{event.title}</h4>
+
+                                    <div className="flex items-center gap-1 text-neutral-500 text-xs mb-1">
+                                        <MapPin size={10} />
+                                        <span>{locationLabel}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1 text-neutral-500 text-xs">
+                                        <User size={10} />
+                                        <span>{attendees}</span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </section>
 
             <CreateCollaborationModal
@@ -228,6 +323,14 @@ const ProjectsPage = () => {
                     loadCollaborations();
                 }}
             />
+            <CreateEventModal
+                isOpen={isCreateEventOpen}
+                onClose={() => setIsCreateEventOpen(false)}
+                onCreated={() => {
+                    setIsCreateEventOpen(false);
+                    loadEvents();
+                }}
+            />
             <CollaborationDetailModal
                 isOpen={!!selectedCollaboration}
                 collaboration={selectedCollaboration}
@@ -245,6 +348,15 @@ const ProjectsPage = () => {
                     setSelectedCollaboration(null);
                     setEditingCollaboration(collaboration);
                     setIsCreateOpen(true);
+                }}
+            />
+            <EventDetailModal
+                isOpen={!!selectedEvent}
+                event={selectedEvent}
+                attendeeCount={selectedEvent ? eventAttendeeCounts[selectedEvent.id] ?? 0 : 0}
+                onClose={() => setSelectedEvent(null)}
+                onAttendanceChange={(eventId, count) => {
+                    setEventAttendeeCounts((prev) => ({ ...prev, [eventId]: count }));
                 }}
             />
         </div>

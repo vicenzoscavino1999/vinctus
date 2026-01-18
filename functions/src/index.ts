@@ -19,6 +19,65 @@ admin.initializeApp();
 const db = admin.firestore();
 
 // ==========================================================
+// EVENT ATTENDEE COUNTERS (With Deduplication)
+// ==========================================================
+
+/**
+ * Increment attendeesCount when a user joins an event
+ * Trigger: onCreate events/{eventId}/attendees/{userId}
+ */
+export const onEventAttendeeCreated = functions.firestore
+    .document("events/{eventId}/attendees/{userId}")
+    .onCreate(async (snap, context) => {
+        const { eventId, userId } = context.params;
+        const dedupEventId = context.eventId;
+
+        try {
+            functions.logger.info("Event attendee joined", { eventId, userId, dedupEventId });
+
+            const eventRef = db.doc(`events/${eventId}`);
+            await deduplicatedIncrement(dedupEventId, eventRef, "attendeesCount", 1);
+
+            functions.logger.info("Event attendeesCount incremented", { eventId, dedupEventId });
+        } catch (error) {
+            functions.logger.error("Failed to increment event attendeesCount", {
+                eventId,
+                userId,
+                dedupEventId,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
+    });
+
+/**
+ * Decrement attendeesCount when a user leaves an event
+ * Trigger: onDelete events/{eventId}/attendees/{userId}
+ */
+export const onEventAttendeeDeleted = functions.firestore
+    .document("events/{eventId}/attendees/{userId}")
+    .onDelete(async (snap, context) => {
+        const { eventId, userId } = context.params;
+        const dedupEventId = context.eventId;
+
+        try {
+            functions.logger.info("Event attendee left", { eventId, userId, dedupEventId });
+
+            const eventRef = db.doc(`events/${eventId}`);
+            await deduplicatedDecrement(dedupEventId, eventRef, "attendeesCount");
+
+            functions.logger.info("Event attendeesCount decremented", { eventId, dedupEventId });
+        } catch (error) {
+            functions.logger.error("Failed to decrement event attendeesCount", {
+                eventId,
+                userId,
+                dedupEventId,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
+    });
+
+
+// ==========================================================
 // 🛡️ DEDUPLICATION HELPER
 // ==========================================================
 

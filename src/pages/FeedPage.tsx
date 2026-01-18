@@ -53,6 +53,7 @@ type PostSummary = {
     authorPhoto: string | null;
     text: string;
     imageUrl: string | null;
+    createdAt?: any;
 };
 
 const toDate = (value: any): Date | null => {
@@ -87,7 +88,8 @@ const buildPostSummary = (post: Post): PostSummary => {
         authorName,
         authorPhoto,
         text: displayText,
-        imageUrl
+        imageUrl,
+        createdAt: post.createdAt
     };
 };
 

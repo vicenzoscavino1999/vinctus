@@ -1,19 +1,21 @@
 # Registro de Despliegues - Vinctus
 
-## 📅 [Fecha Actual] - v1.3.6 - Hotfix Build Error
-**Estado:** ✅ Desplegado (En proceso de build)
-
-### 🐛 Correcciones
-- **TypeScript Error:** Corregido error de tipos (`null` vs `undefined`) en paginación de Comentarios y Notificaciones que impedía el build en Vercel.
-- **Frontend:** Commit `fix: resolve typescript error with null cursor in pagination` empujado a main.
-
-### 🔄 Estado General
-- **Backend:** Actualizado previamente (v1.3.5) y reconfirmado.
-- **Frontend:** Reconstruyendo ahora con el parche aplicado.
-
-## 📅 [Fecha Actual] - v1.3.5 - Redespliegue Completo (Re-iteración)
-**Estado:** ❌ Fallo en Build (Corregido en v1.3.6)
-- Solicitud de usuario. Falló por validación estricta de TypeScript.
-
-## 📅 [Fecha Anterior] - v1.3.4 - Redespliegue Completo (Iteración)
+## 📅 [Fecha Actual] - v1.3.9 - Despliegue de Cloud Functions
 **Estado:** ✅ Desplegado
+
+### 🌩️ Serverless Functions
+- **Comando:** `firebase deploy --only functions`
+- **Resultado:** Actualizadas exitosamente todas las funciones (Node.js 20) incluyendo:
+    - `onPostLikeCreated`/`Deleted`
+    - `onPostDeleted`
+    - `onGroupDeleted`
+    - `onEventAttendeeDeleted`
+    - Y otras funciones trigger de Firestore.
+
+## 📅 [Fecha Actual] - v1.3.8 - Actualización de Reglas e Índices
+**Estado:** ✅ Desplegado
+- Reglas Firestore e Índices sincronizados.
+
+## 📅 [Fecha Anterior] - v1.3.7 - Verificación Final de Despliegue
+**Estado:** ✅ Desplegado
+- Verificación completa de Frontend.
