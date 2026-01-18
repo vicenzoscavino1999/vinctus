@@ -3,7 +3,7 @@ import { Calendar, MapPin, Users, X } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
 import { useToast } from './Toast';
-import { isEventAttendee, joinEvent, leaveEvent, type FirestoreEvent } from '../lib/firestore';
+import { deleteEvent, isEventAttendee, joinEvent, leaveEvent, type FirestoreEvent } from '../lib/firestore';
 
 interface EventDetailModalProps {
     isOpen: boolean;
@@ -11,6 +11,8 @@ interface EventDetailModalProps {
     attendeeCount: number;
     onClose: () => void;
     onAttendanceChange?: (eventId: string, count: number) => void;
+    onEdit?: (event: FirestoreEvent) => void;
+    onDeleted?: () => void;
 }
 
 const formatEventDate = (value: Date | null): string => {
@@ -34,12 +36,15 @@ const EventDetailModal = ({
     event,
     attendeeCount,
     onClose,
-    onAttendanceChange
+    onAttendanceChange,
+    onEdit,
+    onDeleted
 }: EventDetailModalProps) => {
     const { user } = useAuth();
     const { showToast } = useToast();
     const [isAttending, setIsAttending] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [localCount, setLocalCount] = useState(attendeeCount);
 
     useEffect(() => {
@@ -83,6 +88,26 @@ const EventDetailModal = ({
         const query = encodeURIComponent(locationLabel);
         return `https://www.google.com/maps/search/?api=1&query=${query}`;
     }, [locationLabel]);
+
+    const isOwner = !!user && !!event && user.uid === event.createdBy;
+
+    const handleDelete = async () => {
+        if (!event) return;
+        const confirmed = window.confirm('¿Eliminar este encuentro? Esta accion no se puede deshacer.');
+        if (!confirmed) return;
+        setIsDeleting(true);
+        try {
+            await deleteEvent(event.id);
+            showToast('Encuentro eliminado', 'success');
+            onDeleted?.();
+            onClose();
+        } catch (error) {
+            console.error('Error deleting event:', error);
+            showToast('No se pudo eliminar el encuentro.', 'error');
+        } finally {
+            setIsDeleting(false);
+        }
+    };
 
     const handleToggleAttendance = async () => {
         if (!event) return;
@@ -184,6 +209,28 @@ const EventDetailModal = ({
                             {event.visibility === 'public' ? 'Publico' : 'Privado'}
                         </span>
                     </div>
+
+                    {isOwner && (
+                        <div className="flex flex-wrap items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => onEdit?.(event)}
+                                className="px-5 py-2 rounded-full text-xs uppercase tracking-widest border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 transition-colors"
+                            >
+                                Editar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDelete}
+                                disabled={isDeleting}
+                                className={`px-5 py-2 rounded-full text-xs uppercase tracking-widest border border-red-500/50 text-red-400 hover:text-white hover:border-red-400 transition-colors ${
+                                    isDeleting ? 'opacity-60 cursor-not-allowed' : ''
+                                }`}
+                            >
+                                Eliminar
+                            </button>
+                        </div>
+                    )}
 
                     <button
                         onClick={handleToggleAttendance}

@@ -355,6 +355,36 @@ export const onGroupDeleted = functions.firestore
     });
 
 /**
+ * Clean up subcollections when an event is deleted
+ * Trigger: onDelete events/{eventId}
+ */
+export const onEventDeleted = functions.firestore
+    .document("events/{eventId}")
+    .onDelete(async (snap, context) => {
+        const { eventId } = context.params;
+
+        try {
+            functions.logger.info("Event deleted, cleaning up attendees", { eventId });
+
+            const attendeesRef = db.collection(`events/${eventId}/attendees`);
+            try {
+                await db.recursiveDelete(attendeesRef);
+                functions.logger.info("Deleted event attendees subcollection", { eventId });
+            } catch (error) {
+                functions.logger.error("Failed to delete event attendees subcollection", {
+                    eventId,
+                    error: error instanceof Error ? error.message : String(error)
+                });
+            }
+        } catch (error) {
+            functions.logger.error("Failed to clean up event attendees", {
+                eventId,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
+    });
+
+/**
  * Clean up subcollections and media when a post is deleted
  * - Deletes all media files from Storage
  * - Deletes likes subcollection (using recursiveDelete for >500 docs)

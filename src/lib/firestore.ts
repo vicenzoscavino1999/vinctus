@@ -15,6 +15,7 @@ import {
     where,
     orderBy,
     limit,
+    limitToLast,
     startAfter,
     startAt,
     endAt,
@@ -657,33 +658,45 @@ export async function getEvent(eventId: string): Promise<FirestoreEvent | null> 
 }
 
 export async function getUpcomingEvents(limitCount: number = DEFAULT_LIMIT): Promise<FirestoreEvent[]> {
-    const q = query(
+    const upcomingQuery = query(
         collection(db, 'events'),
         where('visibility', '==', 'public'),
         where('startAt', '>=', Timestamp.now()),
         orderBy('startAt', 'asc'),
         limit(limitCount)
     );
-    const snap = await getDocs(q);
-    return snap.docs.map((docSnap) => {
+    const upcomingSnap = await getDocs(upcomingQuery);
+    const mapSnap = (snap: typeof upcomingSnap) => snap.docs.map((docSnap) => {
         const data = docSnap.data();
         return {
             id: docSnap.id,
             title: data.title,
             description: data.description ?? null,
             startAt: toDate(data.startAt) ?? null,
-        endAt: toDate(data.endAt) ?? null,
-        city: data.city ?? null,
-        venue: data.venue ?? null,
-        capacity: typeof data.capacity === 'number' ? data.capacity : null,
-        attendeesCount: typeof data.attendeesCount === 'number' ? data.attendeesCount : null,
-        visibility: (data.visibility as EventVisibility) ?? 'public',
-        createdBy: data.createdBy,
-        coverUrl: data.coverUrl ?? null,
-        createdAt: toDate(data.createdAt) ?? null,
-        updatedAt: toDate(data.updatedAt) ?? null
+            endAt: toDate(data.endAt) ?? null,
+            city: data.city ?? null,
+            venue: data.venue ?? null,
+            capacity: typeof data.capacity === 'number' ? data.capacity : null,
+            attendeesCount: typeof data.attendeesCount === 'number' ? data.attendeesCount : null,
+            visibility: (data.visibility as EventVisibility) ?? 'public',
+            createdBy: data.createdBy,
+            coverUrl: data.coverUrl ?? null,
+            createdAt: toDate(data.createdAt) ?? null,
+            updatedAt: toDate(data.updatedAt) ?? null
         };
     });
+
+    if (!upcomingSnap.empty) {
+        return mapSnap(upcomingSnap);
+    }
+
+    const recentSnap = await getDocs(query(
+        collection(db, 'events'),
+        where('visibility', '==', 'public'),
+        orderBy('startAt', 'asc'),
+        limitToLast(limitCount)
+    ));
+    return mapSnap(recentSnap);
 }
 
 export async function joinEvent(eventId: string, uid: string): Promise<void> {
@@ -707,6 +720,10 @@ export async function joinEvent(eventId: string, uid: string): Promise<void> {
 
 export async function leaveEvent(eventId: string, uid: string): Promise<void> {
     await deleteDoc(doc(db, 'events', eventId, 'attendees', uid));
+}
+
+export async function deleteEvent(eventId: string): Promise<void> {
+    await deleteDoc(doc(db, 'events', eventId));
 }
 
 export async function isEventAttendee(eventId: string, uid: string): Promise<boolean> {

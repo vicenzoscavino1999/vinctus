@@ -62,6 +62,7 @@ const ProjectsPage = () => {
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [isCreateEventOpen, setIsCreateEventOpen] = useState(false);
     const [editingCollaboration, setEditingCollaboration] = useState<CollaborationRead | null>(null);
+    const [editingEvent, setEditingEvent] = useState<FirestoreEvent | null>(null);
     const [selectedCollaboration, setSelectedCollaboration] = useState<CollaborationRead | null>(null);
     const [requestedIds, setRequestedIds] = useState<string[]>([]);
     const [selectedEvent, setSelectedEvent] = useState<FirestoreEvent | null>(null);
@@ -104,6 +105,7 @@ const ProjectsPage = () => {
             showToast('Inicia sesion para publicar encuentros', 'info');
             return;
         }
+        setEditingEvent(null);
         setIsCreateEventOpen(true);
     };
 
@@ -325,9 +327,19 @@ const ProjectsPage = () => {
             />
             <CreateEventModal
                 isOpen={isCreateEventOpen}
-                onClose={() => setIsCreateEventOpen(false)}
+                editingEvent={editingEvent}
+                onClose={() => {
+                    setIsCreateEventOpen(false);
+                    setEditingEvent(null);
+                }}
                 onCreated={() => {
                     setIsCreateEventOpen(false);
+                    setEditingEvent(null);
+                    loadEvents();
+                }}
+                onUpdated={() => {
+                    setIsCreateEventOpen(false);
+                    setEditingEvent(null);
                     loadEvents();
                 }}
             />
@@ -357,6 +369,15 @@ const ProjectsPage = () => {
                 onClose={() => setSelectedEvent(null)}
                 onAttendanceChange={(eventId, count) => {
                     setEventAttendeeCounts((prev) => ({ ...prev, [eventId]: count }));
+                }}
+                onEdit={(event) => {
+                    setSelectedEvent(null);
+                    setEditingEvent(event);
+                    setIsCreateEventOpen(true);
+                }}
+                onDeleted={() => {
+                    setSelectedEvent(null);
+                    loadEvents();
                 }}
             />
         </div>

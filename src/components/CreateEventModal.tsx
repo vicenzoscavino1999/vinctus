@@ -2,13 +2,15 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Loader2, X } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
-import { createEvent, type EventVisibility } from '../lib/firestore';
+import { createEvent, updateEvent, type EventVisibility, type FirestoreEvent } from '../lib/firestore';
 import { useToast } from './Toast';
 
 interface CreateEventModalProps {
     isOpen: boolean;
+    editingEvent?: FirestoreEvent | null;
     onClose: () => void;
     onCreated: () => void;
+    onUpdated?: () => void;
 }
 
 const parseDate = (value: string): Date | null => {
@@ -17,7 +19,19 @@ const parseDate = (value: string): Date | null => {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
-const CreateEventModal = ({ isOpen, onClose, onCreated }: CreateEventModalProps) => {
+const formatDateInput = (value: Date | null): string => {
+    if (!value) return '';
+    const local = new Date(value.getTime() - value.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 16);
+};
+
+const CreateEventModal = ({
+    isOpen,
+    editingEvent,
+    onClose,
+    onCreated,
+    onUpdated
+}: CreateEventModalProps) => {
     const { user } = useAuth();
     const { showToast } = useToast();
 
@@ -44,8 +58,22 @@ const CreateEventModal = ({ isOpen, onClose, onCreated }: CreateEventModalProps)
             setVisibility('public');
             setError(null);
             setIsSubmitting(false);
+            return;
         }
-    }, [isOpen]);
+
+        if (editingEvent) {
+            setTitle(editingEvent.title ?? '');
+            setDescription(editingEvent.description ?? '');
+            setStartAt(formatDateInput(editingEvent.startAt));
+            setEndAt(formatDateInput(editingEvent.endAt));
+            setCity(editingEvent.city ?? '');
+            setVenue(editingEvent.venue ?? '');
+            setCapacity(editingEvent.capacity !== null ? String(editingEvent.capacity) : '');
+            setVisibility(editingEvent.visibility ?? 'public');
+            setError(null);
+            setIsSubmitting(false);
+        }
+    }, [isOpen, editingEvent]);
 
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
@@ -96,7 +124,7 @@ const CreateEventModal = ({ isOpen, onClose, onCreated }: CreateEventModalProps)
         setIsSubmitting(true);
 
         try {
-            await createEvent(user.uid, {
+            const payload = {
                 title: trimmedTitle,
                 description: trimmedDescription ? trimmedDescription : null,
                 startAt: startDate,
@@ -105,9 +133,21 @@ const CreateEventModal = ({ isOpen, onClose, onCreated }: CreateEventModalProps)
                 venue: trimmedVenue ? trimmedVenue : null,
                 capacity: parsedCapacity,
                 visibility
-            });
-            showToast('Encuentro publicado', 'success');
-            onCreated();
+            };
+
+            if (editingEvent) {
+                await updateEvent(editingEvent.id, payload);
+                showToast('Encuentro actualizado', 'success');
+                if (onUpdated) {
+                    onUpdated();
+                } else {
+                    onCreated();
+                }
+            } else {
+                await createEvent(user.uid, payload);
+                showToast('Encuentro publicado', 'success');
+                onCreated();
+            }
         } catch (submitError) {
             console.error('Error saving event:', submitError);
             const fallbackMessage = 'No se pudo publicar el encuentro.';
@@ -128,11 +168,13 @@ const CreateEventModal = ({ isOpen, onClose, onCreated }: CreateEventModalProps)
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-6">
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
             <div className="relative w-full max-w-2xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 flex-shrink-0">
-                    <h2 className="text-xl font-serif text-white">Publicar encuentro</h2>
+                    <h2 className="text-xl font-serif text-white">
+                        {editingEvent ? 'Editar encuentro' : 'Publicar encuentro'}
+                    </h2>
                     <button
                         onClick={onClose}
                         className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
@@ -272,7 +314,7 @@ const CreateEventModal = ({ isOpen, onClose, onCreated }: CreateEventModalProps)
                                     Guardando...
                                 </>
                             ) : (
-                                'Publicar'
+                                editingEvent ? 'Guardar cambios' : 'Publicar'
                             )}
                         </button>
                     </div>
