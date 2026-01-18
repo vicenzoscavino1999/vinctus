@@ -1,15 +1,20 @@
 # Registro de Despliegues - Vinctus
 
-## 📅 [Fecha Actual] - v1.3.2 - Redespliegue con Últimos Cambios del Usuario
+## 📅 [Fecha Actual] - v1.3.3 - Redespliegue Completo + Índices
 **Estado:** ✅ Desplegado
 
 ### 🔄 Redespliegue General
-- **Backend:** `firebase deploy --only firestore:rules,storage` ejecutado exitosamente.
-- **Frontend:** Commit manual `chore: redeploy with latest user changes` empujado a main. Dispara build en Vercel.
+- **Backend:** `firebase deploy --only firestore:rules,firestore:indexes,storage` ejecutado con éxito.
+    - Se forzó el despliegue de índices (`firestore.indexes.json`).
+- **Frontend:** Commit manual `chore: full redeploy with latest user changes and indexes` empujado a main. Dispara build en Vercel.
 
 ### 📝 Resumen de Cambios Recientes
-- Despliegue solicitado por el usuario tras ediciones manuales (presumiblemente en mensajería o UI).
-- Sincronización completa de reglas de respaldo y código fuente.
+- Despliegue solicitado tras cambios adicionales del usuario.
+- Inclusión explícita de índices de Firestore para optimizar consultas.
+
+## 📅 [Fecha Anterior] - v1.3.2 - Redespliegue con Últimos Cambios del Usuario
+**Estado:** ✅ Desplegado
+- Sincronización completa tras ediciones manuales (mensajería/UI).
 
 ## 📅 [Fecha Anterior] - v1.3.1 - Redespliegue Manual Completo
 **Estado:** ✅ Desplegado
@@ -17,6 +22,4 @@
 
 ## 📅 [Fecha Anterior] - v1.3.0 - Mejoras en Autenticación
 **Estado:** ✅ Desplegado
-- **Recuperación de Contraseña:** Implementado.
-- **Verificación de Correo:** Implementado.
-- **Login Celular:** Corregido (Región Perú).
+- Recuperación de Contraseña, Verificación de Correo, Login Celular.

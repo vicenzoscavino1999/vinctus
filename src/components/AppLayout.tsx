@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { Compass, Hash, User, Briefcase, MoreHorizontal, Settings, LogOut, Search } from 'lucide-react';
+import { Bell, Compass, Hash, User, Briefcase, MoreHorizontal, Settings, LogOut, Search } from 'lucide-react';
 
 import Header from './Header';
 import SidebarItem from './SidebarItem';
@@ -115,6 +115,7 @@ const Sidebar = ({ activeTab, onNavigate }: NavProps) => (
     <nav className="flex flex-col space-y-4">
       <SidebarItem icon={Compass} active={activeTab === 'discover'} onClick={() => onNavigate('/discover')} tooltip="Descubrir" />
       <SidebarItem icon={Search} active={activeTab === 'search'} onClick={() => onNavigate('/search')} tooltip="Buscar" />
+      <SidebarItem icon={Bell} active={activeTab === 'notifications'} onClick={() => onNavigate('/notifications')} tooltip="Notificaciones" />
       <SidebarItem icon={Hash} active={activeTab === 'messages'} onClick={() => onNavigate('/messages')} tooltip="Conversación" />
       <SidebarItem icon={Briefcase} active={activeTab === 'projects'} onClick={() => onNavigate('/projects')} tooltip="Conexiones" />
     </nav>
@@ -138,6 +139,7 @@ const MobileNav = ({ activeTab, onNavigate }: NavProps) => {
     <div className="md:hidden fixed bottom-0 w-full bg-bg/95 backdrop-blur-md border-t border-neutral-900 flex justify-around px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] z-50">
       <button onClick={() => onNavigate('/discover')} aria-label="Descubrir" className={`p-2.5 ${activeTab === 'discover' ? 'text-white' : 'text-neutral-600'}`}><Compass size={24} strokeWidth={1} /></button>
       <button onClick={() => onNavigate('/search')} aria-label="Buscar" className={`p-2.5 ${activeTab === 'search' ? 'text-white' : 'text-neutral-600'}`}><Search size={24} strokeWidth={1} /></button>
+      <button onClick={() => onNavigate('/notifications')} aria-label="Notificaciones" className={`p-2.5 ${activeTab === 'notifications' ? 'text-white' : 'text-neutral-600'}`}><Bell size={24} strokeWidth={1} /></button>
       <button onClick={() => onNavigate('/messages')} aria-label="Diálogos" className={`p-2.5 ${activeTab === 'messages' ? 'text-white' : 'text-neutral-600'}`}><Hash size={24} strokeWidth={1} /></button>
       <button onClick={() => onNavigate('/projects')} aria-label="Conexiones" className={`p-2.5 ${activeTab === 'projects' ? 'text-white' : 'text-neutral-600'}`}><Briefcase size={24} strokeWidth={1} /></button>
       <button onClick={() => onNavigate('/profile')} aria-label="Perfil" className={`p-2.5 ${activeTab === 'profile' ? 'text-white' : 'text-neutral-600'}`}><User size={24} strokeWidth={1} /></button>
@@ -161,7 +163,7 @@ const AppLayout = () => {
     if (pathname === '/library') return 'library';
     if (pathname === '/profile') return 'profile';
     if (pathname === '/settings') return 'profile';
-    if (pathname === '/notifications') return 'profile';
+    if (pathname === '/notifications') return 'notifications';
     if (pathname === '/messages') return 'messages';
     if (pathname.startsWith('/user/')) return 'search';
     if (pathname.startsWith('/group/')) return 'discover';

@@ -3,6 +3,7 @@
 
 import {
     collection,
+    collectionGroup,
     doc,
     getDoc,
     getDocs,
@@ -697,14 +698,26 @@ export async function addPostComment(
     return commentRef.id;
 }
 
-export async function getPostComments(postId: string, limitCount = 50): Promise<PostCommentRead[]> {
-    const q = query(
+export async function getPostComments(
+    postId: string,
+    limitCount: number = 50,
+    lastDoc?: DocumentSnapshot
+): Promise<PaginatedResult<PostCommentRead>> {
+    let q = query(
         collection(db, 'posts', postId, 'comments'),
         orderBy('createdAt', 'desc'),
-        limit(limitCount)
+        limit(limitCount + 1)
     );
+
+    if (lastDoc) {
+        q = query(q, startAfter(lastDoc));
+    }
+
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) => {
+    const hasMore = snapshot.docs.length > limitCount;
+    const docs = hasMore ? snapshot.docs.slice(0, limitCount) : snapshot.docs;
+
+    const items = docs.map((docSnap) => {
         const data = docSnap.data();
         const createdAt = toDate(data.createdAt) || new Date();
         return {
@@ -719,6 +732,12 @@ export async function getPostComments(postId: string, limitCount = 50): Promise<
             createdAt
         } as PostCommentRead;
     });
+
+    return {
+        items,
+        lastDoc: docs[docs.length - 1] || null,
+        hasMore
+    };
 }
 
 export async function getPostCommentCount(postId: string): Promise<number> {
@@ -1412,31 +1431,88 @@ export const subscribeToConversations = (
         }
     };
 
-    const q = query(
-        collection(db, 'conversations'),
-        where('memberIds', 'array-contains', uid),
-        limit(100)
+    const membersQuery = query(
+        collectionGroup(db, 'members'),
+        where('uid', '==', uid),
+        limit(200)
     );
 
-    return onSnapshot(q, (snapshot) => {
-        const conversations = snapshot.docs.map((convDoc) => {
-            const data = convDoc.data();
-            return {
-                id: convDoc.id,
-                type: data.type,
-                groupId: data.groupId,
-                memberIds: data.memberIds || undefined,
-                lastMessage: data.lastMessage ? {
-                    ...data.lastMessage,
-                    createdAt: toDate(data.lastMessage.createdAt) || new Date()
-                } : null,
-                createdAt: toDate(data.createdAt) || new Date(),
-                updatedAt: toDate(data.updatedAt) || new Date()
-            } as ConversationRead;
-        }).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    const conversationMap = new Map<string, ConversationRead>();
+    const conversationUnsubs = new Map<string, Unsubscribe>();
 
+    const emit = () => {
+        const conversations = Array.from(conversationMap.values()).sort(
+            (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
+        );
         callback(conversations);
-    }, handleError);
+    };
+
+    const subscribeToConversation = (conversationId: string) => {
+        if (conversationUnsubs.has(conversationId)) return;
+        const convRef = doc(db, 'conversations', conversationId);
+        const unsubscribe = onSnapshot(
+            convRef,
+            (convSnap) => {
+                if (!convSnap.exists()) {
+                    conversationMap.delete(conversationId);
+                    emit();
+                    return;
+                }
+                const data = convSnap.data();
+                const conversation: ConversationRead = {
+                    id: convSnap.id,
+                    type: data.type,
+                    groupId: data.groupId,
+                    memberIds: data.memberIds || undefined,
+                    lastMessage: data.lastMessage ? {
+                        ...data.lastMessage,
+                        createdAt: toDate(data.lastMessage.createdAt) || new Date()
+                    } : null,
+                    createdAt: toDate(data.createdAt) || new Date(),
+                    updatedAt: toDate(data.updatedAt) || new Date()
+                };
+                conversationMap.set(conversationId, conversation);
+                emit();
+            },
+            handleError
+        );
+        conversationUnsubs.set(conversationId, unsubscribe);
+    };
+
+    const unsubscribeMembers = onSnapshot(
+        membersQuery,
+        (snapshot) => {
+            const nextIds = new Set<string>();
+            snapshot.docs.forEach((memberDoc) => {
+                const convId = memberDoc.ref.parent.parent?.id;
+                if (convId) {
+                    nextIds.add(convId);
+                }
+            });
+
+            nextIds.forEach(subscribeToConversation);
+
+            Array.from(conversationUnsubs.keys()).forEach((convId) => {
+                if (nextIds.has(convId)) return;
+                const unsubscribe = conversationUnsubs.get(convId);
+                if (unsubscribe) {
+                    unsubscribe();
+                }
+                conversationUnsubs.delete(convId);
+                conversationMap.delete(convId);
+            });
+
+            emit();
+        },
+        handleError
+    );
+
+    return () => {
+        unsubscribeMembers();
+        conversationUnsubs.forEach((unsubscribe) => unsubscribe());
+        conversationUnsubs.clear();
+        conversationMap.clear();
+    };
 };
 
 /**

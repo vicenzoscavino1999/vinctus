@@ -639,7 +639,16 @@ export default function MessagesPage() {
                                     return (
                                         <div
                                             key={group.id}
-                                            className="bg-surface-1 border border-neutral-800/50 rounded-lg p-5"
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={() => navigate(`/group/${group.id}`)}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter' || event.key === ' ') {
+                                                    event.preventDefault();
+                                                    navigate(`/group/${group.id}`);
+                                                }
+                                            }}
+                                            className="bg-surface-1 border border-neutral-800/50 rounded-lg p-5 cursor-pointer hover:border-neutral-700/70 transition-colors"
                                         >
                                             <div className="flex items-start justify-between gap-4">
                                                 <div className="flex items-start gap-3 min-w-0">
@@ -658,7 +667,10 @@ export default function MessagesPage() {
                                                     </div>
                                                 </div>
                                                 <button
-                                                    onClick={() => void handleOpenMemberGroup(group)}
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        void handleOpenMemberGroup(group);
+                                                    }}
                                                     className="px-3 py-1.5 rounded text-xs bg-neutral-800 text-neutral-200 hover:bg-neutral-700"
                                                 >
                                                     Chat
@@ -669,7 +681,10 @@ export default function MessagesPage() {
                                                     {stats.members.toLocaleString('es-ES')} miembros - {stats.postsWeek} posts/semana
                                                 </div>
                                                 <button
-                                                    onClick={() => navigate(`/group/${group.id}`)}
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        navigate(`/group/${group.id}`);
+                                                    }}
                                                     className="text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
                                                 >
                                                     Ver grupo
