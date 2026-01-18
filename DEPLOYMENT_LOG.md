@@ -1,25 +1,19 @@
 # Registro de Despliegues - Vinctus
 
-## 📅 [Fecha Actual] - v1.3.3 - Redespliegue Completo + Índices
+## 📅 [Fecha Actual] - v1.3.4 - Redespliegue Completo (Iteración)
 **Estado:** ✅ Desplegado
 
 ### 🔄 Redespliegue General
 - **Backend:** `firebase deploy --only firestore:rules,firestore:indexes,storage` ejecutado con éxito.
-    - Se forzó el despliegue de índices (`firestore.indexes.json`).
-- **Frontend:** Commit manual `chore: full redeploy with latest user changes and indexes` empujado a main. Dispara build en Vercel.
+- **Frontend:** Commit manual `chore: full redeploy with latest user changes` empujado a main. Dispara build en Vercel.
 
-### 📝 Resumen de Cambios Recientes
-- Despliegue solicitado tras cambios adicionales del usuario.
-- Inclusión explícita de índices de Firestore para optimizar consultas.
+### 📝 Notas
+- Sincronización rutinaria tras ediciones adicionales del usuario (presumiblemente mejoras en UI/Mensajes).
+- Índices de Firestore confirmados y desplegados nuevamente.
 
-## 📅 [Fecha Anterior] - v1.3.2 - Redespliegue con Últimos Cambios del Usuario
+## 📅 [Fecha Anterior] - v1.3.3 - Redespliegue Completo + Índices
 **Estado:** ✅ Desplegado
-- Sincronización completa tras ediciones manuales (mensajería/UI).
+- Inclusión explícita de `firestore:indexes`.
 
-## 📅 [Fecha Anterior] - v1.3.1 - Redespliegue Manual Completo
+## 📅 [Fecha Anterior] - v1.3.2 - Redespliegue con Últimos Cambios
 **Estado:** ✅ Desplegado
-- Sincronización completa de Backend y Frontend tras correcciones críticas.
-
-## 📅 [Fecha Anterior] - v1.3.0 - Mejoras en Autenticación
-**Estado:** ✅ Desplegado
-- Recuperación de Contraseña, Verificación de Correo, Login Celular.

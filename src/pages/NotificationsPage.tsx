@@ -62,6 +62,7 @@ const NotificationsPage = () => {
     const [activityHasMore, setActivityHasMore] = useState(false);
     const [activityLoadingMore, setActivityLoadingMore] = useState(false);
     const [activitySearchQuery, setActivitySearchQuery] = useState('');
+    const [activityInitialized, setActivityInitialized] = useState(false);
 
     const loadRequests = useCallback(async () => {
         if (!user) return;
@@ -108,9 +109,12 @@ const NotificationsPage = () => {
         }
     }, [user]);
 
-    const loadActivity = useCallback(async (loadMore = false) => {
+    const loadActivity = useCallback(async (
+        loadMore = false,
+        cursor?: PaginatedResult<ActivityRead>['lastDoc']
+    ) => {
         if (!user) return;
-        if (loadMore && !activityCursor) return;
+        if (loadMore && !cursor) return;
 
         try {
             setActivityError(null);
@@ -122,7 +126,7 @@ const NotificationsPage = () => {
             const result = await getUserActivity(
                 user.uid,
                 20,
-                loadMore ? activityCursor ?? undefined : undefined
+                loadMore ? cursor : undefined
             );
             setActivityItems((prev) => (loadMore ? [...prev, ...result.items] : result.items));
             setActivityCursor(result.lastDoc);
@@ -134,7 +138,7 @@ const NotificationsPage = () => {
             setActivityLoading(false);
             setActivityLoadingMore(false);
         }
-    }, [user, activityCursor]);
+    }, [user]);
 
     useEffect(() => {
         void loadRequests();
@@ -150,12 +154,14 @@ const NotificationsPage = () => {
             setActivityLoading(false);
             setActivityLoadingMore(false);
             setActivityError(null);
+            setActivityInitialized(false);
             return;
         }
-        if (activeTab === 'activity' && activityItems.length === 0 && !activityLoading) {
+        if (activeTab === 'activity' && !activityInitialized) {
+            setActivityInitialized(true);
             void loadActivity(false);
         }
-    }, [user, activeTab, activityItems.length, activityLoading, loadActivity]);
+    }, [user, activeTab, activityInitialized, loadActivity]);
 
     const handleAccept = async (request: CollaborationRequestRead) => {
         if (!user) return;
@@ -661,7 +667,7 @@ const NotificationsPage = () => {
                             {activityHasMore && (
                                 <div className="flex justify-center">
                                     <button
-                                        onClick={() => void loadActivity(true)}
+                                        onClick={() => void loadActivity(true, activityCursor ?? undefined)}
                                         disabled={activityLoadingMore}
                                         className="px-5 py-2 rounded-full text-xs uppercase tracking-widest border border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                                     >

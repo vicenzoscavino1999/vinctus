@@ -47,7 +47,10 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
 
     const COMMENTS_PAGE_SIZE = 12;
 
-    const loadComments = useCallback(async (loadMore = false) => {
+    const loadComments = useCallback(async (
+        loadMore = false,
+        cursor?: PaginatedResult<PostCommentRead>['lastDoc']
+    ) => {
         if (!post) return;
         try {
             setError(null);
@@ -60,7 +63,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
                 getPostComments(
                     post.postId,
                     COMMENTS_PAGE_SIZE,
-                    loadMore ? commentsCursor ?? undefined : undefined
+                    loadMore ? cursor : undefined
                 ),
                 loadMore ? Promise.resolve(null) : getPostCommentCount(post.postId)
             ]);
@@ -77,7 +80,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [post, commentsCursor]);
+    }, [post]);
 
     useEffect(() => {
         if (!isOpen || !post) return;
@@ -221,7 +224,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
                         {hasMore && (
                             <div className="flex justify-center">
                                 <button
-                                    onClick={() => void loadComments(true)}
+                                    onClick={() => void loadComments(true, commentsCursor ?? undefined)}
                                     disabled={loadingMore}
                                     className="px-5 py-2 rounded-full text-xs uppercase tracking-widest border border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
