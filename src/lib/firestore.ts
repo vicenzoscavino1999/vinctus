@@ -591,10 +591,7 @@ export interface EventAttendeeWrite {
 
 export async function createEvent(ownerId: string, input: CreateEventInput): Promise<string> {
     const eventRef = doc(collection(db, 'events'));
-    const attendeeRef = doc(db, 'events', eventRef.id, 'attendees', ownerId);
-
-    const batch = writeBatch(db);
-    batch.set(eventRef, {
+    await setDoc(eventRef, {
         title: input.title,
         description: input.description,
         startAt: input.startAt,
@@ -609,12 +606,16 @@ export async function createEvent(ownerId: string, input: CreateEventInput): Pro
         updatedAt: serverTimestamp()
     } as EventWrite, { merge: false });
 
-    batch.set(attendeeRef, {
-        uid: ownerId,
-        joinedAt: serverTimestamp()
-    } as EventAttendeeWrite, { merge: false });
-
-    await batch.commit();
+    try {
+        const attendeeRef = doc(db, 'events', eventRef.id, 'attendees', ownerId);
+        await setDoc(attendeeRef, {
+            uid: ownerId,
+            joinedAt: serverTimestamp()
+        } as EventAttendeeWrite, { merge: false });
+    } catch (error) {
+        await deleteDoc(eventRef).catch(() => {});
+        throw error;
+    }
     return eventRef.id;
 }
 

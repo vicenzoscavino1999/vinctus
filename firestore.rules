@@ -386,7 +386,8 @@ service cloud.firestore {
     function canJoinEvent(eventId) {
       let event = get(/databases/$(database)/documents/events/$(eventId));
       return event.data != null
-        && event.data.visibility == 'public';
+        && (event.data.visibility == 'public'
+          || (isAuthenticated() && event.data.createdBy == request.auth.uid));
     }
 
     function isValidEventCreate() {

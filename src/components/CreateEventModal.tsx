@@ -110,7 +110,16 @@ const CreateEventModal = ({ isOpen, onClose, onCreated }: CreateEventModalProps)
             onCreated();
         } catch (submitError) {
             console.error('Error saving event:', submitError);
-            setError('No se pudo publicar el encuentro.');
+            const fallbackMessage = 'No se pudo publicar el encuentro.';
+            const errorMessage = submitError instanceof Error ? submitError.message : '';
+            const errorCode = typeof submitError === 'object' && submitError && 'code' in submitError
+                ? String((submitError as { code?: unknown }).code)
+                : '';
+            const permissionHint = errorCode.includes('permission') || errorMessage.toLowerCase().includes('permission')
+                ? 'Permisos insuficientes. Revisa las reglas de Firestore.'
+                : fallbackMessage;
+            const detail = errorMessage ? ` (${errorMessage})` : '';
+            setError(`${permissionHint}${detail}`);
         } finally {
             setIsSubmitting(false);
         }
@@ -121,8 +130,8 @@ const CreateEventModal = ({ isOpen, onClose, onCreated }: CreateEventModalProps)
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative w-full max-w-2xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+            <div className="relative w-full max-w-2xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 flex-shrink-0">
                     <h2 className="text-xl font-serif text-white">Publicar encuentro</h2>
                     <button
                         onClick={onClose}
@@ -133,7 +142,7 @@ const CreateEventModal = ({ isOpen, onClose, onCreated }: CreateEventModalProps)
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1">
                     <div className="grid gap-4 md:grid-cols-2">
                         <div>
                             <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
