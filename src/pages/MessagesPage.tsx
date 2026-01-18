@@ -4,27 +4,18 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, ChevronRight, Users, ArrowLeft, Send } from 'lucide-react';
 import { useToast } from '../components/Toast';
 import {
-    acceptGroupJoinRequest,
     getOrCreateGroupConversation,
-    getGroupJoinStatus,
     getGroupMemberCount,
     getGroupPostsWeekCount,
-    getGroups,
-    getPendingGroupJoinRequests,
     subscribeToConversations,
     subscribeToMessages,
     subscribeToUserMemberships,
     sendMessage,
     markConversationRead,
-    joinPublicGroup,
-    rejectGroupJoinRequest,
-    sendGroupJoinRequest,
     getGroup,
     getUserProfile,
     type ConversationRead,
     type FirestoreGroup,
-    type GroupJoinStatus,
-    type GroupJoinRequestRead,
     type MessageRead
 } from '../lib/firestore';
 import CreateGroupModal from '../components/CreateGroupModal';
@@ -71,18 +62,10 @@ export default function MessagesPage() {
     const [groupInfoCache, setGroupInfoCache] = useState<Record<string, GroupInfo>>({});
     const groupInfoCacheRef = useRef<Record<string, GroupInfo>>({});
     const [directInfoCache, setDirectInfoCache] = useState<Record<string, { name: string; photoURL: string | null }>>({});
-    const [groups, setGroups] = useState<FirestoreGroup[]>([]);
-    const [groupsLoading, setGroupsLoading] = useState(false);
-    const [groupsError, setGroupsError] = useState<string | null>(null);
     const [groupStats, setGroupStats] = useState<Record<string, { members: number; postsWeek: number }>>({});
-    const [groupJoinStatusMap, setGroupJoinStatusMap] = useState<Record<string, GroupJoinStatus>>({});
-    const [groupActionLoading, setGroupActionLoading] = useState<string | null>(null);
     const [memberGroups, setMemberGroups] = useState<FirestoreGroup[]>([]);
     const [memberGroupsLoading, setMemberGroupsLoading] = useState(false);
     const [memberGroupsError, setMemberGroupsError] = useState<string | null>(null);
-    const [pendingGroupRequests, setPendingGroupRequests] = useState<GroupJoinRequestRead[]>([]);
-    const [pendingRequestsLoading, setPendingRequestsLoading] = useState(false);
-    const [requestActionLoading, setRequestActionLoading] = useState<string | null>(null);
     const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
 
     const [searchParams, setSearchParams] = useSearchParams();
@@ -173,46 +156,9 @@ export default function MessagesPage() {
     }, [user]);
 
     useEffect(() => {
-        if (activeTab !== 'groups') return;
+        if (memberGroups.length === 0) return;
         let isActive = true;
-
-        const loadGroups = async () => {
-            setGroupsLoading(true);
-            setGroupsError(null);
-            try {
-                const data = await getGroups();
-                const sorted = [...data].sort((a, b) => {
-                    const aTime = a.createdAt ? a.createdAt.getTime() : 0;
-                    const bTime = b.createdAt ? b.createdAt.getTime() : 0;
-                    return bTime - aTime;
-                });
-                if (isActive) {
-                    setGroups(sorted.slice(0, 20));
-                }
-            } catch (loadError) {
-                console.error('Error loading groups:', loadError);
-                if (isActive) {
-                    setGroupsError('No se pudieron cargar grupos.');
-                }
-            } finally {
-                if (isActive) {
-                    setGroupsLoading(false);
-                }
-            }
-        };
-
-        loadGroups();
-
-        return () => {
-            isActive = false;
-        };
-    }, [activeTab]);
-
-    useEffect(() => {
-        const allGroups = [...groups, ...memberGroups];
-        if (allGroups.length === 0) return;
-        let isActive = true;
-        const pending = allGroups.filter((group) => groupStats[group.id] === undefined);
+        const pending = memberGroups.filter((group) => groupStats[group.id] === undefined);
         if (pending.length === 0) return;
 
         const loadStats = async () => {
@@ -240,40 +186,7 @@ export default function MessagesPage() {
         return () => {
             isActive = false;
         };
-    }, [groups, memberGroups, groupStats]);
-
-    useEffect(() => {
-        if (!user || groups.length === 0) {
-            if (!user) setGroupJoinStatusMap({});
-            return;
-        }
-        let isActive = true;
-        const pending = groups.filter((group) => groupJoinStatusMap[group.id] === undefined);
-        if (pending.length === 0) return;
-
-        const loadStatuses = async () => {
-            try {
-                const updates: Record<string, GroupJoinStatus> = {};
-                await Promise.all(
-                    pending.map(async (group) => {
-                        const status = await getGroupJoinStatus(group.id, user.uid);
-                        updates[group.id] = status;
-                    })
-                );
-                if (isActive) {
-                    setGroupJoinStatusMap((prev) => ({ ...prev, ...updates }));
-                }
-            } catch (statusError) {
-                console.error('Error loading group status:', statusError);
-            }
-        };
-
-        loadStatuses();
-
-        return () => {
-            isActive = false;
-        };
-    }, [groups, user, groupJoinStatusMap]);
+    }, [memberGroups, groupStats]);
 
     useEffect(() => {
         if (!user) {
@@ -361,35 +274,6 @@ export default function MessagesPage() {
         });
     }, [conversations, user, directInfoCache, getOtherMemberId]);
 
-    useEffect(() => {
-        if (!user || activeTab !== 'groups') {
-            setPendingGroupRequests([]);
-            setPendingRequestsLoading(false);
-            return;
-        }
-
-        let isActive = true;
-        setPendingRequestsLoading(true);
-
-        void (async () => {
-            try {
-                const requests = await getPendingGroupJoinRequests(user.uid);
-                if (!isActive) return;
-                setPendingGroupRequests(requests);
-                setPendingRequestsLoading(false);
-            } catch (loadError) {
-                console.error('Error loading group requests:', loadError);
-                if (!isActive) return;
-                setPendingGroupRequests([]);
-                setPendingRequestsLoading(false);
-            }
-        })();
-
-        return () => {
-            isActive = false;
-        };
-    }, [user, activeTab]);
-
     // Subscribe to messages of selected conversation
     useEffect(() => {
         if (!selectedConversationId) return;
@@ -438,62 +322,6 @@ export default function MessagesPage() {
         }
     };
 
-    const handleGroupAction = async (group: FirestoreGroup) => {
-        if (!user) {
-            showToast('Inicia sesion para unirte a grupos', 'info');
-            return;
-        }
-
-        const status = groupJoinStatusMap[group.id] ?? 'none';
-        const isOwner = group.ownerId && group.ownerId === user.uid;
-        if (isOwner || status === 'member') {
-            navigate(`/group/${group.id}`);
-            return;
-        }
-        if (status === 'pending') {
-            showToast('Solicitud pendiente', 'info');
-            return;
-        }
-
-        setGroupActionLoading(group.id);
-        try {
-            const visibility = group.visibility ?? 'public';
-            if (visibility === 'public') {
-                await joinPublicGroup(group.id, user.uid);
-                setGroupJoinStatusMap((prev) => ({ ...prev, [group.id]: 'member' }));
-                showToast('Te uniste al grupo', 'success');
-            } else {
-                if (!group.ownerId) {
-                    throw new Error('Grupo privado sin owner');
-                }
-                await sendGroupJoinRequest({
-                    groupId: group.id,
-                    groupName: group.name,
-                    fromUid: user.uid,
-                    toUid: group.ownerId,
-                    message: null,
-                    fromUserName: user.displayName || 'Usuario',
-                    fromUserPhoto: user.photoURL || null
-                });
-                setGroupJoinStatusMap((prev) => ({ ...prev, [group.id]: 'pending' }));
-                showToast('Solicitud enviada', 'success');
-            }
-        } catch (actionError) {
-            console.error('Error joining group:', actionError);
-            showToast('No se pudo procesar la solicitud', 'error');
-        } finally {
-            setGroupActionLoading(null);
-        }
-    };
-
-    const getGroupActionLabel = (group: FirestoreGroup): string => {
-        if (user && group.ownerId === user.uid) return 'Tu grupo';
-        const status = groupJoinStatusMap[group.id] ?? 'none';
-        if (status === 'member') return 'Unido';
-        if (status === 'pending') return 'Pendiente';
-        return (group.visibility ?? 'public') === 'public' ? 'Unirme' : 'Solicitar';
-    };
-
     const getGroupStats = (group: FirestoreGroup): { members: number; postsWeek: number } => {
         const cached = groupStats[group.id];
         return {
@@ -517,50 +345,21 @@ export default function MessagesPage() {
         }
     };
 
-    const handleAcceptRequest = async (request: GroupJoinRequestRead) => {
-        setRequestActionLoading(request.id);
-        try {
-            await acceptGroupJoinRequest(request.id);
-            setPendingGroupRequests((prev) => prev.filter((item) => item.id !== request.id));
-            showToast('Solicitud aceptada', 'success');
-        } catch (actionError) {
-            console.error('Error accepting request:', actionError);
-            showToast('No se pudo aceptar la solicitud', 'error');
-        } finally {
-            setRequestActionLoading(null);
-        }
-    };
-
-    const handleRejectRequest = async (request: GroupJoinRequestRead) => {
-        setRequestActionLoading(request.id);
-        try {
-            await rejectGroupJoinRequest(request.id);
-            setPendingGroupRequests((prev) => prev.filter((item) => item.id !== request.id));
-            showToast('Solicitud rechazada', 'info');
-        } catch (actionError) {
-            console.error('Error rejecting request:', actionError);
-            showToast('No se pudo rechazar la solicitud', 'error');
-        } finally {
-            setRequestActionLoading(null);
-        }
-    };
-
     const handleGroupCreated = (groupId: string) => {
         setIsCreateGroupOpen(false);
         void (async () => {
             try {
                 const created = await getGroup(groupId);
                 if (created) {
-                    setGroups((prev) => {
-                        const next = [created, ...prev.filter((group) => group.id !== created.id)];
-                        return next.slice(0, 20);
+                    setMemberGroups((prev) => {
+                        if (prev.some((group) => group.id === created.id)) return prev;
+                        return [created, ...prev];
                     });
                     setGroupInfoCache((prev) => ({
                         ...prev,
                         [created.id]: { name: created.name, iconUrl: created.iconUrl ?? undefined }
                     }));
                 }
-                setGroupJoinStatusMap((prev) => ({ ...prev, [groupId]: 'member' }));
                 setGroupStats((prev) => ({ ...prev, [groupId]: { members: 1, postsWeek: 0 } }));
             } catch (refreshError) {
                 console.error('Error refreshing group list:', refreshError);
@@ -815,65 +614,6 @@ export default function MessagesPage() {
 
             {activeTab === 'groups' && (
                 <div className="mt-10 space-y-10">
-                    {user && (
-                        <section>
-                            <div className="flex items-center justify-between mb-4">
-                                <h2 className="text-lg font-light text-white">
-                                    Solicitudes pendientes
-                                </h2>
-                            </div>
-                            {pendingRequestsLoading ? (
-                                <div className="text-center text-neutral-500 py-6">Cargando solicitudes...</div>
-                            ) : pendingGroupRequests.length === 0 ? (
-                                <div className="text-center text-neutral-500 py-6">No hay solicitudes pendientes.</div>
-                            ) : (
-                                <div className="space-y-3">
-                                    {pendingGroupRequests.map((request) => {
-                                        const isProcessing = requestActionLoading === request.id;
-                                        return (
-                                            <div
-                                                key={request.id}
-                                                className="bg-neutral-900/30 border border-neutral-800/50 rounded-xl p-4 flex flex-col gap-3"
-                                            >
-                                                <div className="flex items-start justify-between gap-4">
-                                                    <div className="min-w-0">
-                                                        <p className="text-white font-medium">
-                                                            {request.fromUserName || 'Usuario'}
-                                                        </p>
-                                                        <p className="text-neutral-500 text-sm">
-                                                            Solicita unirse a {request.groupName}
-                                                        </p>
-                                                        {request.message && (
-                                                            <p className="text-neutral-400 text-sm mt-2">
-                                                                &quot;{request.message}&quot;
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            onClick={() => void handleAcceptRequest(request)}
-                                                            disabled={isProcessing}
-                                                            className="px-3 py-1.5 rounded text-xs bg-brand-gold text-black btn-premium disabled:opacity-60 disabled:cursor-not-allowed"
-                                                        >
-                                                            Aceptar
-                                                        </button>
-                                                        <button
-                                                            onClick={() => void handleRejectRequest(request)}
-                                                            disabled={isProcessing}
-                                                            className="px-3 py-1.5 rounded text-xs bg-neutral-800 text-neutral-300 hover:bg-neutral-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                                                        >
-                                                            Rechazar
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </section>
-                    )}
-
                     <section>
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-lg font-light text-white">
@@ -934,92 +674,6 @@ export default function MessagesPage() {
                                                 >
                                                     Ver grupo
                                                 </button>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </section>
-
-                    <section>
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-light text-white">
-                                <span className="text-neutral-400">Grupos</span> recomendados
-                            </h2>
-                        </div>
-
-                        {groupsLoading ? (
-                            <div className="text-center text-neutral-500 py-6">Cargando grupos...</div>
-                        ) : groupsError ? (
-                            <div className="text-center text-red-400 py-6">{groupsError}</div>
-                        ) : groups.length === 0 ? (
-                            <div className="text-center text-neutral-500 py-6">Aun no hay grupos disponibles.</div>
-                        ) : (
-                            <div className="grid grid-cols-1 gap-4">
-                                {groups.map((group) => {
-                                    const stats = getGroupStats(group);
-                                    const joinLabel = getGroupActionLabel(group);
-                                    const isLoading = groupActionLoading === group.id;
-                                    const actionLabel = isLoading ? 'Procesando...' : joinLabel;
-                                    const isJoined = joinLabel === 'Unido' || joinLabel === 'Tu grupo';
-                                    const isPending = joinLabel === 'Pendiente';
-                                    const visibilityLabel = (group.visibility ?? 'public') === 'public' ? 'Publico' : 'Privado';
-
-                                    return (
-                                        <div
-                                            key={group.id}
-                                            role="button"
-                                            tabIndex={0}
-                                            className="bg-surface-1 border border-neutral-800/50 rounded-lg p-5 cursor-pointer hover:border-neutral-700 transition-colors"
-                                            onClick={() => navigate(`/group/${group.id}`)}
-                                            onKeyDown={(event) => {
-                                                if (event.key === 'Enter' || event.key === ' ') {
-                                                    event.preventDefault();
-                                                    navigate(`/group/${group.id}`);
-                                                }
-                                            }}
-                                        >
-                                            <div className="flex items-start justify-between gap-4">
-                                                <div className="flex items-start gap-3 min-w-0">
-                                                    <div className="w-12 h-12 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center overflow-hidden">
-                                                        {group.iconUrl ? (
-                                                            <img src={group.iconUrl} alt={group.name} className="w-full h-full object-cover" />
-                                                        ) : (
-                                                            <Users size={20} className="text-neutral-500" />
-                                                        )}
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <h3 className="text-white font-medium text-lg truncate">{group.name}</h3>
-                                                        <p className="text-neutral-500 text-sm mt-1 line-clamp-2">
-                                                            {group.description || 'Sin descripcion.'}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    onClick={(event) => {
-                                                        event.stopPropagation();
-                                                        void handleGroupAction(group);
-                                                    }}
-                                                    disabled={isLoading}
-                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-all btn-premium press-scale ${isJoined
-                                                        ? 'bg-brand-gold text-black'
-                                                        : isPending
-                                                            ? 'bg-neutral-800 text-neutral-500'
-                                                            : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                                                        } ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
-                                                >
-                                                    {actionLabel}
-                                                </button>
-                                            </div>
-
-                                            <div className="flex items-center justify-between pt-3 border-t border-neutral-800/50 mt-4">
-                                                <div className="text-neutral-500 text-xs">
-                                                    {stats.members.toLocaleString('es-ES')} miembros - {stats.postsWeek} posts/semana
-                                                </div>
-                                                <span className="text-[10px] uppercase tracking-wider text-neutral-500">
-                                                    {visibilityLabel}
-                                                </span>
                                             </div>
                                         </div>
                                     );

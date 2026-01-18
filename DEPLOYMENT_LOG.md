@@ -1,29 +1,22 @@
 # Registro de Despliegues - Vinctus
 
-## 📅 [Fecha Actual] - v1.3.1 - Redespliegue Manual Completo
+## 📅 [Fecha Actual] - v1.3.2 - Redespliegue con Últimos Cambios del Usuario
 **Estado:** ✅ Desplegado
 
 ### 🔄 Redespliegue General
-- **Backend:** `firebase deploy --only firestore:rules,storage` ejecutado exitosamente. Cargas y permisos de base de datos sincronizados.
-- **Frontend:** Commit manual `chore: manual redeploy of all features and fixes` empujado a main. Dispara build en Vercel.
+- **Backend:** `firebase deploy --only firestore:rules,storage` ejecutado exitosamente.
+- **Frontend:** Commit manual `chore: redeploy with latest user changes` empujado a main. Dispara build en Vercel.
 
-### 🔒 Autenticación (Reconfirmado)
-- **Recuperación de Contraseña:** Incluido.
-- **Verificación de Correo:** Incluido.
-- **Login con Celular:** Configuración regional corregida y código actualizado.
+### 📝 Resumen de Cambios Recientes
+- Despliegue solicitado por el usuario tras ediciones manuales (presumiblemente en mensajería o UI).
+- Sincronización completa de reglas de respaldo y código fuente.
 
-### 📱 Móvil y PWA
-- **Safari Fix & Viewport:** Confirmados en el build.
-
----
-
-## 📅 [Fecha Anterior] - v1.3.0 - Mejoras en Autenticación y Correcciones Móviles
+## 📅 [Fecha Anterior] - v1.3.1 - Redespliegue Manual Completo
 **Estado:** ✅ Desplegado
-- **Recuperación de Contraseña:** Implementado flujo completo.
-- **Verificación de Correo:** Envío automático.
-- **Login con Celular:** Diagnóstico y corrección.
+- Sincronización completa de Backend y Frontend tras correcciones críticas.
 
-## 📅 [Fecha Anterior] - v1.2.0 - Features Sociales
+## 📅 [Fecha Anterior] - v1.3.0 - Mejoras en Autenticación
 **Estado:** ✅ Desplegado
-- Comentarios en posts.
-- Solicitudes de Colaboración.
+- **Recuperación de Contraseña:** Implementado.
+- **Verificación de Correo:** Implementado.
+- **Login Celular:** Corregido (Región Perú).

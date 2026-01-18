@@ -80,6 +80,37 @@ export interface PublicUserRead {
     photoURL: string | null;
 }
 
+// ==================== Activity Notifications ====================
+
+export type ActivityType = 'post_like' | 'post_comment';
+
+export interface ActivityRead {
+    id: string;
+    type: ActivityType;
+    toUid: string;
+    fromUid: string;
+    fromUserName: string | null;
+    fromUserPhoto: string | null;
+    postId: string | null;
+    postSnippet: string | null;
+    commentText: string | null;
+    createdAt: Date;
+    read: boolean;
+}
+
+export interface ActivityWrite {
+    type: ActivityType;
+    toUid: string;
+    fromUid: string;
+    fromUserName: string | null;
+    fromUserPhoto: string | null;
+    postId: string | null;
+    postSnippet: string | null;
+    commentText: string | null;
+    createdAt: FieldValue;
+    read: boolean;
+}
+
 // Extended user profile data
 export interface UserProfileRead {
     uid: string;
@@ -169,6 +200,15 @@ export interface PaginatedResult<T> {
 const DEFAULT_LIMIT = 30;
 const SMALL_LIST_LIMIT = 50;
 const BATCH_CHUNK_SIZE = 450; // Max 500, use 450 for safety
+const ACTIVITY_SNIPPET_LIMIT = 160;
+
+const notificationsCollection = collection(db, 'notifications');
+
+const trimText = (value: string | null | undefined, limit = ACTIVITY_SNIPPET_LIMIT): string | null => {
+    if (!value) return null;
+    if (value.length <= limit) return value;
+    return `${value.slice(0, limit).trim()}...`;
+};
 
 // ==================== Chunking Helper ====================
 
@@ -569,6 +609,23 @@ export const likePostWithSync = async (postId: string, uid: string): Promise<voi
     } as UserLikeWrite, { merge: false });
 
     await batch.commit();
+
+    try {
+        const post = await getPost(postId);
+        if (!post) return;
+        if (post.authorId === uid) return;
+        const profile = await getUserProfile(uid);
+        await createPostLikeActivity({
+            postId,
+            postAuthorId: post.authorId,
+            postContent: post.content,
+            fromUid: uid,
+            fromUserName: profile?.displayName ?? null,
+            fromUserPhoto: profile?.photoURL ?? null
+        });
+    } catch (error) {
+        console.error('Error creating like activity:', error);
+    }
 };
 
 /**
@@ -621,6 +678,22 @@ export async function addPostComment(
         text,
         createdAt: serverTimestamp()
     });
+    try {
+        const post = await getPost(postId);
+        if (post) {
+            await createPostCommentActivity({
+                postId,
+                postAuthorId: post.authorId,
+                postContent: post.content,
+                commentText: text,
+                fromUid: authorId,
+                fromUserName: authorSnapshot.displayName,
+                fromUserPhoto: authorSnapshot.photoURL
+            });
+        }
+    } catch (error) {
+        console.error('Error creating comment activity:', error);
+    }
     return commentRef.id;
 }
 
@@ -656,6 +729,102 @@ export async function getPostCommentCount(postId: string): Promise<number> {
 export async function getPostLikeCount(postId: string): Promise<number> {
     const snapshot = await getCountFromServer(collection(db, 'posts', postId, 'likes'));
     return snapshot.data().count;
+}
+
+// ==================== Activity Feed ====================
+
+export async function getUserActivity(
+    uid: string,
+    pageSize: number = DEFAULT_LIMIT,
+    lastDoc?: DocumentSnapshot
+): Promise<PaginatedResult<ActivityRead>> {
+    let q = query(
+        notificationsCollection,
+        where('toUid', '==', uid),
+        orderBy('createdAt', 'desc'),
+        limit(pageSize + 1)
+    );
+
+    if (lastDoc) {
+        q = query(q, startAfter(lastDoc));
+    }
+
+    const snapshot = await getDocs(q);
+    const hasMore = snapshot.docs.length > pageSize;
+    const docs = hasMore ? snapshot.docs.slice(0, pageSize) : snapshot.docs;
+
+    const items = docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+            id: docSnap.id,
+            type: data.type as ActivityType,
+            toUid: data.toUid,
+            fromUid: data.fromUid,
+            fromUserName: data.fromUserName ?? null,
+            fromUserPhoto: data.fromUserPhoto ?? null,
+            postId: data.postId ?? null,
+            postSnippet: data.postSnippet ?? null,
+            commentText: data.commentText ?? null,
+            createdAt: toDate(data.createdAt) || new Date(),
+            read: data.read === true
+        } as ActivityRead;
+    });
+
+    return {
+        items,
+        lastDoc: docs[docs.length - 1] || null,
+        hasMore
+    };
+}
+
+export async function createPostLikeActivity(input: {
+    postId: string;
+    postAuthorId: string;
+    postContent: string | null;
+    fromUid: string;
+    fromUserName: string | null;
+    fromUserPhoto: string | null;
+}): Promise<void> {
+    if (input.postAuthorId === input.fromUid) return;
+    const docId = `like_${input.postId}_${input.fromUid}`;
+    await setDoc(doc(notificationsCollection, docId), {
+        type: 'post_like',
+        toUid: input.postAuthorId,
+        fromUid: input.fromUid,
+        fromUserName: input.fromUserName ?? null,
+        fromUserPhoto: input.fromUserPhoto ?? null,
+        postId: input.postId,
+        postSnippet: trimText(input.postContent),
+        commentText: null,
+        createdAt: serverTimestamp(),
+        read: false
+    } as ActivityWrite, { merge: true });
+}
+
+export async function createPostCommentActivity(input: {
+    postId: string;
+    postAuthorId: string;
+    postContent: string | null;
+    commentText: string;
+    fromUid: string;
+    fromUserName: string | null;
+    fromUserPhoto: string | null;
+}): Promise<string | null> {
+    if (input.postAuthorId === input.fromUid) return null;
+    const ref = doc(notificationsCollection);
+    await setDoc(ref, {
+        type: 'post_comment',
+        toUid: input.postAuthorId,
+        fromUid: input.fromUid,
+        fromUserName: input.fromUserName ?? null,
+        fromUserPhoto: input.fromUserPhoto ?? null,
+        postId: input.postId,
+        postSnippet: trimText(input.postContent),
+        commentText: trimText(input.commentText, 220),
+        createdAt: serverTimestamp(),
+        read: false
+    } as ActivityWrite);
+    return ref.id;
 }
 
 // ==================== Saved Posts (Offline-First) ====================

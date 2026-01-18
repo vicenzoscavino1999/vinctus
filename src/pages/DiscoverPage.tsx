@@ -1,10 +1,21 @@
-import { useState, useMemo, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, BookOpen, Check, ArrowRight, Filter, Users } from 'lucide-react';
+import { Search, BookOpen, ArrowRight, Filter, Users } from 'lucide-react';
 import { SearchFilters } from '../components';
 import { useAppState } from '../context';
-import { CATEGORIES, PUBLICATIONS, RECOMMENDED_GROUPS } from '../data';
+import { useAuth } from '../context/AuthContext';
+import { CATEGORIES, PUBLICATIONS } from '../data';
 import { useToast } from '../components/Toast';
+import {
+    getGroupJoinStatus,
+    getGroupMemberCount,
+    getGroupPostsWeekCount,
+    getGroups,
+    joinPublicGroup,
+    sendGroupJoinRequest,
+    type FirestoreGroup,
+    type GroupJoinStatus
+} from '../lib/firestore';
 
 type SearchFiltersState = {
     category: string | null;
@@ -32,18 +43,23 @@ const DiscoverPage = () => {
     const {
         toggleSaveCategory,
         isCategorySaved,
-        toggleJoinGroup,
-        isGroupJoined,
         toggleLikePost,
         isPostLiked,
         toggleSavePost,
         isPostSaved
     } = useAppState();
+    const { user } = useAuth();
     const { showToast } = useToast();
 
     // Search filters state (local, not persisted)
     const [showFilters, setShowFilters] = useState(false);
     const [filters, setFilters] = useState<SearchFiltersState>({ category: null, sortBy: 'relevance' });
+    const [groups, setGroups] = useState<FirestoreGroup[]>([]);
+    const [groupsLoading, setGroupsLoading] = useState(false);
+    const [groupsError, setGroupsError] = useState<string | null>(null);
+    const [groupStats, setGroupStats] = useState<Record<string, { members: number; postsWeek: number }>>({});
+    const [groupJoinStatusMap, setGroupJoinStatusMap] = useState<Record<string, GroupJoinStatus>>({});
+    const [groupActionLoading, setGroupActionLoading] = useState<string | null>(null);
 
     const filteredCategories = useMemo(() => {
         let result = [...CATEGORIES];
@@ -86,6 +102,174 @@ const DiscoverPage = () => {
 
         return result;
     }, [searchQuery, filters, userInterests]);
+
+    useEffect(() => {
+        let isActive = true;
+
+        const loadGroups = async () => {
+            setGroupsLoading(true);
+            setGroupsError(null);
+            try {
+                const data = await getGroups();
+                const sorted = [...data].sort((a, b) => {
+                    const aMembers = a.memberCount ?? 0;
+                    const bMembers = b.memberCount ?? 0;
+                    if (aMembers !== bMembers) return bMembers - aMembers;
+                    const aTime = a.createdAt ? a.createdAt.getTime() : 0;
+                    const bTime = b.createdAt ? b.createdAt.getTime() : 0;
+                    return bTime - aTime;
+                });
+                if (isActive) {
+                    setGroups(sorted.slice(0, 4));
+                }
+            } catch (loadError) {
+                console.error('Error loading groups:', loadError);
+                if (isActive) {
+                    setGroupsError('No se pudieron cargar grupos.');
+                }
+            } finally {
+                if (isActive) {
+                    setGroupsLoading(false);
+                }
+            }
+        };
+
+        loadGroups();
+
+        return () => {
+            isActive = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (groups.length === 0) return;
+        let isActive = true;
+        const pending = groups.filter((group) => groupStats[group.id] === undefined);
+        if (pending.length === 0) return;
+
+        const loadStats = async () => {
+            try {
+                const updates: Record<string, { members: number; postsWeek: number }> = {};
+                await Promise.all(
+                    pending.map(async (group) => {
+                        const [members, postsWeek] = await Promise.all([
+                            getGroupMemberCount(group.id),
+                            getGroupPostsWeekCount(group.id)
+                        ]);
+                        updates[group.id] = { members, postsWeek };
+                    })
+                );
+                if (isActive) {
+                    setGroupStats((prev) => ({ ...prev, ...updates }));
+                }
+            } catch (statsError) {
+                console.error('Error loading group stats:', statsError);
+            }
+        };
+
+        loadStats();
+
+        return () => {
+            isActive = false;
+        };
+    }, [groups, groupStats]);
+
+    useEffect(() => {
+        if (!user || groups.length === 0) {
+            if (!user) setGroupJoinStatusMap({});
+            return;
+        }
+        let isActive = true;
+        const pending = groups.filter((group) => groupJoinStatusMap[group.id] === undefined);
+        if (pending.length === 0) return;
+
+        const loadStatuses = async () => {
+            try {
+                const updates: Record<string, GroupJoinStatus> = {};
+                await Promise.all(
+                    pending.map(async (group) => {
+                        const status = await getGroupJoinStatus(group.id, user.uid);
+                        updates[group.id] = status;
+                    })
+                );
+                if (isActive) {
+                    setGroupJoinStatusMap((prev) => ({ ...prev, ...updates }));
+                }
+            } catch (statusError) {
+                console.error('Error loading group status:', statusError);
+            }
+        };
+
+        loadStatuses();
+
+        return () => {
+            isActive = false;
+        };
+    }, [groups, user, groupJoinStatusMap]);
+
+    const handleGroupAction = async (group: FirestoreGroup) => {
+        if (!user) {
+            showToast('Inicia sesion para unirte a grupos', 'info');
+            return;
+        }
+
+        const status = groupJoinStatusMap[group.id] ?? 'none';
+        const isOwner = group.ownerId && group.ownerId === user.uid;
+        if (isOwner || status === 'member') {
+            navigate(`/group/${group.id}`);
+            return;
+        }
+        if (status === 'pending') {
+            showToast('Solicitud pendiente', 'info');
+            return;
+        }
+
+        setGroupActionLoading(group.id);
+        try {
+            const visibility = group.visibility ?? 'public';
+            if (visibility === 'public') {
+                await joinPublicGroup(group.id, user.uid);
+                setGroupJoinStatusMap((prev) => ({ ...prev, [group.id]: 'member' }));
+                showToast('Te uniste al grupo', 'success');
+            } else {
+                if (!group.ownerId) {
+                    throw new Error('Grupo privado sin owner');
+                }
+                await sendGroupJoinRequest({
+                    groupId: group.id,
+                    groupName: group.name,
+                    fromUid: user.uid,
+                    toUid: group.ownerId,
+                    message: null,
+                    fromUserName: user.displayName || 'Usuario',
+                    fromUserPhoto: user.photoURL || null
+                });
+                setGroupJoinStatusMap((prev) => ({ ...prev, [group.id]: 'pending' }));
+                showToast('Solicitud enviada', 'success');
+            }
+        } catch (actionError) {
+            console.error('Error joining group:', actionError);
+            showToast('No se pudo procesar la solicitud', 'error');
+        } finally {
+            setGroupActionLoading(null);
+        }
+    };
+
+    const getGroupActionLabel = (group: FirestoreGroup): string => {
+        if (user && group.ownerId === user.uid) return 'Tu grupo';
+        const status = groupJoinStatusMap[group.id] ?? 'none';
+        if (status === 'member') return 'Unido';
+        if (status === 'pending') return 'Pendiente';
+        return (group.visibility ?? 'public') === 'public' ? 'Unirme' : 'Solicitar';
+    };
+
+    const getGroupStats = (group: FirestoreGroup): { members: number; postsWeek: number } => {
+        const cached = groupStats[group.id];
+        return {
+            members: cached?.members ?? group.memberCount ?? 0,
+            postsWeek: cached?.postsWeek ?? 0
+        };
+    };
 
     const handleSearch = (e: ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
@@ -195,58 +379,83 @@ const DiscoverPage = () => {
                     <span className="text-neutral-400">Grupos</span> recomendados
                 </h2>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {RECOMMENDED_GROUPS.map(group => (
-                        <div
-                            key={group.id}
-                            role="button"
-                            tabIndex={0}
-                            className="bg-surface-1 border border-neutral-800/50 rounded-lg p-5 cursor-pointer hover:border-neutral-700 transition-colors"
-                            onClick={() => navigate(`/group/${group.id}`)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    navigate(`/group/${group.id}`);
-                                }
-                            }}
-                        >
-                            <div className="flex items-start justify-between mb-3">
-                                <div>
-                                    <h3 className="text-white font-medium text-lg">{group.name}</h3>
-                                    <p className="text-neutral-500 text-xs mt-1">
-                                        {group.members.toLocaleString()} miembros · {group.postsPerWeek} posts/semana
-                                    </p>
-                                </div>
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); toggleJoinGroup(group.id); }}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-all btn-premium press-scale ${isGroupJoined(group.id)
-                                        ? 'bg-brand-gold text-black'
-                                        : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                                        }`}
-                                >
-                                    {isGroupJoined(group.id) ? (
-                                        <><Check size={12} /> Unido</>
-                                    ) : (
-                                        <><BookOpen size={12} /> Unirme</>
-                                    )}
-                                </button>
-                            </div>
+                {groupsLoading ? (
+                    <div className="text-center text-neutral-500 py-6">Cargando grupos...</div>
+                ) : groupsError ? (
+                    <div className="text-center text-red-400 py-6">{groupsError}</div>
+                ) : groups.length === 0 ? (
+                    <div className="text-center text-neutral-500 py-6">Aun no hay grupos disponibles.</div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {groups.map((group) => {
+                            const stats = getGroupStats(group);
+                            const joinLabel = getGroupActionLabel(group);
+                            const isLoading = groupActionLoading === group.id;
+                            const actionLabel = isLoading ? 'Procesando...' : joinLabel;
+                            const isJoined = joinLabel === 'Unido' || joinLabel === 'Tu grupo';
+                            const isPending = joinLabel === 'Pendiente';
+                            const visibilityLabel = (group.visibility ?? 'public') === 'public' ? 'Publico' : 'Privado';
 
-                            <div className="flex items-center justify-between pt-3 border-t border-neutral-800/50 mt-3">
-                                <div className="flex items-center gap-2 text-neutral-500 text-xs">
-                                    <div className={`${CATEGORIES.find(c => c.id === group.categoryId)?.color || 'text-neutral-400'} opacity-60`}>
-                                        {(() => {
-                                            const cat = CATEGORIES.find(c => c.id === group.categoryId);
-                                            return cat ? <cat.icon size={14} strokeWidth={1.5} /> : null;
-                                        })()}
+                            return (
+                                <div
+                                    key={group.id}
+                                    role="button"
+                                    tabIndex={0}
+                                    className="bg-surface-1 border border-neutral-800/50 rounded-lg p-5 cursor-pointer hover:border-neutral-700 transition-colors"
+                                    onClick={() => navigate(`/group/${group.id}`)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                            event.preventDefault();
+                                            navigate(`/group/${group.id}`);
+                                        }
+                                    }}
+                                >
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="flex items-start gap-3 min-w-0">
+                                            <div className="w-12 h-12 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center overflow-hidden">
+                                                {group.iconUrl ? (
+                                                    <img src={group.iconUrl} alt={group.name} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <Users size={20} className="text-neutral-500" />
+                                                )}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h3 className="text-white font-medium text-lg truncate">{group.name}</h3>
+                                                <p className="text-neutral-500 text-sm mt-1 line-clamp-2">
+                                                    {group.description || 'Sin descripcion.'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                void handleGroupAction(group);
+                                            }}
+                                            disabled={isLoading}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-all btn-premium press-scale ${isJoined
+                                                ? 'bg-brand-gold text-black'
+                                                : isPending
+                                                    ? 'bg-neutral-800 text-neutral-500'
+                                                    : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                                                } ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                        >
+                                            {actionLabel}
+                                        </button>
                                     </div>
-                                    <span>{group.subgroup.name}</span>
-                                    <span className="text-neutral-600">{group.subgroup.members} miembros</span>
+
+                                    <div className="flex items-center justify-between pt-3 border-t border-neutral-800/50 mt-4">
+                                        <div className="text-neutral-500 text-xs">
+                                            {stats.members.toLocaleString('es-ES')} miembros - {stats.postsWeek} posts/semana
+                                        </div>
+                                        <span className="text-[10px] uppercase tracking-wider text-neutral-500">
+                                            {visibilityLabel}
+                                        </span>
+                                    </div>
                                 </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </section>
 
             {/* Publicaciones */}

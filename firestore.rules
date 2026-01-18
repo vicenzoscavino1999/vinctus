@@ -100,6 +100,55 @@ service cloud.firestore {
       // Sender can delete (cancel) their request
       allow delete: if isAuthenticated() && resource.data.fromUid == request.auth.uid;
     }
+
+    // notifications/{notificationId}
+    // Activity feed notifications
+    function isValidNotificationCreate() {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'type', 'toUid', 'fromUid', 'fromUserName', 'fromUserPhoto', 'postId', 'postSnippet',
+          'commentText', 'createdAt', 'read'
+        ])
+        && data.type in ['post_like', 'post_comment']
+        && data.toUid is string
+        && data.toUid.size() > 0
+        && data.fromUid == request.auth.uid
+        && data.toUid != request.auth.uid
+        && data.postId is string
+        && data.postId.size() > 0
+        && (data.postSnippet == null || (data.postSnippet is string && data.postSnippet.size() <= 220))
+        && (data.commentText == null || (data.commentText is string && data.commentText.size() <= 300))
+        && data.read == false
+        && data.createdAt == request.time;
+    }
+
+    function isValidNotificationSenderUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['createdAt', 'fromUserName', 'fromUserPhoto', 'postSnippet'])
+        && request.resource.data.fromUid == resource.data.fromUid
+        && request.resource.data.toUid == resource.data.toUid
+        && request.resource.data.type == resource.data.type
+        && request.resource.data.postId == resource.data.postId
+        && request.resource.data.read == resource.data.read
+        && request.resource.data.createdAt == request.time;
+    }
+
+    function isValidNotificationRecipientUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['read'])
+        && request.resource.data.read in [true, false];
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.toUid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidNotificationCreate();
+      allow update: if isAuthenticated()
+        && (
+          (resource.data.toUid == request.auth.uid && isValidNotificationRecipientUpdate())
+          || (resource.data.fromUid == request.auth.uid && isValidNotificationSenderUpdate())
+        );
+      allow delete: if isAuthenticated() && resource.data.toUid == request.auth.uid;
+    }
     
     // users/{uid}/memberships/{groupId}
     // User's joined groups (denormalized for fast reads)
