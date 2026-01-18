@@ -126,7 +126,7 @@ const NotificationsPage = () => {
             const result = await getUserActivity(
                 user.uid,
                 20,
-                loadMore ? cursor : undefined
+                loadMore ? (cursor ?? undefined) : undefined
             );
             setActivityItems((prev) => (loadMore ? [...prev, ...result.items] : result.items));
             setActivityCursor(result.lastDoc);

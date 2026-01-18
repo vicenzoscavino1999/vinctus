@@ -63,7 +63,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
                 getPostComments(
                     post.postId,
                     COMMENTS_PAGE_SIZE,
-                    loadMore ? cursor : undefined
+                    loadMore ? (cursor ?? undefined) : undefined
                 ),
                 loadMore ? Promise.resolve(null) : getPostCommentCount(post.postId)
             ]);
