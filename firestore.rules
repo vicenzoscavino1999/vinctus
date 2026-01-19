@@ -302,7 +302,7 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
 
       match /items/{itemId} {
-        allow read: if isOwner(uid);
+        allow read: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
         allow create: if isOwner(uid) && isValidCollectionItemCreate(uid, collectionId);
         allow delete: if isOwner(uid);
         allow update: if false;
@@ -970,7 +970,8 @@ service cloud.firestore {
       
       // Members (restrict updates)
       match /members/{uid} {
-        allow read: if isAuthenticated() && canAccessConversation(conversationId);
+        allow read: if isAuthenticated()
+          && (resource.data.uid == request.auth.uid || canAccessConversation(conversationId));
         allow create: if isAuthenticated()
           && canCreateConversationMember(conversationId, uid)
           && isValidConversationMemberCreate(uid);
