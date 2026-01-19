@@ -453,3 +453,60 @@ export const onPostDeleted = functions.firestore
             });
         }
     });
+
+/**
+ * Delete collection files when a collection item is deleted
+ * Trigger: onDelete users/{uid}/collections/{collectionId}/items/{itemId}
+ */
+export const onCollectionItemDeleted = functions.firestore
+    .document("users/{uid}/collections/{collectionId}/items/{itemId}")
+    .onDelete(async (snap, context) => {
+        const { uid, collectionId, itemId } = context.params;
+        const data = snap.data();
+        const storagePath = data?.storagePath as string | undefined;
+
+        if (!storagePath) {
+            return;
+        }
+
+        try {
+            const bucket = admin.storage().bucket();
+            await bucket.file(storagePath).delete();
+            functions.logger.info("Deleted collection file", {
+                uid,
+                collectionId,
+                itemId,
+                storagePath
+            });
+        } catch (error) {
+            functions.logger.warn("Failed to delete collection file (may not exist)", {
+                uid,
+                collectionId,
+                itemId,
+                storagePath,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
+    });
+
+/**
+ * Clean up collection items when a collection is deleted
+ * Trigger: onDelete users/{uid}/collections/{collectionId}
+ */
+export const onCollectionDeleted = functions.firestore
+    .document("users/{uid}/collections/{collectionId}")
+    .onDelete(async (snap, context) => {
+        const { uid, collectionId } = context.params;
+
+        try {
+            const itemsRef = db.collection(`users/${uid}/collections/${collectionId}/items`);
+            await db.recursiveDelete(itemsRef);
+            functions.logger.info("Deleted collection items", { uid, collectionId });
+        } catch (error) {
+            functions.logger.error("Failed to delete collection items", {
+                uid,
+                collectionId,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
+    });

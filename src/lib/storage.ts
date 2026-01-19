@@ -125,6 +125,73 @@ export async function deletePostAllMedia(mediaPaths: string[]): Promise<void> {
     await Promise.all(mediaPaths.map(path => deletePostMedia(path)));
 }
 
+const sanitizeFileName = (name: string): string => {
+    const trimmed = name.trim();
+    if (!trimmed) return 'archivo';
+    return trimmed.replace(/[^a-zA-Z0-9._-]/g, '_');
+};
+
+/**
+ * Upload collection file with progress tracking
+ * Returns Promise with URL, storage path, and file metadata
+ */
+export function uploadCollectionFile(
+    file: File,
+    userId: string,
+    collectionId: string,
+    itemId: string,
+    onProgress?: (progress: UploadProgress) => void
+): Promise<{ url: string; path: string; fileName: string; contentType: string; size: number }> {
+    return new Promise((resolve, reject) => {
+        const safeName = sanitizeFileName(file.name);
+        const storagePath = `collections/${userId}/${collectionId}/${itemId}/${safeName}`;
+        const storageRef = ref(storage, storagePath);
+        const uploadTask = uploadBytesResumable(storageRef, file);
+
+        uploadTask.on(
+            'state_changed',
+            (snapshot) => {
+                if (onProgress) {
+                    onProgress({
+                        bytesTransferred: snapshot.bytesTransferred,
+                        totalBytes: snapshot.totalBytes
+                    });
+                }
+            },
+            (error) => {
+                console.error('Upload failed:', error);
+                reject(new Error('Error al subir el archivo'));
+            },
+            async () => {
+                try {
+                    const url = await getDownloadURL(uploadTask.snapshot.ref);
+                    resolve({
+                        url,
+                        path: uploadTask.snapshot.ref.fullPath,
+                        fileName: file.name,
+                        contentType: file.type || 'application/octet-stream',
+                        size: file.size
+                    });
+                } catch (error) {
+                    reject(error);
+                }
+            }
+        );
+    });
+}
+
+/**
+ * Delete collection file from Storage
+ */
+export async function deleteCollectionFile(path: string): Promise<void> {
+    try {
+        await deleteObject(ref(storage, path));
+    } catch (error) {
+        console.error('Delete failed:', error);
+        throw new Error('No se pudo eliminar el archivo');
+    }
+}
+
 /**
  * Upload group icon image
  */

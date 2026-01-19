@@ -210,6 +210,104 @@ service cloud.firestore {
       allow update: if isOwner(uid)
         && request.resource.data.categoryId == categoryId;
     }
+
+    // users/{uid}/collections/{collectionId}
+    // User collections (private)
+    function isValidCollectionCreate() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['name', 'icon', 'itemCount', 'createdAt', 'updatedAt'])
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 80
+        && (data.icon == null || (data.icon is string && data.icon.size() <= 40))
+        && data.itemCount is int
+        && data.itemCount == 0
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function isValidCollectionUpdate() {
+      let data = request.resource.data;
+      let changed = data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['name', 'icon', 'itemCount', 'updatedAt'])
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 80
+        && (data.icon == null || (data.icon is string && data.icon.size() <= 40))
+        && data.itemCount is int
+        && data.itemCount >= 0
+        && data.createdAt == resource.data.createdAt
+        && data.updatedAt == request.time;
+    }
+
+    function isValidCollectionItemCreate(uid, collectionId) {
+      let data = request.resource.data;
+      let isLink = data.type == 'link';
+      let isNote = data.type == 'note';
+      let isFile = data.type == 'file';
+      return data.keys().hasOnly([
+          'ownerId',
+          'collectionId',
+          'collectionName',
+          'type',
+          'title',
+          'url',
+          'text',
+          'fileName',
+          'fileSize',
+          'contentType',
+          'storagePath',
+          'createdAt'
+        ])
+        && data.ownerId == request.auth.uid
+        && data.collectionId == collectionId
+        && data.collectionName is string
+        && data.collectionName.size() > 0
+        && data.collectionName.size() <= 120
+        && data.type in ['link', 'note', 'file']
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 160
+        && (isLink
+          ? (data.url is string && data.url.size() > 0 && data.url.size() <= 600
+            && data.text == null
+            && data.fileName == null
+            && data.fileSize == null
+            && data.contentType == null
+            && data.storagePath == null)
+          : true)
+        && (isNote
+          ? (data.text is string && data.text.size() > 0 && data.text.size() <= 2000
+            && data.url == null
+            && data.fileName == null
+            && data.fileSize == null
+            && data.contentType == null
+            && data.storagePath == null)
+          : true)
+        && (isFile
+          ? (data.url is string && data.url.size() > 0 && data.url.size() <= 600
+            && data.fileName is string && data.fileName.size() > 0 && data.fileName.size() <= 200
+            && data.fileSize is int && data.fileSize > 0 && data.fileSize <= 26214400
+            && data.contentType is string && data.contentType.size() > 0 && data.contentType.size() <= 120
+            && data.storagePath is string && data.storagePath.size() > 0 && data.storagePath.size() <= 600
+            && data.text == null)
+          : true)
+        && data.createdAt == request.time;
+    }
+
+    match /users/{uid}/collections/{collectionId} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid) && isValidCollectionCreate();
+      allow update: if isOwner(uid) && isValidCollectionUpdate();
+      allow delete: if isOwner(uid);
+
+      match /items/{itemId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && isValidCollectionItemCreate(uid, collectionId);
+        allow delete: if isOwner(uid);
+        allow update: if false;
+      }
+    }
     
     // ==================== Groups Collections ====================
 

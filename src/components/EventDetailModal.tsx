@@ -31,6 +31,8 @@ const formatLocation = (event: FirestoreEvent): string | null => {
     return parts.length > 0 ? parts.join(', ') : null;
 };
 
+const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY || '';
+
 const EventDetailModal = ({
     isOpen,
     event,
@@ -87,6 +89,15 @@ const EventDetailModal = ({
         if (!locationLabel) return null;
         const query = encodeURIComponent(locationLabel);
         return `https://www.google.com/maps/search/?api=1&query=${query}`;
+    }, [locationLabel]);
+
+    const mapEmbedUrl = useMemo(() => {
+        if (!locationLabel) return null;
+        const query = encodeURIComponent(locationLabel);
+        if (GOOGLE_MAPS_KEY) {
+            return `https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAPS_KEY}&q=${query}`;
+        }
+        return `https://maps.google.com/maps?q=${query}&output=embed`;
     }, [locationLabel]);
 
     const isOwner = !!user && !!event && user.uid === event.createdBy;
@@ -195,6 +206,20 @@ const EventDetailModal = ({
                                 >
                                     Ver mapa
                                 </a>
+                            )}
+                            {mapEmbedUrl && (
+                                <div className="mt-3 rounded-lg overflow-hidden border border-neutral-800 bg-neutral-900/60">
+                                    <div className="aspect-video w-full">
+                                        <iframe
+                                            title="Mapa del encuentro"
+                                            src={mapEmbedUrl}
+                                            className="w-full h-full"
+                                            loading="lazy"
+                                            allowFullScreen
+                                            referrerPolicy="no-referrer-when-downgrade"
+                                        />
+                                    </div>
+                                </div>
                             )}
                         </div>
                     </div>
