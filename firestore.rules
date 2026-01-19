@@ -951,7 +951,9 @@ service cloud.firestore {
     
     // conversations/{conversationId}
     match /conversations/{conversationId} {
-      allow read: if canAccessConversationData(resource.data);
+      allow read: if isAuthenticated()
+        && (canAccessConversationData(resource.data)
+          || exists(/databases/$(database)/documents/conversations/$(conversationId)/members/$(request.auth.uid)));
       
       // Restrict creation (no spam conversations)
       allow create: if isAuthenticated()

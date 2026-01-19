@@ -1898,10 +1898,14 @@ export const subscribeToConversations = (
         (snapshot) => {
             const nextIds = new Set<string>();
             snapshot.docs.forEach((memberDoc) => {
-                const convId = memberDoc.ref.parent.parent?.id;
-                if (convId) {
-                    nextIds.add(convId);
+                const parentDoc = memberDoc.ref.parent.parent;
+                if (!parentDoc) {
+                    return;
                 }
+                if (parentDoc.parent?.id !== 'conversations') {
+                    return;
+                }
+                nextIds.add(parentDoc.id);
             });
 
             nextIds.forEach(subscribeToConversation);
