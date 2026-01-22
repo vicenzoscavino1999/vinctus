@@ -1830,8 +1830,8 @@ export const sendMessage = async (conversationId: string, uid: string, text: str
 
 /**
  * Subscribe to conversations for a user
- * Note: Since we can't query across subcollections easily,
- * we subscribe to all conversations and filter on client
+ * Direct: query by memberIds
+ * Group: resolve via user memberships
  */
 export const subscribeToConversations = (
     uid: string,
@@ -1845,14 +1845,10 @@ export const subscribeToConversations = (
         }
     };
 
-    const membersQuery = query(
-        collectionGroup(db, 'members'),
-        where('uid', '==', uid),
-        limit(200)
-    );
-
     const conversationMap = new Map<string, ConversationRead>();
     const conversationUnsubs = new Map<string, Unsubscribe>();
+    const directConversationIds = new Set<string>();
+    const groupConversationIds = new Set<string>();
 
     const emit = () => {
         const conversations = Array.from(conversationMap.values()).sort(
@@ -1861,7 +1857,43 @@ export const subscribeToConversations = (
         callback(conversations);
     };
 
-    const subscribeToConversation = (conversationId: string) => {
+    const buildConversation = (
+        id: string,
+        data: Record<string, unknown>,
+        fallbackType: ConversationRead['type']
+    ): ConversationRead => {
+        const rawType = data.type;
+        const type = rawType === 'group' || rawType === 'direct' ? rawType : fallbackType;
+        const groupId = typeof data.groupId === 'string'
+            ? data.groupId
+            : id.startsWith('grp_')
+                ? id.slice(4)
+                : undefined;
+        const memberIds = Array.isArray(data.memberIds)
+            ? data.memberIds.filter((item) => typeof item === 'string')
+            : undefined;
+        const lastMessageData = data.lastMessage as { createdAt?: unknown } | null | undefined;
+
+        return {
+            id,
+            type,
+            groupId,
+            memberIds,
+            lastMessage: lastMessageData
+                ? {
+                    ...(lastMessageData as Record<string, unknown>),
+                    createdAt: toDate(lastMessageData.createdAt) || new Date()
+                }
+                : null,
+            createdAt: toDate(data.createdAt) || new Date(),
+            updatedAt: toDate(data.updatedAt) || new Date()
+        } as ConversationRead;
+    };
+
+    const subscribeToConversation = (
+        conversationId: string,
+        fallbackType: ConversationRead['type']
+    ) => {
         if (conversationUnsubs.has(conversationId)) return;
         const convRef = doc(db, 'conversations', conversationId);
         const unsubscribe = onSnapshot(
@@ -1872,61 +1904,101 @@ export const subscribeToConversations = (
                     emit();
                     return;
                 }
-                const data = convSnap.data();
-                const conversation: ConversationRead = {
-                    id: convSnap.id,
-                    type: data.type,
-                    groupId: data.groupId,
-                    memberIds: data.memberIds || undefined,
-                    lastMessage: data.lastMessage ? {
-                        ...data.lastMessage,
-                        createdAt: toDate(data.lastMessage.createdAt) || new Date()
-                    } : null,
-                    createdAt: toDate(data.createdAt) || new Date(),
-                    updatedAt: toDate(data.updatedAt) || new Date()
-                };
-                conversationMap.set(conversationId, conversation);
+                const data = convSnap.data() as Record<string, unknown>;
+                conversationMap.set(
+                    conversationId,
+                    buildConversation(conversationId, data, fallbackType)
+                );
                 emit();
             },
-            handleError
+            (error) => {
+                console.error(`Error subscribing to conversation ${conversationId}:`, error);
+                unsubscribeConversation(conversationId);
+                emit();
+            }
         );
         conversationUnsubs.set(conversationId, unsubscribe);
     };
 
-    const unsubscribeMembers = onSnapshot(
-        membersQuery,
+    const unsubscribeConversation = (conversationId: string) => {
+        const unsubscribe = conversationUnsubs.get(conversationId);
+        if (unsubscribe) {
+            unsubscribe();
+        }
+        conversationUnsubs.delete(conversationId);
+        conversationMap.delete(conversationId);
+    };
+
+    const directQuery = query(
+        collection(db, 'conversations'),
+        where('memberIds', 'array-contains', uid),
+        limit(200)
+    );
+
+    const unsubscribeDirect = onSnapshot(
+        directQuery,
         (snapshot) => {
             const nextIds = new Set<string>();
-            snapshot.docs.forEach((memberDoc) => {
-                const parentDoc = memberDoc.ref.parent.parent;
-                if (!parentDoc) {
+            snapshot.docs.forEach((convSnap) => {
+                const data = convSnap.data() as Record<string, unknown>;
+                const rawType = data.type;
+                const isDirect = rawType === 'direct' || (!rawType && convSnap.id.startsWith('dm_'));
+                if (!isDirect) {
                     return;
                 }
-                if (parentDoc.parent?.id !== 'conversations') {
-                    return;
-                }
-                nextIds.add(parentDoc.id);
+                nextIds.add(convSnap.id);
+                conversationMap.set(
+                    convSnap.id,
+                    buildConversation(convSnap.id, data, 'direct')
+                );
             });
 
-            nextIds.forEach(subscribeToConversation);
-
-            Array.from(conversationUnsubs.keys()).forEach((convId) => {
-                if (nextIds.has(convId)) return;
-                const unsubscribe = conversationUnsubs.get(convId);
-                if (unsubscribe) {
-                    unsubscribe();
+            const toRemove: string[] = [];
+            directConversationIds.forEach((conversationId) => {
+                if (!nextIds.has(conversationId)) {
+                    toRemove.push(conversationId);
                 }
-                conversationUnsubs.delete(convId);
-                conversationMap.delete(convId);
+            });
+            toRemove.forEach((conversationId) => {
+                directConversationIds.delete(conversationId);
+                conversationMap.delete(conversationId);
             });
 
+            nextIds.forEach((conversationId) => directConversationIds.add(conversationId));
             emit();
         },
         handleError
     );
 
+    const unsubscribeMemberships = subscribeToUserMemberships(
+        uid,
+        (groupIds) => {
+            const nextIds = new Set(groupIds.map((groupId) => `grp_${groupId}`));
+
+            nextIds.forEach((conversationId) => {
+                subscribeToConversation(conversationId, 'group');
+            });
+
+            const toRemove: string[] = [];
+            groupConversationIds.forEach((conversationId) => {
+                if (!nextIds.has(conversationId)) {
+                    toRemove.push(conversationId);
+                }
+            });
+            toRemove.forEach((conversationId) => {
+                groupConversationIds.delete(conversationId);
+                unsubscribeConversation(conversationId);
+            });
+
+            nextIds.forEach((conversationId) => groupConversationIds.add(conversationId));
+            emit();
+        },
+        200
+    );
+
     return () => {
-        unsubscribeMembers();
+        unsubscribeDirect();
+        unsubscribeMemberships();
         conversationUnsubs.forEach((unsubscribe) => unsubscribe());
         conversationUnsubs.clear();
         conversationMap.clear();

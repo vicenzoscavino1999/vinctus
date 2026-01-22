@@ -183,16 +183,15 @@ export const onGroupMemberCreated = functions.firestore
         const { groupId, userId } = context.params;
         const eventId = context.eventId;
 
-        try {
-            functions.logger.info("Member joined group", {
-                groupId,
-                userId,
-                eventId
-            });
+        functions.logger.info("Member joined group", {
+            groupId,
+            userId,
+            eventId
+        });
 
+        try {
             const groupRef = db.doc(`groups/${groupId}`);
             await deduplicatedIncrement(eventId, groupRef, "memberCount", 1);
-
             functions.logger.info("Member count incremented", { groupId, eventId });
         } catch (error) {
             functions.logger.error("Failed to increment member count", {
@@ -201,7 +200,16 @@ export const onGroupMemberCreated = functions.firestore
                 eventId,
                 error: error instanceof Error ? error.message : String(error)
             });
-            // Don't throw - we don't want to fail the user's join action
+        }
+
+        try {
+            await ensureGroupConversationForMember(groupId, userId);
+        } catch (error) {
+            functions.logger.error("Failed to ensure group conversation member", {
+                groupId,
+                userId,
+                error: error instanceof Error ? error.message : String(error)
+            });
         }
     });
 
@@ -230,7 +238,62 @@ export const onGroupMemberDeleted = functions.firestore
                 error: error instanceof Error ? error.message : String(error)
             });
         }
+
+        try {
+            const conversationId = `grp_${groupId}`;
+            await db.doc(`conversations/${conversationId}/members/${userId}`).delete();
+        } catch (error) {
+            functions.logger.error("Failed to remove group conversation member", {
+                groupId,
+                userId,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
     });
+
+async function ensureGroupConversationForMember(groupId: string, uid: string): Promise<void> {
+    const conversationId = `grp_${groupId}`;
+    const convRef = db.doc(`conversations/${conversationId}`);
+    const memberRef = db.doc(`conversations/${conversationId}/members/${uid}`);
+
+    await db.runTransaction(async (tx) => {
+        const convSnap = await tx.get(convRef);
+        if (!convSnap.exists) {
+            tx.create(convRef, {
+                type: "group",
+                groupId,
+                lastMessage: null,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+        } else {
+            const data = convSnap.data() || {};
+            const updates: Record<string, unknown> = {};
+            if (data.type !== "group") {
+                updates.type = "group";
+            }
+            if (data.groupId !== groupId) {
+                updates.groupId = groupId;
+            }
+            if (Object.keys(updates).length > 0) {
+                updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+                tx.set(convRef, updates, { merge: true });
+            }
+        }
+
+        const memberSnap = await tx.get(memberRef);
+        if (!memberSnap.exists) {
+            tx.create(memberRef, {
+                uid,
+                role: "member",
+                joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+                lastReadClientAt: Date.now(),
+                lastReadAt: admin.firestore.FieldValue.serverTimestamp(),
+                muted: false
+            });
+        }
+    });
+}
 
 // ==========================================================
 // ❤️ POST LIKE COUNTERS (With Deduplication)
