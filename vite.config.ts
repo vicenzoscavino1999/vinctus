@@ -14,6 +14,7 @@ export default defineConfig({
         react(),
         VitePWA({
             registerType: 'autoUpdate',
+            injectRegister: 'none',
             includeAssets: ['icon-192.png', 'icon-512.png'],
             manifest: {
                 name: 'Vinctus - Red Social por Intereses',
@@ -21,7 +22,7 @@ export default defineConfig({
                 description: 'Conecta con comunidades que comparten tus pasiones',
                 theme_color: '#0a0a0a',
                 background_color: '#0a0a0a',
-                display: 'minimal-ui',
+                display: 'standalone',
                 orientation: 'any',
                 scope: '/',
                 start_url: '/',
@@ -41,6 +42,9 @@ export default defineConfig({
                 ]
             },
             workbox: {
+                clientsClaim: true,
+                skipWaiting: true,
+                cleanupOutdatedCaches: true,
                 navigateFallback: '/index.html',
                 globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
                 runtimeCaching: [
@@ -122,4 +126,3 @@ export default defineConfig({
         },
     },
 });
-

@@ -45,6 +45,7 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
     const [recentsError, setRecentsError] = useState<string | null>(null);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [selectedCollection, setSelectedCollection] = useState<CollectionRead | null>(null);
+    const [selectedRecent, setSelectedRecent] = useState<CollectionItemRead | null>(null);
 
     const loadCollections = async () => {
         if (!user) return;
@@ -100,6 +101,39 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
                 || (item.collectionName || '').toLowerCase().includes(query);
         });
     }, [recents, searchQuery]);
+
+    const openExternal = (url: string | null, label: string) => {
+        if (!url) {
+            showToast(`${label} no disponible.`, 'info');
+            return;
+        }
+        try {
+            const parsed = new URL(url);
+            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+                showToast('Enlace invalido.', 'info');
+                return;
+            }
+            window.open(url, '_blank', 'noopener,noreferrer');
+        } catch {
+            showToast('Enlace invalido.', 'info');
+        }
+    };
+
+    const handleRecentClick = (item: CollectionItemRead) => {
+        if (item.type === 'note') {
+            setSelectedRecent(item);
+            return;
+        }
+        if (item.type === 'link') {
+            openExternal(item.url, 'Enlace');
+            return;
+        }
+        if (item.type === 'file') {
+            openExternal(item.url, 'Archivo');
+            return;
+        }
+        showToast('Vista del elemento disponible pronto', 'info');
+    };
 
     if (!user) {
         return (
@@ -196,7 +230,7 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
                             return (
                                 <button
                                     key={item.id}
-                                    onClick={() => showToast('Vista del elemento disponible pronto', 'info')}
+                                    onClick={() => handleRecentClick(item)}
                                     className="w-full text-left flex items-center gap-4 bg-neutral-900/30 border border-neutral-800 rounded-lg p-4 hover:bg-neutral-900/50 hover:border-neutral-700 transition-all group"
                                 >
                                     <div className="w-12 h-12 rounded-lg bg-neutral-800/80 flex items-center justify-center flex-shrink-0 text-neutral-300">
@@ -243,6 +277,35 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
                     loadRecents();
                 }}
             />
+
+            {selectedRecent && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+                    <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setSelectedRecent(null)} />
+                    <div className="relative w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <h3 className="text-lg font-serif text-white">{selectedRecent.title}</h3>
+                                <p className="text-xs text-neutral-500 mt-1">
+                                    Coleccion: {selectedRecent.collectionName || 'Sin carpeta'}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setSelectedRecent(null)}
+                                className="text-neutral-400 hover:text-white transition-colors"
+                                aria-label="Cerrar"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <div className="mt-4 text-sm text-neutral-300 whitespace-pre-wrap">
+                            {selectedRecent.text || 'Sin contenido.'}
+                        </div>
+                        <div className="mt-5 text-xs text-neutral-500">
+                            {formatRelativeTime(selectedRecent.createdAt)}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

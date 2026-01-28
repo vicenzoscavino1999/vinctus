@@ -1,17 +1,23 @@
-import { ChevronLeft, MapPin, BookOpen, UserPlus, Check, Clock, Loader2, MessageCircle } from 'lucide-react';
+import { ChevronLeft, MapPin, BookOpen, UserPlus, UserCheck, Check, Clock, Loader2, MessageCircle, X } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from './Toast';
 import {
     getUserProfile,
-    getFriendshipStatus,
-    sendFriendRequest,
-    acceptFriendRequest,
-    cancelFriendRequest,
+    getFollowStatus,
+    getAccountVisibilityServer,
+    sendFollowRequest,
+    acceptFollowRequest,
+    declineFollowRequest,
+    cancelFollowRequest,
+    followPublicUser,
+    unfollowUser,
     getOrCreateDirectConversation,
+    type FollowStatus,
     type UserProfileRead
 } from '../lib/firestore';
+import ProfilePostsGrid from './ProfilePostsGrid';
 
 const UserProfilePage = () => {
     const { userId } = useParams<{ userId: string }>();
@@ -21,8 +27,8 @@ const UserProfilePage = () => {
 
     const [profile, setProfile] = useState<UserProfileRead | null>(null);
     const [loading, setLoading] = useState(true);
-    const [friendStatus, setFriendStatus] = useState<'none' | 'friends' | 'pending_sent' | 'pending_received'>('none');
-    const [requestId, setRequestId] = useState<string | undefined>();
+    const [followStatus, setFollowStatus] = useState<FollowStatus>('none');
+    const [isMutual, setIsMutual] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
 
     // Load user profile
@@ -38,11 +44,19 @@ const UserProfilePage = () => {
                 const userProfile = await getUserProfile(userId);
                 setProfile(userProfile);
 
-                // Get friendship status if logged in
+                // Get follow status if logged in
                 if (currentUser && userProfile) {
-                    const status = await getFriendshipStatus(currentUser.uid, userId);
-                    setFriendStatus(status.status);
-                    setRequestId(status.requestId);
+                    const status = await getFollowStatus(currentUser.uid, userId, userProfile.accountVisibility);
+                    let nextStatus = status.status;
+                    if (userProfile.accountVisibility !== 'private'
+                        && (nextStatus === 'pending_sent' || nextStatus === 'pending_received')) {
+                        nextStatus = 'none';
+                    }
+                    setFollowStatus(nextStatus);
+                    setIsMutual(!!status.isMutual);
+                } else {
+                    setFollowStatus('none');
+                    setIsMutual(false);
                 }
             } catch (error) {
                 console.error('Error loading profile:', error);
@@ -54,21 +68,61 @@ const UserProfilePage = () => {
         void loadProfile();
     }, [userId, currentUser]);
 
-    const handleSendRequest = async () => {
-        if (!currentUser || !userId) return;
+    const handleFollow = async () => {
+        if (!currentUser || !userId || !profile) return;
 
         setActionLoading(true);
         try {
-            await sendFriendRequest(
-                currentUser.uid,
-                userId,
-                currentUser.displayName,
-                currentUser.photoURL
-            );
-            setFriendStatus('pending_sent');
-            showToast('Solicitud enviada', 'success');
+            const visibility = await getAccountVisibilityServer(userId);
+            if (visibility !== profile.accountVisibility) {
+                setProfile((prev) => (prev ? { ...prev, accountVisibility: visibility } : prev));
+            }
+            if (visibility === 'private') {
+                try {
+                    await sendFollowRequest(currentUser.uid, userId);
+                    setFollowStatus('pending_sent');
+                    showToast('Solicitud enviada', 'success');
+                } catch (err) {
+                    const code = (err as { code?: string })?.code;
+                    if (code === 'permission-denied') {
+                        await followPublicUser(currentUser.uid, userId);
+                        const status = await getFollowStatus(currentUser.uid, userId, 'public');
+                        setFollowStatus(status.status);
+                        setIsMutual(!!status.isMutual);
+                        showToast('Siguiendo', 'success');
+                    } else {
+                        throw err;
+                    }
+                }
+            } else {
+                try {
+                    await Promise.allSettled([
+                        cancelFollowRequest(currentUser.uid, userId)
+                    ]);
+                    await followPublicUser(currentUser.uid, userId);
+                    const status = await getFollowStatus(currentUser.uid, userId, visibility);
+                    setFollowStatus(status.status);
+                    setIsMutual(!!status.isMutual);
+                    showToast('Siguiendo', 'success');
+                } catch (err) {
+                    const code = (err as { code?: string })?.code;
+                    if (code === 'permission-denied') {
+                        const fallbackVisibility = await getAccountVisibilityServer(userId);
+                        if (fallbackVisibility === 'private') {
+                            await sendFollowRequest(currentUser.uid, userId);
+                            setFollowStatus('pending_sent');
+                            setIsMutual(false);
+                            showToast('Solicitud enviada', 'success');
+                        } else {
+                            throw err;
+                        }
+                    } else {
+                        throw err;
+                    }
+                }
+            }
         } catch (err) {
-            const message = err instanceof Error ? err.message : 'Error al enviar solicitud';
+            const message = err instanceof Error ? err.message : 'Error al seguir usuario';
             showToast(message, 'error');
         } finally {
             setActionLoading(false);
@@ -76,13 +130,14 @@ const UserProfilePage = () => {
     };
 
     const handleAcceptRequest = async () => {
-        if (!requestId) return;
+        if (!currentUser || !userId) return;
 
         setActionLoading(true);
         try {
-            await acceptFriendRequest(requestId);
-            setFriendStatus('friends');
-            showToast('¡Ahora son amigos!', 'success');
+            await acceptFollowRequest(userId, currentUser.uid);
+            setFollowStatus('none');
+            setIsMutual(false);
+            showToast('Solicitud aceptada', 'success');
         } catch {
             showToast('Error al aceptar solicitud', 'error');
         } finally {
@@ -90,17 +145,48 @@ const UserProfilePage = () => {
         }
     };
 
-    const handleCancelRequest = async () => {
-        if (!requestId) return;
+    const handleDeclineRequest = async () => {
+        if (!currentUser || !userId) return;
 
         setActionLoading(true);
         try {
-            await cancelFriendRequest(requestId);
-            setFriendStatus('none');
-            setRequestId(undefined);
+            await declineFollowRequest(userId, currentUser.uid);
+            setFollowStatus('none');
+            showToast('Solicitud rechazada', 'info');
+        } catch {
+            showToast('Error al rechazar solicitud', 'error');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleCancelRequest = async () => {
+        if (!currentUser || !userId) return;
+
+        setActionLoading(true);
+        try {
+            await cancelFollowRequest(currentUser.uid, userId);
+            setFollowStatus('none');
+            setIsMutual(false);
             showToast('Solicitud cancelada', 'info');
         } catch {
             showToast('Error al cancelar solicitud', 'error');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleUnfollow = async () => {
+        if (!currentUser || !userId) return;
+
+        setActionLoading(true);
+        try {
+            await unfollowUser(currentUser.uid, userId);
+            setFollowStatus('none');
+            setIsMutual(false);
+            showToast('Dejaste de seguir', 'info');
+        } catch {
+            showToast('Error al dejar de seguir', 'error');
         } finally {
             setActionLoading(false);
         }
@@ -120,77 +206,116 @@ const UserProfilePage = () => {
         }
     };
 
-    const renderFriendButton = () => {
+    const renderFollowActions = () => {
         if (!currentUser || currentUser.uid === userId) return null;
 
-        switch (friendStatus) {
-            case 'friends':
+        const isPrivate = profile?.accountVisibility === 'private';
+        const canMessage = !isPrivate || isMutual || followStatus === 'following';
+        const messageButton = canMessage ? (
+            <button
+                onClick={handleSendMessage}
+                disabled={actionLoading}
+                className="flex items-center gap-2 px-5 py-2.5 bg-neutral-800 border border-neutral-700 text-white hover:bg-neutral-700 transition-colors text-sm disabled:opacity-50 rounded-lg"
+            >
+                <MessageCircle size={16} />
+                Mensaje
+            </button>
+        ) : null;
+
+        switch (followStatus) {
+            case 'following':
                 return (
                     <>
+                        {messageButton}
                         <button
-                            onClick={handleSendMessage}
+                            onClick={handleUnfollow}
                             disabled={actionLoading}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-neutral-800 border border-neutral-700 text-white hover:bg-neutral-700 transition-colors text-sm disabled:opacity-50 rounded-lg"
+                            className="flex items-center gap-2 px-5 py-2.5 border border-neutral-700 text-white hover:bg-neutral-900 transition-colors text-sm disabled:opacity-50 rounded-lg"
                         >
-                            <MessageCircle size={16} />
-                            Mensaje
+                            {actionLoading ? (
+                                <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                                <>
+                                    <UserCheck size={16} />
+                                    Siguiendo
+                                </>
+                            )}
                         </button>
-                        <span className="flex items-center gap-2 px-5 py-2.5 text-green-400 text-sm">
-                            <Check size={16} />
-                            Amigos
-                        </span>
                     </>
                 );
             case 'pending_sent':
                 return (
-                    <button
-                        onClick={handleCancelRequest}
-                        disabled={actionLoading}
-                        className="flex items-center gap-2 px-5 py-2.5 border border-amber-500/50 text-amber-400 hover:bg-amber-500/10 transition-colors text-sm disabled:opacity-50 rounded-lg"
-                    >
-                        {actionLoading ? (
-                            <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                            <>
-                                <Clock size={16} />
-                                Pendiente
-                            </>
-                        )}
-                    </button>
+                    <>
+                        {messageButton}
+                        <button
+                            onClick={handleCancelRequest}
+                            disabled={actionLoading}
+                            className="flex items-center gap-2 px-5 py-2.5 border border-amber-500/50 text-amber-400 hover:bg-amber-500/10 transition-colors text-sm disabled:opacity-50 rounded-lg"
+                        >
+                            {actionLoading ? (
+                                <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                                <>
+                                    <Clock size={16} />
+                                    Pendiente
+                                </>
+                            )}
+                        </button>
+                    </>
                 );
             case 'pending_received':
                 return (
-                    <button
-                        onClick={handleAcceptRequest}
-                        disabled={actionLoading}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-green-500/20 border border-green-500/50 text-green-400 hover:bg-green-500/30 transition-colors text-sm disabled:opacity-50 rounded-lg"
-                    >
-                        {actionLoading ? (
-                            <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                            <>
-                                <Check size={16} />
-                                Aceptar solicitud
-                            </>
-                        )}
-                    </button>
+                    <>
+                        {messageButton}
+                        <button
+                            onClick={handleAcceptRequest}
+                            disabled={actionLoading}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-green-500/20 border border-green-500/50 text-green-400 hover:bg-green-500/30 transition-colors text-sm disabled:opacity-50 rounded-lg"
+                        >
+                            {actionLoading ? (
+                                <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                                <>
+                                    <Check size={16} />
+                                    Aceptar solicitud
+                                </>
+                            )}
+                        </button>
+                        <button
+                            onClick={handleDeclineRequest}
+                            disabled={actionLoading}
+                            className="flex items-center gap-2 px-5 py-2.5 border border-neutral-700 text-neutral-300 hover:bg-neutral-900 transition-colors text-sm disabled:opacity-50 rounded-lg"
+                        >
+                            {actionLoading ? (
+                                <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                                <>
+                                    <X size={16} />
+                                    Rechazar
+                                </>
+                            )}
+                        </button>
+                    </>
                 );
             default:
                 return (
-                    <button
-                        onClick={handleSendRequest}
-                        disabled={actionLoading}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-medium hover:from-amber-400 hover:to-amber-500 transition-all text-sm disabled:opacity-50 rounded-lg"
-                    >
-                        {actionLoading ? (
-                            <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                            <>
-                                <UserPlus size={16} />
-                                Añadir amigo
-                            </>
-                        )}
-                    </button>
+                    <>
+                        {messageButton}
+                        <button
+                            onClick={handleFollow}
+                            disabled={actionLoading}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-medium hover:from-amber-400 hover:to-amber-500 transition-all text-sm disabled:opacity-50 rounded-lg"
+                        >
+                            {actionLoading ? (
+                                <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                                <>
+                                    <UserPlus size={16} />
+                                    Seguir
+                                </>
+                            )}
+                        </button>
+                    </>
                 );
         }
     };
@@ -213,6 +338,22 @@ const UserProfilePage = () => {
     }
 
     const initial = profile.displayName?.charAt(0).toUpperCase() || '?';
+    const isOwner = currentUser?.uid === userId;
+    const isPrivate = profile.accountVisibility === 'private';
+    const canViewPrivateContent = !isPrivate || isOwner || isMutual || followStatus === 'following';
+    const canViewFollowLists = !isPrivate || isOwner || isMutual || followStatus === 'following';
+    const postsCount = typeof profile.postsCount === 'number' ? profile.postsCount : 0;
+    const followersCount = typeof profile.followersCount === 'number' ? profile.followersCount : 0;
+    const followingCount = typeof profile.followingCount === 'number' ? profile.followingCount : 0;
+
+    const handleFollowListClick = (tab: 'followers' | 'following') => {
+        if (!userId) return;
+        if (!canViewFollowLists) {
+            showToast('Esta cuenta es privada', 'info');
+            return;
+        }
+        navigate(`/user/${userId}/connections?tab=${tab}`);
+    };
 
     return (
         <div className="page-profile pt-8 max-w-4xl mx-auto pb-20">
@@ -252,9 +393,34 @@ const UserProfilePage = () => {
 
                 {/* Action buttons */}
                 <div className="flex items-center gap-3">
-                    {renderFriendButton()}
+                    {renderFollowActions()}
                 </div>
             </header>
+
+            <div className="grid grid-cols-3 gap-3 mb-10">
+                <div className="rounded-xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-center">
+                    <div className="text-xs uppercase tracking-widest text-neutral-500">Publicaciones</div>
+                    <div className="text-lg font-semibold text-white mt-1">{postsCount}</div>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => handleFollowListClick('followers')}
+                    disabled={!canViewFollowLists}
+                    className={`rounded-xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-center transition-colors ${canViewFollowLists ? 'hover:bg-neutral-800/40' : 'opacity-60 cursor-not-allowed'}`}
+                >
+                    <div className="text-xs uppercase tracking-widest text-neutral-500">Seguidores</div>
+                    <div className="text-lg font-semibold text-white mt-1">{followersCount}</div>
+                </button>
+                <button
+                    type="button"
+                    onClick={() => handleFollowListClick('following')}
+                    disabled={!canViewFollowLists}
+                    className={`rounded-xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-center transition-colors ${canViewFollowLists ? 'hover:bg-neutral-800/40' : 'opacity-60 cursor-not-allowed'}`}
+                >
+                    <div className="text-xs uppercase tracking-widest text-neutral-500">Siguiendo</div>
+                    <div className="text-lg font-semibold text-white mt-1">{followingCount}</div>
+                </button>
+            </div>
 
             {/* Content grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
@@ -296,14 +462,29 @@ const UserProfilePage = () => {
                     </section>
                 </div>
 
-                {/* Right column - Portfolio */}
+                {/* Right column - Posts + Portfolio */}
                 <div className="md:col-span-2">
-                    <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-6">Portafolio & Contribuciones</h2>
+                    {canViewPrivateContent ? (
+                        <div className="space-y-10">
+                            <ProfilePostsGrid userId={profile.uid} canView={canViewPrivateContent} />
 
-                    <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
-                        <BookOpen size={32} strokeWidth={0.5} className="mx-auto mb-4 text-neutral-600" />
-                        <p className="text-neutral-600 font-light italic">Sin contribuciones publicadas aún.</p>
-                    </div>
+                            <div>
+                                <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-6">Portafolio & Contribuciones</h2>
+
+                                <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
+                                    <BookOpen size={32} strokeWidth={0.5} className="mx-auto mb-4 text-neutral-600" />
+                                    <p className="text-neutral-600 font-light italic">Sin contribuciones publicadas a??n.</p>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
+                            <p className="text-white text-lg font-light mb-2">Cuenta privada</p>
+                            <p className="text-neutral-500 text-sm">
+                                Sigue a este usuario para ver sus publicaciones.
+                            </p>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

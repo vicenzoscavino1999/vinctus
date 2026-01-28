@@ -38,6 +38,10 @@ service firebase.storage {
       return request.resource.size < 100 * 1024 * 1024; // 100MB
     }
 
+    function isUnderStoryVideoSizeLimit() {
+      return request.resource.size < 25 * 1024 * 1024; // 25MB
+    }
+
     function isValidCollectionFileType() {
       return request.resource.contentType in [
         'application/pdf',
@@ -59,6 +63,18 @@ service firebase.storage {
         'image/png',
         'image/gif',
         'image/webp'
+      ];
+    }
+
+    function isValidChatFileType() {
+      return request.resource.contentType in [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.ms-excel',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation'
       ];
     }
 
@@ -101,9 +117,97 @@ service firebase.storage {
       allow update: if false;
     }
 
+    // Post files: posts/{userId}/{postId}/files/{filename}
+    match /posts/{userId}/{postId}/files/{filename} {
+      allow read: if true;
+
+      allow create: if isAuthenticated()
+        && isOwner(userId)
+        && isNewFile()
+        && isValidChatFileType()
+        && isUnderCollectionFileSizeLimit();
+
+      allow delete: if isAuthenticated() && isOwner(userId);
+      allow update: if false;
+    }
+
+    // Profile photos: profiles/{userId}/avatar/{filename}
+    match /profiles/{userId}/avatar/{filename} {
+      allow read: if true;
+
+      allow create: if isAuthenticated()
+        && isOwner(userId)
+        && isNewFile()
+        && isValidImageType()
+        && isUnderImageSizeLimit();
+
+      allow delete: if isAuthenticated() && isOwner(userId);
+      allow update: if false;
+    }
+
     // Group icons: groups/{userId}/{groupId}/icon/{filename}
     match /groups/{userId}/{groupId}/icon/{filename} {
       allow read: if true;
+
+      allow create: if isAuthenticated()
+        && isOwner(userId)
+        && isNewFile()
+        && isValidImageType()
+        && isUnderImageSizeLimit();
+
+      allow delete: if isAuthenticated() && isOwner(userId);
+      allow update: if false;
+    }
+
+    // Story media: stories/{userId}/{storyId}/original/{filename}
+    match /stories/{userId}/{storyId}/original/{filename} {
+      allow read: if isAuthenticated();
+
+      allow create: if isAuthenticated()
+        && isOwner(userId)
+        && isNewFile()
+        && (
+          (isValidImageType() && isUnderImageSizeLimit())
+          || (isValidVideoType() && isUnderStoryVideoSizeLimit())
+        );
+
+      allow delete: if isAuthenticated() && isOwner(userId);
+      allow update: if false;
+    }
+
+    // Story thumbnails: stories/{userId}/{storyId}/thumb/{filename}
+    match /stories/{userId}/{storyId}/thumb/{filename} {
+      allow read: if isAuthenticated();
+
+      allow create: if isAuthenticated()
+        && isOwner(userId)
+        && isNewFile()
+        && isValidImageType()
+        && isUnderImageSizeLimit();
+
+      allow delete: if isAuthenticated() && isOwner(userId);
+      allow update: if false;
+    }
+
+    // Conversation attachments: conversations/{conversationId}/attachments/{userId}/{messageId}/{filename}
+    match /conversations/{conversationId}/attachments/{userId}/{messageId}/{filename} {
+      allow read: if isAuthenticated();
+
+      allow create: if isAuthenticated()
+        && isOwner(userId)
+        && isNewFile()
+        && (
+          (isValidImageType() && isUnderImageSizeLimit())
+          || (isValidChatFileType() && isUnderCollectionFileSizeLimit())
+        );
+
+      allow delete: if isAuthenticated() && isOwner(userId);
+      allow update: if false;
+    }
+
+    // Conversation thumbnails: conversations/{conversationId}/thumbnails/{userId}/{messageId}/{filename}
+    match /conversations/{conversationId}/thumbnails/{userId}/{messageId}/{filename} {
+      allow read: if isAuthenticated();
 
       allow create: if isAuthenticated()
         && isOwner(userId)

@@ -21,11 +21,16 @@ const FeedPage = lazy(() => import('../pages/FeedPage'));
 const ProjectsPage = lazy(() => import('../pages/ProjectsPage'));
 const LibraryPage = lazy(() => import('../pages/LibraryPage'));
 const ProfilePage = lazy(() => import('../pages/ProfilePage'));
+const FollowListPage = lazy(() => import('../pages/FollowListPage'));
 const NotificationsPage = lazy(() => import('../pages/NotificationsPage'));
 const MessagesPage = lazy(() => import('../pages/MessagesPage'));
+const ConversationDetailsPage = lazy(() => import('../pages/ConversationDetailsPage'));
 
 // Settings page (lazy loaded)
 const SettingsPage = lazy(() => import('../pages/SettingsPage'));
+const SettingsNotificationsPage = lazy(() => import('../pages/SettingsNotificationsPage'));
+const SettingsPrivacySecurityPage = lazy(() => import('../pages/SettingsPrivacySecurityPage'));
+const HelpPage = lazy(() => import('../pages/HelpPage'));
 
 type NavProps = {
   activeTab: string;
@@ -160,9 +165,10 @@ const AppLayout = () => {
     if (pathname === '/projects') return 'projects';
     if (pathname === '/library') return 'library';
     if (pathname === '/profile') return 'profile';
-    if (pathname === '/settings') return 'profile';
+    if (pathname.startsWith('/settings')) return 'profile';
+    if (pathname === '/help') return 'profile';
     if (pathname === '/notifications') return 'notifications';
-    if (pathname === '/messages') return 'messages';
+    if (pathname.startsWith('/messages')) return 'messages';
     if (pathname.startsWith('/user/')) return 'search';
     if (pathname.startsWith('/group/')) return 'discover';
     if (pathname.startsWith('/post/')) return 'discover';
@@ -194,10 +200,15 @@ const AppLayout = () => {
                 <Route path="/projects" element={<ProjectsPage />} />
                 <Route path="/library" element={<LibraryPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/settings/notifications" element={<SettingsNotificationsPage />} />
+                <Route path="/settings/privacy" element={<SettingsPrivacySecurityPage />} />
+                <Route path="/help" element={<HelpPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/user/:userId" element={<UserProfilePage />} />
+                <Route path="/user/:userId/connections" element={<FollowListPage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/messages" element={<MessagesPage />} />
+                <Route path="/messages/:conversationId/details" element={<ConversationDetailsPage />} />
                 <Route path="/group/:groupId" element={<GroupDetailPage />} />
                 <Route path="/post/:postId" element={<PostDetailPage />} />
                 <Route path="*" element={<DiscoverPage />} />

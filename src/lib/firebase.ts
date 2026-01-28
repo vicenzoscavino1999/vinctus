@@ -3,7 +3,9 @@
 
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
+import { getFirestore as getFirestoreLite } from 'firebase/firestore/lite';
+import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
@@ -24,8 +26,16 @@ export const auth = getAuth(app);
 // Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();
 
-// Firestore instance
-export const db = getFirestore(app);
+// Firestore instance (force long-polling to reduce WebChannel blocks)
+export const db = initializeFirestore(app, {
+    experimentalForceLongPolling: true
+});
+
+// Firestore Lite instance (REST) for operations sensitive to WebChannel blocks
+export const dbLite = getFirestoreLite(app);
+
+// Functions instance
+export const functions = getFunctions(app);
 
 // Storage instance
 export const storage = getStorage(app);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ChevronLeft, Heart, Loader2, MessageCircle, User } from 'lucide-react';
+import { ChevronLeft, Heart, Loader2, MessageCircle, User, FileText } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
 import { addPostComment, getPostCommentCount, getPostComments, getPostLikeCount, type PaginatedResult, type PostCommentRead } from '../lib/firestore';
@@ -11,6 +11,7 @@ type PostSummary = {
     authorPhoto: string | null;
     text: string;
     imageUrl: string | null;
+    media?: { type: 'image' | 'video' | 'file'; url: string; path: string; fileName?: string; contentType?: string; size?: number }[];
     createdAt?: unknown;
 };
 
@@ -41,6 +42,18 @@ const formatRelativeTime = (date: Date | null): string => {
     if (hours < 24) return `Hace ${hours} h`;
     const days = Math.floor(hours / 24);
     return `Hace ${days} d`;
+};
+
+const formatBytes = (value: number | undefined): string => {
+    if (!value || !Number.isFinite(value)) return '';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let size = value;
+    let unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024;
+        unitIndex += 1;
+    }
+    return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 };
 
 const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommentsModalProps) => {
@@ -162,6 +175,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
         : [];
     const headline = postParagraphs[0] || 'Publicacion';
     const bodyParagraphs = postParagraphs.slice(1);
+    const hasMedia = !!post.media?.length;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -185,6 +199,65 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
                             </h1>
                         )}
 
+                        {post.media && post.media.length > 0 && (
+                            <div className="mb-8 space-y-4">
+                                {post.media.some((item) => item.type === 'image') && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        {post.media
+                                            .filter((item) => item.type === 'image')
+                                            .map((item, index) => (
+                                                <img
+                                                    key={`${item.path}-${index}`}
+                                                    src={item.url}
+                                                    alt="Adjunto"
+                                                    className="w-full h-56 object-cover rounded-xl border border-neutral-800"
+                                                />
+                                            ))}
+                                    </div>
+                                )}
+
+                                {post.media.some((item) => item.type === 'video') && (
+                                    <div className="space-y-3">
+                                        {post.media
+                                            .filter((item) => item.type === 'video')
+                                            .map((item, index) => (
+                                                <video
+                                                    key={`${item.path}-${index}`}
+                                                    src={item.url}
+                                                    controls
+                                                    preload="metadata"
+                                                    className="w-full max-h-[360px] rounded-xl border border-neutral-800 bg-black"
+                                                />
+                                            ))}
+                                    </div>
+                                )}
+
+                                {post.media.some((item) => item.type === 'file') && (
+                                    <div className="space-y-2">
+                                        {post.media
+                                            .filter((item) => item.type === 'file')
+                                            .map((item, index) => (
+                                                <a
+                                                    key={`${item.path}-${index}`}
+                                                    href={item.url}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="flex items-center justify-between gap-3 bg-neutral-900/60 border border-neutral-800 rounded-lg px-3 py-2 hover:border-neutral-700 transition-colors"
+                                                >
+                                                    <div className="flex items-center gap-2 text-sm text-neutral-200">
+                                                        <FileText size={16} className="text-emerald-300" />
+                                                        <span className="truncate">{item.fileName || 'Archivo adjunto'}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-xs text-neutral-500">
+                                                        {item.size ? formatBytes(item.size) : ''}
+                                                    </div>
+                                                </a>
+                                            ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         <div className="flex items-center gap-3 mb-8">
                             <div className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center overflow-hidden">
                                 {post.authorPhoto ? (
@@ -205,7 +278,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
                             </div>
                         </div>
 
-                        {post.imageUrl && (
+                        {!hasMedia && post.imageUrl && (
                             <div className="relative rounded-xl overflow-hidden mb-8 aspect-video bg-surface-overlay">
                                 <img
                                     src={post.imageUrl}

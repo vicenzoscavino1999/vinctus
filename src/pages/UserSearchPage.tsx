@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Search, UserPlus, Check, Clock, X, MessageCircle } from 'lucide-react';
+import { Search, UserPlus, UserCheck, Check, Clock, X, MessageCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
@@ -7,20 +7,25 @@ import {
     getOrCreateDirectConversation,
     searchUsersByDisplayName,
     getRecentUsers,
-    sendFriendRequest,
-    getFriendshipStatus,
-    acceptFriendRequest,
-    cancelFriendRequest,
+    getFollowStatus,
+    getAccountVisibilityServer,
+    sendFollowRequest,
+    acceptFollowRequest,
+    declineFollowRequest,
+    cancelFollowRequest,
+    followPublicUser,
+    unfollowUser,
+    type FollowStatus,
     type PublicUserRead
 } from '../lib/firestore';
 
 const MIN_QUERY_LENGTH = 2;
 
-type FriendStatus = 'none' | 'friends' | 'pending_sent' | 'pending_received' | 'loading';
+type FollowStatusState = FollowStatus | 'loading';
 
 interface UserWithStatus extends PublicUserRead {
-    friendStatus: FriendStatus;
-    requestId?: string;
+    followStatus: FollowStatusState;
+    isMutual?: boolean;
 }
 
 export default function UserSearchPage() {
@@ -42,15 +47,20 @@ export default function UserSearchPage() {
             try {
                 const users = await getRecentUsers(15, user?.uid);
 
-                // Get friendship status for each
+                // Get follow status for each
                 const usersWithStatus: UserWithStatus[] = await Promise.all(
                     users.map(async (item) => {
-                        if (!user) return { ...item, friendStatus: 'none' as FriendStatus };
+                        if (!user) return { ...item, followStatus: 'none' as FollowStatusState };
                         try {
-                            const status = await getFriendshipStatus(user.uid, item.uid);
-                            return { ...item, friendStatus: status.status, requestId: status.requestId };
+                            const status = await getFollowStatus(user.uid, item.uid, item.accountVisibility);
+                            let nextStatus = status.status;
+                            if (item.accountVisibility !== 'private'
+                                && (nextStatus === 'pending_sent' || nextStatus === 'pending_received')) {
+                                nextStatus = 'none';
+                            }
+                            return { ...item, followStatus: nextStatus, isMutual: status.isMutual };
                         } catch {
-                            return { ...item, friendStatus: 'none' as FriendStatus };
+                            return { ...item, followStatus: 'none' as FollowStatusState };
                         }
                     })
                 );
@@ -84,15 +94,20 @@ export default function UserSearchPage() {
                 const matches = await searchUsersByDisplayName(trimmed);
                 const filtered = user ? matches.filter((item) => item.uid !== user.uid) : matches;
 
-                // Get friendship status for each result
+                // Get follow status for each result
                 const resultsWithStatus: UserWithStatus[] = await Promise.all(
                     filtered.map(async (item) => {
-                        if (!user) return { ...item, friendStatus: 'none' as FriendStatus };
+                        if (!user) return { ...item, followStatus: 'none' as FollowStatusState };
                         try {
-                            const status = await getFriendshipStatus(user.uid, item.uid);
-                            return { ...item, friendStatus: status.status, requestId: status.requestId };
+                            const status = await getFollowStatus(user.uid, item.uid, item.accountVisibility);
+                            let nextStatus = status.status;
+                            if (item.accountVisibility !== 'private'
+                                && (nextStatus === 'pending_sent' || nextStatus === 'pending_received')) {
+                                nextStatus = 'none';
+                            }
+                            return { ...item, followStatus: nextStatus, isMutual: status.isMutual };
                         } catch {
-                            return { ...item, friendStatus: 'none' as FriendStatus };
+                            return { ...item, followStatus: 'none' as FollowStatusState };
                         }
                     })
                 );
@@ -119,29 +134,85 @@ export default function UserSearchPage() {
         };
     }, [queryText, user]);
 
-    const handleSendRequest = async (target: UserWithStatus) => {
+    const updateUserStatus = (uid: string, updater: (item: UserWithStatus) => UserWithStatus) => {
+        setResults(prev => prev.map(item => (item.uid == uid ? updater(item) : item)));
+        setSuggestedUsers(prev => prev.map(item => (item.uid == uid ? updater(item) : item)));
+    };
+
+    const handleFollow = async (target: UserWithStatus) => {
         if (!user) {
-            showToast('Necesitas iniciar sesión', 'error');
+            showToast('Necesitas iniciar sesi??n', 'error');
             return;
         }
 
         setActionLoading(target.uid);
         try {
-            await sendFriendRequest(
-                user.uid,
-                target.uid,
-                user.displayName,
-                user.photoURL
-            );
-            // Update local state
-            setResults(prev => prev.map(r =>
-                r.uid === target.uid
-                    ? { ...r, friendStatus: 'pending_sent' as FriendStatus }
-                    : r
-            ));
-            showToast('Solicitud enviada', 'success');
+            const visibility = await getAccountVisibilityServer(target.uid);
+            if (visibility !== target.accountVisibility) {
+                updateUserStatus(target.uid, (item) => ({
+                    ...item,
+                    accountVisibility: visibility
+                }));
+            }
+            if (visibility === 'private') {
+                try {
+                    await sendFollowRequest(user.uid, target.uid);
+                    updateUserStatus(target.uid, (item) => ({
+                        ...item,
+                        followStatus: 'pending_sent' as FollowStatusState,
+                        isMutual: false
+                    }));
+                    showToast('Solicitud enviada', 'success');
+                } catch (err) {
+                    const code = (err as { code?: string })?.code;
+                    if (code === 'permission-denied') {
+                        await followPublicUser(user.uid, target.uid);
+                        const status = await getFollowStatus(user.uid, target.uid, 'public');
+                        updateUserStatus(target.uid, (item) => ({
+                            ...item,
+                            followStatus: status.status,
+                            isMutual: status.isMutual
+                        }));
+                        showToast('Siguiendo', 'success');
+                    } else {
+                        throw err;
+                    }
+                }
+            } else {
+                try {
+                    await Promise.allSettled([
+                        cancelFollowRequest(user.uid, target.uid)
+                    ]);
+                    await followPublicUser(user.uid, target.uid);
+                    const status = await getFollowStatus(user.uid, target.uid, visibility);
+                    updateUserStatus(target.uid, (item) => ({
+                        ...item,
+                        followStatus: status.status,
+                        isMutual: status.isMutual
+                    }));
+                    showToast('Siguiendo', 'success');
+                } catch (err) {
+                    const code = (err as { code?: string })?.code;
+                    if (code === 'permission-denied') {
+                        const fallbackVisibility = await getAccountVisibilityServer(target.uid);
+                        if (fallbackVisibility === 'private') {
+                            await sendFollowRequest(user.uid, target.uid);
+                            updateUserStatus(target.uid, (item) => ({
+                                ...item,
+                                followStatus: 'pending_sent' as FollowStatusState,
+                                isMutual: false
+                            }));
+                            showToast('Solicitud enviada', 'success');
+                        } else {
+                            throw err;
+                        }
+                    } else {
+                        throw err;
+                    }
+                }
+            }
         } catch (err) {
-            const message = err instanceof Error ? err.message : 'Error al enviar solicitud';
+            const message = err instanceof Error ? err.message : 'Error al seguir usuario';
             showToast(message, 'error');
         } finally {
             setActionLoading(null);
@@ -149,17 +220,17 @@ export default function UserSearchPage() {
     };
 
     const handleAcceptRequest = async (target: UserWithStatus) => {
-        if (!target.requestId) return;
+        if (!user) return;
 
         setActionLoading(target.uid);
         try {
-            await acceptFriendRequest(target.requestId);
-            setResults(prev => prev.map(r =>
-                r.uid === target.uid
-                    ? { ...r, friendStatus: 'friends' as FriendStatus }
-                    : r
-            ));
-            showToast('¡Ahora son amigos!', 'success');
+            await acceptFollowRequest(target.uid, user.uid);
+            updateUserStatus(target.uid, (item) => ({
+                ...item,
+                followStatus: 'none' as FollowStatusState,
+                isMutual: false
+            }));
+            showToast('Solicitud aceptada', 'success');
         } catch (err) {
             showToast('Error al aceptar solicitud', 'error');
             console.error(err);
@@ -168,20 +239,60 @@ export default function UserSearchPage() {
         }
     };
 
-    const handleCancelRequest = async (target: UserWithStatus) => {
-        if (!target.requestId) return;
+    const handleDeclineRequest = async (target: UserWithStatus) => {
+        if (!user) return;
 
         setActionLoading(target.uid);
         try {
-            await cancelFriendRequest(target.requestId);
-            setResults(prev => prev.map(r =>
-                r.uid === target.uid
-                    ? { ...r, friendStatus: 'none' as FriendStatus, requestId: undefined }
-                    : r
-            ));
+            await declineFollowRequest(target.uid, user.uid);
+            updateUserStatus(target.uid, (item) => ({
+                ...item,
+                followStatus: 'none' as FollowStatusState,
+                isMutual: false
+            }));
+            showToast('Solicitud rechazada', 'info');
+        } catch (err) {
+            showToast('Error al rechazar solicitud', 'error');
+            console.error(err);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleCancelRequest = async (target: UserWithStatus) => {
+        if (!user) return;
+
+        setActionLoading(target.uid);
+        try {
+            await cancelFollowRequest(user.uid, target.uid);
+            updateUserStatus(target.uid, (item) => ({
+                ...item,
+                followStatus: 'none' as FollowStatusState,
+                isMutual: false
+            }));
             showToast('Solicitud cancelada', 'info');
         } catch (err) {
             showToast('Error al cancelar solicitud', 'error');
+            console.error(err);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleUnfollow = async (target: UserWithStatus) => {
+        if (!user) return;
+
+        setActionLoading(target.uid);
+        try {
+            await unfollowUser(user.uid, target.uid);
+            updateUserStatus(target.uid, (item) => ({
+                ...item,
+                followStatus: 'none' as FollowStatusState,
+                isMutual: false
+            }));
+            showToast('Dejaste de seguir', 'info');
+        } catch (err) {
+            showToast('Error al dejar de seguir', 'error');
             console.error(err);
         } finally {
             setActionLoading(null);
@@ -211,22 +322,36 @@ export default function UserSearchPage() {
 
     const renderActionButton = (result: UserWithStatus) => {
         const isLoading = actionLoading === result.uid;
+        const messageButton = result.isMutual ? (
+            <button
+                type="button"
+                onClick={() => handleStartChat(result)}
+                disabled={isLoading}
+                className="p-2 rounded-full border border-neutral-700 text-white hover:bg-neutral-900 disabled:opacity-50"
+            >
+                <MessageCircle size={18} />
+            </button>
+        ) : null;
 
-        switch (result.friendStatus) {
-            case 'friends':
+        switch (result.followStatus) {
+            case 'following':
                 return (
                     <div className="flex gap-2">
-                        <span className="flex items-center gap-1 px-3 py-2 text-green-400 text-sm">
-                            <Check size={16} />
-                            Amigos
-                        </span>
+                        {messageButton}
                         <button
                             type="button"
-                            onClick={() => handleStartChat(result)}
+                            onClick={() => handleUnfollow(result)}
                             disabled={isLoading}
-                            className="p-2 rounded-full border border-neutral-700 text-white hover:bg-neutral-900 disabled:opacity-50"
+                            className="flex items-center gap-2 px-4 py-2 rounded-full border border-neutral-700 text-white text-sm hover:bg-neutral-900 disabled:opacity-50"
                         >
-                            <MessageCircle size={18} />
+                            {isLoading ? (
+                                <div className="w-4 h-4 border-2 border-neutral-400/30 border-t-neutral-200 rounded-full animate-spin" />
+                            ) : (
+                                <>
+                                    <UserCheck size={16} />
+                                    Siguiendo
+                                </>
+                            )}
                         </button>
                     </div>
                 );
@@ -262,7 +387,7 @@ export default function UserSearchPage() {
                         </button>
                         <button
                             type="button"
-                            onClick={() => handleCancelRequest(result)}
+                            onClick={() => handleDeclineRequest(result)}
                             disabled={isLoading}
                             className="p-2 rounded-full border border-neutral-700 text-neutral-400 hover:text-red-400 hover:border-red-500/50 disabled:opacity-50"
                         >
@@ -274,7 +399,7 @@ export default function UserSearchPage() {
                 return (
                     <button
                         type="button"
-                        onClick={() => handleSendRequest(result)}
+                        onClick={() => handleFollow(result)}
                         disabled={isLoading}
                         className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 text-black text-sm font-medium hover:from-amber-400 hover:to-amber-500 disabled:opacity-50"
                     >
@@ -283,7 +408,7 @@ export default function UserSearchPage() {
                         ) : (
                             <>
                                 <UserPlus size={16} />
-                                Añadir
+                                Seguir
                             </>
                         )}
                     </button>

@@ -4,19 +4,20 @@ import { Search } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
     acceptCollaborationRequest,
+    acceptFollowRequest,
     acceptGroupJoinRequest,
-    acceptFriendRequest,
+    getIncomingFollowRequests,
     getOrCreateDirectConversation,
     getPendingCollaborationRequests,
     getPendingGroupJoinRequests,
-    getPendingFriendRequests,
     getUserActivity,
     rejectCollaborationRequest,
     rejectGroupJoinRequest,
-    rejectFriendRequest,
+    declineFollowRequest,
     type ActivityRead,
     type CollaborationRequestRead,
-    type FriendRequestRead,
+    type FollowRequestRead,
+    type FollowUserRead,
     type GroupJoinRequestRead,
     type PaginatedResult
 } from '../lib/firestore';
@@ -36,12 +37,14 @@ const formatRelativeTime = (date: Date): string => {
     return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 };
 
+type FollowRequestWithUser = FollowRequestRead & { fromUser: FollowUserRead | null };
+
 const NotificationsPage = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
     const { showToast } = useToast();
     const [activeTab, setActiveTab] = useState<'requests' | 'activity'>('requests');
-    const [requestTab, setRequestTab] = useState<'collaboration' | 'friendship' | 'groups'>('collaboration');
+    const [requestTab, setRequestTab] = useState<'collaboration' | 'followers' | 'groups'>('collaboration');
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState<'recent' | 'oldest'>('recent');
     const [requests, setRequests] = useState<CollaborationRequestRead[]>([]);
@@ -51,10 +54,10 @@ const NotificationsPage = () => {
     const [groupLoading, setGroupLoading] = useState(false);
     const [groupError, setGroupError] = useState<string | null>(null);
     const [groupActionLoading, setGroupActionLoading] = useState<string | null>(null);
-    const [friendRequests, setFriendRequests] = useState<FriendRequestRead[]>([]);
-    const [friendLoading, setFriendLoading] = useState(false);
-    const [friendError, setFriendError] = useState<string | null>(null);
-    const [friendActionLoading, setFriendActionLoading] = useState<string | null>(null);
+    const [followRequests, setFollowRequests] = useState<FollowRequestWithUser[]>([]);
+    const [followLoading, setFollowLoading] = useState(false);
+    const [followError, setFollowError] = useState<string | null>(null);
+    const [followActionLoading, setFollowActionLoading] = useState<string | null>(null);
     const [activityItems, setActivityItems] = useState<ActivityRead[]>([]);
     const [activityLoading, setActivityLoading] = useState(false);
     const [activityError, setActivityError] = useState<string | null>(null);
@@ -94,18 +97,18 @@ const NotificationsPage = () => {
         }
     }, [user]);
 
-    const loadFriendRequests = useCallback(async () => {
+    const loadFollowRequests = useCallback(async () => {
         if (!user) return;
         try {
-            setFriendError(null);
-            setFriendLoading(true);
-            const data = await getPendingFriendRequests(user.uid);
-            setFriendRequests(data);
+            setFollowError(null);
+            setFollowLoading(true);
+            const result = await getIncomingFollowRequests(user.uid, 50);
+            setFollowRequests(result.items);
         } catch (loadError) {
-            console.error('Error loading friend requests:', loadError);
-            setFriendError('No se pudieron cargar las solicitudes de amistad.');
+            console.error('Error loading follow requests:', loadError);
+            setFollowError('No se pudieron cargar las solicitudes de seguimiento.');
         } finally {
-            setFriendLoading(false);
+            setFollowLoading(false);
         }
     }, [user]);
 
@@ -143,8 +146,8 @@ const NotificationsPage = () => {
     useEffect(() => {
         void loadRequests();
         void loadGroupRequests();
-        void loadFriendRequests();
-    }, [loadRequests, loadGroupRequests, loadFriendRequests]);
+        void loadFollowRequests();
+    }, [loadRequests, loadGroupRequests, loadFollowRequests]);
 
     useEffect(() => {
         if (!user) {
@@ -216,31 +219,31 @@ const NotificationsPage = () => {
         }
     };
 
-    const handleFriendAccept = async (request: FriendRequestRead) => {
-        setFriendActionLoading(request.id);
+    const handleFollowAccept = async (request: FollowRequestWithUser) => {
+        setFollowActionLoading(request.id);
         try {
-            await acceptFriendRequest(request.id);
-            setFriendRequests((prev) => prev.filter((item) => item.id !== request.id));
-            showToast('Solicitud de amistad aceptada.', 'success');
+            await acceptFollowRequest(request.fromUid, request.toUid);
+            setFollowRequests((prev) => prev.filter((item) => item.id !== request.id));
+            showToast('Solicitud de seguimiento aceptada.', 'success');
         } catch (acceptError) {
-            console.error('Error accepting friend request:', acceptError);
-            showToast('No se pudo aceptar la solicitud de amistad.', 'error');
+            console.error('Error accepting follow request:', acceptError);
+            showToast('No se pudo aceptar la solicitud de seguimiento.', 'error');
         } finally {
-            setFriendActionLoading(null);
+            setFollowActionLoading(null);
         }
     };
 
-    const handleFriendReject = async (requestId: string) => {
-        setFriendActionLoading(requestId);
+    const handleFollowReject = async (request: FollowRequestWithUser) => {
+        setFollowActionLoading(request.id);
         try {
-            await rejectFriendRequest(requestId);
-            setFriendRequests((prev) => prev.filter((item) => item.id !== requestId));
-            showToast('Solicitud de amistad rechazada.', 'info');
+            await declineFollowRequest(request.fromUid, request.toUid);
+            setFollowRequests((prev) => prev.filter((item) => item.id !== request.id));
+            showToast('Solicitud de seguimiento rechazada.', 'info');
         } catch (rejectError) {
-            console.error('Error rejecting friend request:', rejectError);
-            showToast('No se pudo rechazar la solicitud de amistad.', 'error');
+            console.error('Error rejecting follow request:', rejectError);
+            showToast('No se pudo rechazar la solicitud de seguimiento.', 'error');
         } finally {
-            setFriendActionLoading(null);
+            setFollowActionLoading(null);
         }
     };
 
@@ -260,7 +263,7 @@ const NotificationsPage = () => {
             .sort(sortByDate);
     }, [requests, normalizedQuery, sortBy]);
 
-    const filteredFriendRequests = useMemo(() => {
+    const filteredFollowRequests = useMemo(() => {
         const query = normalizedQuery;
         const matchesQuery = (value: string) => query.length === 0 || value.toLowerCase().includes(query);
         const sortByDate = (a: { createdAt: Date }, b: { createdAt: Date }) => (
@@ -268,11 +271,11 @@ const NotificationsPage = () => {
                 ? b.createdAt.getTime() - a.createdAt.getTime()
                 : a.createdAt.getTime() - b.createdAt.getTime()
         );
-        return friendRequests
-            .filter((item) => matchesQuery(item.fromUserName ?? ''))
+        return followRequests
+            .filter((item) => matchesQuery(`${item.fromUser?.displayName ?? ''} ${item.fromUser?.username ?? ''} ${item.fromUid}`.trim()))
             .slice()
             .sort(sortByDate);
-    }, [friendRequests, normalizedQuery, sortBy]);
+    }, [followRequests, normalizedQuery, sortBy]);
 
     const filteredGroupRequests = useMemo(() => {
         const query = normalizedQuery;
@@ -290,30 +293,30 @@ const NotificationsPage = () => {
 
     const activeRequestList = requestTab === 'collaboration'
         ? filteredCollaborationRequests
-        : requestTab === 'friendship'
-            ? filteredFriendRequests
+        : requestTab === 'followers'
+            ? filteredFollowRequests
             : filteredGroupRequests;
 
     const activeLoading = requestTab === 'collaboration'
         ? loading
-        : requestTab === 'friendship'
-            ? friendLoading
+        : requestTab === 'followers'
+            ? followLoading
             : groupLoading;
 
     const activeError = requestTab === 'collaboration'
         ? error
-        : requestTab === 'friendship'
-            ? friendError
+        : requestTab === 'followers'
+            ? followError
             : groupError;
     const requestTabTitle = requestTab === 'collaboration'
         ? 'Colaboracion'
-        : requestTab === 'friendship'
-            ? 'Amistad'
+        : requestTab === 'followers'
+            ? 'Seguidores'
             : 'Grupos';
     const emptyText = requestTab === 'collaboration'
         ? 'No tienes solicitudes de colaboracion.'
-        : requestTab === 'friendship'
-            ? 'No tienes solicitudes de amistad.'
+        : requestTab === 'followers'
+            ? 'No tienes solicitudes de seguimiento.'
             : 'No tienes solicitudes de grupos.';
 
     const filteredActivityItems = useMemo(() => {
@@ -375,15 +378,15 @@ const NotificationsPage = () => {
                                         </div>
                                     </button>
                                     <button
-                                        onClick={() => setRequestTab('friendship')}
-                                        className={`text-left p-4 rounded-xl border transition-colors ${requestTab === 'friendship'
+                                        onClick={() => setRequestTab('followers')}
+                                        className={`text-left p-4 rounded-xl border transition-colors ${requestTab === 'followers'
                                             ? 'border-amber-500/60 bg-amber-500/10'
                                             : 'border-neutral-800/70 bg-neutral-900/30 hover:border-neutral-700'
                                             }`}
                                     >
                                         <div className="flex items-center justify-between mb-4">
-                                            <span className="text-neutral-300 font-medium">Amistad</span>
-                                            <span className="text-brand-gold text-lg font-medium">{friendRequests.length}</span>
+                                            <span className="text-neutral-300 font-medium">Seguidores</span>
+                                            <span className="text-brand-gold text-lg font-medium">{followRequests.length}</span>
                                         </div>
                                         <div className="inline-flex items-center gap-2 text-xs uppercase tracking-widest px-3 py-1.5 rounded-full border border-amber-500/40 text-amber-200">
                                             Revisar
@@ -419,13 +422,13 @@ const NotificationsPage = () => {
                                         Colaboracion
                                     </button>
                                     <button
-                                        onClick={() => setRequestTab('friendship')}
-                                        className={`px-4 py-2 rounded-full text-sm border transition-colors ${requestTab === 'friendship'
+                                        onClick={() => setRequestTab('followers')}
+                                        className={`px-4 py-2 rounded-full text-sm border transition-colors ${requestTab === 'followers'
                                             ? 'border-amber-500/60 text-amber-200'
                                             : 'border-neutral-800 text-neutral-500 hover:text-white'
                                             }`}
                                     >
-                                        Amistad
+                                        Seguidores
                                     </button>
                                     <button
                                         onClick={() => setRequestTab('groups')}
@@ -516,8 +519,10 @@ const NotificationsPage = () => {
                                                 </div>
                                             ))}
 
-                                            {requestTab === 'friendship' && filteredFriendRequests.map((request) => {
-                                                const isProcessing = friendActionLoading === request.id;
+                                            {requestTab === 'followers' && filteredFollowRequests.map((request) => {
+                                                const isProcessing = followActionLoading === request.id;
+                                                const name = request.fromUser?.displayName || request.fromUser?.username || 'Usuario';
+                                                const initials = name.charAt(0).toUpperCase();
                                                 return (
                                                     <div
                                                         key={request.id}
@@ -525,27 +530,32 @@ const NotificationsPage = () => {
                                                     >
                                                         <div className="flex items-start gap-3 min-w-0">
                                                             <div className="w-11 h-11 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-300">
-                                                                {(request.fromUserName || 'U').charAt(0).toUpperCase()}
+                                                                {initials}
                                                             </div>
                                                             <div className="min-w-0">
                                                                 <p className="text-white font-medium">
-                                                                    {request.fromUserName || 'Usuario'}
+                                                                    {name}
                                                                 </p>
-                                                                <p className="text-neutral-500 text-sm">
-                                                                    Quiere agregarte como amigo
+                                                                {request.fromUser?.username && (
+                                                                    <p className="text-neutral-500 text-sm">
+                                                                        @{request.fromUser.username}
+                                                                    </p>
+                                                                )}
+                                                                <p className="text-neutral-500 text-sm mt-1">
+                                                                    Quiere seguirte
                                                                 </p>
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-3">
                                                             <button
-                                                                onClick={() => handleFriendAccept(request)}
+                                                                onClick={() => handleFollowAccept(request)}
                                                                 disabled={isProcessing}
                                                                 className="px-3 py-1.5 text-xs uppercase tracking-widest rounded-full border border-emerald-500/60 text-emerald-300 hover:text-white hover:border-emerald-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                                                             >
                                                                 Aceptar
                                                             </button>
                                                             <button
-                                                                onClick={() => handleFriendReject(request.id)}
+                                                                onClick={() => handleFollowReject(request)}
                                                                 disabled={isProcessing}
                                                                 className="px-3 py-1.5 text-xs uppercase tracking-widest rounded-full border border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                                                             >
@@ -628,12 +638,17 @@ const NotificationsPage = () => {
                                 <div className="space-y-4">
                                     {filteredActivityItems.map((item) => {
                                         const name = item.fromUserName || 'Usuario';
+                                        const isFollow = item.type === 'follow';
                                         const title = item.type === 'post_like'
                                             ? `${name} le dio "Me gusta" a tu publicacion`
-                                            : `${name} comento en tu publicacion`;
+                                            : item.type === 'post_comment'
+                                                ? `${name} comento en tu publicacion`
+                                                : `${name} empezo a seguirte`;
                                         const detail = item.type === 'post_comment'
                                             ? item.commentText
-                                            : item.postSnippet;
+                                            : item.type === 'post_like'
+                                                ? item.postSnippet
+                                                : null;
                                         return (
                                             <div
                                                 key={item.id}
@@ -650,14 +665,21 @@ const NotificationsPage = () => {
                                                         </p>
                                                     )}
                                                 </div>
-                                                {item.postId && (
+                                                {isFollow ? (
+                                                    <button
+                                                        onClick={() => navigate(`/user/${item.fromUid}`)}
+                                                        className="px-4 py-1.5 rounded-full text-xs uppercase tracking-widest border border-amber-500/60 text-amber-200 hover:text-white hover:border-amber-400 transition-colors"
+                                                    >
+                                                        Ver perfil
+                                                    </button>
+                                                ) : item.postId ? (
                                                     <button
                                                         onClick={() => navigate(`/post/${item.postId}`)}
                                                         className="px-4 py-1.5 rounded-full text-xs uppercase tracking-widest border border-amber-500/60 text-amber-200 hover:text-white hover:border-amber-400 transition-colors"
                                                     >
                                                         Ver
                                                     </button>
-                                                )}
+                                                ) : null}
                                             </div>
                                         );
                                     })}

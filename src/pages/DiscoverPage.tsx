@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, BookOpen, ArrowRight, Filter, Users } from 'lucide-react';
 import { SearchFilters } from '../components';
+import StoriesWidget from '../components/StoriesWidget';
 import { useAppState } from '../context';
 import { useAuth } from '../context/AuthContext';
 import { CATEGORIES, PUBLICATIONS } from '../data';
@@ -280,6 +281,9 @@ const DiscoverPage = () => {
         <div className="page-discover pb-32">
             {/* Header */}
             <header className="mb-12 pt-6 md:pt-10 flex flex-col items-center text-center">
+                <div className="w-full max-w-4xl mb-8">
+                    <StoriesWidget />
+                </div>
                 <span className="text-caption font-medium tracking-[0.3em] text-neutral-500 uppercase mb-4">DESCUBRIR</span>
                 <h1 className="text-display-sm md:text-display-md font-display font-normal text-white mb-8 tracking-tight">
                     Curadur{'\u00ED'}a de <span className="text-brand-gold italic">Intereses</span>

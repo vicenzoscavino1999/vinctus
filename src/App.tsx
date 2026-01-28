@@ -1,10 +1,11 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
 import LoginScreen from './components/LoginScreen';
 import PageLoader from './components/PageLoader';
 import { ToastProvider } from './components/Toast';
 import { AppStateProvider, AuthProvider, useAuth } from './context';
+import { initTheme } from './lib/theme';
 
 const getStoredItem = (key: string): string | null => {
   if (typeof window === 'undefined') return null;
@@ -35,6 +36,11 @@ const AppLayout = lazy(() => import('./components/AppLayout'));
 // Inner app that uses auth context
 function AppContent() {
   const { user, loading } = useAuth();
+
+  useEffect(() => {
+    const cleanup = initTheme();
+    return () => cleanup();
+  }, []);
 
   // Check if onboarding is complete
   const onboardingComplete = getStoredItem('vinctus_onboarding_complete') === 'true';

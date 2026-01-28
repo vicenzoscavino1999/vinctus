@@ -6,6 +6,7 @@ import {
     collectionGroup,
     doc,
     getDoc,
+    getDocFromServer,
     getDocs,
     getCountFromServer,
     setDoc,
@@ -14,6 +15,7 @@ import {
     query,
     where,
     orderBy,
+    documentId,
     limit,
     limitToLast,
     startAfter,
@@ -29,7 +31,19 @@ import {
     type DocumentReference,
     type Unsubscribe
 } from 'firebase/firestore';
-import { db } from './firebase';
+import {
+    doc as docLite,
+    getDoc as getDocLite,
+    getDocs as getDocsLite,
+    collection as collectionLite,
+    query as queryLite,
+    where as whereLite,
+    orderBy as orderByLite,
+    Timestamp as TimestampLite,
+    serverTimestamp as serverTimestampLite,
+    writeBatch as writeBatchLite
+} from 'firebase/firestore/lite';
+import { db, dbLite } from './firebase';
 
 // ==================== Type Helpers ====================
 
@@ -81,11 +95,48 @@ export interface PublicUserRead {
     uid: string;
     displayName: string | null;
     photoURL: string | null;
+    accountVisibility?: AccountVisibility;
+}
+
+export type StoryVisibility = 'friends';
+
+export type StoryMediaType = 'image' | 'video';
+
+export interface StoryOwnerSnapshot {
+    displayName: string | null;
+    photoURL: string | null;
+}
+
+export interface StoryRead {
+    id: string;
+    ownerId: string;
+    ownerSnapshot: StoryOwnerSnapshot;
+    mediaType: StoryMediaType;
+    mediaUrl: string;
+    mediaPath: string;
+    thumbUrl: string | null;
+    thumbPath: string | null;
+    visibility: StoryVisibility;
+    createdAt: Date;
+    expiresAt: Date;
+}
+
+export interface StoryWrite {
+    ownerId: string;
+    ownerSnapshot: StoryOwnerSnapshot;
+    mediaType: StoryMediaType;
+    mediaUrl: string;
+    mediaPath: string;
+    thumbUrl: string | null;
+    thumbPath: string | null;
+    visibility: StoryVisibility;
+    createdAt: FieldValue;
+    expiresAt: Timestamp;
 }
 
 // ==================== Activity Notifications ====================
 
-export type ActivityType = 'post_like' | 'post_comment';
+export type ActivityType = 'post_like' | 'post_comment' | 'follow';
 
 export interface ActivityRead {
     id: string;
@@ -126,16 +177,72 @@ export interface UserProfileRead {
     location: string | null;
     username: string | null;
     reputation: number;
+    accountVisibility: AccountVisibility;
+    followersCount: number;
+    followingCount: number;
+    postsCount: number;
     createdAt: Date;
     updatedAt: Date;
 }
 
 export interface UserProfileUpdate {
     displayName?: string;
+    photoURL?: string | null;
     bio?: string;
     role?: string;
     location?: string;
     username?: string;
+}
+
+// User settings (preferences)
+export interface NotificationSettings {
+    pushEnabled: boolean;
+    emailEnabled: boolean;
+    mentionsOnly: boolean;
+    weeklyDigest: boolean;
+    productUpdates: boolean;
+}
+
+export type AccountVisibility = 'public' | 'private';
+
+export interface PrivacySettings {
+    accountVisibility: AccountVisibility;
+    allowDirectMessages: boolean;
+    showOnlineStatus: boolean;
+    showLastActive: boolean;
+    allowFriendRequests: boolean;
+    blockedUsers: string[];
+}
+
+export interface UserSettingsRead {
+    notifications: NotificationSettings;
+    privacy: PrivacySettings;
+}
+
+// Support tickets (Help & Feedback)
+export type SupportTicketType = 'issue' | 'feature';
+
+export interface SupportTicketContext {
+    path: string;
+    href: string;
+    userAgent: string;
+    platform: string;
+    locale: string;
+    screen: { width: number; height: number };
+    viewport: { width: number; height: number };
+    timezoneOffset: number;
+}
+
+export interface SupportTicketWrite {
+    uid: string;
+    email: string | null;
+    type: SupportTicketType;
+    title: string;
+    message: string;
+    context: SupportTicketContext | null;
+    appVersion: string;
+    status: 'open';
+    createdAt: FieldValue;
 }
 
 // ==================== Write Types (to Firestore) ====================
@@ -256,6 +363,23 @@ const DEFAULT_LIMIT = 30;
 const SMALL_LIST_LIMIT = 50;
 const BATCH_CHUNK_SIZE = 450; // Max 500, use 450 for safety
 const ACTIVITY_SNIPPET_LIMIT = 160;
+
+export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+    pushEnabled: true,
+    emailEnabled: true,
+    mentionsOnly: false,
+    weeklyDigest: false,
+    productUpdates: true
+};
+
+export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
+    accountVisibility: 'public',
+    allowDirectMessages: true,
+    showOnlineStatus: true,
+    showLastActive: true,
+    allowFriendRequests: true,
+    blockedUsers: []
+};
 
 const notificationsCollection = collection(db, 'notifications');
 
@@ -428,7 +552,7 @@ export async function createGroup(ownerId: string, input: CreateGroupInput): Pro
         } as UserMembershipWrite, { merge: false });
         await batch.commit();
     } catch (error) {
-        await deleteDoc(groupRef).catch(() => {});
+        await deleteDoc(groupRef).catch(() => { });
         throw error;
     }
 
@@ -445,6 +569,59 @@ export async function updateGroup(groupId: string, input: CreateGroupInput): Pro
         updatedAt: serverTimestamp()
     });
 }
+
+/**
+ * Add a member to an existing group
+ * Validates existence before creating to prevent permission-denied errors
+ * @param groupId - ID of the group
+ * @param uid - User ID to add as member
+ * @param role - Role for the new member (default: 'member')
+ */
+export async function addGroupMember(
+    groupId: string,
+    uid: string,
+    role: 'member' | 'moderator' | 'admin' = 'member'
+): Promise<void> {
+    const memberRef = doc(db, 'groups', groupId, 'members', uid);
+    const membershipRef = doc(db, 'users', uid, 'memberships', groupId);
+    const groupRef = doc(db, 'groups', groupId);
+
+    // Check existence before creating to avoid permission-denied
+    const [memberSnap, membershipSnap] = await Promise.all([
+        getDoc(memberRef),
+        getDoc(membershipRef)
+    ]);
+
+    const batch = writeBatch(db);
+
+    // Only create if doesn't exist
+    if (!memberSnap.exists()) {
+        batch.set(memberRef, {
+            uid,
+            groupId,
+            role,
+            joinedAt: serverTimestamp()
+        } as GroupMemberWrite, { merge: false });
+    }
+
+    if (!membershipSnap.exists()) {
+        batch.set(membershipRef, {
+            groupId,
+            joinedAt: serverTimestamp()
+        } as UserMembershipWrite, { merge: false });
+    }
+
+    // Only increment memberCount if adding new member
+    if (!memberSnap.exists()) {
+        batch.update(groupRef, {
+            memberCount: increment(1),
+            updatedAt: serverTimestamp()
+        });
+    }
+
+    await batch.commit();
+}
+
 
 export async function joinPublicGroup(groupId: string, uid: string): Promise<void> {
     const group = await getGroup(groupId);
@@ -667,7 +844,7 @@ export async function createEvent(ownerId: string, input: CreateEventInput): Pro
             joinedAt: serverTimestamp()
         } as EventAttendeeWrite, { merge: false });
     } catch (error) {
-        await deleteDoc(eventRef).catch(() => {});
+        await deleteDoc(eventRef).catch(() => { });
         throw error;
     }
     return eventRef.id;
@@ -743,13 +920,22 @@ export async function getUpcomingEvents(limitCount: number = DEFAULT_LIMIT): Pro
         return mapSnap(upcomingSnap);
     }
 
-    const recentSnap = await getDocs(query(
-        collection(db, 'events'),
-        where('visibility', '==', 'public'),
-        orderBy('startAt', 'asc'),
-        limitToLast(limitCount)
-    ));
-    return mapSnap(recentSnap);
+    try {
+        const recentSnap = await getDocs(query(
+            collection(db, 'events'),
+            where('visibility', '==', 'public'),
+            orderBy('startAt', 'asc'),
+            limitToLast(limitCount)
+        ));
+        return mapSnap(recentSnap);
+    } catch (error) {
+        const code = (error as { code?: string })?.code;
+        if (code === 'failed-precondition') {
+            console.warn('Events fallback query requires an index; returning empty list until built.');
+            return [];
+        }
+        throw error;
+    }
 }
 
 export async function joinEvent(eventId: string, uid: string): Promise<void> {
@@ -1294,6 +1480,52 @@ export async function deleteCollectionItem(uid: string, collectionId: string, it
     await batch.commit();
 }
 
+const mapCollectionItem = (docSnap: DocumentSnapshot): CollectionItemRead => {
+    const data = docSnap.data() as Record<string, unknown> | undefined;
+    return {
+        id: docSnap.id,
+        ownerId: data?.ownerId as string,
+        collectionId: data?.collectionId as string,
+        collectionName: (data?.collectionName as string) ?? null,
+        type: data?.type as CollectionItemType,
+        title: data?.title as string,
+        url: (data?.url as string) ?? null,
+        text: (data?.text as string) ?? null,
+        fileName: (data?.fileName as string) ?? null,
+        fileSize: typeof data?.fileSize === 'number' ? (data.fileSize as number) : null,
+        contentType: (data?.contentType as string) ?? null,
+        storagePath: (data?.storagePath as string) ?? null,
+        createdAt: toDate(data?.createdAt) ?? new Date(0)
+    } as CollectionItemRead;
+};
+
+const fallbackRecentCollectionItems = async (uid: string, limitCount: number): Promise<CollectionItemRead[]> => {
+    const collectionSnap = await getDocs(query(
+        collection(db, 'users', uid, 'collections'),
+        orderBy('updatedAt', 'desc'),
+        limit(Math.min(limitCount * 2, 12))
+    ));
+
+    if (collectionSnap.empty) return [];
+
+    const itemSnaps = await Promise.all(
+        collectionSnap.docs.map((docSnap) => {
+            const itemsRef = collection(db, 'users', uid, 'collections', docSnap.id, 'items');
+            const itemsQuery = query(itemsRef, orderBy('createdAt', 'desc'), limit(limitCount));
+            return getDocs(itemsQuery).catch(() => null);
+        })
+    );
+
+    const merged: CollectionItemRead[] = [];
+    itemSnaps.forEach((snap) => {
+        if (!snap) return;
+        snap.docs.forEach((docSnap) => merged.push(mapCollectionItem(docSnap)));
+    });
+
+    merged.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return merged.slice(0, limitCount);
+};
+
 export async function getRecentCollectionItems(uid: string, limitCount: number = SMALL_LIST_LIMIT): Promise<CollectionItemRead[]> {
     const q = query(
         collectionGroup(db, 'items'),
@@ -1301,25 +1533,17 @@ export async function getRecentCollectionItems(uid: string, limitCount: number =
         orderBy('createdAt', 'desc'),
         limit(limitCount)
     );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) => {
-        const data = docSnap.data();
-        return {
-            id: docSnap.id,
-            ownerId: data.ownerId,
-            collectionId: data.collectionId,
-            collectionName: data.collectionName,
-            type: data.type as CollectionItemType,
-            title: data.title,
-            url: data.url ?? null,
-            text: data.text ?? null,
-            fileName: data.fileName ?? null,
-            fileSize: typeof data.fileSize === 'number' ? data.fileSize : null,
-            contentType: data.contentType ?? null,
-            storagePath: data.storagePath ?? null,
-            createdAt: toDate(data.createdAt) ?? new Date()
-        } as CollectionItemRead;
-    });
+    try {
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map((docSnap) => mapCollectionItem(docSnap));
+    } catch (error) {
+        const code = (error as { code?: string })?.code;
+        if (code === 'failed-precondition' || code === 'permission-denied') {
+            console.warn('Recent items query failed; using per-collection fallback.');
+            return fallbackRecentCollectionItems(uid, limitCount);
+        }
+        throw error;
+    }
 }
 
 // ==================== Real-time Subscriptions ====================
@@ -1342,6 +1566,36 @@ export const subscribeToUserMemberships = (
         const groupIds = snapshot.docs.map(d => d.id);
         onUpdate(groupIds);
     });
+};
+
+/**
+ * Subscribe to user's direct conversation index
+ */
+export const subscribeToUserDirectConversations = (
+    uid: string,
+    onUpdate: (conversationIds: string[]) => void,
+    limitCount: number = 200,
+    onError?: (error: unknown) => void
+): Unsubscribe => {
+    const q = query(
+        collection(db, 'users', uid, 'directConversations'),
+        orderBy('updatedAt', 'desc'),
+        limit(limitCount)
+    );
+
+    return onSnapshot(
+        q,
+        (snapshot) => {
+            const conversationIds = snapshot.docs.map(d => d.id);
+            onUpdate(conversationIds);
+        },
+        (error) => {
+            console.error('Error subscribing to direct conversation index:', error);
+            if (onError) {
+                onError(error);
+            }
+        }
+    );
 };
 
 /**
@@ -1588,6 +1842,8 @@ export interface ConversationRead {
     lastMessage: {
         text: string;
         senderId: string;
+        senderName?: string | null;
+        senderPhotoURL?: string | null;
         createdAt: Date;
         clientCreatedAt: number;
     } | null;
@@ -1607,7 +1863,10 @@ export interface ConversationMemberRead {
 export interface MessageRead {
     id: string;
     senderId: string;
+    senderName?: string | null;
+    senderPhotoURL?: string | null;
     text: string;
+    attachments?: MessageAttachmentRead[];
     createdAt: Date;
     clientCreatedAt: number;
     clientId: string;
@@ -1628,6 +1887,8 @@ export interface ConversationWrite {
     lastMessage: {
         text: string;
         senderId: string;
+        senderName?: string | null;
+        senderPhotoURL?: string | null;
         createdAt: FieldValue;
         clientCreatedAt: number;
     } | null;
@@ -1646,7 +1907,10 @@ export interface ConversationMemberWrite {
 
 export interface MessageWrite {
     senderId: string;
+    senderName?: string | null;
+    senderPhotoURL?: string | null;
     text: string;
+    attachments?: MessageAttachmentWrite[];
     createdAt: FieldValue;
     clientCreatedAt: number;
     clientId: string;
@@ -1657,7 +1921,44 @@ export interface TypingIndicatorWrite {
     updatedAt: FieldValue;
 }
 
+export type MessageAttachmentKind = 'image' | 'file';
+
+export interface MessageAttachmentRead {
+    kind: MessageAttachmentKind;
+    url: string;
+    thumbUrl?: string | null;
+    path: string;
+    fileName: string;
+    contentType: string;
+    size: number;
+    width?: number | null;
+    height?: number | null;
+}
+
+export interface MessageAttachmentWrite extends MessageAttachmentRead { }
+
 // ==================== Messaging Functions ====================
+
+const upsertDirectConversationIndex = async (
+    uid: string,
+    conversationId: string,
+    otherUid: string
+): Promise<void> => {
+    const indexRef = doc(db, 'users', uid, 'directConversations', conversationId);
+    try {
+        await setDoc(indexRef, {
+            conversationId,
+            otherUid,
+            type: 'direct',
+            updatedAt: serverTimestamp()
+        } as Record<string, unknown>, { merge: true });
+    } catch (error) {
+        const code = (error as { code?: string })?.code;
+        if (code !== 'permission-denied') {
+            throw error;
+        }
+    }
+};
 
 /**
  * Get or create a direct conversation between two users
@@ -1742,6 +2043,12 @@ export const getOrCreateDirectConversation = async (uid1: string, uid2: string):
         } as ConversationMemberWrite, { merge: false });
     }
 
+    const [firstUid, secondUid] = memberIds;
+    await Promise.all([
+        upsertDirectConversationIndex(firstUid, conversationId, secondUid),
+        upsertDirectConversationIndex(secondUid, conversationId, firstUid)
+    ]);
+
     return conversationId;
 };
 
@@ -1798,27 +2105,66 @@ export const getOrCreateGroupConversation = async (groupId: string, uid: string)
  * Send a message to a conversation
  * Uses deterministic clientId for offline dedup
  */
-export const sendMessage = async (conversationId: string, uid: string, text: string): Promise<void> => {
-    const clientId = `${uid}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+export const sendMessage = async (
+    conversationId: string,
+    uid: string,
+    text: string,
+    senderName?: string | null,
+    senderPhotoURL?: string | null,
+    attachments?: MessageAttachmentWrite[],
+    clientIdOverride?: string
+): Promise<void> => {
+    const clientId = clientIdOverride ?? `${uid}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const messageRef = doc(db, `conversations/${conversationId}/messages`, clientId);
     const convRef = doc(db, 'conversations', conversationId);
 
+    const normalizedText = text ?? '';
+    const normalizedAttachments = attachments && attachments.length > 0 ? attachments : undefined;
+
+    const lastMessageText = (() => {
+        if (normalizedText.trim()) {
+            return normalizedText.trim();
+        }
+        if (!normalizedAttachments) {
+            return '';
+        }
+        const imageCount = normalizedAttachments.filter((item) => item.kind === 'image').length;
+        const fileCount = normalizedAttachments.length - imageCount;
+        if (imageCount > 0 && fileCount > 0) {
+            return 'Adjuntos';
+        }
+        if (imageCount > 0) {
+            return imageCount === 1 ? 'Imagen' : 'Imagenes';
+        }
+        return fileCount === 1 ? 'Archivo' : 'Archivos';
+    })();
+
     const batch = writeBatch(db);
 
-    // Message (deterministic ID = offline dedup)
-    batch.set(messageRef, {
+    const messagePayload: MessageWrite = {
         senderId: uid,
-        text,
+        senderName: senderName ?? null,
+        senderPhotoURL: senderPhotoURL ?? null,
+        text: normalizedText,
         createdAt: serverTimestamp(),
         clientCreatedAt: Date.now(),
         clientId
-    } as MessageWrite, { merge: false });
+    };
+
+    if (normalizedAttachments) {
+        messagePayload.attachments = normalizedAttachments;
+    }
+
+    // Message (deterministic ID = offline dedup)
+    batch.set(messageRef, messagePayload, { merge: false });
 
     // Update lastMessage
     batch.update(convRef, {
         lastMessage: {
-            text,
+            text: lastMessageText,
             senderId: uid,
+            senderName: senderName ?? null,
+            senderPhotoURL: senderPhotoURL ?? null,
             createdAt: serverTimestamp(),
             clientCreatedAt: Date.now()
         },
@@ -1929,28 +2275,13 @@ export const subscribeToConversations = (
         conversationMap.delete(conversationId);
     };
 
-    const directQuery = query(
-        collection(db, 'conversations'),
-        where('memberIds', 'array-contains', uid),
-        limit(200)
-    );
+    const unsubscribeDirectIndex = subscribeToUserDirectConversations(
+        uid,
+        (conversationIds) => {
+            const nextIds = new Set(conversationIds.filter((id) => id.startsWith('dm_')));
 
-    const unsubscribeDirect = onSnapshot(
-        directQuery,
-        (snapshot) => {
-            const nextIds = new Set<string>();
-            snapshot.docs.forEach((convSnap) => {
-                const data = convSnap.data() as Record<string, unknown>;
-                const rawType = data.type;
-                const isDirect = rawType === 'direct' || (!rawType && convSnap.id.startsWith('dm_'));
-                if (!isDirect) {
-                    return;
-                }
-                nextIds.add(convSnap.id);
-                conversationMap.set(
-                    convSnap.id,
-                    buildConversation(convSnap.id, data, 'direct')
-                );
+            nextIds.forEach((conversationId) => {
+                subscribeToConversation(conversationId, 'direct');
             });
 
             const toRemove: string[] = [];
@@ -1961,12 +2292,13 @@ export const subscribeToConversations = (
             });
             toRemove.forEach((conversationId) => {
                 directConversationIds.delete(conversationId);
-                conversationMap.delete(conversationId);
+                unsubscribeConversation(conversationId);
             });
 
             nextIds.forEach((conversationId) => directConversationIds.add(conversationId));
             emit();
         },
+        200,
         handleError
     );
 
@@ -1997,7 +2329,7 @@ export const subscribeToConversations = (
     );
 
     return () => {
-        unsubscribeDirect();
+        unsubscribeDirectIndex();
         unsubscribeMemberships();
         conversationUnsubs.forEach((unsubscribe) => unsubscribe());
         conversationUnsubs.clear();
@@ -2022,10 +2354,26 @@ export const subscribeToMessages = (
     return onSnapshot(q, (snapshot) => {
         const messages = snapshot.docs.map(doc => {
             const data = doc.data();
+            const attachments = Array.isArray(data.attachments)
+                ? data.attachments.map((item: Record<string, unknown>) => ({
+                    kind: item.kind === 'image' ? 'image' : 'file',
+                    url: String(item.url || ''),
+                    thumbUrl: typeof item.thumbUrl === 'string' ? item.thumbUrl : null,
+                    path: String(item.path || ''),
+                    fileName: String(item.fileName || ''),
+                    contentType: String(item.contentType || ''),
+                    size: Number(item.size || 0),
+                    width: typeof item.width === 'number' ? item.width : null,
+                    height: typeof item.height === 'number' ? item.height : null
+                }))
+                : undefined;
             return {
                 id: doc.id,
                 senderId: data.senderId,
-                text: data.text,
+                senderName: data.senderName ?? null,
+                senderPhotoURL: data.senderPhotoURL ?? null,
+                text: typeof data.text === 'string' ? data.text : '',
+                attachments,
                 createdAt: toDate(data.createdAt) || new Date(),
                 clientCreatedAt: data.clientCreatedAt,
                 clientId: data.clientId
@@ -2114,11 +2462,14 @@ export const searchUsersByDisplayName = async (queryText: string, limitCount = 1
     const snapshot = await getDocs(q);
 
     return snapshot.docs.map((docSnap) => {
-        const data = docSnap.data() as { displayName?: string | null; photoURL?: string | null };
+        const data = docSnap.data() as { displayName?: string | null; photoURL?: string | null; accountVisibility?: AccountVisibility };
+        const accountVisibility: AccountVisibility =
+            data.accountVisibility === 'private' ? 'private' : 'public';
         return {
             uid: docSnap.id,
             displayName: data.displayName ?? null,
-            photoURL: data.photoURL ?? null
+            photoURL: data.photoURL ?? null,
+            accountVisibility
         };
     });
 };
@@ -2137,11 +2488,14 @@ export const getRecentUsers = async (limitCount = 15, excludeUid?: string): Prom
     const snapshot = await getDocs(q);
 
     const users = snapshot.docs.map((docSnap) => {
-        const data = docSnap.data() as { displayName?: string | null; photoURL?: string | null };
+        const data = docSnap.data() as { displayName?: string | null; photoURL?: string | null; accountVisibility?: AccountVisibility };
+        const accountVisibility: AccountVisibility =
+            data.accountVisibility === 'private' ? 'private' : 'public';
         return {
             uid: docSnap.id,
             displayName: data.displayName ?? null,
-            photoURL: data.photoURL ?? null
+            photoURL: data.photoURL ?? null,
+            accountVisibility
         };
     });
 
@@ -2158,11 +2512,13 @@ export const getRecentUsers = async (limitCount = 15, excludeUid?: string): Prom
  */
 export interface PostMedia {
     url: string;
-    path: string;         // Storage path: posts/{authorId}/{postId}/(images|videos)/{filename}
-    type: 'image' | 'video';
+    path: string;         // Storage path: posts/{authorId}/{postId}/(images|videos|files)/{filename}
+    type: 'image' | 'video' | 'file';
     contentType: string;
     width?: number;       // For CLS prevention
     height?: number;      // For CLS prevention
+    fileName?: string;
+    size?: number;
 }
 
 /**
@@ -2480,6 +2836,20 @@ export async function getUserProfile(uid: string): Promise<UserProfileRead | nul
         return null;
     }
 
+    const accountVisibility =
+        privateData?.settings?.privacy?.accountVisibility === 'private'
+            ? 'private'
+            : (publicData?.accountVisibility === 'private' ? 'private' : 'public');
+    const followersCount = typeof publicData?.followersCount === 'number'
+        ? publicData.followersCount
+        : (typeof privateData?.followersCount === 'number' ? privateData.followersCount : 0);
+    const followingCount = typeof publicData?.followingCount === 'number'
+        ? publicData.followingCount
+        : (typeof privateData?.followingCount === 'number' ? privateData.followingCount : 0);
+    const postsCount = typeof publicData?.postsCount === 'number'
+        ? publicData.postsCount
+        : (typeof privateData?.postsCount === 'number' ? privateData.postsCount : 0);
+
     // 4. Merge data (private first, complement with public)
     return {
         uid: uid,
@@ -2492,9 +2862,29 @@ export async function getUserProfile(uid: string): Promise<UserProfileRead | nul
         location: privateData?.location ?? null,
         username: privateData?.username ?? publicData?.username ?? null,
         reputation: privateData?.reputation ?? 0,
+        accountVisibility,
+        followersCount,
+        followingCount,
+        postsCount,
         createdAt: toDate(privateData?.createdAt ?? publicData?.createdAt) ?? new Date(),
         updatedAt: toDate(privateData?.updatedAt ?? publicData?.updatedAt) ?? new Date()
     };
+}
+
+export async function getAccountVisibilityServer(uid: string): Promise<AccountVisibility> {
+    try {
+        const snap = await getDocFromServer(doc(db, 'users_public', uid));
+        const data = snap.data() as { accountVisibility?: AccountVisibility } | undefined;
+        return data?.accountVisibility === 'private' ? 'private' : 'public';
+    } catch (error) {
+        try {
+            const snap = await getDoc(doc(db, 'users_public', uid));
+            const data = snap.data() as { accountVisibility?: AccountVisibility } | undefined;
+            return data?.accountVisibility === 'private' ? 'private' : 'public';
+        } catch {
+            return 'public';
+        }
+    }
 }
 
 /**
@@ -2524,6 +2914,11 @@ export async function updateUserProfile(
 
     if (updates.bio !== undefined) {
         userUpdates.bio = updates.bio;
+    }
+
+    if (updates.photoURL !== undefined) {
+        userUpdates.photoURL = updates.photoURL;
+        publicUpdates.photoURL = updates.photoURL;
     }
 
     if (updates.role !== undefined) {
@@ -2564,6 +2959,8 @@ export function subscribeToUserProfile(
                 return;
             }
             const data = snapshot.data();
+            const privacy = (data.settings?.privacy ?? {}) as Partial<PrivacySettings>;
+            const accountVisibility = privacy.accountVisibility === 'private' ? 'private' : 'public';
             onData({
                 uid: data.uid || uid,
                 displayName: data.displayName || null,
@@ -2575,12 +2972,297 @@ export function subscribeToUserProfile(
                 location: data.location || null,
                 username: data.username || null,
                 reputation: data.reputation || 0,
+                accountVisibility,
+                followersCount: typeof data.followersCount === 'number' ? data.followersCount : 0,
+                followingCount: typeof data.followingCount === 'number' ? data.followingCount : 0,
+                postsCount: typeof data.postsCount === 'number' ? data.postsCount : 0,
                 createdAt: toDate(data.createdAt) || new Date(),
                 updatedAt: toDate(data.updatedAt) || new Date()
             });
         },
         onError
     );
+}
+
+// ==================== User Settings ====================
+
+const normalizeNotificationSettings = (value: unknown): NotificationSettings => {
+    const data = (value ?? {}) as Partial<NotificationSettings>;
+    return {
+        pushEnabled: typeof data.pushEnabled === 'boolean' ? data.pushEnabled : DEFAULT_NOTIFICATION_SETTINGS.pushEnabled,
+        emailEnabled: typeof data.emailEnabled === 'boolean' ? data.emailEnabled : DEFAULT_NOTIFICATION_SETTINGS.emailEnabled,
+        mentionsOnly: typeof data.mentionsOnly === 'boolean' ? data.mentionsOnly : DEFAULT_NOTIFICATION_SETTINGS.mentionsOnly,
+        weeklyDigest: typeof data.weeklyDigest === 'boolean' ? data.weeklyDigest : DEFAULT_NOTIFICATION_SETTINGS.weeklyDigest,
+        productUpdates: typeof data.productUpdates === 'boolean' ? data.productUpdates : DEFAULT_NOTIFICATION_SETTINGS.productUpdates
+    };
+};
+
+const normalizePrivacySettings = (value: unknown): PrivacySettings => {
+    const data = (value ?? {}) as Partial<PrivacySettings>;
+    const visibility = data.accountVisibility === 'private' || data.accountVisibility === 'public'
+        ? data.accountVisibility
+        : DEFAULT_PRIVACY_SETTINGS.accountVisibility;
+    return {
+        accountVisibility: visibility,
+        allowDirectMessages: typeof data.allowDirectMessages === 'boolean'
+            ? data.allowDirectMessages
+            : DEFAULT_PRIVACY_SETTINGS.allowDirectMessages,
+        showOnlineStatus: typeof data.showOnlineStatus === 'boolean'
+            ? data.showOnlineStatus
+            : DEFAULT_PRIVACY_SETTINGS.showOnlineStatus,
+        showLastActive: typeof data.showLastActive === 'boolean'
+            ? data.showLastActive
+            : DEFAULT_PRIVACY_SETTINGS.showLastActive,
+        allowFriendRequests: typeof data.allowFriendRequests === 'boolean'
+            ? data.allowFriendRequests
+            : DEFAULT_PRIVACY_SETTINGS.allowFriendRequests,
+        blockedUsers: Array.isArray(data.blockedUsers)
+            ? data.blockedUsers.filter((uid) => typeof uid === 'string')
+            : []
+    };
+};
+
+export async function getUserSettings(uid: string): Promise<UserSettingsRead> {
+    try {
+        const snap = await getDoc(doc(db, 'users', uid));
+        if (!snap.exists()) {
+            return {
+                notifications: DEFAULT_NOTIFICATION_SETTINGS,
+                privacy: DEFAULT_PRIVACY_SETTINGS
+            };
+        }
+        const data = snap.data() as { settings?: { notifications?: unknown; privacy?: unknown } };
+        return {
+            notifications: normalizeNotificationSettings(data.settings?.notifications),
+            privacy: normalizePrivacySettings(data.settings?.privacy)
+        };
+    } catch (error) {
+        console.error('Error loading user settings:', error);
+        return {
+            notifications: DEFAULT_NOTIFICATION_SETTINGS,
+            privacy: DEFAULT_PRIVACY_SETTINGS
+        };
+    }
+}
+
+export async function updateNotificationSettings(
+    uid: string,
+    settings: NotificationSettings
+): Promise<void> {
+    await updateDoc(doc(db, 'users', uid), {
+        'settings.notifications': settings
+    });
+}
+
+export async function updatePrivacySettings(
+    uid: string,
+    settings: PrivacySettings
+): Promise<void> {
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'users', uid), {
+        'settings.privacy': settings
+    });
+    batch.set(doc(db, 'users_public', uid), {
+        accountVisibility: settings.accountVisibility,
+        updatedAt: serverTimestamp()
+    }, { merge: true });
+    await batch.commit();
+}
+
+export async function createSupportTicket(input: {
+    uid: string;
+    email: string | null;
+    type: SupportTicketType;
+    title: string;
+    message: string;
+    context: SupportTicketContext | null;
+    appVersion: string;
+}): Promise<string> {
+    const ticketRef = doc(collection(db, 'support_tickets'));
+    await setDoc(ticketRef, {
+        uid: input.uid,
+        email: input.email ?? null,
+        type: input.type,
+        title: input.title,
+        message: input.message,
+        context: input.context ?? null,
+        appVersion: input.appVersion,
+        status: 'open',
+        createdAt: serverTimestamp()
+    } as SupportTicketWrite, { merge: false });
+    return ticketRef.id;
+}
+
+// ==================== Stories ====================
+
+const STORY_DURATION_MS = 24 * 60 * 60 * 1000;
+
+const buildStoryRead = (id: string, data: Record<string, unknown>): StoryRead => {
+    const ownerSnapshot = (data.ownerSnapshot ?? {}) as Partial<StoryOwnerSnapshot>;
+    return {
+        id,
+        ownerId: (data.ownerId as string) ?? '',
+        ownerSnapshot: {
+            displayName: typeof ownerSnapshot.displayName === 'string' ? ownerSnapshot.displayName : null,
+            photoURL: typeof ownerSnapshot.photoURL === 'string' ? ownerSnapshot.photoURL : null
+        },
+        mediaType: (data.mediaType as StoryMediaType) ?? 'image',
+        mediaUrl: (data.mediaUrl as string) ?? '',
+        mediaPath: (data.mediaPath as string) ?? '',
+        thumbUrl: (data.thumbUrl as string) ?? null,
+        thumbPath: (data.thumbPath as string) ?? null,
+        visibility: (data.visibility as StoryVisibility) ?? 'friends',
+        createdAt: toDate(data.createdAt) || new Date(0),
+        expiresAt: toDate(data.expiresAt) || new Date(0)
+    };
+};
+
+export async function createStory(input: {
+    storyId?: string;
+    ownerId: string;
+    ownerName: string | null;
+    ownerPhoto: string | null;
+    mediaType: StoryMediaType;
+    mediaUrl: string;
+    mediaPath: string;
+    thumbUrl?: string | null;
+    thumbPath?: string | null;
+    visibility?: StoryVisibility;
+}): Promise<string> {
+    const storyRef = input.storyId ? doc(db, 'stories', input.storyId) : doc(collection(db, 'stories'));
+    const expiresAt = Timestamp.fromMillis(Date.now() + STORY_DURATION_MS);
+    await setDoc(storyRef, {
+        ownerId: input.ownerId,
+        ownerSnapshot: {
+            displayName: input.ownerName ?? null,
+            photoURL: input.ownerPhoto ?? null
+        },
+        mediaType: input.mediaType,
+        mediaUrl: input.mediaUrl,
+        mediaPath: input.mediaPath,
+        thumbUrl: input.thumbUrl ?? null,
+        thumbPath: input.thumbPath ?? null,
+        visibility: input.visibility ?? 'friends',
+        createdAt: serverTimestamp(),
+        expiresAt
+    } as StoryWrite, { merge: false });
+    return storyRef.id;
+}
+
+export async function getFriendIds(uid: string): Promise<string[]> {
+    try {
+        const [followingIds, followerIds] = await Promise.all([
+            getFollowingIds(uid).catch((err) => {
+                const code = (err as { code?: string })?.code;
+                if (code === 'permission-denied') {
+                    console.warn('[getFriendIds] permission-denied al leer following, retornando []');
+                    return [];
+                }
+                throw err;
+            }),
+            getFollowerIds(uid).catch((err) => {
+                const code = (err as { code?: string })?.code;
+                if (code === 'permission-denied') {
+                    console.warn('[getFriendIds] permission-denied al leer followers, retornando []');
+                    return [];
+                }
+                throw err;
+            })
+        ]);
+
+        const followerSet = new Set(followerIds);
+        const friendIds = followingIds.filter((id) => followerSet.has(id));
+
+        console.log(`[getFriendIds] Cargados ${friendIds.length} amigos para uid ${uid}`);
+        return friendIds;
+    } catch (error) {
+        console.error('[getFriendIds] Error inesperado:', error);
+        return [];
+    }
+}
+
+export async function getUserStories(uid: string): Promise<StoryRead[]> {
+    const now = TimestampLite.now();
+    const q = queryLite(
+        collectionLite(dbLite, 'stories'),
+        whereLite('ownerId', '==', uid),
+        whereLite('visibility', '==', 'friends'),
+        whereLite('expiresAt', '>', now),
+        orderByLite('expiresAt', 'desc')
+    );
+
+    const snapshot = await getDocsLite(q);
+    console.log(`[getUserStories] Cargadas ${snapshot.docs.length} historias para uid ${uid}`);
+
+    return snapshot.docs.map((docSnap) => buildStoryRead(docSnap.id, docSnap.data()));
+}
+
+export async function getStoriesForOwners(ownerIds: string[]): Promise<StoryRead[]> {
+    const uniqueIds = Array.from(new Set(ownerIds.filter(Boolean)));
+    if (uniqueIds.length === 0) return [];
+
+    const now = TimestampLite.now();
+    const chunkSize = 10;
+    const chunks: string[][] = [];
+    for (let i = 0; i < uniqueIds.length; i += chunkSize) {
+        chunks.push(uniqueIds.slice(i, i + chunkSize));
+    }
+
+    const results = await Promise.allSettled(
+        chunks.map(async (chunk) => {
+            const q = queryLite(
+                collectionLite(dbLite, 'stories'),
+                whereLite('ownerId', 'in', chunk),
+                whereLite('visibility', '==', 'friends'),
+                whereLite('expiresAt', '>', now),
+                orderByLite('expiresAt', 'desc')
+            );
+            const snapshot = await getDocsLite(q);
+            console.log(`[getStoriesForOwners] Chunk query retornó ${snapshot.docs.length} historias para owners:`, chunk);
+            return snapshot.docs.map((docSnap) => buildStoryRead(docSnap.id, docSnap.data()));
+        })
+    );
+
+    const merged = new Map<string, StoryRead>();
+    let hadFailure = false;
+    let firstError: unknown = null;
+
+    for (let index = 0; index < results.length; index += 1) {
+        const result = results[index];
+        if (result.status === 'fulfilled') {
+            result.value.forEach((story) => merged.set(story.id, story));
+            continue;
+        }
+
+        hadFailure = true;
+        if (!firstError) {
+            firstError = result.reason;
+        }
+        const chunk = chunks[index] ?? [];
+        for (const ownerId of chunk) {
+            try {
+                const fallbackStories = await getUserStories(ownerId);
+                fallbackStories.forEach((story) => merged.set(story.id, story));
+            } catch (fallbackError) {
+                if (!firstError) {
+                    firstError = fallbackError;
+                }
+                console.warn('[getStoriesForOwners] Fallback failed for owner', ownerId, fallbackError);
+            }
+        }
+    }
+
+    const stories = Array.from(merged.values()).sort((a, b) => {
+        const aTime = a.createdAt?.getTime?.() ?? 0;
+        const bTime = b.createdAt?.getTime?.() ?? 0;
+        return bTime - aTime;
+    });
+
+    if (stories.length === 0 && hadFailure && firstError) {
+        throw firstError;
+    }
+
+    return stories;
 }
 
 // ==================== Friend Requests ====================
@@ -2862,6 +3544,287 @@ export async function getFriendshipStatus(
     return { status: 'none' };
 }
 
+const buildFollowRequestId = (fromUid: string, toUid: string): string => `${fromUid}_${toUid}`;
+
+const getPublicUsersByIds = async (uids: string[]): Promise<Map<string, FollowUserRead>> => {
+    const unique = Array.from(new Set(uids.filter(Boolean)));
+    const result = new Map<string, FollowUserRead>();
+    if (unique.length === 0) return result;
+
+    const chunks: string[][] = [];
+    for (let i = 0; i < unique.length; i += 10) {
+        chunks.push(unique.slice(i, i + 10));
+    }
+
+    for (const chunk of chunks) {
+        const q = query(collection(db, 'users_public'), where(documentId(), 'in', chunk));
+        const snapshot = await getDocs(q);
+        snapshot.docs.forEach((docSnap) => {
+            const data = docSnap.data() as { displayName?: string | null; photoURL?: string | null; username?: string | null };
+            result.set(docSnap.id, {
+                uid: docSnap.id,
+                displayName: data.displayName ?? null,
+                photoURL: data.photoURL ?? null,
+                username: data.username ?? null
+            });
+        });
+    }
+
+    return result;
+};
+
+export async function getFollowStatus(
+    currentUid: string,
+    targetUid: string,
+    targetVisibility?: AccountVisibility
+): Promise<{ status: FollowStatus; requestId?: string; isMutual?: boolean }> {
+    try {
+        const followerDoc = await getDoc(doc(db, 'users', targetUid, 'followers', currentUid));
+        if (followerDoc.exists()) {
+            try {
+                const reverseDoc = await getDoc(doc(db, 'users', currentUid, 'followers', targetUid));
+                return { status: 'following', isMutual: reverseDoc.exists() };
+            } catch (error) {
+                const code = (error as { code?: string })?.code;
+                if (code !== 'permission-denied') {
+                    throw error;
+                }
+                return { status: 'following', isMutual: false };
+            }
+        }
+    } catch (error) {
+        const code = (error as { code?: string })?.code;
+        if (code !== 'permission-denied') {
+            throw error;
+        }
+    }
+
+    if (targetVisibility && targetVisibility !== 'private') {
+        return { status: 'none' };
+    }
+
+    const incomingId = buildFollowRequestId(targetUid, currentUid);
+    try {
+        const incoming = await getDoc(doc(db, 'follow_requests', incomingId));
+        if (incoming.exists()) {
+            const data = incoming.data() as { status?: FollowRequestStatus };
+            if (data.status === 'pending') {
+                return { status: 'pending_received', requestId: incoming.id };
+            }
+        }
+    } catch (error) {
+        const code = (error as { code?: string })?.code;
+        if (code !== 'permission-denied') {
+            throw error;
+        }
+    }
+
+    const outgoingId = buildFollowRequestId(currentUid, targetUid);
+    try {
+        const outgoing = await getDoc(doc(db, 'follow_requests', outgoingId));
+        if (outgoing.exists()) {
+            const data = outgoing.data() as { status?: FollowRequestStatus };
+            if (data.status === 'pending') {
+                return { status: 'pending_sent', requestId: outgoing.id };
+            }
+        }
+    } catch (error) {
+        const code = (error as { code?: string })?.code;
+        if (code !== 'permission-denied') {
+            throw error;
+        }
+    }
+
+    return { status: 'none' };
+}
+
+export async function sendFollowRequest(fromUid: string, toUid: string): Promise<string> {
+    const requestId = buildFollowRequestId(fromUid, toUid);
+    const requestRef = doc(db, 'follow_requests', requestId);
+    let existing = null as null | DocumentSnapshot;
+    try {
+        existing = await getDoc(requestRef);
+    } catch (error) {
+        const code = (error as { code?: string })?.code;
+        if (code !== 'permission-denied') {
+            throw error;
+        }
+    }
+    if (existing?.exists()) {
+        const data = existing.data() as { status?: FollowRequestStatus };
+        if (data.status === 'pending') {
+            await updateDoc(requestRef, {
+                status: 'pending',
+                updatedAt: serverTimestamp()
+            });
+            return requestId;
+        }
+        await updateDoc(requestRef, {
+            status: 'pending',
+            updatedAt: serverTimestamp()
+        });
+        return requestId;
+    }
+
+    await setDoc(requestRef, {
+        fromUid,
+        toUid,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+    } as FollowRequestWrite, { merge: false });
+    return requestRef.id;
+}
+
+export async function cancelFollowRequest(fromUid: string, toUid: string): Promise<void> {
+    const ref = doc(db, 'follow_requests', buildFollowRequestId(fromUid, toUid));
+    try {
+        const snap = await getDoc(ref);
+        if (!snap.exists()) return;
+        await deleteDoc(ref);
+    } catch (error) {
+        const code = (error as { code?: string })?.code;
+        if (code !== 'permission-denied') {
+            throw error;
+        }
+    }
+}
+
+export async function acceptFollowRequest(fromUid: string, toUid: string): Promise<void> {
+    await updateDoc(doc(db, 'follow_requests', buildFollowRequestId(fromUid, toUid)), {
+        status: 'accepted',
+        updatedAt: serverTimestamp()
+    });
+}
+
+export async function declineFollowRequest(fromUid: string, toUid: string): Promise<void> {
+    await updateDoc(doc(db, 'follow_requests', buildFollowRequestId(fromUid, toUid)), {
+        status: 'declined',
+        updatedAt: serverTimestamp()
+    });
+}
+
+export async function followPublicUser(followerUid: string, targetUid: string): Promise<void> {
+    const followerRef = docLite(dbLite, 'users', targetUid, 'followers', followerUid);
+    const followingRef = docLite(dbLite, 'users', followerUid, 'following', targetUid);
+    const [followerSnap, followingSnap] = await Promise.all([
+        getDocLite(followerRef),
+        getDocLite(followingRef)
+    ]);
+
+    let hasWrites = false;
+    const batch = writeBatchLite(dbLite);
+    if (!followerSnap.exists()) {
+        batch.set(followerRef, {
+            uid: followerUid,
+            createdAt: serverTimestampLite()
+        }, { merge: false });
+        hasWrites = true;
+    }
+    if (!followingSnap.exists()) {
+        batch.set(followingRef, {
+            uid: targetUid,
+            createdAt: serverTimestampLite()
+        }, { merge: false });
+        hasWrites = true;
+    }
+    if (!hasWrites) {
+        return;
+    }
+    await batch.commit();
+}
+
+export async function unfollowUser(followerUid: string, targetUid: string): Promise<void> {
+    const followerRef = doc(db, 'users', targetUid, 'followers', followerUid);
+    const followingRef = doc(db, 'users', followerUid, 'following', targetUid);
+    const batch = writeBatch(db);
+    batch.delete(followerRef);
+    batch.delete(followingRef);
+    await batch.commit();
+}
+
+export async function getFollowingIds(uid: string): Promise<string[]> {
+    const snapshot = await getDocs(collection(db, 'users', uid, 'following'));
+    return snapshot.docs.map((docSnap) => docSnap.id);
+}
+
+export async function getFollowerIds(uid: string): Promise<string[]> {
+    const snapshot = await getDocs(collection(db, 'users', uid, 'followers'));
+    return snapshot.docs.map((docSnap) => docSnap.id);
+}
+
+export async function getFollowList(
+    uid: string,
+    list: 'followers' | 'following',
+    pageSize = 20,
+    cursor?: PaginatedResult<FollowUserRead>['lastDoc']
+): Promise<PaginatedResult<FollowUserRead>> {
+    const baseRef = collection(db, 'users', uid, list);
+    const constraints = [orderBy('createdAt', 'desc'), limit(pageSize)];
+    const q = cursor
+        ? query(baseRef, ...constraints, startAfter(cursor))
+        : query(baseRef, ...constraints);
+
+    const snapshot = await getDocs(q);
+    const ids = snapshot.docs.map((docSnap) => docSnap.id);
+    const usersMap = await getPublicUsersByIds(ids);
+
+    const items = ids.map((id) => usersMap.get(id) ?? {
+        uid: id,
+        displayName: null,
+        photoURL: null,
+        username: null
+    });
+
+    return {
+        items,
+        lastDoc: snapshot.docs[snapshot.docs.length - 1] ?? null,
+        hasMore: snapshot.docs.length === pageSize
+    };
+}
+
+export async function getIncomingFollowRequests(
+    uid: string,
+    pageSize = 20,
+    cursor?: PaginatedResult<FollowRequestRead>['lastDoc']
+): Promise<PaginatedResult<FollowRequestRead & { fromUser: FollowUserRead | null }>> {
+    const baseRef = collection(db, 'follow_requests');
+    const constraints = [
+        where('toUid', '==', uid),
+        where('status', '==', 'pending'),
+        orderBy('createdAt', 'desc'),
+        limit(pageSize)
+    ];
+    const q = cursor
+        ? query(baseRef, ...constraints, startAfter(cursor))
+        : query(baseRef, ...constraints);
+
+    const snapshot = await getDocs(q);
+    const raw = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data() as { fromUid: string; toUid: string; status: FollowRequestStatus; createdAt?: Timestamp; updatedAt?: Timestamp };
+        return {
+            id: docSnap.id,
+            fromUid: data.fromUid,
+            toUid: data.toUid,
+            status: data.status,
+            createdAt: toDate(data.createdAt) || new Date(),
+            updatedAt: toDate(data.updatedAt) || new Date()
+        };
+    });
+
+    const userMap = await getPublicUsersByIds(raw.map((item) => item.fromUid));
+    const items = raw.map((item) => ({
+        ...item,
+        fromUser: userMap.get(item.fromUid) ?? null
+    }));
+
+    return {
+        items,
+        lastDoc: snapshot.docs[snapshot.docs.length - 1] ?? null,
+        hasMore: snapshot.docs.length === pageSize
+    };
+}
+
 // ==================== Collaborations ====================
 
 export type CollaborationStatus = 'open' | 'closed';
@@ -2889,6 +3852,36 @@ export interface CollaborationRead {
     createdAt: Date;
     updatedAt: Date;
 }
+
+// ==================== Follow Requests ====================
+
+export type FollowRequestStatus = 'pending' | 'accepted' | 'declined';
+
+export interface FollowRequestRead {
+    id: string;
+    fromUid: string;
+    toUid: string;
+    status: FollowRequestStatus;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+export interface FollowRequestWrite {
+    fromUid: string;
+    toUid: string;
+    status: FollowRequestStatus;
+    createdAt: FieldValue;
+    updatedAt: FieldValue;
+}
+
+export interface FollowUserRead {
+    uid: string;
+    displayName: string | null;
+    photoURL: string | null;
+    username: string | null;
+}
+
+export type FollowStatus = 'none' | 'following' | 'pending_sent' | 'pending_received';
 
 const mapCollaborationDoc = (docSnap: DocumentSnapshot): CollaborationRead => {
     const data = docSnap.data() as Record<string, unknown> | undefined;
@@ -3105,4 +4098,3 @@ export async function rejectCollaborationRequest(requestId: string): Promise<voi
         updatedAt: serverTimestamp()
     });
 }
-

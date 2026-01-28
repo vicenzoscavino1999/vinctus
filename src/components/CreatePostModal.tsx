@@ -1,32 +1,78 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { X, Image as ImageIcon, Loader2, Film, FileText } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
 import { getNewPostId } from '../lib/firestore';
 import { createPostUploading, updatePost } from '../lib/firestore-post-upload';
 import { compressToWebp, validateImage } from '../lib/compression';
-import { uploadPostImages, deletePostAllMedia } from '../lib/storage';
+import { uploadPostMedia, deletePostAllMedia } from '../lib/storage';
 
-type SelectedImage = { file: File; url: string };
+type SelectedAttachment = {
+    id: string;
+    kind: 'image' | 'video' | 'file';
+    file: File;
+    previewUrl?: string;
+};
 
 interface CreatePostModalProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
+const MAX_ATTACHMENTS = 10;
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024; // 100MB
+const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25MB
+
+const allowedVideoTypes = new Set([
+    'video/mp4',
+    'video/webm',
+    'video/quicktime'
+]);
+
+const allowedFileTypes = new Set([
+    'application/pdf',
+    'application/msword',
+    'application/vnd.ms-excel',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+]);
+
+const allowedFileExtensions = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx']);
+
+const formatBytes = (value: number): string => {
+    if (!Number.isFinite(value) || value <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let size = value;
+    let unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024;
+        unitIndex += 1;
+    }
+    return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+};
+
 const CreatePostModal = ({ isOpen, onClose }: CreatePostModalProps) => {
     const navigate = useNavigate();
     const { user } = useAuth();
 
     const [text, setText] = useState('');
-    const [images, setImages] = useState<SelectedImage[]>([]);
+    const [attachments, setAttachments] = useState<SelectedAttachment[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const [progress, setProgress] = useState({ percent: 0, transferred: 0, total: 0 });
 
     const imageInputRef = useRef<HTMLInputElement>(null);
+    const videoInputRef = useRef<HTMLInputElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const totalAttachmentSize = useMemo(
+        () => attachments.reduce((sum, item) => sum + item.file.size, 0),
+        [attachments]
+    );
 
     // Reset state when modal closes
     useEffect(() => {
@@ -35,71 +81,146 @@ const CreatePostModal = ({ isOpen, onClose }: CreatePostModalProps) => {
             setError(null);
             setIsSubmitting(false);
             setProgress({ percent: 0, transferred: 0, total: 0 });
-            setImages((prev) => {
+            setAttachments((prev) => {
                 if (prev.length === 0) return prev;
-                prev.forEach(img => URL.revokeObjectURL(img.url));
+                prev.forEach(item => {
+                    if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+                });
                 return [];
             });
         }
     }, [isOpen]);
 
-    const canSubmit = !isSubmitting && (!!text.trim() || images.length > 0);
+    const canSubmit = !isSubmitting && !!text.trim();
 
     const openImagePicker = () => imageInputRef.current?.click();
+    const openVideoPicker = () => videoInputRef.current?.click();
+    const openFilePicker = () => fileInputRef.current?.click();
+
+    const buildAttachmentId = () => `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const addAttachment = (item: SelectedAttachment) => {
+        if (attachments.length >= MAX_ATTACHMENTS) {
+            setError('Maximo 10 adjuntos por publicacion.');
+            if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+            return;
+        }
+        setAttachments(prev => [...prev, item]);
+    };
 
     const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const picked = Array.from(e.target.files ?? []);
-        e.target.value = ''; // Allow reselecting same file
+        e.target.value = '';
         setError(null);
 
         if (!picked.length) return;
 
-        const remaining = Math.max(0, 4 - images.length);
+        const remaining = Math.max(0, MAX_ATTACHMENTS - attachments.length);
         const limited = picked.slice(0, remaining);
 
-        // Validate before compressing
         for (const f of limited) {
             const v = validateImage(f);
             if (!v.valid) {
-                setError(v.error ?? 'Imagen inválida.');
+                setError(v.error ?? 'Imagen invalida.');
                 return;
             }
         }
 
         try {
-            const compressed: File[] = [];
             for (const f of limited) {
-                compressed.push(await compressToWebp(f));
+                const compressedFile = await compressToWebp(f);
+                addAttachment({
+                    id: buildAttachmentId(),
+                    kind: 'image',
+                    file: compressedFile,
+                    previewUrl: URL.createObjectURL(compressedFile)
+                });
             }
-
-            const newImages: SelectedImage[] = compressed.map(file => ({
-                file,
-                url: URL.createObjectURL(file)
-            }));
-
-            setImages(prev => [...prev, ...newImages]);
         } catch (err: any) {
-            setError(err.message || 'Error procesando imágenes');
+            setError(err.message || 'Error procesando imagenes');
         }
     };
 
-    const removeImage = (index: number) => {
-        setImages(prev => {
-            const updated = [...prev];
-            URL.revokeObjectURL(updated[index].url);
-            updated.splice(index, 1);
+    const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const picked = Array.from(e.target.files ?? []);
+        e.target.value = '';
+        setError(null);
+
+        if (!picked.length) return;
+
+        const remaining = Math.max(0, MAX_ATTACHMENTS - attachments.length);
+        const limited = picked.slice(0, remaining);
+
+        for (const f of limited) {
+            const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
+            if (!allowedVideoTypes.has(f.type) && !['mp4', 'webm', 'mov'].includes(ext)) {
+                setError('Video no permitido. Usa MP4 o WebM.');
+                return;
+            }
+            if (f.size > MAX_VIDEO_BYTES) {
+                setError('El video supera el limite de 100MB.');
+                return;
+            }
+        }
+
+        limited.forEach((file) => {
+            addAttachment({
+                id: buildAttachmentId(),
+                kind: 'video',
+                file,
+                previewUrl: URL.createObjectURL(file)
+            });
+        });
+    };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const picked = Array.from(e.target.files ?? []);
+        e.target.value = '';
+        setError(null);
+
+        if (!picked.length) return;
+
+        const remaining = Math.max(0, MAX_ATTACHMENTS - attachments.length);
+        const limited = picked.slice(0, remaining);
+
+        for (const f of limited) {
+            const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
+            if (!allowedFileTypes.has(f.type) && !allowedFileExtensions.has(ext)) {
+                setError('Archivo no permitido. Usa PDF, Word, Excel o PowerPoint.');
+                return;
+            }
+            if (f.size > MAX_FILE_BYTES) {
+                setError('El archivo supera el limite de 25MB.');
+                return;
+            }
+        }
+
+        limited.forEach((file) => {
+            addAttachment({
+                id: buildAttachmentId(),
+                kind: 'file',
+                file
+            });
+        });
+    };
+
+    const removeAttachment = (id: string) => {
+        setAttachments(prev => {
+            const updated = prev.filter(item => item.id !== id);
+            const removed = prev.find(item => item.id === id);
+            if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
             return updated;
         });
     };
 
     const handleSubmit = async () => {
         if (!user) {
-            setError('Debes iniciar sesión');
+            setError('Debes iniciar sesion');
             return;
         }
 
-        if (!text.trim() && images.length === 0) {
-            setError('Escribe algo o selecciona imágenes');
+        if (!text.trim()) {
+            setError('Escribe algo antes de publicar.');
             return;
         }
 
@@ -109,7 +230,14 @@ const CreatePostModal = ({ isOpen, onClose }: CreatePostModalProps) => {
 
         const postId = getNewPostId();
         let created = false;
-        let uploadedMedia: Array<{ url: string; path: string; type: 'image' }> = [];
+        let uploadedMedia: Array<{
+            url: string;
+            path: string;
+            type: 'image' | 'video' | 'file';
+            contentType?: string;
+            fileName?: string;
+            size?: number;
+        }> = [];
 
         try {
             await createPostUploading({
@@ -123,13 +251,13 @@ const CreatePostModal = ({ isOpen, onClose }: CreatePostModalProps) => {
             });
             created = true;
 
-            if (images.length > 0) {
-                uploadedMedia = await uploadPostImages(
-                    images.map(i => i.file),
+            if (attachments.length > 0) {
+                uploadedMedia = await uploadPostMedia(
+                    attachments.map((item) => ({ kind: item.kind, file: item.file })),
                     user.uid,
                     postId,
                     (total, transferred) => {
-                        const percent = Math.round((transferred / total) * 100);
+                        const percent = total > 0 ? Math.round((transferred / total) * 100) : 0;
                         setProgress({ percent, transferred, total });
                     }
                 );
@@ -142,14 +270,12 @@ const CreatePostModal = ({ isOpen, onClose }: CreatePostModalProps) => {
                 await updatePost(postId, { status: 'ready' });
             }
 
-            // Success - close modal and navigate to feed
             onClose();
             navigate('/feed');
         } catch (err: any) {
             console.error('Error creating post:', err);
             setError(err.message || 'Error al publicar');
 
-            // Mark post as failed and cleanup any uploaded media
             if (created) {
                 await updatePost(postId, { status: 'failed' }).catch(() => { });
             }
@@ -163,15 +289,17 @@ const CreatePostModal = ({ isOpen, onClose }: CreatePostModalProps) => {
         }
     };
 
-    // FIX: Conditional JSX render instead of early return
+    const imageAttachments = attachments.filter(item => item.kind === 'image');
+    const videoAttachments = attachments.filter(item => item.kind === 'video');
+    const fileAttachments = attachments.filter(item => item.kind === 'file');
+
     if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
             <div className="bg-[#1a1a1a] border border-neutral-800 rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-                {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-neutral-800">
-                    <h2 className="text-lg font-medium text-white">Crear Publicación</h2>
+                    <h2 className="text-lg font-medium text-white">Crear Publicacion</h2>
                     <button
                         onClick={onClose}
                         disabled={isSubmitting}
@@ -181,9 +309,7 @@ const CreatePostModal = ({ isOpen, onClose }: CreatePostModalProps) => {
                     </button>
                 </div>
 
-                {/* Content */}
                 <div className="flex-1 overflow-y-auto p-4">
-                    {/* Author info */}
                     <div className="flex items-center gap-3 mb-4">
                         {user?.photoURL ? (
                             <img
@@ -202,35 +328,32 @@ const CreatePostModal = ({ isOpen, onClose }: CreatePostModalProps) => {
                         </div>
                     </div>
 
-                    {/* Textarea */}
                     <textarea
                         value={text}
                         onChange={(e) => setText(e.target.value)}
-                        placeholder="¿Qué estás pensando?"
+                        placeholder="Que estas pensando?"
                         className="w-full h-32 bg-transparent text-white placeholder-neutral-500 resize-none focus:outline-none text-base leading-relaxed"
                         maxLength={5000}
                         autoFocus
                         disabled={isSubmitting}
                     />
 
-                    {/* Character count */}
                     <div className="text-right text-neutral-500 text-sm">
                         {text.length}/5000
                     </div>
 
-                    {/* Image previews */}
-                    {images.length > 0 && (
+                    {imageAttachments.length > 0 && (
                         <div className="mt-4 grid grid-cols-2 gap-2">
-                            {images.map((img, index) => (
-                                <div key={index} className="relative group">
+                            {imageAttachments.map((img) => (
+                                <div key={img.id} className="relative group">
                                     <img
-                                        src={img.url}
-                                        alt={`Preview ${index + 1}`}
+                                        src={img.previewUrl}
+                                        alt="Preview"
                                         className="w-full h-40 object-cover rounded-lg"
                                     />
                                     {!isSubmitting && (
                                         <button
-                                            onClick={() => removeImage(index)}
+                                            onClick={() => removeAttachment(img.id)}
                                             className="absolute top-2 right-2 bg-black/70 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
                                         >
                                             <X size={16} />
@@ -241,18 +364,64 @@ const CreatePostModal = ({ isOpen, onClose }: CreatePostModalProps) => {
                         </div>
                     )}
 
-                    {/* Error Message */}
+                    {videoAttachments.length > 0 && (
+                        <div className="mt-4 space-y-2">
+                            {videoAttachments.map((video) => (
+                                <div key={video.id} className="flex items-center justify-between gap-3 bg-neutral-900/60 border border-neutral-800 rounded-lg px-3 py-2">
+                                    <div className="flex items-center gap-2 text-neutral-300 text-sm">
+                                        <Film size={16} className="text-sky-300" />
+                                        <span className="truncate">{video.file.name}</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xs text-neutral-500">{formatBytes(video.file.size)}</span>
+                                        {!isSubmitting && (
+                                            <button
+                                                onClick={() => removeAttachment(video.id)}
+                                                className="text-neutral-500 hover:text-white"
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {fileAttachments.length > 0 && (
+                        <div className="mt-4 space-y-2">
+                            {fileAttachments.map((file) => (
+                                <div key={file.id} className="flex items-center justify-between gap-3 bg-neutral-900/60 border border-neutral-800 rounded-lg px-3 py-2">
+                                    <div className="flex items-center gap-2 text-neutral-300 text-sm">
+                                        <FileText size={16} className="text-emerald-300" />
+                                        <span className="truncate">{file.file.name}</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xs text-neutral-500">{formatBytes(file.file.size)}</span>
+                                        {!isSubmitting && (
+                                            <button
+                                                onClick={() => removeAttachment(file.id)}
+                                                className="text-neutral-500 hover:text-white"
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     {error && (
                         <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
                             {error}
                         </div>
                     )}
 
-                    {/* Progress */}
                     {isSubmitting && progress.total > 0 && (
                         <div className="mt-4">
                             <div className="flex justify-between text-sm text-neutral-400 mb-2">
-                                <span>Subiendo imágenes...</span>
+                                <span>Subiendo archivos...</span>
                                 <span>{progress.percent}%</span>
                             </div>
                             <div className="w-full bg-neutral-800 rounded-full h-2">
@@ -265,9 +434,8 @@ const CreatePostModal = ({ isOpen, onClose }: CreatePostModalProps) => {
                     )}
                 </div>
 
-                {/* Footer */}
-                <div className="p-4 border-t border-neutral-800 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                <div className="p-4 border-t border-neutral-800 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
                         <input
                             ref={imageInputRef}
                             type="file"
@@ -276,17 +444,49 @@ const CreatePostModal = ({ isOpen, onClose }: CreatePostModalProps) => {
                             onChange={handleImageSelect}
                             className="hidden"
                         />
+                        <input
+                            ref={videoInputRef}
+                            type="file"
+                            accept="video/*"
+                            multiple
+                            onChange={handleVideoSelect}
+                            className="hidden"
+                        />
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,application/pdf,application/msword,application/vnd.ms-excel,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                            multiple
+                            onChange={handleFileSelect}
+                            className="hidden"
+                        />
                         <button
                             onClick={openImagePicker}
-                            disabled={isSubmitting || images.length >= 4}
+                            disabled={isSubmitting || attachments.length >= MAX_ATTACHMENTS}
                             className="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-300 hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <ImageIcon size={20} />
-                            <span className="text-sm">Imágenes</span>
+                            <span className="text-sm">Imagenes</span>
                         </button>
-                        {images.length > 0 && (
-                            <span className="text-xs text-neutral-500">
-                                {images.length}/4
+                        <button
+                            onClick={openVideoPicker}
+                            disabled={isSubmitting || attachments.length >= MAX_ATTACHMENTS}
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-300 hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <Film size={20} />
+                            <span className="text-sm">Videos</span>
+                        </button>
+                        <button
+                            onClick={openFilePicker}
+                            disabled={isSubmitting || attachments.length >= MAX_ATTACHMENTS}
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-300 hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <FileText size={20} />
+                            <span className="text-sm">Archivos</span>
+                        </button>
+                        {attachments.length > 0 && (
+                            <span className="text-xs text-neutral-500 w-full sm:w-auto">
+                                {attachments.length}/{MAX_ATTACHMENTS} - {formatBytes(totalAttachmentSize)}
                             </span>
                         )}
                     </div>
@@ -294,7 +494,7 @@ const CreatePostModal = ({ isOpen, onClose }: CreatePostModalProps) => {
                     <button
                         onClick={handleSubmit}
                         disabled={!canSubmit}
-                        className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-medium rounded-lg hover:from-amber-600 hover:to-amber-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-medium rounded-lg hover:from-amber-600 hover:to-amber-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                         {isSubmitting ? (
                             <>

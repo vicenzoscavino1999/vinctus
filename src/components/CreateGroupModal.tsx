@@ -7,9 +7,18 @@ import { CATEGORIES } from '../data';
 import {
     createGroup,
     updateGroup,
+    addGroupMember,
     type CreateGroupInput,
     type GroupVisibility
 } from '../lib/firestore';
+
+// Import UserProfileRead type for preselected members
+interface UserProfileRead {
+    uid: string;
+    displayName?: string | null;
+    username?: string | null;
+    photoURL?: string | null;
+}
 import { compressToWebp, validateImage } from '../lib/compression';
 import { uploadGroupIcon } from '../lib/storage';
 
@@ -19,9 +28,15 @@ interface CreateGroupModalProps {
     isOpen: boolean;
     onClose: () => void;
     onCreated: (groupId: string) => void;
+    preselectedMemberProfiles?: UserProfileRead[]; // Optional: members to add automatically
 }
 
-const CreateGroupModal = ({ isOpen, onClose, onCreated }: CreateGroupModalProps) => {
+const CreateGroupModal = ({
+    isOpen,
+    onClose,
+    onCreated,
+    preselectedMemberProfiles = []
+}: CreateGroupModalProps) => {
     const { user } = useAuth();
     const { showToast } = useToast();
     const imageInputRef = useRef<HTMLInputElement>(null);
@@ -116,6 +131,24 @@ const CreateGroupModal = ({ isOpen, onClose, onCreated }: CreateGroupModalProps)
                 }
             }
 
+            // Add preselected members to the group
+            if (preselectedMemberProfiles.length > 0) {
+                try {
+                    // Filter out the creator (already added by createGroup)
+                    const membersToAdd = preselectedMemberProfiles
+                        .filter(profile => profile.uid !== user.uid);
+
+                    await Promise.all(
+                        membersToAdd.map(profile =>
+                            addGroupMember(groupId, profile.uid, 'member')
+                        )
+                    );
+                } catch (memberError) {
+                    console.error('Error adding preselected members:', memberError);
+                    showToast('Grupo creado, pero algunos miembros no se pudieron agregar.', 'warning');
+                }
+            }
+
             showToast('Grupo creado', 'success');
             onCreated(groupId);
         } catch (submitError) {
@@ -172,6 +205,43 @@ const CreateGroupModal = ({ isOpen, onClose, onCreated }: CreateGroupModalProps)
                             </select>
                         </div>
                     </div>
+
+                    {/* Preselected Members */}
+                    {preselectedMemberProfiles.length > 0 && (
+                        <div>
+                            <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
+                                Miembros iniciales
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                                {preselectedMemberProfiles.map((profile) => (
+                                    <div
+                                        key={profile.uid}
+                                        className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg"
+                                    >
+                                        <div className="w-6 h-6 rounded-full bg-neutral-700 overflow-hidden flex-shrink-0">
+                                            {profile.photoURL ? (
+                                                <img
+                                                    src={profile.photoURL}
+                                                    alt={profile.displayName || 'Usuario'}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center">
+                                                    <span className="text-xs text-neutral-400">👤</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <span className="text-sm text-white">
+                                            {profile.displayName || profile.username || 'Usuario'}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                            <p className="text-xs text-neutral-500 mt-2">
+                                Estas personas serán agregadas automáticamente al grupo
+                            </p>
+                        </div>
+                    )}
 
                     <div>
                         <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">

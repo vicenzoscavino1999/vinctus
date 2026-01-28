@@ -41,6 +41,23 @@
     --dur-slow: 500ms;
   }
 
+  [data-theme="light"] {
+    --bg: 30 25% 98%;
+    --surface-1: 30 18% 96%;
+    --surface-2: 30 16% 94%;
+    --surface-3: 30 14% 90%;
+    --text-1: 220 15% 12%;
+    --text-2: 220 12% 28%;
+    --text-3: 220 10% 42%;
+    --accent: 38 80% 48%;
+    --accent-2: 190 70% 45%;
+    --border: 220 12% 85%;
+    --ring: 220 15% 12%;
+    --shadow-soft: 0 6px 24px -6px rgba(0, 0, 0, 0.12);
+    --shadow-lift: 0 16px 40px -10px rgba(0, 0, 0, 0.18);
+    --shadow-glow: 0 0 18px rgba(212, 175, 55, 0.18);
+  }
+
   body {
     font-family: var(--font-sans);
     background-color: hsl(var(--bg));
@@ -169,6 +186,30 @@
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+.chat-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.chat-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* ===== ELEGANT PAGE TRANSITIONS ===== */

@@ -1,16 +1,29 @@
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, Moon, Sun, Monitor, Bell, Shield, HelpCircle, ChevronRight, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import SupportModal from '../components/SupportModal';
+import { applyTheme, getStoredTheme, setStoredTheme, type ThemeMode } from '../lib/theme';
 
 const SettingsPage = () => {
     const navigate = useNavigate();
     const { signOut } = useAuth();
-    const [theme, setTheme] = useState<'dark' | 'light' | 'system'>('dark');
+    const [theme, setTheme] = useState<ThemeMode>(() => getStoredTheme());
+    const [isSupportOpen, setIsSupportOpen] = useState(false);
+
+    useEffect(() => {
+        applyTheme(theme);
+        setStoredTheme(theme);
+    }, [theme]);
+
+    const handleThemeChange = (nextTheme: ThemeMode) => {
+        setTheme(nextTheme);
+    };
 
     return (
-        <div className="max-w-2xl mx-auto pb-20 fade-in">
+        <>
+            <div className="max-w-2xl mx-auto pb-20 fade-in">
             <header className="flex items-center gap-4 mb-8 sticky top-0 bg-bg/80 backdrop-blur-md py-4 z-10">
                 <button
                     onClick={() => navigate(-1)}
@@ -25,45 +38,63 @@ const SettingsPage = () => {
                 {/* Appearance */}
                 <section>
                     <h2 className="text-sm font-medium text-neutral-400 mb-4 uppercase tracking-wider px-2">Apariencia</h2>
-                    <div className="bg-[#1A1A1A] border border-neutral-800 rounded-2xl overflow-hidden">
+                    <div className="bg-[#1A1A1A] border border-neutral-800 rounded-2xl overflow-hidden" role="radiogroup" aria-label="Apariencia">
                         <button
-                            onClick={() => setTheme('dark')}
+                            onClick={() => handleThemeChange('dark')}
                             className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-neutral-800 last:border-0"
+                            role="radio"
+                            aria-checked={theme === 'dark'}
                         >
                             <div className="flex items-center gap-3">
                                 <Moon size={20} className="text-purple-400" />
                                 <span>Modo oscuro</span>
                             </div>
-                            {theme === 'dark' && <div className="w-2 h-2 rounded-full bg-purple-500" />}
+                            <div className={`w-4 h-4 rounded-full border ${theme === 'dark'
+                                ? 'border-purple-400 bg-purple-500'
+                                : 'border-neutral-600'
+                                }`} />
                         </button>
                         <button
-                            onClick={() => setTheme('light')}
+                            onClick={() => handleThemeChange('light')}
                             className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-neutral-800 last:border-0"
+                            role="radio"
+                            aria-checked={theme === 'light'}
                         >
                             <div className="flex items-center gap-3">
                                 <Sun size={20} className="text-orange-400" />
                                 <span>Modo claro</span>
                             </div>
-                            {theme === 'light' && <div className="w-2 h-2 rounded-full bg-purple-500" />}
+                            <div className={`w-4 h-4 rounded-full border ${theme === 'light'
+                                ? 'border-purple-400 bg-purple-500'
+                                : 'border-neutral-600'
+                                }`} />
                         </button>
                         <button
-                            onClick={() => setTheme('system')}
+                            onClick={() => handleThemeChange('system')}
                             className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+                            role="radio"
+                            aria-checked={theme === 'system'}
                         >
                             <div className="flex items-center gap-3">
                                 <Monitor size={20} className="text-blue-400" />
                                 <span>Sistema</span>
                             </div>
-                            {theme === 'system' && <div className="w-2 h-2 rounded-full bg-purple-500" />}
+                            <div className={`w-4 h-4 rounded-full border ${theme === 'system'
+                                ? 'border-purple-400 bg-purple-500'
+                                : 'border-neutral-600'
+                                }`} />
                         </button>
                     </div>
                 </section>
 
-                {/* Prevent notifications */}
+                {/* Preferences */}
                 <section>
                     <h2 className="text-sm font-medium text-neutral-400 mb-4 uppercase tracking-wider px-2">Preferencias</h2>
                     <div className="bg-[#1A1A1A] border border-neutral-800 rounded-2xl overflow-hidden">
-                        <button className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-neutral-800">
+                        <button
+                            onClick={() => navigate('/settings/notifications')}
+                            className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-neutral-800"
+                        >
                             <div className="flex items-center gap-3">
                                 <Bell size={20} className="text-yellow-400" />
                                 <div className="text-left">
@@ -73,7 +104,10 @@ const SettingsPage = () => {
                             </div>
                             <ChevronRight size={18} className="text-neutral-600" />
                         </button>
-                        <button className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors">
+                        <button
+                            onClick={() => navigate('/settings/privacy')}
+                            className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+                        >
                             <div className="flex items-center gap-3">
                                 <Shield size={20} className="text-green-400" />
                                 <div className="text-left">
@@ -90,7 +124,10 @@ const SettingsPage = () => {
                 <section>
                     <h2 className="text-sm font-medium text-neutral-400 mb-4 uppercase tracking-wider px-2">Soporte</h2>
                     <div className="bg-[#1A1A1A] border border-neutral-800 rounded-2xl overflow-hidden">
-                        <button className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors">
+                        <button
+                            onClick={() => setIsSupportOpen(true)}
+                            className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+                        >
                             <div className="flex items-center gap-3">
                                 <HelpCircle size={20} className="text-cyan-400" />
                                 <span>Ayuda y comentarios</span>
@@ -98,7 +135,7 @@ const SettingsPage = () => {
                             <ChevronRight size={18} className="text-neutral-600" />
                         </button>
                         <div className="p-4 text-center">
-                            <p className="text-xs text-neutral-600 font-mono">Vinctus v0.0.1 (Alpha)</p>
+                            <p className="text-xs text-neutral-600 font-mono">Vinctus v0.0.2 (Alpha)</p>
                         </div>
                     </div>
                 </section>
@@ -121,6 +158,8 @@ const SettingsPage = () => {
                 </button>
             </div>
         </div>
+        <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
+        </>
     );
 };
 

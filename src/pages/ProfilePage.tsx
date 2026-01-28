@@ -6,6 +6,8 @@ import { useAuth } from '../context/AuthContext';
 import { subscribeToUserProfile, type UserProfileRead } from '../lib/firestore';
 import EditProfileModal from '../components/EditProfileModal';
 import CollectionsPanel from '../components/CollectionsPanel';
+import StoriesWidget from '../components/StoriesWidget';
+import ProfilePostsGrid from '../components/ProfilePostsGrid';
 
 const ProfilePage = () => {
     const navigate = useNavigate();
@@ -47,8 +49,16 @@ const ProfilePage = () => {
     const location = activeProfile?.location || 'Sin ubicación';
     const bio = activeProfile?.bio || '';
     const reputation = activeProfile?.reputation || 0;
+    const postsCount = typeof activeProfile?.postsCount === 'number' ? activeProfile.postsCount : 0;
+    const followersCount = typeof activeProfile?.followersCount === 'number' ? activeProfile.followersCount : 0;
+    const followingCount = typeof activeProfile?.followingCount === 'number' ? activeProfile.followingCount : 0;
     const handleEditProfile = () => {
         setIsEditModalOpen(true);
+    };
+
+    const handleFollowListClick = (tab: 'followers' | 'following') => {
+        if (!user) return;
+        navigate(`/user/${user.uid}/connections?tab=${tab}`);
     };
 
     const handleProfileSaved = () => {
@@ -106,6 +116,33 @@ const ProfilePage = () => {
                     </button>
                 </div>
             </header>
+
+            <div className="grid grid-cols-3 gap-3 mb-10">
+                <div className="rounded-xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-center">
+                    <div className="text-xs uppercase tracking-widest text-neutral-500">Publicaciones</div>
+                    <div className="text-lg font-semibold text-white mt-1">{postsCount}</div>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => handleFollowListClick('followers')}
+                    className="rounded-xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-center transition-colors hover:bg-neutral-800/40"
+                >
+                    <div className="text-xs uppercase tracking-widest text-neutral-500">Seguidores</div>
+                    <div className="text-lg font-semibold text-white mt-1">{followersCount}</div>
+                </button>
+                <button
+                    type="button"
+                    onClick={() => handleFollowListClick('following')}
+                    className="rounded-xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-center transition-colors hover:bg-neutral-800/40"
+                >
+                    <div className="text-xs uppercase tracking-widest text-neutral-500">Siguiendo</div>
+                    <div className="text-lg font-semibold text-white mt-1">{followingCount}</div>
+                </button>
+            </div>
+
+            <div className="mb-10">
+                <StoriesWidget />
+            </div>
 
             {/* Tabs: Mi Perfil | Colecciones */}
             <div className="flex justify-center mb-8">
@@ -182,9 +219,12 @@ const ProfilePage = () => {
                         </section>
                     </div>
 
-                    {/* Right column - Portfolio */}
-                    <div className="md:col-span-2">
-                        <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-6">Portafolio & Contribuciones</h2>
+                    {/* Right column - Posts + Portfolio */}
+                    <div className="md:col-span-2 space-y-10">
+                        <ProfilePostsGrid userId={user?.uid} canView={!!user} />
+
+                        <div>
+                            <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-6">Portafolio & Contribuciones</h2>
 
                         <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
                             <BookOpen size={32} strokeWidth={0.5} className="mx-auto mb-4 text-neutral-600" />
@@ -195,6 +235,7 @@ const ProfilePage = () => {
                             >
                                 + Publicar tu primera contribución
                             </button>
+                        </div>
                         </div>
                     </div>
                 </div>

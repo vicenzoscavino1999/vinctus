@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bookmark, Heart, Link2, MessageCircle } from 'lucide-react';
+import { Bookmark, Heart, Link2, MessageCircle, Film, FileText } from 'lucide-react';
 import {
     collection,
     doc,
@@ -16,6 +16,7 @@ import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import PostCommentsModal from '../components/PostCommentsModal';
+import StoriesWidget from '../components/StoriesWidget';
 import {
     getPostCommentCount,
     getPostLikeCount,
@@ -43,7 +44,7 @@ type Post = {
     authorPhoto?: string | null;
 
     // Common
-    media?: { type: 'image' | 'video'; url: string; path: string }[];
+    media?: { type: 'image' | 'video' | 'file'; url: string; path: string; fileName?: string; contentType?: string; size?: number }[];
     createdAt?: any;
 };
 
@@ -53,6 +54,7 @@ type PostSummary = {
     authorPhoto: string | null;
     text: string;
     imageUrl: string | null;
+    media: Post['media'];
     createdAt?: any;
 };
 
@@ -81,7 +83,7 @@ const buildPostSummary = (post: Post): PostSummary => {
     const displayText = post.text ?? post.content ?? '';
     const authorName = post.authorSnapshot?.displayName ?? post.authorName ?? 'Usuario';
     const authorPhoto = post.authorSnapshot?.photoURL ?? post.authorPhoto ?? null;
-    const imageUrl = post.media?.[0]?.url ?? null;
+    const imageUrl = post.media?.find((item) => item.type === 'image')?.url ?? null;
 
     return {
         postId: post.postId,
@@ -89,6 +91,7 @@ const buildPostSummary = (post: Post): PostSummary => {
         authorPhoto,
         text: displayText,
         imageUrl,
+        media: post.media ?? [],
         createdAt: post.createdAt
     };
 };
@@ -335,6 +338,9 @@ const FeedPage = () => {
 
     return (
         <div className="p-4 md:p-8">
+            <div className="max-w-3xl mx-auto mb-8">
+                <StoriesWidget />
+            </div>
             {loadingInitial ? (
                 <div className="text-sm text-neutral-500 text-center py-8">Cargando posts...</div>
             ) : posts.length === 0 ? (
@@ -353,6 +359,8 @@ const FeedPage = () => {
                         const commentCount = commentCounts[p.postId] ?? 0;
                         const isLiked = likedByUser[p.postId] ?? false;
                         const isSaved = savedByUser[p.postId] ?? false;
+                        const hasVideo = (summary.media ?? []).some((item) => item.type === 'video');
+                        const fileCount = (summary.media ?? []).filter((item) => item.type === 'file').length;
 
                         return (
                             <div
@@ -409,7 +417,21 @@ const FeedPage = () => {
                                     </div>
 
                                     <div className="flex items-center justify-between mt-6 text-xs text-neutral-300">
-                                        <span>Desliza para ver mas -&gt;</span>
+                                        <div className="flex items-center gap-3">
+                                            <span>Desliza para ver mas -&gt;</span>
+                                            {hasVideo && (
+                                                <span className="flex items-center gap-1">
+                                                    <Film size={12} />
+                                                    Video
+                                                </span>
+                                            )}
+                                            {fileCount > 0 && (
+                                                <span className="flex items-center gap-1">
+                                                    <FileText size={12} />
+                                                    {fileCount} archivo{fileCount > 1 ? 's' : ''}
+                                                </span>
+                                            )}
+                                        </div>
                                         <button
                                             onClick={(event) => {
                                                 event.stopPropagation();

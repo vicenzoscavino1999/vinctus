@@ -14,6 +14,56 @@ service cloud.firestore {
     function isOwner(uid) {
       return isAuthenticated() && request.auth.uid == uid;
     }
+
+    function isFriend(viewerUid, ownerUid) {
+      return exists(/databases/$(database)/documents/users/$(ownerUid)/followers/$(viewerUid))
+        && exists(/databases/$(database)/documents/users/$(viewerUid)/followers/$(ownerUid));
+    }
+
+    function isFollower(viewerUid, ownerUid) {
+      return exists(/databases/$(database)/documents/users/$(ownerUid)/followers/$(viewerUid));
+    }
+
+    function canViewFollowLists(viewerUid, ownerUid) {
+      return isAccountPublic(ownerUid)
+        || viewerUid == ownerUid
+        || isFriend(viewerUid, ownerUid)
+        || isFollower(viewerUid, ownerUid);
+    }
+
+    function isAccountPrivate(uid) {
+      let publicDoc = get(/databases/$(database)/documents/users_public/$(uid));
+      let publicVisibility = (publicDoc != null && publicDoc.data != null)
+        ? publicDoc.data.accountVisibility
+        : null;
+      let userDoc = get(/databases/$(database)/documents/users/$(uid));
+      let privateFromUserDoc = userDoc != null
+        && userDoc.data != null
+        && userDoc.data.settings is map
+        && userDoc.data.settings.privacy is map
+        && userDoc.data.settings.privacy.accountVisibility == 'private';
+      return publicVisibility == 'private'
+        || (publicVisibility != 'public' && privateFromUserDoc);
+    }
+
+    function isAccountPublic(uid) {
+      return !isAccountPrivate(uid);
+    }
+
+    function canViewPrivateContent(viewerUid, ownerUid) {
+      return viewerUid == ownerUid
+        || isFriend(viewerUid, ownerUid);
+    }
+
+    function canViewUserContent(viewerUid, ownerUid) {
+      return isAccountPublic(ownerUid) || canViewPrivateContent(viewerUid, ownerUid);
+    }
+
+    function isValidFollowDoc(uid) {
+      return request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+        && request.resource.data.uid == uid
+        && request.resource.data.createdAt == request.time;
+    }
     
     // Validate membership structure against path and auth
     function isValidMembershipCreate(groupId) {
@@ -101,6 +151,91 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && resource.data.fromUid == request.auth.uid;
     }
 
+    // follow_requests/{requestId}
+    // Follow request system (private accounts)
+    match /follow_requests/{requestId} {
+      // Allow get for participants. If the doc doesn't exist, allow get only
+      // when the requestId includes the current user's uid (incoming/outgoing check).
+      allow get: if isAuthenticated()
+        && (
+          (resource != null
+            && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid))
+          ||
+          (resource == null
+            && (requestId.matches('^' + request.auth.uid + '_.*')
+              || requestId.matches('.*_' + request.auth.uid + '$')))
+        );
+      // Allow listing for authenticated users so they can query their own pending requests.
+      // The client still filters by toUid and status.
+      allow list: if isAuthenticated();
+
+      allow create: if isAuthenticated()
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUid != request.auth.uid
+        && requestId == request.resource.data.fromUid + '_' + request.resource.data.toUid
+        && isAccountPrivate(request.resource.data.toUid)
+        && request.resource.data.keys().hasOnly(['fromUid', 'toUid', 'status', 'createdAt', 'updatedAt'])
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if isAuthenticated()
+        && requestId == resource.data.fromUid + '_' + resource.data.toUid
+        && request.resource.data.keys().hasOnly(['fromUid', 'toUid', 'status', 'createdAt', 'updatedAt'])
+        && request.resource.data.fromUid == resource.data.fromUid
+        && request.resource.data.toUid == resource.data.toUid
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && (
+          (resource.data.toUid == request.auth.uid && request.resource.data.status in ['accepted', 'declined'])
+          || (resource.data.fromUid == request.auth.uid && request.resource.data.status == 'pending')
+        );
+
+      allow delete: if isAuthenticated()
+        && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
+    }
+
+    // users/{uid}/followers/{followerUid}
+    match /users/{uid}/followers/{followerUid} {
+      // Allow followers to read their own follower doc even for private accounts.
+      allow get: if isAuthenticated()
+        && (canViewFollowLists(request.auth.uid, uid) || request.auth.uid == followerUid);
+      allow list: if isAuthenticated() && canViewFollowLists(request.auth.uid, uid);
+
+      // Only allow direct follows to public accounts (private handled by server)
+      allow create: if isAuthenticated()
+        && request.auth.uid == followerUid
+        && isAccountPublic(uid)
+        && isValidFollowDoc(followerUid);
+
+      allow delete: if isAuthenticated()
+        && (request.auth.uid == followerUid || request.auth.uid == uid);
+
+      // Allow idempotent updates (e.g. duplicate follow attempts) without opening extra fields.
+      allow update: if isAuthenticated()
+        && request.auth.uid == followerUid
+        && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+        && request.resource.data.uid == followerUid;
+    }
+
+    // users/{uid}/following/{targetUid}
+    match /users/{uid}/following/{targetUid} {
+      allow get: if isAuthenticated() && canViewFollowLists(request.auth.uid, uid);
+      allow list: if isAuthenticated() && canViewFollowLists(request.auth.uid, uid);
+
+      allow create: if isAuthenticated()
+        && request.auth.uid == uid
+        && isAccountPublic(targetUid)
+        && isValidFollowDoc(targetUid);
+
+      allow delete: if isAuthenticated() && request.auth.uid == uid;
+      // Allow idempotent updates (e.g. duplicate follow attempts) without opening extra fields.
+      allow update: if isAuthenticated()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+        && request.resource.data.uid == targetUid;
+    }
+
     // notifications/{notificationId}
     // Activity feed notifications
     function isValidNotificationCreate() {
@@ -139,6 +274,57 @@ service cloud.firestore {
         && request.resource.data.read in [true, false];
     }
 
+    function isValidSupportTicketCreate() {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'uid', 'email', 'type', 'title', 'message', 'context',
+          'createdAt', 'status', 'appVersion'
+        ])
+        && data.uid == request.auth.uid
+        && data.type in ['issue', 'feature']
+        && data.title is string
+        && data.title.size() >= 4
+        && data.title.size() <= 120
+        && data.message is string
+        && data.message.size() >= 10
+        && data.message.size() <= 2000
+        && (data.email == null || (data.email is string && data.email.size() <= 254))
+        && (data.context == null || data.context is map)
+        && data.status == 'open'
+        && data.createdAt == request.time
+        && data.appVersion is string
+        && data.appVersion.size() <= 40;
+    }
+
+    function isValidStoryOwnerSnapshot(snapshot) {
+      return snapshot is map
+        && snapshot.keys().hasOnly(['displayName', 'photoURL'])
+        && (snapshot.displayName == null || (snapshot.displayName is string && snapshot.displayName.size() <= 80))
+        && (snapshot.photoURL == null || snapshot.photoURL is string);
+    }
+
+    function isValidStoryCreate() {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'ownerId', 'ownerSnapshot', 'mediaType', 'mediaUrl', 'mediaPath',
+          'thumbUrl', 'thumbPath', 'visibility', 'createdAt', 'expiresAt'
+        ])
+        && data.ownerId == request.auth.uid
+        && isValidStoryOwnerSnapshot(data.ownerSnapshot)
+        && data.mediaType in ['image', 'video']
+        && data.mediaUrl is string
+        && data.mediaUrl.size() > 0
+        && data.mediaPath is string
+        && data.mediaPath.size() > 0
+        && (data.thumbUrl == null || (data.thumbUrl is string && data.thumbUrl.size() > 0))
+        && (data.thumbPath == null || (data.thumbPath is string && data.thumbPath.size() > 0))
+        && data.visibility in ['friends']
+        && data.createdAt == request.time
+        && data.expiresAt is timestamp
+        && data.expiresAt > request.time
+        && data.expiresAt <= request.time + duration.value(25, 'h');
+    }
+
     match /notifications/{notificationId} {
       allow read: if isAuthenticated() && resource.data.toUid == request.auth.uid;
       allow create: if isAuthenticated() && isValidNotificationCreate();
@@ -148,6 +334,25 @@ service cloud.firestore {
           || (resource.data.fromUid == request.auth.uid && isValidNotificationSenderUpdate())
         );
       allow delete: if isAuthenticated() && resource.data.toUid == request.auth.uid;
+    }
+
+    match /support_tickets/{ticketId} {
+      allow read, update, delete: if false;
+      allow create: if isAuthenticated() && isValidSupportTicketCreate();
+    }
+
+    // stories/{storyId}
+      // Stories (friends-only)
+      // Note: Simplified for Safari mobile compatibility - frontend filters appropriately
+      match /stories/{storyId} {
+        allow read: if isAuthenticated()
+          && resource.data.visibility == 'friends'
+          && (resource.data.ownerId == request.auth.uid
+            || isFriend(request.auth.uid, resource.data.ownerId));
+
+      allow create: if isAuthenticated() && isValidStoryCreate();
+      allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+      allow update: if false;
     }
     
     // users/{uid}/memberships/{groupId}
@@ -164,6 +369,34 @@ service cloud.firestore {
       // Update only if data doesn't change (idempotent writes)
       allow update: if isOwner(uid) 
         && request.resource.data.groupId == groupId;  // Prevent spoofing
+    }
+
+    function isValidDirectConversationIndexWrite(conversationId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['conversationId', 'otherUid', 'type', 'updatedAt'])
+        && data.conversationId == conversationId
+        && data.otherUid is string
+        && data.type == 'direct'
+        && data.updatedAt is timestamp;
+    }
+
+    // users/{uid}/directConversations/{conversationId}
+    // User's direct conversation index (private)
+    match /users/{uid}/directConversations/{conversationId} {
+      // Only owner can read
+      allow read: if isOwner(uid);
+      
+      // Only the user can write to their own index
+      allow create, update: if isOwner(uid)
+        && isValidDirectConversationIndexWrite(conversationId);
+      allow delete: if isOwner(uid);
+    }
+
+    // users/{uid}/friends/{friendUid}
+    // Friend index (server managed)
+    match /users/{uid}/friends/{friendUid} {
+      allow read: if isOwner(uid);
+      allow create, update, delete: if false;
     }
     
     // users/{uid}/likes/{postId}
@@ -302,7 +535,7 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
 
       match /items/{itemId} {
-        allow read: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+        allow read: if isOwner(uid);
         allow create: if isOwner(uid) && isValidCollectionItemCreate(uid, collectionId);
         allow delete: if isOwner(uid);
         allow update: if false;
@@ -597,23 +830,38 @@ service cloud.firestore {
       let isVideo = item.type == 'video'
         && item.path.matches('posts/' + request.auth.uid + '/' + postId + '/videos/[^/]+');
 
+      // File: path must be files/
+      let isFile = item.type == 'file'
+        && item.path.matches('posts/' + request.auth.uid + '/' + postId + '/files/[^/]+');
+
       // contentType is optional; if present, it must match type
       let hasContentType = item.keys().hasAny(['contentType']);
       let validContentType = !hasContentType
         || (item.contentType is string
-          && item.contentType.size() <= 50
+          && item.contentType.size() <= 120
           && ((isImage && item.contentType.matches('image/.*'))
-              || (isVideo && item.contentType.matches('video/.*'))));
+              || (isVideo && item.contentType.matches('video/.*'))
+              || (isFile && item.contentType.matches('application/.*'))));
+
+      let hasSize = item.keys().hasAny(['size']);
+      let validSize = !hasSize
+        || (item.size is int && item.size >= 0 && item.size <= 26214400);
+
+      let hasFileName = item.keys().hasAny(['fileName']);
+      let validFileName = !isFile
+        || (hasFileName && item.fileName is string && item.fileName.size() > 0 && item.fileName.size() <= 120);
       
-      return item.keys().hasOnly(['url', 'path', 'type', 'contentType', 'width', 'height'])
+      return item.keys().hasOnly(['url', 'path', 'type', 'contentType', 'width', 'height', 'fileName', 'size'])
         && item.url is string
         && item.url.size() > 0
         && item.url.size() <= 500
         && item.path is string
         && item.path.size() <= 300
-        && item.type in ['image', 'video']
-        && (isImage || isVideo)
-        && validContentType;
+        && item.type in ['image', 'video', 'file']
+        && (isImage || isVideo || isFile)
+        && validContentType
+        && validSize
+        && validFileName;
     }
     
     // Validate all media items in the array (no nulls allowed)
@@ -951,9 +1199,13 @@ service cloud.firestore {
     
     // conversations/{conversationId}
     match /conversations/{conversationId} {
-      allow read: if isAuthenticated()
+      allow get: if isAuthenticated()
         && (canAccessConversationData(resource.data)
           || exists(/databases/$(database)/documents/conversations/$(conversationId)/members/$(request.auth.uid)));
+
+      allow list: if isAuthenticated()
+        && resource.data.memberIds is list
+        && resource.data.memberIds.hasAny([request.auth.uid]);
       
       // Restrict creation (no spam conversations)
       allow create: if isAuthenticated()
@@ -972,8 +1224,13 @@ service cloud.firestore {
       
       // Members (restrict updates)
       match /members/{uid} {
-        allow read: if isAuthenticated()
-          && (resource.data.uid == request.auth.uid || canAccessConversation(conversationId));
+        allow get: if isAuthenticated()
+          && (uid == request.auth.uid
+            || resource.data.uid == request.auth.uid
+            || canAccessConversation(conversationId));
+
+        allow list: if isAuthenticated()
+          && (uid == request.auth.uid || resource.data.uid == request.auth.uid);
         allow create: if isAuthenticated()
           && canCreateConversationMember(conversationId, uid)
           && isValidConversationMemberCreate(uid);

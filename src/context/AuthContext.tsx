@@ -74,32 +74,58 @@ const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
         const userRef = doc(db, 'users', firebaseUser.uid);
         const snapshot = await getDoc(userRef);
 
-        const displayName = firebaseUser.displayName ?? null;
-        const displayNameLowercase = displayName ? displayName.toLowerCase() : null;
-        const photoURL = firebaseUser.photoURL ?? null;
-        const email = firebaseUser.email ?? null;
-        const phoneNumber = firebaseUser.phoneNumber ?? null;
+    const displayName = firebaseUser.displayName ?? null;
+    const displayNameLowercase = displayName ? displayName.toLowerCase() : null;
+    const photoURL = firebaseUser.photoURL ?? null;
+    const email = firebaseUser.email ?? null;
+    const phoneNumber = firebaseUser.phoneNumber ?? null;
+    const defaultPrivacy = {
+        accountVisibility: 'public' as 'public' | 'private',
+        allowDirectMessages: true,
+        showOnlineStatus: true,
+        showLastActive: true,
+        allowFriendRequests: true,
+        blockedUsers: []
+    };
+    const defaultNotifications = {
+        pushEnabled: true,
+        emailEnabled: true,
+        mentionsOnly: false,
+        weeklyDigest: false,
+        productUpdates: true
+    };
 
-        if (!snapshot.exists()) {
-            await setDoc(userRef, {
-                uid: firebaseUser.uid,
-                displayName,
-                displayNameLowercase,
-                email,
-                photoURL,
-                phoneNumber,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp()
-            });
-        } else {
-            const data = snapshot.data() as {
-                displayName?: string | null;
-                displayNameLowercase?: string | null;
-                photoURL?: string | null;
-                email?: string | null;
-                phoneNumber?: string | null;
+    let accountVisibility: 'public' | 'private' = 'public';
+
+    if (!snapshot.exists()) {
+        await setDoc(userRef, {
+            uid: firebaseUser.uid,
+            displayName,
+            displayNameLowercase,
+            email,
+            photoURL,
+            phoneNumber,
+            settings: {
+                privacy: defaultPrivacy,
+                notifications: defaultNotifications
+            },
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        });
+        accountVisibility = defaultPrivacy.accountVisibility;
+    } else {
+        const data = snapshot.data() as {
+            displayName?: string | null;
+            displayNameLowercase?: string | null;
+            photoURL?: string | null;
+            email?: string | null;
+            phoneNumber?: string | null;
+            settings?: {
+                privacy?: { accountVisibility?: string };
+                notifications?: Record<string, unknown>;
             };
-            const updates: Record<string, unknown> = {};
+        };
+        const updates: Record<string, unknown> = {};
 
             if (data.displayName !== displayName) {
                 updates.displayName = displayName;
@@ -117,23 +143,32 @@ const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
                 updates.email = email;
             }
 
-            if (data.phoneNumber !== phoneNumber) {
-                updates.phoneNumber = phoneNumber;
-            }
-
-            if (Object.keys(updates).length > 0) {
-                updates.updatedAt = serverTimestamp();
-                await setDoc(userRef, updates, { merge: true });
-            }
+        if (data.phoneNumber !== phoneNumber) {
+            updates.phoneNumber = phoneNumber;
         }
 
-        await setDoc(doc(db, 'users_public', firebaseUser.uid), {
-            uid: firebaseUser.uid,
-            displayName,
-            displayNameLowercase,
-            photoURL,
-            updatedAt: serverTimestamp()
-        }, { merge: true });
+        if (data.settings?.privacy?.accountVisibility !== 'public' && data.settings?.privacy?.accountVisibility !== 'private') {
+            updates['settings.privacy'] = defaultPrivacy;
+        } else if (!data.settings?.notifications) {
+            updates['settings.notifications'] = defaultNotifications;
+        }
+
+        accountVisibility = data.settings?.privacy?.accountVisibility === 'private' ? 'private' : 'public';
+
+        if (Object.keys(updates).length > 0) {
+            updates.updatedAt = serverTimestamp();
+            await setDoc(userRef, updates, { merge: true });
+        }
+    }
+
+    await setDoc(doc(db, 'users_public', firebaseUser.uid), {
+        uid: firebaseUser.uid,
+        displayName,
+        displayNameLowercase,
+        photoURL,
+        accountVisibility,
+        updatedAt: serverTimestamp()
+    }, { merge: true });
     } catch (error) {
         console.error('Error ensuring user profile:', error);
     }

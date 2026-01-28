@@ -1,7 +1,8 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent, type ChangeEvent } from 'react';
 import { X, User, MapPin, Briefcase, FileText, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getUserProfile, updateUserProfile } from '../lib/firestore';
+import { uploadProfilePhoto } from '../lib/storage';
 import { useToast } from './Toast';
 
 interface EditProfileModalProps {
@@ -21,6 +22,12 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
     const [bio, setBio] = useState('');
     const [role, setRole] = useState('');
     const [location, setLocation] = useState('');
+    const [photoFile, setPhotoFile] = useState<File | null>(null);
+    const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+    const [photoRemoved, setPhotoRemoved] = useState(false);
+    const [photoError, setPhotoError] = useState<string | null>(null);
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     // Load current profile data
     useEffect(() => {
@@ -35,10 +42,16 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
                     setBio(profile.bio || '');
                     setRole(profile.role || '');
                     setLocation(profile.location || '');
+                    setPhotoPreview(profile.photoURL || null);
                 } else {
                     // Use data from auth if no profile exists
                     setDisplayName(user.displayName || '');
+                    setPhotoPreview(user.photoURL || null);
                 }
+                setPhotoFile(null);
+                setPhotoRemoved(false);
+                setPhotoError(null);
+                setUploadProgress(null);
             } catch (error) {
                 console.error('Error loading profile:', error);
                 showToast('Error al cargar el perfil', 'error');
@@ -50,14 +63,77 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
         void loadProfile();
     }, [isOpen, user, showToast]);
 
+    useEffect(() => {
+        return () => {
+            if (photoPreview?.startsWith('blob:')) {
+                URL.revokeObjectURL(photoPreview);
+            }
+        };
+    }, [photoPreview]);
+
+    const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0] || null;
+        event.target.value = '';
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            setPhotoError('Solo se permiten imagenes.');
+            return;
+        }
+
+        if (file.size > 10 * 1024 * 1024) {
+            setPhotoError('La imagen supera el limite de 10MB.');
+            return;
+        }
+
+        if (photoPreview?.startsWith('blob:')) {
+            URL.revokeObjectURL(photoPreview);
+        }
+
+        const previewUrl = URL.createObjectURL(file);
+        setPhotoFile(file);
+        setPhotoPreview(previewUrl);
+        setPhotoRemoved(false);
+        setPhotoError(null);
+    };
+
+    const handleRemovePhoto = () => {
+        if (photoPreview?.startsWith('blob:')) {
+            URL.revokeObjectURL(photoPreview);
+        }
+        setPhotoFile(null);
+        setPhotoPreview(null);
+        setPhotoRemoved(true);
+        setPhotoError(null);
+        setUploadProgress(null);
+    };
+
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         if (!user) return;
 
         setSaving(true);
         try {
+            let uploadedPhotoURL: string | null | undefined = undefined;
+
+            if (photoRemoved) {
+                uploadedPhotoURL = null;
+            }
+
+            if (photoFile) {
+                setUploadProgress(0);
+                const uploaded = await uploadProfilePhoto(photoFile, user.uid, (progress) => {
+                    const percent = progress.totalBytes > 0
+                        ? Math.round((progress.bytesTransferred / progress.totalBytes) * 100)
+                        : 0;
+                    setUploadProgress(percent);
+                });
+                uploadedPhotoURL = uploaded.url;
+            }
+
             await updateUserProfile(user.uid, {
                 displayName: displayName.trim() || undefined,
+                photoURL: uploadedPhotoURL,
                 bio: bio.trim() || undefined,
                 role: role.trim() || undefined,
                 location: location.trim() || undefined
@@ -71,6 +147,7 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
             showToast('Error al actualizar el perfil', 'error');
         } finally {
             setSaving(false);
+            setUploadProgress(null);
         }
     };
 
@@ -104,6 +181,56 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
                     </div>
                 ) : (
                     <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                        {/* Profile Photo */}
+                        <div>
+                            <label className="flex items-center gap-2 text-xs text-neutral-500 uppercase tracking-wider mb-2">
+                                <User size={14} />
+                                Foto de perfil
+                            </label>
+                            <div className="flex items-center gap-4">
+                                <div className="w-16 h-16 rounded-full bg-neutral-800 border border-neutral-700 overflow-hidden flex items-center justify-center text-neutral-500">
+                                    {photoPreview ? (
+                                        <img src={photoPreview} alt="Foto de perfil" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <User size={24} />
+                                    )}
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="px-3 py-2 text-xs border border-neutral-700 text-neutral-200 rounded-md hover:bg-neutral-800 transition-colors"
+                                        >
+                                            Subir foto
+                                        </button>
+                                        {photoPreview && (
+                                            <button
+                                                type="button"
+                                                onClick={handleRemovePhoto}
+                                                className="px-3 py-2 text-xs border border-neutral-700 text-neutral-400 rounded-md hover:bg-neutral-800 transition-colors"
+                                            >
+                                                Quitar
+                                            </button>
+                                        )}
+                                    </div>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handlePhotoChange}
+                                        className="hidden"
+                                    />
+                                    {uploadProgress !== null && (
+                                        <div className="text-xs text-neutral-500">Subiendo {uploadProgress}%</div>
+                                    )}
+                                    {photoError && (
+                                        <div className="text-xs text-red-400">{photoError}</div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Display Name */}
                         <div>
                             <label className="flex items-center gap-2 text-xs text-neutral-500 uppercase tracking-wider mb-2">

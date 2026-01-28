@@ -307,6 +307,13 @@ export default function MessagesPage() {
         setSearchParams(nextParams, { replace: true });
     };
 
+    const handleOpenDetails = () => {
+        if (!activeConversation || activeConversation.type !== 'direct') return;
+        if (!selectedConversationId) return;
+        // Navigate to details page using conversationId in URL
+        navigate(`/messages/${selectedConversationId}/details`);
+    };
+
     const handleSendMessage = async (e: FormEvent) => {
         e.preventDefault();
         if (!newMessage.trim() || !selectedConversationId || !user) return;
@@ -440,12 +447,23 @@ export default function MessagesPage() {
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500/20 to-amber-600/20 border border-amber-500/30 flex items-center justify-center">
                         <Users size={18} className="text-amber-500" />
                     </div>
-                    <div className="flex-1">
-                        <h2 className="text-white font-medium">{getConversationName(activeConversation)}</h2>
-                        {activeConversation.type === 'group' && (
-                            <span className="text-xs text-neutral-500">Grupo</span>
-                        )}
-                    </div>
+                    {activeConversation.type === 'direct' ? (
+                        <button
+                            type="button"
+                            onClick={handleOpenDetails}
+                            aria-label="Ver detalles del chat"
+                            className="flex-1 text-left hover:opacity-80 transition-opacity cursor-pointer"
+                        >
+                            <h2 className="text-white font-medium">{getConversationName(activeConversation)}</h2>
+                        </button>
+                    ) : (
+                        <div className="flex-1">
+                            <h2 className="text-white font-medium">{getConversationName(activeConversation)}</h2>
+                            {activeConversation.type === 'group' && (
+                                <span className="text-xs text-neutral-500">Grupo</span>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Messages */}
