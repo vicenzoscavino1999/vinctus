@@ -623,6 +623,57 @@ export async function addGroupMember(
 }
 
 
+/**
+ * Get list of users that current user follows
+ * Uses Firestore Lite for iOS compatibility
+ * Returns array of UserProfileRead for display in UI
+ */
+export async function getFollowing(uid: string): Promise<UserProfileRead[]> {
+    // Get following IDs
+    const followingQuery = queryLite(collectionLite(dbLite, 'users', uid, 'following'));
+    const snapshot = await getDocsLite(followingQuery);
+
+    const followingIds = snapshot.docs.map(doc => doc.id);
+
+    if (followingIds.length === 0) return [];
+
+    // Get profiles in chunks of 10 (Firestore 'in' limitation)
+    const profiles: UserProfileRead[] = [];
+
+    for (let i = 0; i < followingIds.length; i += 10) {
+        const chunk = followingIds.slice(i, i + 10);
+        const profilesQuery = queryLite(
+            collectionLite(dbLite, 'users_public'),
+            whereLite(documentId(), 'in', chunk)
+        );
+        const profilesSnap = await getDocsLite(profilesQuery);
+
+        profilesSnap.docs.forEach(doc => {
+            const data = doc.data();
+            profiles.push({
+                uid: doc.id,
+                displayName: data.displayName ?? null,
+                displayNameLowercase: data.displayNameLowercase ?? null,
+                photoURL: data.photoURL ?? null,
+                email: null,
+                bio: null,
+                role: null,
+                location: null,
+                username: data.username ?? null,
+                reputation: 0,
+                accountVisibility: data.accountVisibility ?? 'public',
+                followersCount: data.followersCount ?? 0,
+                followingCount: data.followingCount ?? 0,
+                postsCount: data.postsCount ?? 0,
+                createdAt: data.createdAt ? toDate(data.createdAt) ?? new Date() : new Date(),
+                updatedAt: data.updatedAt ? toDate(data.updatedAt) ?? new Date() : new Date()
+            });
+        });
+    }
+
+    return profiles;
+}
+
 export async function joinPublicGroup(groupId: string, uid: string): Promise<void> {
     const group = await getGroup(groupId);
     if (!group) {

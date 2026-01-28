@@ -8,17 +8,11 @@ import {
     createGroup,
     updateGroup,
     addGroupMember,
+    getFollowing,
     type CreateGroupInput,
-    type GroupVisibility
+    type GroupVisibility,
+    type UserProfileRead
 } from '../lib/firestore';
-
-// Import UserProfileRead type for preselected members
-interface UserProfileRead {
-    uid: string;
-    displayName?: string | null;
-    username?: string | null;
-    photoURL?: string | null;
-}
 import { compressToWebp, validateImage } from '../lib/compression';
 import { uploadGroupIcon } from '../lib/storage';
 
@@ -48,6 +42,11 @@ const CreateGroupModal = ({
     const [icon, setIcon] = useState<SelectedImage | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [selectedMembers, setSelectedMembers] = useState<UserProfileRead[]>([]);
+    const [availableUsers, setAvailableUsers] = useState<UserProfileRead[]>([]);
+    const [showMemberSelector, setShowMemberSelector] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isLoadingUsers, setIsLoadingUsers] = useState(false);
 
     useEffect(() => {
         if (!isOpen) {
@@ -57,12 +56,40 @@ const CreateGroupModal = ({
             setVisibility('public');
             setError(null);
             setIsSubmitting(false);
+            setSelectedMembers([]);
+            setAvailableUsers([]);
+            setShowMemberSelector(false);
+            setSearchQuery('');
+            setIsLoadingUsers(false);
             setIcon((prev) => {
                 if (prev) URL.revokeObjectURL(prev.url);
                 return null;
             });
         }
     }, [isOpen]);
+
+    useEffect(() => {
+        if (!isOpen || !user?.uid) return;
+
+        const loadFollowing = async () => {
+            setIsLoadingUsers(true);
+            try {
+                const following = await getFollowing(user.uid);
+                setAvailableUsers(following);
+            } catch (err) {
+                console.error('Error loading following:', err);
+            } finally {
+                setIsLoadingUsers(false);
+            }
+        };
+
+        void loadFollowing();
+    }, [isOpen, user?.uid]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        setSelectedMembers(preselectedMemberProfiles);
+    }, [isOpen, preselectedMemberProfiles]);
 
     const openImagePicker = () => imageInputRef.current?.click();
 
@@ -88,6 +115,41 @@ const CreateGroupModal = ({
             setError(err instanceof Error ? err.message : 'Error procesando la imagen.');
         }
     };
+
+    const isPreselectedMember = (uid: string) =>
+        preselectedMemberProfiles.some((profile) => profile.uid === uid);
+
+    const handleToggleMember = (profile: UserProfileRead) => {
+        if (isPreselectedMember(profile.uid)) return;
+        setSelectedMembers((prev) => {
+            const exists = prev.some((member) => member.uid === profile.uid);
+            if (exists) {
+                return prev.filter((member) => member.uid !== profile.uid);
+            }
+            return [...prev, profile];
+        });
+    };
+
+    const handleRemoveMember = (uid: string) => {
+        if (isPreselectedMember(uid)) return;
+        setSelectedMembers((prev) => prev.filter((member) => member.uid !== uid));
+    };
+
+    const handleClose = () => {
+        setShowMemberSelector(false);
+        setSearchQuery('');
+        onClose();
+    };
+
+    const filteredUsers = availableUsers.filter((profile) => {
+        if (profile.uid === user?.uid) return false;
+        if (isPreselectedMember(profile.uid)) return false;
+        if (!searchQuery) return true;
+        const query = searchQuery.toLowerCase();
+        const displayName = (profile.displayName || '').toLowerCase();
+        const username = (profile.username || '').toLowerCase();
+        return displayName.includes(query) || username.includes(query);
+    });
 
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
@@ -131,11 +193,11 @@ const CreateGroupModal = ({
                 }
             }
 
-            // Add preselected members to the group
-            if (preselectedMemberProfiles.length > 0) {
+            // Add selected members to the group
+            if (selectedMembers.length > 0) {
                 try {
                     // Filter out the creator (already added by createGroup)
-                    const membersToAdd = preselectedMemberProfiles
+                    const membersToAdd = selectedMembers
                         .filter(profile => profile.uid !== user.uid);
 
                     await Promise.all(
@@ -144,7 +206,7 @@ const CreateGroupModal = ({
                         )
                     );
                 } catch (memberError) {
-                    console.error('Error adding preselected members:', memberError);
+                    console.error('Error adding selected members:', memberError);
                     showToast('Grupo creado, pero algunos miembros no se pudieron agregar.', 'warning');
                 }
             }
@@ -162,21 +224,22 @@ const CreateGroupModal = ({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative w-full max-w-2xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
-                    <h2 className="text-xl font-serif text-white">Crear grupo</h2>
-                    <button
-                        onClick={onClose}
-                        className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
-                        aria-label="Cerrar"
-                    >
-                        <X size={20} />
-                    </button>
-                </div>
+        <>
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={handleClose} />
+                <div className="relative w-full max-w-2xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+                        <h2 className="text-xl font-serif text-white">Crear grupo</h2>
+                        <button
+                            onClick={handleClose}
+                            className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
+                            aria-label="Cerrar"
+                        >
+                            <X size={20} />
+                        </button>
+                    </div>
 
-                <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                    <form onSubmit={handleSubmit} className="p-6 space-y-5">
                     <div className="grid gap-4 md:grid-cols-2">
                         <div>
                             <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
@@ -206,42 +269,72 @@ const CreateGroupModal = ({
                         </div>
                     </div>
 
-                    {/* Preselected Members */}
-                    {preselectedMemberProfiles.length > 0 && (
-                        <div>
-                            <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
-                                Miembros iniciales
+                    {/* Selected Members */}
+                    <div>
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="text-xs text-neutral-500 uppercase tracking-wider">
+                                Miembros iniciales ({selectedMembers.length})
                             </label>
-                            <div className="flex flex-wrap gap-2">
-                                {preselectedMemberProfiles.map((profile) => (
-                                    <div
-                                        key={profile.uid}
-                                        className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg"
-                                    >
-                                        <div className="w-6 h-6 rounded-full bg-neutral-700 overflow-hidden flex-shrink-0">
-                                            {profile.photoURL ? (
-                                                <img
-                                                    src={profile.photoURL}
-                                                    alt={profile.displayName || 'Usuario'}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center">
-                                                    <span className="text-xs text-neutral-400">👤</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                        <span className="text-sm text-white">
-                                            {profile.displayName || profile.username || 'Usuario'}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                            <p className="text-xs text-neutral-500 mt-2">
-                                Estas personas serán agregadas automáticamente al grupo
-                            </p>
+                            <button
+                                type="button"
+                                onClick={() => setShowMemberSelector(true)}
+                                className="text-xs text-amber-500 hover:text-amber-400 transition-colors flex items-center gap-1"
+                            >
+                                <span>+</span>
+                                <span>Agregar personas</span>
+                            </button>
                         </div>
-                    )}
+
+                        {selectedMembers.length > 0 ? (
+                            <>
+                                <div className="flex flex-wrap gap-2">
+                                    {selectedMembers.map((profile) => {
+                                        const isPreselected = isPreselectedMember(profile.uid);
+                                        return (
+                                            <div
+                                                key={profile.uid}
+                                                className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg"
+                                            >
+                                                <div className="w-6 h-6 rounded-full bg-neutral-700 overflow-hidden flex-shrink-0">
+                                                    {profile.photoURL ? (
+                                                        <img
+                                                            src={profile.photoURL}
+                                                            alt={profile.displayName || 'Usuario'}
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center">
+                                                            <span className="text-xs text-neutral-400">U</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <span className="text-sm text-white">
+                                                    {profile.displayName || profile.username || 'Usuario'}
+                                                </span>
+                                                {!isPreselected && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveMember(profile.uid)}
+                                                        className="ml-1 text-neutral-400 hover:text-white transition-colors"
+                                                        aria-label="Quitar miembro"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <p className="text-xs text-neutral-500 mt-2">
+                                    Estas personas seran agregadas automaticamente al grupo
+                                </p>
+                            </>
+                        ) : (
+                            <p className="text-sm text-neutral-500">
+                                Sin miembros iniciales. Click "Agregar personas" para invitar.
+                            </p>
+                        )}
+                    </div>
 
                     <div>
                         <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
@@ -314,7 +407,7 @@ const CreateGroupModal = ({
                     <div className="flex items-center justify-end gap-3 pt-2">
                         <button
                             type="button"
-                            onClick={onClose}
+                            onClick={handleClose}
                             className="px-4 py-2 rounded-lg text-neutral-300 hover:text-white transition-colors"
                         >
                             Cancelar
@@ -334,9 +427,115 @@ const CreateGroupModal = ({
                             )}
                         </button>
                     </div>
-                </form>
+                    </form>
+                </div>
             </div>
-        </div>
+            {/* Member Selector Modal */}
+            {showMemberSelector && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
+                    <div className="bg-neutral-900 border border-neutral-800 rounded-xl w-full max-w-md max-h-[80vh] flex flex-col">
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-4 border-b border-neutral-800">
+                            <h3 className="text-lg font-medium text-white">Agregar personas</h3>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowMemberSelector(false);
+                                    setSearchQuery('');
+                                }}
+                                className="p-1 text-neutral-400 hover:text-white transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Search */}
+                        <div className="p-4 border-b border-neutral-800">
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(event) => setSearchQuery(event.target.value)}
+                                placeholder="Buscar por nombre..."
+                                className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
+                            />
+                        </div>
+
+                        {/* User List */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                            {isLoadingUsers ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <Loader2 className="animate-spin text-amber-500" size={24} />
+                                </div>
+                            ) : filteredUsers.length === 0 ? (
+                                <p className="text-center text-neutral-500 py-8">
+                                    {searchQuery ? 'No se encontraron usuarios' : 'No sigues a nadie aun'}
+                                </p>
+                            ) : (
+                                filteredUsers.map((profile) => {
+                                    const isSelected = selectedMembers.some((member) => member.uid === profile.uid);
+
+                                    return (
+                                        <button
+                                            key={profile.uid}
+                                            type="button"
+                                            onClick={() => handleToggleMember(profile)}
+                                            className="w-full flex items-center gap-3 p-3 bg-neutral-800/30 hover:bg-neutral-800/50 border border-neutral-700/50 rounded-lg transition-all text-left"
+                                        >
+                                            <div className="w-10 h-10 rounded-full bg-neutral-700 overflow-hidden flex-shrink-0">
+                                                {profile.photoURL ? (
+                                                    <img
+                                                        src={profile.photoURL}
+                                                        alt={profile.displayName || 'Usuario'}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center">
+                                                        <span className="text-neutral-400">U</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-white font-medium truncate">
+                                                    {profile.displayName || 'Usuario'}
+                                                </p>
+                                                {profile.username && (
+                                                    <p className="text-xs text-neutral-500 truncate">
+                                                        @{profile.username}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div
+                                                className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                                                    isSelected
+                                                        ? 'bg-amber-500 border-amber-500'
+                                                        : 'border-neutral-600'
+                                                }`}
+                                            >
+                                                {isSelected && <span className="text-black text-[10px]">OK</span>}
+                                            </div>
+                                        </button>
+                                    );
+                                })
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-neutral-800">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowMemberSelector(false);
+                                    setSearchQuery('');
+                                }}
+                                className="w-full px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-black font-medium rounded-lg transition-colors"
+                            >
+                                Listo ({selectedMembers.length} seleccionados)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
     );
 };
 
