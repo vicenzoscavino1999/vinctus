@@ -84,9 +84,8 @@ export default function MessagesPage() {
 
     useEffect(() => {
         if (!conversationParam) return;
-        if (conversationParam !== selectedConversationId) {
-            setSelectedConversationId(conversationParam);
-        }
+        // Only sync URL -> state (one-way)
+        setSelectedConversationId(conversationParam);
 
         const isGroupConversation = conversationParam.startsWith('grp_');
         const memberIds = !isGroupConversation ? parseDirectMemberIds(conversationParam) : null;
@@ -107,7 +106,7 @@ export default function MessagesPage() {
                 ...prev
             ];
         });
-    }, [conversationParam, selectedConversationId]);
+    }, [conversationParam]); // Removed selectedConversationId to prevent sync loop
 
     // Subscribe to conversations
     useEffect(() => {
@@ -467,7 +466,7 @@ export default function MessagesPage() {
                 </div>
 
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto py-6 space-y-4">
+                <div className="flex-1 overflow-y-auto py-6 space-y-4 chat-scroll">
                     {messages.length === 0 ? (
                         <div className="text-center text-neutral-500 py-10">
                             No hay mensajes aún. ¡Envía el primero!
