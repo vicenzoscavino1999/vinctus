@@ -26,8 +26,37 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [history, setHistory] = useState<GeminiMessage[]>([]);
+    const [viewportHeight, setViewportHeight] = useState('100dvh');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const modalRef = useRef<HTMLDivElement>(null);
+
+    // Handle viewport changes (keyboard appearing/disappearing)
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const handleResize = () => {
+            // Use visualViewport for accurate height when keyboard is open
+            if (window.visualViewport) {
+                const vh = window.visualViewport.height;
+                setViewportHeight(`${vh}px`);
+            }
+        };
+
+        // Listen to visual viewport changes
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', handleResize);
+            window.visualViewport.addEventListener('scroll', handleResize);
+            handleResize(); // Initial call
+        }
+
+        return () => {
+            if (window.visualViewport) {
+                window.visualViewport.removeEventListener('resize', handleResize);
+                window.visualViewport.removeEventListener('scroll', handleResize);
+            }
+        };
+    }, [isOpen]);
 
     // Scroll to bottom when new messages arrive
     useEffect(() => {
@@ -97,7 +126,10 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:justify-end p-0 md:p-4">
+        <div
+            className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:justify-end p-0 md:p-4"
+            style={{ height: viewportHeight }}
+        >
             {/* Backdrop */}
             <div
                 className="absolute inset-0 bg-black/60 backdrop-blur-sm"
@@ -105,9 +137,17 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
             />
 
             {/* Modal */}
-            <div className="relative w-full md:w-96 h-[85vh] md:h-[600px] md:mr-4 bg-neutral-900 border border-neutral-800 md:rounded-2xl rounded-t-2xl flex flex-col overflow-hidden animate-slide-up md:animate-none">
+            <div
+                ref={modalRef}
+                className="relative w-full md:w-96 md:h-[600px] md:mr-4 bg-neutral-900 border border-neutral-800 md:rounded-2xl rounded-t-2xl flex flex-col overflow-hidden"
+                style={{
+                    height: 'calc(100% - env(safe-area-inset-top, 0px))',
+                    maxHeight: '100%',
+                    paddingBottom: 'env(safe-area-inset-bottom, 0px)'
+                }}
+            >
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-800 bg-gradient-to-r from-amber-500/10 to-transparent">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-800 bg-gradient-to-r from-amber-500/10 to-transparent flex-shrink-0">
                     <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center">
                             <Sparkles size={18} className="text-black" />
@@ -127,7 +167,7 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
                 </div>
 
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 chat-scroll">
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 chat-scroll min-h-0">
                     {messages.map((msg) => (
                         <div
                             key={msg.id}
@@ -135,8 +175,8 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
                         >
                             <div
                                 className={`max-w-[85%] px-4 py-2.5 rounded-2xl ${msg.role === 'user'
-                                        ? 'bg-amber-600 text-white rounded-br-md'
-                                        : 'bg-neutral-800 text-neutral-100 rounded-bl-md'
+                                    ? 'bg-amber-600 text-white rounded-br-md'
+                                    : 'bg-neutral-800 text-neutral-100 rounded-bl-md'
                                     }`}
                             >
                                 <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
@@ -156,8 +196,8 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
                     <div ref={messagesEndRef} />
                 </div>
 
-                {/* Input */}
-                <form onSubmit={handleSubmit} className="p-3 border-t border-neutral-800 bg-neutral-900/80">
+                {/* Input - Fixed at bottom */}
+                <form onSubmit={handleSubmit} className="p-3 border-t border-neutral-800 bg-neutral-900 flex-shrink-0">
                     <div className="flex gap-2">
                         <input
                             ref={inputRef}
@@ -171,7 +211,7 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
                         <button
                             type="submit"
                             disabled={!input.trim() || isLoading}
-                            className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black rounded-full hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                            className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black rounded-full hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex-shrink-0"
                             aria-label="Enviar"
                         >
                             <Send size={18} />
@@ -182,3 +222,4 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
         </div>
     );
 }
+
