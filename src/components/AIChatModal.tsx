@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect, type FormEvent } from 'react';
-import { X, Send, Sparkles, Loader2 } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback, type FormEvent, type TouchEvent, type MouseEvent } from 'react';
+import { X, Send, Sparkles, Loader2, Mic, Volume2, Square } from 'lucide-react';
 import { sendChatMessage, type GeminiMessage } from '../lib/aiChat';
+import { useVoice } from '../lib/voice';
 
 interface Message {
     id: string;
@@ -26,8 +27,31 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [history, setHistory] = useState<GeminiMessage[]>([]);
+    const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isHoldingRef = useRef(false);
+
+    // Voice hook
+    const {
+        isListening,
+        isSpeaking,
+        isSupported: voiceSupported,
+        interimText,
+        startListening,
+        stopListening,
+        speak,
+        stopSpeaking,
+        error: voiceError,
+    } = useVoice({ lang: 'es-PE' });
+
+    // Update input with interim text while listening
+    useEffect(() => {
+        if (isListening && interimText) {
+            setInput(interimText);
+        }
+    }, [isListening, interimText]);
 
     // Scroll to bottom when new messages arrive
     useEffect(() => {
@@ -79,10 +103,62 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
         };
     }, [isOpen]);
 
+    // Cleanup on unmount - stop any speaking
+    useEffect(() => {
+        return () => {
+            stopSpeaking();
+            stopListening();
+        };
+    }, [stopSpeaking, stopListening]);
+
+    // Handle hold-to-talk for microphone
+    const handleMicDown = useCallback((e: TouchEvent | MouseEvent) => {
+        e.preventDefault(); // Prevent context menu on long press
+        isHoldingRef.current = true;
+
+        // Start listening immediately
+        startListening();
+    }, [startListening]);
+
+    const handleMicUp = useCallback(() => {
+        if (isHoldingRef.current) {
+            isHoldingRef.current = false;
+            stopListening();
+        }
+        if (holdTimerRef.current) {
+            clearTimeout(holdTimerRef.current);
+            holdTimerRef.current = null;
+        }
+    }, [stopListening]);
+
+    // Handle speaking a message
+    const handleSpeak = useCallback((messageId: string, content: string) => {
+        if (speakingMessageId === messageId) {
+            // Already speaking this message, stop it
+            stopSpeaking();
+            setSpeakingMessageId(null);
+        } else {
+            // Stop any current speech and start new one
+            stopSpeaking();
+            setSpeakingMessageId(messageId);
+            speak(content);
+        }
+    }, [speakingMessageId, speak, stopSpeaking]);
+
+    // Update speaking state
+    useEffect(() => {
+        if (!isSpeaking && speakingMessageId) {
+            setSpeakingMessageId(null);
+        }
+    }, [isSpeaking, speakingMessageId]);
+
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         const text = input.trim();
         if (!text || isLoading) return;
+
+        // Stop listening if active
+        stopListening();
 
         // Add user message
         const userMessage: Message = {
@@ -147,7 +223,9 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
                         </div>
                         <div>
                             <h3 className="text-white font-medium text-sm">Asistente Vinctus</h3>
-                            <p className="text-xs text-neutral-500">Impulsado por IA</p>
+                            <p className="text-xs text-neutral-500">
+                                {isListening ? '🎤 Escuchando...' : 'Impulsado por IA'}
+                            </p>
                         </div>
                     </div>
                     <button
@@ -159,6 +237,13 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
                     </button>
                 </div>
 
+                {/* Voice error toast */}
+                {voiceError && (
+                    <div className="px-4 py-2 bg-red-900/50 text-red-300 text-xs">
+                        {voiceError}
+                    </div>
+                )}
+
                 {/* Messages - scrollable area */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
                     {messages.map((msg) => (
@@ -166,13 +251,39 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
                             key={msg.id}
                             className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                         >
-                            <div
-                                className={`max-w-[85%] px-4 py-2.5 rounded-2xl ${msg.role === 'user'
-                                    ? 'bg-amber-600 text-white rounded-br-md'
-                                    : 'bg-neutral-800 text-neutral-100 rounded-bl-md'
-                                    }`}
-                            >
-                                <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                            <div className="flex flex-col gap-1 max-w-[85%]">
+                                <div
+                                    className={`px-4 py-2.5 rounded-2xl ${msg.role === 'user'
+                                        ? 'bg-amber-600 text-white rounded-br-md'
+                                        : 'bg-neutral-800 text-neutral-100 rounded-bl-md'
+                                        }`}
+                                >
+                                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                                </div>
+
+                                {/* TTS button for assistant messages */}
+                                {msg.role === 'assistant' && voiceSupported && msg.id !== 'welcome' && (
+                                    <button
+                                        onClick={() => handleSpeak(msg.id, msg.content)}
+                                        className={`self-start flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-all ${speakingMessageId === msg.id
+                                            ? 'bg-amber-500/20 text-amber-400'
+                                            : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'
+                                            }`}
+                                        aria-label={speakingMessageId === msg.id ? 'Detener audio' : 'Escuchar'}
+                                    >
+                                        {speakingMessageId === msg.id ? (
+                                            <>
+                                                <Square size={12} className="fill-current" />
+                                                <span>Detener</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Volume2 size={12} />
+                                                <span>Escuchar</span>
+                                            </>
+                                        )}
+                                    </button>
+                                )}
                             </div>
                         </div>
                     ))}
@@ -191,13 +302,33 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
 
                 {/* Input - always visible at bottom */}
                 <form onSubmit={handleSubmit} className="p-3 border-t border-neutral-800 bg-neutral-900 flex-shrink-0">
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
+                        {/* Microphone button - hold to talk */}
+                        {voiceSupported && (
+                            <button
+                                type="button"
+                                onMouseDown={handleMicDown}
+                                onMouseUp={handleMicUp}
+                                onMouseLeave={handleMicUp}
+                                onTouchStart={handleMicDown}
+                                onTouchEnd={handleMicUp}
+                                disabled={isLoading}
+                                className={`p-3 rounded-full transition-all flex-shrink-0 select-none ${isListening
+                                    ? 'bg-red-500 text-white animate-pulse'
+                                    : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
+                                    } disabled:opacity-40`}
+                                aria-label="Mantener para hablar"
+                            >
+                                <Mic size={18} />
+                            </button>
+                        )}
+
                         <input
                             ref={inputRef}
                             type="text"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            placeholder="Escribe un mensaje..."
+                            placeholder={isListening ? 'Hablando...' : 'Escribe un mensaje...'}
                             disabled={isLoading}
                             autoComplete="off"
                             autoCorrect="off"
@@ -212,6 +343,13 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
                             <Send size={18} />
                         </button>
                     </div>
+
+                    {/* Hint text */}
+                    {voiceSupported && !isListening && (
+                        <p className="text-[10px] text-neutral-600 text-center mt-2">
+                            Mantén presionado 🎤 para hablar
+                        </p>
+                    )}
                 </form>
             </div>
         </>
