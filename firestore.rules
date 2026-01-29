@@ -1236,7 +1236,7 @@ service cloud.firestore {
           && isValidConversationMemberCreate(uid);
         allow update: if isAuthenticated() 
           && request.auth.uid == uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastReadClientAt', 'lastReadAt', 'muted'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastReadClientAt', 'lastReadAt', 'muted', 'mutedUntil'])
           && request.resource.data.role == resource.data.role;  // No self-promotion
         allow delete: if isAuthenticated() && request.auth.uid == uid;
       }

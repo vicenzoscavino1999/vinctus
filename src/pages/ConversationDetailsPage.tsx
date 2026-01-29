@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, User as UserIcon, Users, AlertCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, User as UserIcon, Users, AlertCircle, Loader2, Bell, BellOff, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { getUserProfile, type UserProfileRead } from '../lib/firestore';
+import {
+    getUserProfile,
+    getConversationMember,
+    setConversationMute,
+    clearConversationMute,
+    type UserProfileRead,
+    type ConversationMemberRead
+} from '../lib/firestore';
 import CreateGroupModal from '../components/CreateGroupModal';
 
 // Helper to parse otherUserId from conversation ID
@@ -25,6 +32,11 @@ export default function ConversationDetailsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+
+    // Mute state
+    const [memberData, setMemberData] = useState<ConversationMemberRead | null>(null);
+    const [showMuteModal, setShowMuteModal] = useState(false);
+    const [isTogglingMute, setIsTogglingMute] = useState(false);
 
     useEffect(() => {
         // Guard 1: Wait for auth
@@ -75,6 +87,30 @@ export default function ConversationDetailsPage() {
         void loadProfile();
     }, [conversationId, user, navigate]);
 
+    // Load member data for mute state
+    useEffect(() => {
+        if (!conversationId || !user?.uid) return;
+
+        const loadMemberData = async () => {
+            try {
+                const member = await getConversationMember(conversationId, user.uid);
+                if (member) {
+                    // Auto-unmute if mutedUntil has passed
+                    if (member.muted && member.mutedUntil && member.mutedUntil < new Date()) {
+                        await clearConversationMute(conversationId, user.uid);
+                        setMemberData({ ...member, muted: false, mutedUntil: null });
+                    } else {
+                        setMemberData(member);
+                    }
+                }
+            } catch (err) {
+                console.error('[ConversationDetailsPage] Error loading member data:', err);
+            }
+        };
+
+        void loadMemberData();
+    }, [conversationId, user]);
+
     const handleGoBack = () => {
         navigate('/messages');
     };
@@ -83,6 +119,44 @@ export default function ConversationDetailsPage() {
         if (!otherUserProfile) return;
         // Use /user/:userId route (confirmed in AppLayout line 206)
         navigate(`/user/${otherUserProfile.uid}`);
+    };
+
+    // Mute handlers
+    const handleMute = async (hours: number | null) => {
+        if (!conversationId || !user?.uid) return;
+        setIsTogglingMute(true);
+        try {
+            const mutedUntil = hours ? new Date(Date.now() + hours * 60 * 60 * 1000) : null;
+            await setConversationMute(conversationId, user.uid, mutedUntil);
+            setMemberData(prev => prev ? { ...prev, muted: true, mutedUntil } : null);
+            setShowMuteModal(false);
+        } catch (err) {
+            console.error('[ConversationDetailsPage] Error muting:', err);
+        } finally {
+            setIsTogglingMute(false);
+        }
+    };
+
+    const handleUnmute = async () => {
+        if (!conversationId || !user?.uid) return;
+        setIsTogglingMute(true);
+        try {
+            await clearConversationMute(conversationId, user.uid);
+            setMemberData(prev => prev ? { ...prev, muted: false, mutedUntil: null } : null);
+        } catch (err) {
+            console.error('[ConversationDetailsPage] Error unmuting:', err);
+        } finally {
+            setIsTogglingMute(false);
+        }
+    };
+
+    // Helper: format mute status text
+    const getMuteStatusText = () => {
+        if (!memberData?.muted) return null;
+        if (!memberData.mutedUntil) return 'Silenciado';
+        const now = new Date();
+        if (memberData.mutedUntil <= now) return null;
+        return `Silenciado hasta ${memberData.mutedUntil.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}`;
     };
 
     // Loading state
@@ -184,16 +258,38 @@ export default function ConversationDetailsPage() {
                     </div>
                 </button>
 
-                {/* Mute - Coming Soon (Fase 3) */}
-                <div className="w-full flex items-center gap-4 p-4 bg-neutral-900/10 border border-neutral-800/30 rounded-xl opacity-50 cursor-not-allowed">
-                    <div className="w-10 h-10 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center flex-shrink-0">
-                        <span className="text-neutral-600 text-lg">🔕</span>
-                    </div>
-                    <div className="flex-1">
-                        <p className="text-neutral-400 font-medium">Silenciar</p>
-                        <p className="text-xs text-neutral-600">Próximamente</p>
-                    </div>
-                </div>
+                {/* Mute - Active */}
+                {memberData?.muted ? (
+                    <button
+                        type="button"
+                        onClick={handleUnmute}
+                        disabled={isTogglingMute}
+                        className="w-full flex items-center gap-4 p-4 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 hover:border-amber-500/50 rounded-xl transition-all text-left cursor-pointer disabled:opacity-50"
+                    >
+                        <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
+                            <BellOff size={18} className="text-amber-500" />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-amber-400 font-medium">Quitar silencio</p>
+                            <p className="text-xs text-amber-600">{getMuteStatusText()}</p>
+                        </div>
+                    </button>
+                ) : (
+                    <button
+                        type="button"
+                        onClick={() => setShowMuteModal(true)}
+                        disabled={isTogglingMute}
+                        className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-neutral-900/40 border border-neutral-800/50 hover:border-neutral-700/50 rounded-xl transition-all text-left cursor-pointer disabled:opacity-50"
+                    >
+                        <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
+                            <Bell size={18} className="text-amber-500" />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-white font-medium">Silenciar</p>
+                            <p className="text-xs text-neutral-500">No recibir notificaciones de este chat</p>
+                        </div>
+                    </button>
+                )}
 
                 {/* Block - Coming Soon (Fase 3) */}
                 <div className="w-full flex items-center gap-4 p-4 bg-neutral-900/10 border border-neutral-800/30 rounded-xl opacity-50 cursor-not-allowed">
@@ -228,6 +324,54 @@ export default function ConversationDetailsPage() {
                 }}
                 preselectedMemberProfiles={otherUserProfile ? [otherUserProfile] : []}
             />
+
+            {/* Mute Options Modal */}
+            {showMuteModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowMuteModal(false)} />
+                    <div className="relative w-full max-w-sm mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+                            <h3 className="text-lg font-medium text-white">Silenciar conversación</h3>
+                            <button
+                                onClick={() => setShowMuteModal(false)}
+                                className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="p-4 space-y-2">
+                            <button
+                                onClick={() => handleMute(1)}
+                                disabled={isTogglingMute}
+                                className="w-full p-3 text-left text-white hover:bg-neutral-800 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                                1 hora
+                            </button>
+                            <button
+                                onClick={() => handleMute(4)}
+                                disabled={isTogglingMute}
+                                className="w-full p-3 text-left text-white hover:bg-neutral-800 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                                4 horas
+                            </button>
+                            <button
+                                onClick={() => handleMute(8)}
+                                disabled={isTogglingMute}
+                                className="w-full p-3 text-left text-white hover:bg-neutral-800 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                                8 horas
+                            </button>
+                            <button
+                                onClick={() => handleMute(null)}
+                                disabled={isTogglingMute}
+                                className="w-full p-3 text-left text-white hover:bg-neutral-800 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                                Para siempre
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

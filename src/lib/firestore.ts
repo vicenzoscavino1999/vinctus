@@ -1909,6 +1909,7 @@ export interface ConversationMemberRead {
     lastReadClientAt: number;
     lastReadAt: Date;
     muted: boolean;
+    mutedUntil?: Date | null;
 }
 
 export interface MessageRead {
@@ -1954,6 +1955,7 @@ export interface ConversationMemberWrite {
     lastReadClientAt: number;
     lastReadAt: FieldValue;
     muted: boolean;
+    mutedUntil: FieldValue | Date | null;
 }
 
 export interface MessageWrite {
@@ -2079,7 +2081,8 @@ export const getOrCreateDirectConversation = async (uid1: string, uid2: string):
             joinedAt: serverTimestamp(),
             lastReadClientAt: Date.now(),
             lastReadAt: serverTimestamp(),
-            muted: false
+            muted: false,
+            mutedUntil: null
         } as ConversationMemberWrite, { merge: false });
     }
 
@@ -2090,7 +2093,8 @@ export const getOrCreateDirectConversation = async (uid1: string, uid2: string):
             joinedAt: serverTimestamp(),
             lastReadClientAt: Date.now(),
             lastReadAt: serverTimestamp(),
-            muted: false
+            muted: false,
+            mutedUntil: null
         } as ConversationMemberWrite, { merge: false });
     }
 
@@ -2145,7 +2149,8 @@ export const getOrCreateGroupConversation = async (groupId: string, uid: string)
             joinedAt: serverTimestamp(),
             lastReadClientAt: Date.now(),
             lastReadAt: serverTimestamp(),
-            muted: false
+            muted: false,
+            mutedUntil: null
         } as ConversationMemberWrite, { merge: false });
     }
 
@@ -2457,7 +2462,8 @@ export const markConversationRead = async (conversationId: string, uid: string):
                 joinedAt: serverTimestamp(),
                 lastReadClientAt: Date.now(),
                 lastReadAt: serverTimestamp(),
-                muted: false
+                muted: false,
+                mutedUntil: null
             } as ConversationMemberWrite, { merge: false });
         } catch (createError) {
             console.error('Error creating conversation member:', createError);
@@ -2474,6 +2480,58 @@ export const setTyping = async (conversationId: string, uid: string, isTyping: b
         isTyping,
         updatedAt: serverTimestamp()
     } as TypingIndicatorWrite, { merge: false }).commit();
+};
+
+/**
+ * Mute a conversation for X hours or forever
+ * @param mutedUntil - Date when mute expires, null = forever
+ */
+export const setConversationMute = async (
+    conversationId: string,
+    uid: string,
+    mutedUntil: Date | null
+): Promise<void> => {
+    const memberRef = doc(db, `conversations/${conversationId}/members`, uid);
+    await writeBatch(db).update(memberRef, {
+        muted: true,
+        mutedUntil
+    }).commit();
+};
+
+/**
+ * Unmute a conversation
+ */
+export const clearConversationMute = async (
+    conversationId: string,
+    uid: string
+): Promise<void> => {
+    const memberRef = doc(db, `conversations/${conversationId}/members`, uid);
+    await writeBatch(db).update(memberRef, {
+        muted: false,
+        mutedUntil: null
+    }).commit();
+};
+
+/**
+ * Get conversation member data (for mute state)
+ */
+export const getConversationMember = async (
+    conversationId: string,
+    uid: string
+): Promise<ConversationMemberRead | null> => {
+    const memberRef = doc(db, `conversations/${conversationId}/members`, uid);
+    const snap = await getDoc(memberRef);
+    if (!snap.exists()) return null;
+    const data = snap.data();
+    return {
+        uid: snap.id,
+        role: data.role,
+        joinedAt: toDate(data.joinedAt) || new Date(),
+        lastReadClientAt: data.lastReadClientAt,
+        lastReadAt: toDate(data.lastReadAt) || new Date(),
+        muted: data.muted ?? false,
+        mutedUntil: data.mutedUntil ? toDate(data.mutedUntil) : null
+    } as ConversationMemberRead;
 };
 
 /**
