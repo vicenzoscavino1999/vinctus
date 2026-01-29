@@ -397,27 +397,27 @@ const UserProfilePage = () => {
                 </div>
             </header>
 
-            <div className="grid grid-cols-3 gap-3 mb-10">
-                <div className="rounded-xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-center">
-                    <div className="text-xs uppercase tracking-widest text-neutral-500">Publicaciones</div>
+            <div className="grid grid-cols-3 gap-2 mb-10">
+                <div className="rounded-xl border border-neutral-800 bg-neutral-900/30 px-2 sm:px-4 py-3 text-center min-w-0">
+                    <div className="text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest text-neutral-500 truncate">Publicaciones</div>
                     <div className="text-lg font-semibold text-white mt-1">{postsCount}</div>
                 </div>
                 <button
                     type="button"
                     onClick={() => handleFollowListClick('followers')}
                     disabled={!canViewFollowLists}
-                    className={`rounded-xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-center transition-colors ${canViewFollowLists ? 'hover:bg-neutral-800/40' : 'opacity-60 cursor-not-allowed'}`}
+                    className={`rounded-xl border border-neutral-800 bg-neutral-900/30 px-2 sm:px-4 py-3 text-center transition-colors min-w-0 ${canViewFollowLists ? 'hover:bg-neutral-800/40' : 'opacity-60 cursor-not-allowed'}`}
                 >
-                    <div className="text-xs uppercase tracking-widest text-neutral-500">Seguidores</div>
+                    <div className="text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest text-neutral-500 truncate">Seguidores</div>
                     <div className="text-lg font-semibold text-white mt-1">{followersCount}</div>
                 </button>
                 <button
                     type="button"
                     onClick={() => handleFollowListClick('following')}
                     disabled={!canViewFollowLists}
-                    className={`rounded-xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-center transition-colors ${canViewFollowLists ? 'hover:bg-neutral-800/40' : 'opacity-60 cursor-not-allowed'}`}
+                    className={`rounded-xl border border-neutral-800 bg-neutral-900/30 px-2 sm:px-4 py-3 text-center transition-colors min-w-0 ${canViewFollowLists ? 'hover:bg-neutral-800/40' : 'opacity-60 cursor-not-allowed'}`}
                 >
-                    <div className="text-xs uppercase tracking-widest text-neutral-500">Siguiendo</div>
+                    <div className="text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest text-neutral-500 truncate">Siguiendo</div>
                     <div className="text-lg font-semibold text-white mt-1">{followingCount}</div>
                 </button>
             </div>
