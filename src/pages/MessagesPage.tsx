@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, ChevronRight, Users, ArrowLeft, Send } from 'lucide-react';
@@ -409,6 +409,15 @@ export default function MessagesPage() {
 
     const activeConversations = activeTab === 'groups' ? groupConversations : privateConversations;
 
+    // Check if all group conversations have their names loaded in cache
+    const isGroupCacheReady = useMemo(() => {
+        if (activeTab !== 'groups') return true; // Only matters for groups tab
+        if (groupConversations.length === 0) return true; // No groups to check
+        return groupConversations.every(conv =>
+            !conv.groupId || groupInfoCache[conv.groupId]?.name
+        );
+    }, [activeTab, groupConversations, groupInfoCache]);
+
     const selectedConversation = conversations.find(c => c.id === selectedConversationId);
     const fallbackConversation = selectedConversationId && !selectedConversation
         ? {
@@ -571,7 +580,20 @@ export default function MessagesPage() {
 
             {/* Conversations List */}
             <div className="space-y-2">
-                {activeConversations.length === 0 && !error ? (
+                {/* Skeleton while group names are loading */}
+                {activeTab === 'groups' && !isGroupCacheReady && activeConversations.length > 0 ? (
+                    <>
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className="flex items-center gap-4 p-4 bg-neutral-900/20 border border-neutral-800/50 rounded-xl">
+                                <div className="w-14 h-14 rounded-full skeleton" />
+                                <div className="flex-1 space-y-2">
+                                    <div className="h-4 w-32 skeleton" />
+                                    <div className="h-3 w-20 skeleton" />
+                                </div>
+                            </div>
+                        ))}
+                    </>
+                ) : activeConversations.length === 0 && !error ? (
                     <div className="text-center text-neutral-500 py-10">
                         {searchQuery ? 'No hay resultados' : `No hay ${activeTab === 'groups' ? 'grupos' : 'mensajes privados'} aún`}
                     </div>
