@@ -26,47 +26,22 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [history, setHistory] = useState<GeminiMessage[]>([]);
-    const [viewportHeight, setViewportHeight] = useState('100dvh');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
-    const modalRef = useRef<HTMLDivElement>(null);
-
-    // Handle viewport changes (keyboard appearing/disappearing)
-    useEffect(() => {
-        if (!isOpen) return;
-
-        const handleResize = () => {
-            // Use visualViewport for accurate height when keyboard is open
-            if (window.visualViewport) {
-                const vh = window.visualViewport.height;
-                setViewportHeight(`${vh}px`);
-            }
-        };
-
-        // Listen to visual viewport changes
-        if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', handleResize);
-            window.visualViewport.addEventListener('scroll', handleResize);
-            handleResize(); // Initial call
-        }
-
-        return () => {
-            if (window.visualViewport) {
-                window.visualViewport.removeEventListener('resize', handleResize);
-                window.visualViewport.removeEventListener('scroll', handleResize);
-            }
-        };
-    }, [isOpen]);
 
     // Scroll to bottom when new messages arrive
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-    // Focus input when modal opens
+    // Focus input when modal opens (delayed to avoid keyboard issues)
     useEffect(() => {
         if (isOpen) {
-            setTimeout(() => inputRef.current?.focus(), 100);
+            // Don't auto-focus on mobile to prevent keyboard issues
+            const isMobile = window.innerWidth < 768;
+            if (!isMobile) {
+                setTimeout(() => inputRef.current?.focus(), 100);
+            }
         }
     }, [isOpen]);
 
@@ -80,6 +55,29 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
         window.addEventListener('keydown', handleEscape);
         return () => window.removeEventListener('keydown', handleEscape);
     }, [isOpen, onClose]);
+
+    // Prevent body scroll when modal is open
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+            document.body.style.position = 'fixed';
+            document.body.style.width = '100%';
+            document.body.style.top = `-${window.scrollY}px`;
+        } else {
+            const scrollY = document.body.style.top;
+            document.body.style.overflow = '';
+            document.body.style.position = '';
+            document.body.style.width = '';
+            document.body.style.top = '';
+            window.scrollTo(0, parseInt(scrollY || '0') * -1);
+        }
+        return () => {
+            document.body.style.overflow = '';
+            document.body.style.position = '';
+            document.body.style.width = '';
+            document.body.style.top = '';
+        };
+    }, [isOpen]);
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
@@ -126,23 +124,18 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
     if (!isOpen) return null;
 
     return (
-        <div
-            className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:justify-end p-0 md:p-4"
-            style={{ height: viewportHeight }}
-        >
-            {/* Backdrop */}
+        <>
+            {/* Full screen overlay */}
             <div
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm"
                 onClick={onClose}
             />
 
-            {/* Modal */}
+            {/* Chat container - full screen on mobile */}
             <div
-                ref={modalRef}
-                className="relative w-full md:w-96 md:h-[600px] md:mr-4 bg-neutral-900 border border-neutral-800 md:rounded-2xl rounded-t-2xl flex flex-col overflow-hidden"
+                className="fixed inset-0 z-[101] flex flex-col bg-neutral-900 md:inset-auto md:right-4 md:bottom-4 md:top-auto md:left-auto md:w-96 md:h-[600px] md:rounded-2xl md:border md:border-neutral-800"
                 style={{
-                    height: 'calc(100% - env(safe-area-inset-top, 0px))',
-                    maxHeight: '100%',
+                    paddingTop: 'env(safe-area-inset-top, 0px)',
                     paddingBottom: 'env(safe-area-inset-bottom, 0px)'
                 }}
             >
@@ -166,8 +159,8 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
                     </button>
                 </div>
 
-                {/* Messages */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 chat-scroll min-h-0">
+                {/* Messages - scrollable area */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
                     {messages.map((msg) => (
                         <div
                             key={msg.id}
@@ -196,7 +189,7 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
                     <div ref={messagesEndRef} />
                 </div>
 
-                {/* Input - Fixed at bottom */}
+                {/* Input - always visible at bottom */}
                 <form onSubmit={handleSubmit} className="p-3 border-t border-neutral-800 bg-neutral-900 flex-shrink-0">
                     <div className="flex gap-2">
                         <input
@@ -206,12 +199,14 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
                             onChange={(e) => setInput(e.target.value)}
                             placeholder="Escribe un mensaje..."
                             disabled={isLoading}
-                            className="flex-1 px-4 py-2.5 bg-neutral-800 border border-neutral-700 rounded-full text-white text-sm placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors disabled:opacity-50"
+                            autoComplete="off"
+                            autoCorrect="off"
+                            className="flex-1 px-4 py-3 bg-neutral-800 border border-neutral-700 rounded-full text-white text-base placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors disabled:opacity-50"
                         />
                         <button
                             type="submit"
                             disabled={!input.trim() || isLoading}
-                            className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black rounded-full hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex-shrink-0"
+                            className="px-4 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-black rounded-full hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex-shrink-0"
                             aria-label="Enviar"
                         >
                             <Send size={18} />
@@ -219,7 +214,6 @@ export default function AIChatModal({ isOpen, onClose }: AIChatModalProps) {
                     </div>
                 </form>
             </div>
-        </div>
+        </>
     );
 }
-
