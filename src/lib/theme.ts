@@ -3,16 +3,16 @@ export type ThemeMode = 'dark' | 'light' | 'system';
 const STORAGE_KEY = 'vinctus_theme';
 
 export const getStoredTheme = (): ThemeMode => {
-    if (typeof window === 'undefined') return 'system';
+    if (typeof window === 'undefined') return 'dark';
     try {
         const stored = window.localStorage?.getItem(STORAGE_KEY);
         if (stored === 'dark' || stored === 'light' || stored === 'system') {
             return stored;
         }
     } catch {
-        return 'system';
+        return 'dark';
     }
-    return 'system';
+    return 'dark';
 };
 
 export const setStoredTheme = (theme: ThemeMode): void => {
