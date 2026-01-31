@@ -14,6 +14,7 @@ import {
     followPublicUser,
     unfollowUser,
     getOrCreateDirectConversation,
+    isUserBlocked,
     type FollowStatus,
     type UserProfileRead
 } from '../lib/firestore';
@@ -70,6 +71,16 @@ const UserProfilePage = () => {
 
     const handleFollow = async () => {
         if (!currentUser || !userId || !profile) return;
+
+        try {
+            const blocked = await isUserBlocked(currentUser.uid, userId);
+            if (blocked) {
+                showToast('Desbloquea a este usuario para poder seguirlo', 'info');
+                return;
+            }
+        } catch (err) {
+            console.error('Error checking block status:', err);
+        }
 
         setActionLoading(true);
         try {
@@ -197,6 +208,11 @@ const UserProfilePage = () => {
 
         setActionLoading(true);
         try {
+            const blocked = await isUserBlocked(currentUser.uid, userId);
+            if (blocked) {
+                showToast('Desbloquea a este usuario para enviarle mensajes', 'info');
+                return;
+            }
             const conversationId = await getOrCreateDirectConversation(currentUser.uid, userId);
             navigate(`/messages?conversation=${conversationId}`);
         } catch {

@@ -22,6 +22,7 @@ import {
     getPostLikeCount,
     isPostLiked,
     isPostSaved,
+    getBlockedUsers,
     likePostWithSync,
     savePostWithSync,
     unlikePostWithSync,
@@ -31,6 +32,7 @@ import {
 // Post type with BOTH schemas (new + legacy) for compatibility
 type Post = {
     postId: string;
+    authorId?: string;
 
     // New schema
     authorSnapshot?: { displayName: string; photoURL: string | null };
@@ -110,6 +112,7 @@ const FeedPage = () => {
     const [savedByUser, setSavedByUser] = useState<Record<string, boolean>>({});
     const [activePost, setActivePost] = useState<PostSummary | null>(null);
     const postFromSearch = new URLSearchParams(location.search).get('post');
+    const [blockedUsers, setBlockedUsers] = useState<Set<string>>(new Set());
 
     // Initial load with getDocs (NO realtime to avoid pagination conflicts)
     useEffect(() => {
@@ -135,6 +138,22 @@ const FeedPage = () => {
 
         loadInitial();
     }, []);
+
+    useEffect(() => {
+        if (!user?.uid) {
+            setBlockedUsers(new Set());
+            return;
+        }
+        const loadBlocked = async () => {
+            try {
+                const ids = await getBlockedUsers(user.uid);
+                setBlockedUsers(new Set(ids));
+            } catch (err) {
+                console.error('Error loading blocked users:', err);
+            }
+        };
+        void loadBlocked();
+    }, [user?.uid]);
 
     useEffect(() => {
         if (!postFromSearch || activePost?.postId === postFromSearch) return;
@@ -347,7 +366,9 @@ const FeedPage = () => {
                 <div className="text-sm text-neutral-500 text-center py-8">No hay posts todavía.</div>
             ) : (
                 <div className="space-y-6 max-w-3xl mx-auto">
-                    {posts.map((p) => {
+                    {posts
+                        .filter((post) => !post.authorId || !blockedUsers.has(post.authorId))
+                        .map((p) => {
                         const summary = buildPostSummary(p);
                         const displayText = summary.text;
                         const authorName = summary.authorName;

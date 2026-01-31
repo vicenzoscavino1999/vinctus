@@ -2,13 +2,19 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, User as UserIcon, Users, AlertCircle, Loader2, Bell, BellOff, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/Toast';
 import {
     getUserProfile,
     getConversationMember,
     setConversationMute,
     clearConversationMute,
+    blockUser,
+    unblockUser,
+    isUserBlocked,
+    createUserReport,
     type UserProfileRead,
-    type ConversationMemberRead
+    type ConversationMemberRead,
+    type UserReportReason
 } from '../lib/firestore';
 import CreateGroupModal from '../components/CreateGroupModal';
 
@@ -23,15 +29,32 @@ const parseOtherUserId = (conversationId: string, currentUid: string): string | 
     return otherId ?? null;
 };
 
+const REPORT_REASON_OPTIONS: Array<{ value: UserReportReason; label: string }> = [
+    { value: 'spam', label: 'Spam o publicidad' },
+    { value: 'harassment', label: 'Acoso' },
+    { value: 'abuse', label: 'Abuso' },
+    { value: 'fake', label: 'Suplantacion' },
+    { value: 'other', label: 'Otro' }
+];
+
 export default function ConversationDetailsPage() {
     const navigate = useNavigate();
     const { conversationId } = useParams<{ conversationId: string }>();
     const { user } = useAuth();
+    const { showToast } = useToast();
 
     const [otherUserProfile, setOtherUserProfile] = useState<UserProfileRead | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+    const [showReportModal, setShowReportModal] = useState(false);
+    const [reportReason, setReportReason] = useState<UserReportReason>('spam');
+    const [reportDetails, setReportDetails] = useState('');
+    const [reportError, setReportError] = useState<string | null>(null);
+    const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+    const [isBlocked, setIsBlocked] = useState(false);
+    const [showBlockModal, setShowBlockModal] = useState(false);
+    const [isBlocking, setIsBlocking] = useState(false);
 
     // Mute state
     const [memberData, setMemberData] = useState<ConversationMemberRead | null>(null);
@@ -111,6 +134,19 @@ export default function ConversationDetailsPage() {
         void loadMemberData();
     }, [conversationId, user]);
 
+    useEffect(() => {
+        if (!user?.uid || !otherUserProfile) return;
+        const loadBlockStatus = async () => {
+            try {
+                const blocked = await isUserBlocked(user.uid, otherUserProfile.uid);
+                setIsBlocked(blocked);
+            } catch (err) {
+                console.error('[ConversationDetailsPage] Error loading block status:', err);
+            }
+        };
+        void loadBlockStatus();
+    }, [user, otherUserProfile]);
+
     const handleGoBack = () => {
         navigate('/messages');
     };
@@ -147,6 +183,58 @@ export default function ConversationDetailsPage() {
             console.error('[ConversationDetailsPage] Error unmuting:', err);
         } finally {
             setIsTogglingMute(false);
+        }
+    };
+
+    const resetReportForm = () => {
+        setReportReason('spam');
+        setReportDetails('');
+        setReportError(null);
+    };
+
+    const handleSubmitReport = async () => {
+        if (!user?.uid || !otherUserProfile) return;
+        setIsSubmittingReport(true);
+        setReportError(null);
+        try {
+            await createUserReport({
+                reporterUid: user.uid,
+                reportedUid: otherUserProfile.uid,
+                reason: reportReason,
+                details: reportDetails.trim() ? reportDetails.trim() : null,
+                conversationId: conversationId ?? null
+            });
+            showToast('Reporte enviado', 'success');
+            setShowReportModal(false);
+            resetReportForm();
+        } catch (err) {
+            console.error('[ConversationDetailsPage] Error creating report:', err);
+            setReportError('No se pudo enviar el reporte.');
+        } finally {
+            setIsSubmittingReport(false);
+        }
+    };
+
+    const handleToggleBlock = async () => {
+        if (!user?.uid || !otherUserProfile) return;
+        setIsBlocking(true);
+        try {
+            if (isBlocked) {
+                await unblockUser(user.uid, otherUserProfile.uid);
+                setIsBlocked(false);
+                showToast('Usuario desbloqueado', 'success');
+            } else {
+                await blockUser(user.uid, otherUserProfile.uid);
+                setIsBlocked(true);
+                showToast('Usuario bloqueado', 'success');
+                navigate('/messages');
+            }
+        } catch (err) {
+            console.error('[ConversationDetailsPage] Error toggling block:', err);
+            showToast('No se pudo completar la accion', 'error');
+        } finally {
+            setIsBlocking(false);
+            setShowBlockModal(false);
         }
     };
 
@@ -291,27 +379,38 @@ export default function ConversationDetailsPage() {
                     </button>
                 )}
 
-                {/* Block - Coming Soon (Fase 3) */}
-                <div className="w-full flex items-center gap-4 p-4 bg-neutral-900/10 border border-neutral-800/30 rounded-xl opacity-50 cursor-not-allowed">
-                    <div className="w-10 h-10 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center flex-shrink-0">
-                        <span className="text-neutral-600 text-lg">🚫</span>
+                {/* Block - Active */}
+                <button
+                    type="button"
+                    onClick={() => setShowBlockModal(true)}
+                    className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-red-500/10 border border-neutral-800/50 hover:border-red-500/30 rounded-xl transition-all text-left cursor-pointer"
+                >
+                    <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center flex-shrink-0">
+                        <span className="text-red-400 text-lg">{isBlocked ? '?' : '??'}</span>
                     </div>
                     <div className="flex-1">
-                        <p className="text-neutral-400 font-medium">Bloquear</p>
-                        <p className="text-xs text-neutral-600">Próximamente</p>
+                        <p className="text-white font-medium">{isBlocked ? 'Desbloquear' : 'Bloquear'}</p>
+                        <p className="text-xs text-neutral-500">
+                            {isBlocked ? 'Permitir mensajes y seguir de nuevo' : 'No podras ver sus mensajes ni posts'}
+                        </p>
                     </div>
-                </div>
+                </button>
 
-                {/* Report - Coming Soon (Fase 3) */}
-                <div className="w-full flex items-center gap-4 p-4 bg-neutral-900/10 border border-neutral-800/30 rounded-xl opacity-50 cursor-not-allowed">
-                    <div className="w-10 h-10 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center flex-shrink-0">
-                        <AlertCircle size={18} className="text-neutral-600" />
+                {/* Report - Active */}
+                <button
+                    type="button"
+                    onClick={() => setShowReportModal(true)}
+                    className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-red-500/10 border border-neutral-800/50 hover:border-red-500/30 rounded-xl transition-all text-left cursor-pointer"
+                >
+                    <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center flex-shrink-0">
+                        <AlertCircle size={18} className="text-red-400" />
                     </div>
                     <div className="flex-1">
-                        <p className="text-neutral-400 font-medium">Reportar</p>
-                        <p className="text-xs text-neutral-600">Próximamente</p>
+                        <p className="text-white font-medium">Reportar</p>
+                        <p className="text-xs text-neutral-500">Reportar este usuario</p>
                     </div>
-                </div>
+                </button>
+
             </div>
 
             {/* Create Group Modal */}
@@ -324,6 +423,148 @@ export default function ConversationDetailsPage() {
                 }}
                 preselectedMemberProfiles={otherUserProfile ? [otherUserProfile] : []}
             />
+
+            {/* Report Modal */}
+            {showReportModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    <div
+                        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                        onClick={() => {
+                            setShowReportModal(false);
+                            resetReportForm();
+                        }}
+                    />
+                    <div className="relative w-full max-w-md mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+                            <h3 className="text-lg font-medium text-white">Reportar usuario</h3>
+                            <button
+                                onClick={() => {
+                                    setShowReportModal(false);
+                                    resetReportForm();
+                                }}
+                                className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
+                                aria-label="Cerrar"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="p-4 space-y-4">
+                            <div>
+                                <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
+                                    Motivo
+                                </label>
+                                <select
+                                    value={reportReason}
+                                    onChange={(event) => setReportReason(event.target.value as UserReportReason)}
+                                    className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-red-500/50 transition-colors"
+                                >
+                                    {REPORT_REASON_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                            {option.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
+                                    Detalles (opcional)
+                                </label>
+                                <textarea
+                                    value={reportDetails}
+                                    onChange={(event) => setReportDetails(event.target.value)}
+                                    rows={4}
+                                    maxLength={2000}
+                                    className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-red-500/50 transition-colors resize-none"
+                                    placeholder="Describe el motivo del reporte"
+                                />
+                                <div className="text-right text-xs text-neutral-500 mt-1">
+                                    {reportDetails.length}/2000
+                                </div>
+                            </div>
+
+                            {reportError && (
+                                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                                    {reportError}
+                                </div>
+                            )}
+
+                            <div className="flex items-center justify-end gap-3 pt-1">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowReportModal(false);
+                                        resetReportForm();
+                                    }}
+                                    className="px-4 py-2 rounded-lg text-neutral-300 hover:text-white transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleSubmitReport}
+                                    disabled={isSubmittingReport}
+                                    className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isSubmittingReport ? 'Enviando...' : 'Enviar reporte'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Block Modal */}
+            {showBlockModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    <div
+                        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                        onClick={() => setShowBlockModal(false)}
+                    />
+                    <div className="relative w-full max-w-md mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+                            <h3 className="text-lg font-medium text-white">
+                                {isBlocked ? 'Desbloquear usuario' : 'Bloquear usuario'}
+                            </h3>
+                            <button
+                                onClick={() => setShowBlockModal(false)}
+                                className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
+                                aria-label="Cerrar"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="p-4 space-y-4">
+                            <p className="text-sm text-neutral-400">
+                                {isBlocked
+                                    ? 'Podran volver a enviarse mensajes y seguirse.'
+                                    : 'No podras enviar ni recibir mensajes. Dejaran de seguirse automaticamente y no veras sus publicaciones.'}
+                            </p>
+                            <div className="flex items-center justify-end gap-3 pt-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowBlockModal(false)}
+                                    className="px-4 py-2 rounded-lg text-neutral-300 hover:text-white transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleToggleBlock}
+                                    disabled={isBlocking}
+                                    className={`px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                                        isBlocked
+                                            ? 'bg-amber-500 hover:bg-amber-600 text-black'
+                                            : 'bg-red-500 hover:bg-red-600 text-white'
+                                    }`}
+                                >
+                                    {isBlocking ? 'Procesando...' : (isBlocked ? 'Desbloquear' : 'Bloquear')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Mute Options Modal */}
             {showMuteModal && (

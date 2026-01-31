@@ -15,6 +15,7 @@ import {
     cancelFollowRequest,
     followPublicUser,
     unfollowUser,
+    isUserBlocked,
     type FollowStatus,
     type PublicUserRead
 } from '../lib/firestore';
@@ -143,6 +144,16 @@ export default function UserSearchPage() {
         if (!user) {
             showToast('Necesitas iniciar sesi??n', 'error');
             return;
+        }
+
+        try {
+            const blocked = await isUserBlocked(user.uid, target.uid);
+            if (blocked) {
+                showToast('Desbloquea a este usuario para poder seguirlo', 'info');
+                return;
+            }
+        } catch (err) {
+            console.error('Error checking block status:', err);
         }
 
         setActionLoading(target.uid);

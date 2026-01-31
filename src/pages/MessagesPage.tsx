@@ -14,6 +14,7 @@ import {
     markConversationRead,
     getGroup,
     getUserProfile,
+    getBlockedUsers,
     type ConversationRead,
     type FirestoreGroup,
     type MessageRead
@@ -67,6 +68,7 @@ export default function MessagesPage() {
     const [memberGroupsLoading, setMemberGroupsLoading] = useState(false);
     const [memberGroupsError, setMemberGroupsError] = useState<string | null>(null);
     const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+    const [blockedUsers, setBlockedUsers] = useState<Set<string>>(new Set());
 
     const [searchParams, setSearchParams] = useSearchParams();
     const conversationParam = searchParams.get('conversation');
@@ -238,6 +240,24 @@ export default function MessagesPage() {
     }, [user]);
 
     useEffect(() => {
+        if (!user) {
+            setBlockedUsers(new Set());
+            return;
+        }
+
+        const loadBlocked = async () => {
+            try {
+                const ids = await getBlockedUsers(user.uid);
+                setBlockedUsers(new Set(ids));
+            } catch (err) {
+                console.error('Error loading blocked users:', err);
+            }
+        };
+
+        void loadBlocked();
+    }, [user]);
+
+    useEffect(() => {
         if (!user || conversations.length === 0) return;
 
         const missingIds = new Set<string>();
@@ -402,6 +422,8 @@ export default function MessagesPage() {
 
     const privateConversations = conversations.filter(conv => {
         if (conv.type !== 'direct') return false;
+        const otherId = getOtherMemberId(conv);
+        if (otherId && blockedUsers.has(otherId)) return false;
         if (!searchQuery.trim()) return true;
         const name = getConversationName(conv);
         return name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -431,6 +453,14 @@ export default function MessagesPage() {
         } as ConversationRead
         : null;
     const activeConversation = selectedConversation ?? fallbackConversation;
+
+    useEffect(() => {
+        if (!selectedConversationId || !activeConversation || activeConversation.type !== 'direct') return;
+        const otherId = getOtherMemberId(activeConversation);
+        if (otherId && blockedUsers.has(otherId)) {
+            handleBackToList();
+        }
+    }, [selectedConversationId, activeConversation, blockedUsers, getOtherMemberId]);
 
     if (loading) {
         return (

@@ -296,6 +296,22 @@ service cloud.firestore {
         && data.appVersion.size() <= 40;
     }
 
+    function isValidUserReportCreate() {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'reporterUid', 'reportedUid', 'reason', 'details',
+          'conversationId', 'status', 'createdAt'
+        ])
+        && data.reporterUid == request.auth.uid
+        && data.reportedUid is string
+        && data.reportedUid.size() > 0
+        && data.reason in ['spam', 'harassment', 'abuse', 'fake', 'other']
+        && (data.details == null || (data.details is string && data.details.size() <= 2000))
+        && (data.conversationId == null || (data.conversationId is string && data.conversationId.size() > 0))
+        && data.status == 'open'
+        && data.createdAt == request.time;
+    }
+
     function isValidStoryOwnerSnapshot(snapshot) {
       return snapshot is map
         && snapshot.keys().hasOnly(['displayName', 'photoURL'])
@@ -339,6 +355,11 @@ service cloud.firestore {
     match /support_tickets/{ticketId} {
       allow read, update, delete: if false;
       allow create: if isAuthenticated() && isValidSupportTicketCreate();
+    }
+
+    match /reports/{reportId} {
+      allow read, update, delete: if false;
+      allow create: if isAuthenticated() && isValidUserReportCreate();
     }
 
     // stories/{storyId}
@@ -390,6 +411,14 @@ service cloud.firestore {
       allow create, update: if isOwner(uid)
         && isValidDirectConversationIndexWrite(conversationId);
       allow delete: if isOwner(uid);
+    }
+
+    // users/{uid}/blockedUsers/{blockedUid}
+    // User's blocked list (private)
+    match /users/{uid}/blockedUsers/{blockedUid} {
+      allow read: if isOwner(uid);
+      allow create, delete: if isOwner(uid);
+      allow update: if false;
     }
 
     // users/{uid}/friends/{friendUid}

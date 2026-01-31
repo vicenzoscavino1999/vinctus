@@ -237,6 +237,20 @@ export const onUserFollowerCreated = functions.firestore
         }
 
         try {
+            const [blockedByTarget, blockedByFollower] = await Promise.all([
+                db.doc(`users/${uid}/blockedUsers/${followerUid}`).get(),
+                db.doc(`users/${followerUid}/blockedUsers/${uid}`).get()
+            ]);
+            if (blockedByTarget.exists || blockedByFollower.exists) {
+                functions.logger.info("Skipping follow notification due to block", {
+                    uid,
+                    followerUid,
+                    blockedByTarget: blockedByTarget.exists,
+                    blockedByFollower: blockedByFollower.exists
+                });
+                return;
+            }
+
             const followerSnap = await db.doc(`users_public/${followerUid}`).get();
             const followerData = followerSnap.exists ? followerSnap.data() : null;
             const fromUserName = typeof followerData?.displayName === "string" ? followerData.displayName : null;
@@ -1023,20 +1037,49 @@ export const onDirectConversationWrite = functions.firestore
         const updatedAt = after.updatedAt ?? admin.firestore.FieldValue.serverTimestamp();
         const [firstUid, secondUid] = memberIds;
 
-        await Promise.all([
-            db.doc(`users/${firstUid}/directConversations/${conversationId}`).set({
-                conversationId,
-                otherUid: secondUid,
-                type: "direct",
-                updatedAt
-            }, { merge: true }),
-            db.doc(`users/${secondUid}/directConversations/${conversationId}`).set({
-                conversationId,
-                otherUid: firstUid,
-                type: "direct",
-                updatedAt
-            }, { merge: true })
+        const [firstBlockedSnap, secondBlockedSnap] = await Promise.all([
+            db.doc(`users/${firstUid}/blockedUsers/${secondUid}`).get(),
+            db.doc(`users/${secondUid}/blockedUsers/${firstUid}`).get()
         ]);
+
+        const writes: Promise<unknown>[] = [];
+        if (!firstBlockedSnap.exists) {
+            writes.push(
+                db.doc(`users/${firstUid}/directConversations/${conversationId}`).set({
+                    conversationId,
+                    otherUid: secondUid,
+                    type: "direct",
+                    updatedAt
+                }, { merge: true })
+            );
+        } else {
+            functions.logger.info("Skipping direct conversation index for blocked user", {
+                conversationId,
+                uid: firstUid,
+                blockedUid: secondUid
+            });
+        }
+
+        if (!secondBlockedSnap.exists) {
+            writes.push(
+                db.doc(`users/${secondUid}/directConversations/${conversationId}`).set({
+                    conversationId,
+                    otherUid: firstUid,
+                    type: "direct",
+                    updatedAt
+                }, { merge: true })
+            );
+        } else {
+            functions.logger.info("Skipping direct conversation index for blocked user", {
+                conversationId,
+                uid: secondUid,
+                blockedUid: firstUid
+            });
+        }
+
+        if (writes.length > 0) {
+            await Promise.all(writes);
+        }
     });
 
 // ==========================================================
