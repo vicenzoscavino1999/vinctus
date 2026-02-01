@@ -47,6 +47,9 @@ export interface GroupDetailViewProps {
     canOpenChat: boolean;
     openingChat: boolean;
     isAuthenticated: boolean;
+    canCreatePost: boolean;
+    canEditGroup: boolean;
+    canLeaveGroup: boolean;
 
     // Callbacks
     onJoinGroup: () => void;
@@ -54,6 +57,10 @@ export interface GroupDetailViewProps {
     onNavigateToCategory: () => void;
     onOpenPost?: (postId: string) => void;
     onOpenGroupChat: () => void;
+    onOpenCreatePost: () => void;
+    onEditGroup: () => void;
+    onOpenMembers: () => void;
+    onLeaveGroup: () => void;
 }
 
 // ===== COMPONENTE VIEW (SOLO UI) =====
@@ -69,11 +76,18 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
     canOpenChat,
     openingChat,
     isAuthenticated,
+    canCreatePost,
+    canEditGroup,
+    canLeaveGroup,
     onJoinGroup,
     onGoBack,
     onNavigateToCategory,
     onOpenPost,
     onOpenGroupChat,
+    onOpenCreatePost,
+    onEditGroup,
+    onOpenMembers,
+    onLeaveGroup,
 }) => {
     // Loading state
     if (isLoading) {
@@ -192,6 +206,22 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
                         <MessageCircle size={18} />
                         {openingChat ? 'Abriendo...' : 'Chat'}
                     </button>
+                    {canLeaveGroup && (
+                        <button
+                            onClick={onLeaveGroup}
+                            className="px-4 py-3 rounded-button bg-red-500/10 border border-red-500/30 text-red-300 text-sm hover:bg-red-500/20 transition-colors"
+                        >
+                            Salir
+                        </button>
+                    )}
+                    {canEditGroup && (
+                        <button
+                            onClick={onEditGroup}
+                            className="px-4 py-3 rounded-button bg-neutral-800 border border-neutral-700 text-neutral-200 text-sm hover:bg-neutral-700 transition-colors"
+                        >
+                            Editar grupo
+                        </button>
+                    )}
                     {category && (
                         <button
                             onClick={onNavigateToCategory}
@@ -205,7 +235,17 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
 
             {/* Recent posts */}
             <section className="mb-8">
-                <h2 className="text-heading-lg font-display text-white mb-4">Publicaciones recientes</h2>
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-heading-lg font-display text-white">Publicaciones recientes</h2>
+                    {canCreatePost && (
+                        <button
+                            onClick={onOpenCreatePost}
+                            className="px-4 py-2 rounded-button bg-brand-gold text-black text-xs uppercase tracking-wider font-medium hover:opacity-90 transition-opacity"
+                        >
+                            Publicar
+                        </button>
+                    )}
+                </div>
                 <div className="space-y-3 stagger-premium">
                     {group.recentPosts.length === 0 ? (
                         <div className="text-center text-neutral-500 py-6">
@@ -241,7 +281,15 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
 
             {/* Top members */}
             <section>
-                <h2 className="text-heading-lg font-display text-white mb-4">Miembros destacados</h2>
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-heading-lg font-display text-white">Miembros destacados</h2>
+                    <button
+                        onClick={onOpenMembers}
+                        className="text-xs uppercase tracking-wider text-amber-400 hover:text-amber-300 transition-colors"
+                    >
+                        Ver miembros
+                    </button>
+                </div>
                 {group.topMembers.length === 0 ? (
                     <div className="text-center text-neutral-500 py-6">
                         No hay miembros destacados por ahora.

@@ -13,6 +13,8 @@ export type CreatePostUploadingInput = {
     authorId: string;
     authorSnapshot: AuthorSnapshot;
     text: string;
+    groupId?: string | null;
+    categoryId?: string | null;
 };
 
 /**
@@ -42,8 +44,8 @@ export async function createPostUploading(input: CreatePostUploadingInput): Prom
         commentCount: 0,
         createdAt: serverTimestamp(),
         updatedAt: null,
-        groupId: null,
-        categoryId: null,
+        groupId: input.groupId ?? null,
+        categoryId: input.categoryId ?? null,
     });
 }
 

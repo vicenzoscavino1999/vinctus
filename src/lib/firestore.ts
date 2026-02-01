@@ -640,6 +640,34 @@ export async function addGroupMember(
     await batch.commit();
 }
 
+/**
+ * Update a group member role (owner only)
+ */
+export async function updateGroupMemberRole(
+    groupId: string,
+    uid: string,
+    role: 'member' | 'moderator' | 'admin'
+): Promise<void> {
+    await updateDoc(doc(db, 'groups', groupId, 'members', uid), {
+        role
+    });
+}
+
+/**
+ * Remove a member from a group (owner only)
+ */
+export async function removeGroupMember(
+    groupId: string,
+    uid: string
+): Promise<void> {
+    const memberRef = doc(db, 'groups', groupId, 'members', uid);
+    const membershipRef = doc(db, 'users', uid, 'memberships', groupId);
+    const batch = writeBatch(db);
+    batch.delete(memberRef);
+    batch.delete(membershipRef);
+    await batch.commit();
+}
+
 
 /**
  * Get list of users that current user follows
@@ -1081,6 +1109,44 @@ export async function getGroupMembers(groupId: string, limitCount: number = DEFA
             joinedAt: data.joinedAt ?? Timestamp.now()
         };
     });
+}
+
+export async function getGroupMembersPage(
+    groupId: string,
+    pageSize: number = DEFAULT_LIMIT,
+    lastDoc?: DocumentSnapshot
+): Promise<PaginatedResult<GroupMemberRead>> {
+    let q = query(
+        collection(db, 'groups', groupId, 'members'),
+        orderBy('joinedAt', 'desc'),
+        limit(pageSize + 1)
+    );
+
+    if (lastDoc) {
+        q = query(q, startAfter(lastDoc));
+    }
+
+    const snapshot = await getDocs(q);
+    const hasMore = snapshot.docs.length > pageSize;
+    const docs = hasMore ? snapshot.docs.slice(0, pageSize) : snapshot.docs;
+
+    const items = docs.map((docSnap) => {
+        const data = docSnap.data() as { groupId?: string; role?: GroupMemberRead['role']; joinedAt?: Timestamp };
+        return {
+            uid: docSnap.id,
+            groupId: data.groupId ?? groupId,
+            role: data.role ?? 'member',
+            joinedAt: data.joinedAt ?? Timestamp.now()
+        } as GroupMemberRead;
+    });
+
+    const newLastDoc = docs.length > 0 ? docs[docs.length - 1] : null;
+
+    return {
+        items,
+        lastDoc: newLastDoc,
+        hasMore
+    };
 }
 
 export async function getGroupPostsWeekCount(groupId: string): Promise<number> {
@@ -3238,6 +3304,27 @@ export async function createUserReport(input: {
         createdAt: serverTimestamp()
     } as UserReportWrite, { merge: false });
     return reportRef.id;
+}
+
+export async function createGroupReport(input: {
+    reporterUid: string;
+    groupId: string;
+    reason: UserReportReason;
+    details?: string | null;
+    conversationId?: string | null;
+}): Promise<string> {
+    const details = input.details?.trim();
+    const mergedDetails = details
+        ? `[Grupo ${input.groupId}] ${details}`
+        : `Reporte de grupo ${input.groupId}`;
+
+    return createUserReport({
+        reporterUid: input.reporterUid,
+        reportedUid: input.groupId,
+        reason: input.reason,
+        details: mergedDetails,
+        conversationId: input.conversationId ?? `grp_${input.groupId}`
+    });
 }
 
 // ==================== Stories ====================

@@ -25,6 +25,7 @@ const FollowListPage = lazy(() => import('../pages/FollowListPage'));
 const NotificationsPage = lazy(() => import('../pages/NotificationsPage'));
 const MessagesPage = lazy(() => import('../pages/MessagesPage'));
 const ConversationDetailsPage = lazy(() => import('../pages/ConversationDetailsPage'));
+const GroupEditPage = lazy(() => import('../pages/GroupEditPage'));
 
 // Settings page (lazy loaded)
 const SettingsPage = lazy(() => import('../pages/SettingsPage'));
@@ -210,6 +211,7 @@ const AppLayout = () => {
                 <Route path="/messages" element={<MessagesPage />} />
                 <Route path="/messages/:conversationId/details" element={<ConversationDetailsPage />} />
                 <Route path="/group/:groupId" element={<GroupDetailPage />} />
+                <Route path="/group/:groupId/edit" element={<GroupEditPage />} />
                 <Route path="/post/:postId" element={<PostDetailPage />} />
                 <Route path="*" element={<DiscoverPage />} />
               </Routes>

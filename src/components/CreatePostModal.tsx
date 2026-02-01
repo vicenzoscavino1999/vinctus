@@ -18,6 +18,10 @@ type SelectedAttachment = {
 interface CreatePostModalProps {
     isOpen: boolean;
     onClose: () => void;
+    groupId?: string | null;
+    categoryId?: string | null;
+    redirectTo?: string | null;
+    onCreated?: (postId: string) => void;
 }
 
 const MAX_ATTACHMENTS = 10;
@@ -54,7 +58,14 @@ const formatBytes = (value: number): string => {
     return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 };
 
-const CreatePostModal = ({ isOpen, onClose }: CreatePostModalProps) => {
+const CreatePostModal = ({
+    isOpen,
+    onClose,
+    groupId = null,
+    categoryId = null,
+    redirectTo = '/feed',
+    onCreated
+}: CreatePostModalProps) => {
     const navigate = useNavigate();
     const { user } = useAuth();
 
@@ -247,7 +258,9 @@ const CreatePostModal = ({ isOpen, onClose }: CreatePostModalProps) => {
                     displayName: user.displayName || 'Usuario',
                     photoURL: user.photoURL || null
                 },
-                text: text.trim()
+                text: text.trim(),
+                groupId,
+                categoryId
             });
             created = true;
 
@@ -271,7 +284,12 @@ const CreatePostModal = ({ isOpen, onClose }: CreatePostModalProps) => {
             }
 
             onClose();
-            navigate('/feed');
+            if (onCreated) {
+                onCreated(postId);
+            }
+            if (redirectTo) {
+                navigate(redirectTo);
+            }
         } catch (err: any) {
             console.error('Error creating post:', err);
             setError(err.message || 'Error al publicar');
