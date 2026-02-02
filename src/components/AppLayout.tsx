@@ -14,19 +14,19 @@ import {
 import Header from './Header';
 import SidebarItem from './SidebarItem';
 import PageLoader from './PageLoader';
-import CreatePostModal from './CreatePostModal';
+import CreatePostModal from '@/features/posts/components/CreatePostModal';
 import { useAuth } from '../context/AuthContext';
 
 // Lazy loaded components
 const GroupDetailPage = lazy(() => import('@/features/groups/pages/GroupDetailPage'));
-const PostDetailPage = lazy(() => import('./PostDetailPage'));
+const PostDetailPage = lazy(() => import('@/features/posts/pages/PostDetailPage'));
 const UserProfilePage = lazy(() => import('./UserProfilePage'));
 
 // Lazy loaded pages
 const DiscoverPage = lazy(() => import('../pages/DiscoverPage'));
 const UserSearchPage = lazy(() => import('../pages/UserSearchPage'));
 const CategoryPage = lazy(() => import('../pages/CategoryPage'));
-const FeedPage = lazy(() => import('../pages/FeedPage'));
+const FeedPage = lazy(() => import('@/features/posts/pages/FeedPage'));
 const ProjectsPage = lazy(() => import('../pages/ProjectsPage'));
 const LibraryPage = lazy(() => import('../pages/LibraryPage'));
 const ProfilePage = lazy(() => import('../pages/ProfilePage'));
