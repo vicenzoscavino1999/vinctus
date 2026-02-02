@@ -18,7 +18,7 @@ import CreatePostModal from './CreatePostModal';
 import { useAuth } from '../context/AuthContext';
 
 // Lazy loaded components
-const GroupDetailPage = lazy(() => import('./GroupDetailPage'));
+const GroupDetailPage = lazy(() => import('@/features/groups/pages/GroupDetailPage'));
 const PostDetailPage = lazy(() => import('./PostDetailPage'));
 const UserProfilePage = lazy(() => import('./UserProfilePage'));
 
@@ -37,7 +37,7 @@ const ConversationDetailsPage = lazy(() => import('@/features/chat/pages/Convers
 const GroupConversationDetailsPage = lazy(
   () => import('@/features/chat/pages/GroupConversationDetailsPage'),
 );
-const GroupEditPage = lazy(() => import('../pages/GroupEditPage'));
+const GroupEditPage = lazy(() => import('@/features/groups/pages/GroupEditPage'));
 
 // Settings page (lazy loaded)
 const SettingsPage = lazy(() => import('../pages/SettingsPage'));
