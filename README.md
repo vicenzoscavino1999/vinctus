@@ -110,6 +110,9 @@ Usuarios seed (email / password):
 - `npm run build` - build de producción
 - `npm run preview` - preview del build
 - `npm run lint` - ESLint
+- `npm run check:cycles` - detecta ciclos de dependencias en `src`
+- `npm run check:stubs` - valida fecha de caducidad + ticket en stubs
+- `npm run guardrails` - lint + ciclos + validaciÃ³n de stubs
 - `npm run test` - Vitest en modo watch
 - `npm run test:run` - Vitest en modo CI
 - `npm run test:e2e` - Playwright
