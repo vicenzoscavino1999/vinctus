@@ -20,7 +20,7 @@ import { useAuth } from '../context/AuthContext';
 // Lazy loaded components
 const GroupDetailPage = lazy(() => import('@/features/groups/pages/GroupDetailPage'));
 const PostDetailPage = lazy(() => import('@/features/posts/pages/PostDetailPage'));
-const UserProfilePage = lazy(() => import('./UserProfilePage'));
+const UserProfilePage = lazy(() => import('@/features/profile/components/UserProfilePage'));
 
 // Lazy loaded pages
 const DiscoverPage = lazy(() => import('../pages/DiscoverPage'));

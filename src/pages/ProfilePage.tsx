@@ -4,11 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
 import { subscribeToUserProfile, type UserProfileRead } from '../lib/firestore';
-import EditProfileModal from '../components/EditProfileModal';
+import EditProfileModal from '@/features/profile/components/EditProfileModal';
 import CollectionsPanel from '@/features/collections/components/CollectionsPanel';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
 import ProfilePostsGrid from '@/features/posts/components/ProfilePostsGrid';
-import ContributionsSection from '../components/ContributionsSection';
+import ContributionsSection from '@/features/profile/components/ContributionsSection';
 import { CATEGORIES } from '../data/mockData';
 
 const ProfilePage = () => {
