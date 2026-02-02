@@ -7,7 +7,7 @@ import { subscribeToUserProfile, type UserProfileRead } from '../lib/firestore';
 import EditProfileModal from '../components/EditProfileModal';
 import CollectionsPanel from '../components/CollectionsPanel';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
-import ProfilePostsGrid from '../components/ProfilePostsGrid';
+import ProfilePostsGrid from '@/features/posts/components/ProfilePostsGrid';
 import ContributionsSection from '../components/ContributionsSection';
 import { CATEGORIES } from '../data/mockData';
 

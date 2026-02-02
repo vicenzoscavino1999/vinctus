@@ -28,7 +28,7 @@ import {
   type FollowStatus,
   type UserProfileRead,
 } from '../lib/firestore';
-import ProfilePostsGrid from './ProfilePostsGrid';
+import ProfilePostsGrid from '@/features/posts/components/ProfilePostsGrid';
 import ContributionsSection from './ContributionsSection';
 import { CATEGORIES } from '../data/mockData';
 
