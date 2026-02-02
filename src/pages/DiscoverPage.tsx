@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, BookOpen, ArrowRight, Filter, Users } from 'lucide-react';
-import { SearchFilters } from '../components';
+import SearchFilters from '@/features/discover/components/SearchFilters';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
 import { useAppState } from '../context';
 import { useAuth } from '../context/AuthContext';

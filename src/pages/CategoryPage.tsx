@@ -9,13 +9,8 @@ import {
   Link as LinkIcon,
   Loader2,
 } from 'lucide-react';
-import {
-  ApiContentCard,
-  SkeletonContentGrid,
-  EmptyState,
-  ErrorState,
-  useToast,
-} from '../components';
+import { SkeletonContentGrid, EmptyState, ErrorState, useToast } from '../components';
+import ApiContentCard from '@/features/discover/components/ApiContentCard';
 import { useApiContent } from '../hooks';
 import { CATEGORIES } from '../data';
 import {
