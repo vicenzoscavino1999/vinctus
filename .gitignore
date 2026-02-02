@@ -7,6 +7,9 @@ node_modules/
 dist/
 dist-ssr/
 *.local
+coverage/
+.vite/
+.turbo/
 
 # Editor directories and files
 .vscode/*
@@ -34,6 +37,7 @@ pnpm-debug.log*
 dev-dist/
 
 .vercel
+.firebase/
 
 # Playwright
 playwright-report/
