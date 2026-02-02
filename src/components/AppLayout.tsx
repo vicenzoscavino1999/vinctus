@@ -1,6 +1,15 @@
 import { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { Compass, Hash, User, Briefcase, MoreHorizontal, Settings, LogOut, Search } from 'lucide-react';
+import {
+  Compass,
+  Hash,
+  User,
+  Briefcase,
+  MoreHorizontal,
+  Settings,
+  LogOut,
+  Search,
+} from 'lucide-react';
 
 import Header from './Header';
 import SidebarItem from './SidebarItem';
@@ -25,6 +34,7 @@ const FollowListPage = lazy(() => import('../pages/FollowListPage'));
 const NotificationsPage = lazy(() => import('../pages/NotificationsPage'));
 const MessagesPage = lazy(() => import('../pages/MessagesPage'));
 const ConversationDetailsPage = lazy(() => import('../pages/ConversationDetailsPage'));
+const GroupConversationDetailsPage = lazy(() => import('../pages/GroupConversationDetailsPage'));
 const GroupEditPage = lazy(() => import('../pages/GroupEditPage'));
 
 // Settings page (lazy loaded)
@@ -75,7 +85,11 @@ const MoreMenu = ({ onNavigate }: { onNavigate: (path: string) => void }) => {
         aria-label="Más opciones"
         title="Más opciones"
       >
-        <MoreHorizontal size={24} strokeWidth={1.5} className="group-hover:scale-105 transition-transform duration-200" />
+        <MoreHorizontal
+          size={24}
+          strokeWidth={1.5}
+          className="group-hover:scale-105 transition-transform duration-200"
+        />
       </button>
 
       {isOpen && (
@@ -119,13 +133,38 @@ const Sidebar = ({ activeTab, onNavigate }: NavProps) => (
       <img src="/logo-vinctus.png" alt="Vinctus" className="w-12 h-12" />
     </button>
     <nav className="flex flex-col space-y-4">
-      <SidebarItem icon={Compass} active={activeTab === 'discover'} onClick={() => onNavigate('/discover')} tooltip="Descubrir" />
-      <SidebarItem icon={Search} active={activeTab === 'search'} onClick={() => onNavigate('/search')} tooltip="Buscar" />
-      <SidebarItem icon={Hash} active={activeTab === 'messages'} onClick={() => onNavigate('/messages')} tooltip="Conversación" />
-      <SidebarItem icon={Briefcase} active={activeTab === 'projects'} onClick={() => onNavigate('/projects')} tooltip="Conexiones" />
+      <SidebarItem
+        icon={Compass}
+        active={activeTab === 'discover'}
+        onClick={() => onNavigate('/discover')}
+        tooltip="Descubrir"
+      />
+      <SidebarItem
+        icon={Search}
+        active={activeTab === 'search'}
+        onClick={() => onNavigate('/search')}
+        tooltip="Buscar"
+      />
+      <SidebarItem
+        icon={Hash}
+        active={activeTab === 'messages'}
+        onClick={() => onNavigate('/messages')}
+        tooltip="Conversación"
+      />
+      <SidebarItem
+        icon={Briefcase}
+        active={activeTab === 'projects'}
+        onClick={() => onNavigate('/projects')}
+        tooltip="Conexiones"
+      />
     </nav>
     <div className="mt-auto mb-4 flex flex-col items-center gap-4">
-      <SidebarItem icon={User} active={activeTab === 'profile'} onClick={() => onNavigate('/profile')} tooltip="Perfil" />
+      <SidebarItem
+        icon={User}
+        active={activeTab === 'profile'}
+        onClick={() => onNavigate('/profile')}
+        tooltip="Perfil"
+      />
       <MoreMenu onNavigate={onNavigate} />
     </div>
   </aside>
@@ -142,11 +181,41 @@ const MobileNav = ({ activeTab, onNavigate }: NavProps) => {
   // Changing the request to fit mobile: usually "More" is the last item.
   return (
     <div className="md:hidden fixed bottom-0 w-full bg-bg/95 backdrop-blur-md border-t border-neutral-900 flex justify-around px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] z-50">
-      <button onClick={() => onNavigate('/discover')} aria-label="Descubrir" className={`p-2.5 ${activeTab === 'discover' ? 'text-white' : 'text-neutral-600'}`}><Compass size={24} strokeWidth={1} /></button>
-      <button onClick={() => onNavigate('/search')} aria-label="Buscar" className={`p-2.5 ${activeTab === 'search' ? 'text-white' : 'text-neutral-600'}`}><Search size={24} strokeWidth={1} /></button>
-      <button onClick={() => onNavigate('/messages')} aria-label="Diálogos" className={`p-2.5 ${activeTab === 'messages' ? 'text-white' : 'text-neutral-600'}`}><Hash size={24} strokeWidth={1} /></button>
-      <button onClick={() => onNavigate('/projects')} aria-label="Conexiones" className={`p-2.5 ${activeTab === 'projects' ? 'text-white' : 'text-neutral-600'}`}><Briefcase size={24} strokeWidth={1} /></button>
-      <button onClick={() => onNavigate('/profile')} aria-label="Perfil" className={`p-2.5 ${activeTab === 'profile' ? 'text-white' : 'text-neutral-600'}`}><User size={24} strokeWidth={1} /></button>
+      <button
+        onClick={() => onNavigate('/discover')}
+        aria-label="Descubrir"
+        className={`p-2.5 ${activeTab === 'discover' ? 'text-white' : 'text-neutral-600'}`}
+      >
+        <Compass size={24} strokeWidth={1} />
+      </button>
+      <button
+        onClick={() => onNavigate('/search')}
+        aria-label="Buscar"
+        className={`p-2.5 ${activeTab === 'search' ? 'text-white' : 'text-neutral-600'}`}
+      >
+        <Search size={24} strokeWidth={1} />
+      </button>
+      <button
+        onClick={() => onNavigate('/messages')}
+        aria-label="Diálogos"
+        className={`p-2.5 ${activeTab === 'messages' ? 'text-white' : 'text-neutral-600'}`}
+      >
+        <Hash size={24} strokeWidth={1} />
+      </button>
+      <button
+        onClick={() => onNavigate('/projects')}
+        aria-label="Conexiones"
+        className={`p-2.5 ${activeTab === 'projects' ? 'text-white' : 'text-neutral-600'}`}
+      >
+        <Briefcase size={24} strokeWidth={1} />
+      </button>
+      <button
+        onClick={() => onNavigate('/profile')}
+        aria-label="Perfil"
+        className={`p-2.5 ${activeTab === 'profile' ? 'text-white' : 'text-neutral-600'}`}
+      >
+        <User size={24} strokeWidth={1} />
+      </button>
     </div>
   );
 };
@@ -182,7 +251,12 @@ const AppLayout = () => {
 
   return (
     <div className="min-h-screen bg-bg text-neutral-200 font-sans selection:bg-white/20 selection:text-white overflow-x-hidden">
-      <div className="fixed inset-0 opacity-[0.03] pointer-events-none z-0 mix-blend-overlay" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} />
+      <div
+        className="fixed inset-0 opacity-[0.03] pointer-events-none z-0 mix-blend-overlay"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+        }}
+      />
 
       <div className="flex h-screen relative z-10">
         <Sidebar activeTab={getActiveTab()} onNavigate={navigate} />
@@ -209,7 +283,14 @@ const AppLayout = () => {
                 <Route path="/user/:userId/connections" element={<FollowListPage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/messages" element={<MessagesPage />} />
-                <Route path="/messages/:conversationId/details" element={<ConversationDetailsPage />} />
+                <Route
+                  path="/messages/:conversationId/details"
+                  element={<ConversationDetailsPage />}
+                />
+                <Route
+                  path="/messages/:conversationId/group-details"
+                  element={<GroupConversationDetailsPage />}
+                />
                 <Route path="/group/:groupId" element={<GroupDetailPage />} />
                 <Route path="/group/:groupId/edit" element={<GroupEditPage />} />
                 <Route path="/post/:postId" element={<PostDetailPage />} />
@@ -221,10 +302,7 @@ const AppLayout = () => {
       </div>
 
       {/* Create Post Modal */}
-      <CreatePostModal
-        isOpen={isCreatePostOpen}
-        onClose={() => setIsCreatePostOpen(false)}
-      />
+      <CreatePostModal isOpen={isCreatePostOpen} onClose={() => setIsCreatePostOpen(false)} />
     </div>
   );
 };
