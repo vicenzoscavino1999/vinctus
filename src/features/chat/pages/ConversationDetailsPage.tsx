@@ -25,7 +25,7 @@ import {
   type ConversationMemberRead,
   type UserReportReason,
 } from '@/shared/lib/firestore';
-import CreateGroupModal from '@/components/CreateGroupModal';
+import CreateGroupModal from '@/features/groups/components/CreateGroupModal';
 
 // Helper to parse otherUserId from conversation ID
 const parseOtherUserId = (conversationId: string, currentUid: string): string | null => {

@@ -43,7 +43,7 @@ import {
   type MessageAttachmentRead,
   type UserReportReason,
 } from '@/shared/lib/firestore';
-import CreateGroupModal from '@/components/CreateGroupModal';
+import CreateGroupModal from '@/features/groups/components/CreateGroupModal';
 
 // Helper to format relative time
 const formatRelativeTime = (date: Date): string => {
