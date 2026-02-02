@@ -5,7 +5,7 @@ import { useToast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
 import { subscribeToUserProfile, type UserProfileRead } from '../lib/firestore';
 import EditProfileModal from '@/features/profile/components/EditProfileModal';
-import CollectionsPanel from '../components/CollectionsPanel';
+import CollectionsPanel from '@/features/collections/components/CollectionsPanel';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
 import ProfilePostsGrid from '@/features/posts/components/ProfilePostsGrid';
 import ContributionsSection from '@/features/profile/components/ContributionsSection';
