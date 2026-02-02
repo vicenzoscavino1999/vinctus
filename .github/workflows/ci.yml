@@ -27,7 +27,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
+      - run: npm ci --include=optional
       - run: npm run lint
 
   typecheck:
@@ -39,7 +39,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
+      - run: npm ci --include=optional
       - run: npm run typecheck
 
   test:
@@ -51,7 +51,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
+      - run: npm ci --include=optional
       - run: npm run test:run
 
   build:
@@ -63,7 +63,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
+      - run: npm ci --include=optional
       - run: npm run build
 
   e2e:
@@ -75,7 +75,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
+      - run: npm ci --include=optional
       - run: npm run functions:install
       - run: npm run functions:build
       - run: npx playwright install --with-deps
