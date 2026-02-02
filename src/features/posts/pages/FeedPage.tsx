@@ -16,7 +16,7 @@ import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/shared/ui/Toast';
 import PostCommentsModal from '@/features/posts/components/PostCommentsModal';
-import StoriesWidget from '@/components/StoriesWidget';
+import StoriesWidget from '@/features/posts/components/StoriesWidget';
 import {
   getPostCommentCount,
   getPostLikeCount,
