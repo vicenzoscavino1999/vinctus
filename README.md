@@ -88,9 +88,25 @@ npm run build
 npm run preview
 ```
 
+## Desarrollo local con emuladores
+
+```bash
+npm run dev:local
+```
+
+Inicia Firebase Emulator Suite (Auth/Firestore/Storage/Functions), aplica el seed y levanta Vite en `http://localhost:5173`.
+Emulator UI: `http://localhost:4000`.
+
+Usuarios seed (email / password):
+
+- `alice@vinctus.local` / `password123`
+- `bob@vinctus.local` / `password123`
+- `carla@vinctus.local` / `password123`
+
 ## Scripts útiles
 
 - `npm run dev` - desarrollo con Vite
+- `npm run dev:local` - emuladores + seed + Vite
 - `npm run build` - build de producción
 - `npm run preview` - preview del build
 - `npm run lint` - ESLint
@@ -99,6 +115,10 @@ npm run preview
 - `npm run test:e2e` - Playwright
 - `npm run typecheck` - TypeScript sin emitir
 - `npm run ci` - lint + build + tests
+- `npm run emulators` - Firebase emulators
+- `npm run seed` - seed de datos en emuladores
+- `npm run functions:install` - instala deps de Cloud Functions
+- `npm run functions:build` - build de Cloud Functions
 
 ## Testing
 
@@ -114,6 +134,8 @@ Copia `.env.example` a `.env.local` y completa lo necesario:
   - Por defecto: `https://api.allorigins.win/raw?url=`
   - Actualmente se usa como fallback solo para arXiv.
   - Para desactivar el proxy, define la variable vacía.
+- `VITE_USE_FIREBASE_EMULATOR` (opcional) - usa emuladores Firebase en local.
+- `VITE_FIREBASE_EMULATOR_HOST` (opcional) - host para emuladores (default `127.0.0.1`).
 
 ## APIs externas
 

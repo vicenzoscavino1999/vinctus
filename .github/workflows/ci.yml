@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  VITE_FIREBASE_API_KEY: test
+  VITE_FIREBASE_AUTH_DOMAIN: localhost
+  VITE_FIREBASE_PROJECT_ID: vinctus-dev
+  VITE_FIREBASE_STORAGE_BUCKET: vinctus-dev.appspot.com
+  VITE_FIREBASE_MESSAGING_SENDER_ID: test
+  VITE_FIREBASE_APP_ID: test
+  VITE_USE_FIREBASE_EMULATOR: true
+  VITE_FIREBASE_EMULATOR_HOST: 127.0.0.1
+  FIREBASE_PROJECT_ID: vinctus-dev
+  GCLOUD_PROJECT: vinctus-dev
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --include=optional
+      - run: npm run lint
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --include=optional
+      - run: npm run typecheck
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --include=optional
+      - run: npm install --no-save @rollup/rollup-linux-x64-gnu@4.55.1
+      - run: npm run test:run
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --include=optional
+      - run: npm install --no-save @rollup/rollup-linux-x64-gnu@4.55.1
+      - run: npm run build
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --include=optional
+      - run: npm install --no-save @rollup/rollup-linux-x64-gnu@4.55.1
+      - run: npm run functions:install
+      - run: npm run functions:build
+      - run: npx playwright install --with-deps
+      - run: npx firebase emulators:exec --only auth,firestore,storage,functions --project vinctus-dev "npm run seed && npm run test:e2e"
