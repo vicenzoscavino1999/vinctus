@@ -1,6 +1,3 @@
-// Voice module exports
-// Use WebSpeechProvider now, can swap to GeminiLiveProvider later
-
-export * from './types';
-export { WebSpeechProvider } from './WebSpeechProvider';
-export { useVoice } from './useVoice';
+// TODO: STUB REMOVE BY: 2026-03-31
+// Ticket: PHASE2-001
+export * from '@/shared/lib/voice/index';
