@@ -9,10 +9,10 @@ import {
 } from '../lib/firestore';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
-import CreateEventModal from '../components/CreateEventModal';
-import EventDetailModal from '../components/EventDetailModal';
 import CreateCollaborationModal from '@/features/collaborations/components/CreateCollaborationModal';
 import CollaborationDetailModal from '@/features/collaborations/components/CollaborationDetailModal';
+import CreateEventModal from '@/features/events/components/CreateEventModal';
+import EventDetailModal from '@/features/events/components/EventDetailModal';
 
 const formatRelativeTime = (date: Date): string => {
   const diffMs = Date.now() - date.getTime();
