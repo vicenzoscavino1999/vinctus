@@ -52,6 +52,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci --include=optional
+      - run: npm install --no-save @rollup/rollup-linux-x64-gnu@4.55.1
       - run: npm run test:run
 
   build:
@@ -64,6 +65,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci --include=optional
+      - run: npm install --no-save @rollup/rollup-linux-x64-gnu@4.55.1
       - run: npm run build
 
   e2e:
@@ -76,6 +78,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci --include=optional
+      - run: npm install --no-save @rollup/rollup-linux-x64-gnu@4.55.1
       - run: npm run functions:install
       - run: npm run functions:build
       - run: npx playwright install --with-deps
