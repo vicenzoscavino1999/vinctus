@@ -32,9 +32,11 @@ const LibraryPage = lazy(() => import('../pages/LibraryPage'));
 const ProfilePage = lazy(() => import('../pages/ProfilePage'));
 const FollowListPage = lazy(() => import('../pages/FollowListPage'));
 const NotificationsPage = lazy(() => import('../pages/NotificationsPage'));
-const MessagesPage = lazy(() => import('../pages/MessagesPage'));
-const ConversationDetailsPage = lazy(() => import('../pages/ConversationDetailsPage'));
-const GroupConversationDetailsPage = lazy(() => import('../pages/GroupConversationDetailsPage'));
+const MessagesPage = lazy(() => import('@/features/chat/pages/MessagesPage'));
+const ConversationDetailsPage = lazy(() => import('@/features/chat/pages/ConversationDetailsPage'));
+const GroupConversationDetailsPage = lazy(
+  () => import('@/features/chat/pages/GroupConversationDetailsPage'),
+);
 const GroupEditPage = lazy(() => import('../pages/GroupEditPage'));
 
 // Settings page (lazy loaded)
