@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
-import LoginScreen from './components/LoginScreen';
+import LoginScreen from '@/features/auth/components/LoginScreen';
 import PageLoader from './components/PageLoader';
 import { ToastProvider } from './components/Toast';
 import { AppStateProvider, AuthProvider, useAuth } from './context';
@@ -30,7 +30,7 @@ const setStoredItem = (key: string, value: string): void => {
   }
 };
 
-const OnboardingFlow = lazy(() => import('./components/OnboardingFlow'));
+const OnboardingFlow = lazy(() => import('@/features/auth/components/OnboardingFlow'));
 const AppLayout = lazy(() => import('./components/AppLayout'));
 
 // Inner app that uses auth context
