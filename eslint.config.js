@@ -7,7 +7,14 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
 export default defineConfig([
-  globalIgnores(['dist', 'functions/lib']),
+  globalIgnores([
+    'dist',
+    'functions/lib',
+    '.vercel',
+    'playwright-report',
+    'test-results',
+    'coverage',
+  ]),
   {
     files: ['**/*.{js,jsx,ts,tsx}'],
     extends: [
@@ -43,6 +50,59 @@ export default defineConfig([
         {
           allowConstantExport: true,
           allowExportNames: ['useAuth', 'useAppState', 'useToast'],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/shared/**/*.{js,jsx,ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '@/features/*',
+                '@/features/**',
+                '@/app/*',
+                '@/app/**',
+                '../features/**',
+                '../../features/**',
+                '../../../features/**',
+                '../../../../features/**',
+                '../app/**',
+                '../../app/**',
+                '../../../app/**',
+                '../../../../app/**',
+              ],
+              message:
+                'shared no puede importar de features/app. Mueve ese acoplamiento hacia app.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/features/**/*.{js,jsx,ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '@/app/*',
+                '@/app/**',
+                '../app/**',
+                '../../app/**',
+                '../../../app/**',
+                '../../../../app/**',
+              ],
+              message: 'features no puede importar app. app debe orquestar providers y rutas.',
+            },
+          ],
         },
       ],
     },

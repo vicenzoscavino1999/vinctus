@@ -28,7 +28,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci --include=optional
-      - run: npm run lint
+      - run: npm run guardrails
 
   typecheck:
     name: typecheck
