@@ -24,7 +24,7 @@ import {
   type UserProfileRead,
   type ConversationMemberRead,
   type UserReportReason,
-} from '@/shared/lib/firestore';
+} from '@/features/chat/api';
 import CreateGroupModal from '@/features/groups/components/CreateGroupModal';
 
 // Helper to parse otherUserId from conversation ID

@@ -42,7 +42,7 @@ import {
   type MessageRead,
   type MessageAttachmentRead,
   type UserReportReason,
-} from '@/shared/lib/firestore';
+} from '@/features/chat/api';
 import CreateGroupModal from '@/features/groups/components/CreateGroupModal';
 
 // Helper to format relative time

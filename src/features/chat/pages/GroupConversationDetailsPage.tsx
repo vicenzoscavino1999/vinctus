@@ -30,7 +30,7 @@ import {
   type MessageAttachmentRead,
   type MessageRead,
   type UserReportReason,
-} from '@/shared/lib/firestore';
+} from '@/features/chat/api';
 
 const CLEARED_STORAGE_KEY = 'vinctus:clearedConversations';
 
