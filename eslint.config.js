@@ -127,6 +127,58 @@ export default defineConfig([
     },
   },
   {
+    files: ['src/features/posts/{pages,components}/**/*.{js,jsx,ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/shared/lib/firestore',
+              message: 'En posts/pages y posts/components importa desde @/features/posts/api.',
+            },
+            {
+              name: '@/shared/lib/firestore-post-upload',
+              message: 'En posts/pages y posts/components importa desde @/features/posts/api.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/features/groups/{pages,components}/**/*.{js,jsx,ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/shared/lib/firestore',
+              message: 'En groups/pages y groups/components importa desde @/features/groups/api.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/features/chat/pages/**/*.{js,jsx,ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/shared/lib/firestore',
+              message: 'En chat/pages importa desde @/features/chat/api.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['functions/**/*.{js,ts}', 'playwright.config.ts'],
     languageOptions: {
       globals: globals.node,
