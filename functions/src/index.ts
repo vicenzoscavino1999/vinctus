@@ -25,6 +25,47 @@ const db = admin.firestore();
 const KARMA_PER_LIKE = 2;
 const REPUTATION_MAX = 100;
 
+type ApplyToBatch<T> = (batch: admin.firestore.WriteBatch, item: T) => void;
+
+/**
+ * Commit write batches sequentially to avoid high write fan-out spikes.
+ */
+async function commitInBatches<T>(
+  items: readonly T[],
+  batchSize: number,
+  apply: ApplyToBatch<T>,
+): Promise<number> {
+  if (items.length === 0) {
+    return 0;
+  }
+  if (batchSize <= 0) {
+    throw new Error(`Invalid batch size: ${batchSize}`);
+  }
+
+  let batch = db.batch();
+  let operationCount = 0;
+  let batchCount = 0;
+
+  for (const item of items) {
+    apply(batch, item);
+    operationCount += 1;
+
+    if (operationCount === batchSize) {
+      await batch.commit();
+      batchCount += 1;
+      batch = db.batch();
+      operationCount = 0;
+    }
+  }
+
+  if (operationCount > 0) {
+    await batch.commit();
+    batchCount += 1;
+  }
+
+  return batchCount;
+}
+
 // ==========================================================
 // EVENT ATTENDEE COUNTERS (With Deduplication)
 // ==========================================================
@@ -705,35 +746,16 @@ export const onGroupDeleted = functions.firestore
         return;
       }
 
-      // Firestore batch has limit of 500 operations
-      const batchSize = 450; // Use 450 for safety margin
-      const batches: admin.firestore.WriteBatch[] = [];
-      let currentBatch = db.batch();
-      let operationCount = 0;
-
-      membersSnapshot.docs.forEach((doc) => {
-        currentBatch.delete(doc.ref);
-        operationCount++;
-
-        if (operationCount === batchSize) {
-          batches.push(currentBatch);
-          currentBatch = db.batch();
-          operationCount = 0;
-        }
+      // Firestore batch has a hard limit of 500 writes.
+      const batchSize = 450;
+      const batchCount = await commitInBatches(membersSnapshot.docs, batchSize, (batch, doc) => {
+        batch.delete(doc.ref);
       });
-
-      // Add the last batch if it has operations
-      if (operationCount > 0) {
-        batches.push(currentBatch);
-      }
-
-      // Commit all batches
-      await Promise.all(batches.map((batch) => batch.commit()));
 
       functions.logger.info('Members cleaned up', {
         groupId,
         totalDeleted: membersSnapshot.size,
-        batchCount: batches.length,
+        batchCount,
       });
     } catch (error) {
       functions.logger.error('Failed to clean up group members', {
@@ -982,35 +1004,33 @@ export const onUserPublicProfileUpdated = functions.firestore
         return;
       }
 
-      const batchSize = 400;
-      let batch = db.batch();
-      let opCount = 0;
-      const commits: Array<Promise<unknown>> = [];
+      const docsToUpdate = snapshot.docs.filter((doc) => {
+        const message = doc.data() || {};
+        return message.senderName !== senderName || message.senderPhotoURL !== senderPhotoURL;
+      });
 
-      snapshot.docs.forEach((doc) => {
+      if (docsToUpdate.length === 0) {
+        functions.logger.info('Message sender metadata already up to date', {
+          uid,
+          scannedCount: snapshot.size,
+        });
+        return;
+      }
+
+      const batchSize = 400;
+      const batchCount = await commitInBatches(docsToUpdate, batchSize, (batch, doc) => {
         batch.update(doc.ref, {
           senderName,
           senderPhotoURL,
           senderUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-        opCount += 1;
-
-        if (opCount === batchSize) {
-          commits.push(batch.commit());
-          batch = db.batch();
-          opCount = 0;
-        }
       });
-
-      if (opCount > 0) {
-        commits.push(batch.commit());
-      }
-
-      await Promise.all(commits);
 
       functions.logger.info('Updated message sender metadata', {
         uid,
-        updatedCount: snapshot.size,
+        scannedCount: snapshot.size,
+        updatedCount: docsToUpdate.length,
+        batchCount,
       });
     } catch (error) {
       functions.logger.error('Failed to update message sender metadata', {
