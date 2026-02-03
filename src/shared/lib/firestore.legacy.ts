@@ -528,6 +528,7 @@ export interface PaginatedResult<T> {
 
 const DEFAULT_LIMIT = 30;
 const SMALL_LIST_LIMIT = 50;
+const LARGE_LIST_LIMIT = 200;
 const BATCH_CHUNK_SIZE = 450; // Max 500, use 450 for safety
 const ACTIVITY_SNIPPET_LIMIT = 160;
 
@@ -1748,8 +1749,16 @@ export const isCategorySaved = async (categoryId: string, uid: string): Promise<
 
 // ==================== Collections ====================
 
-export const getUserCollections = async (uid: string): Promise<CollectionRead[]> => {
-  const q = query(collection(db, 'users', uid, 'collections'), orderBy('createdAt', 'desc'));
+export const getUserCollections = async (
+  uid: string,
+  limitCount: number = LARGE_LIST_LIMIT,
+): Promise<CollectionRead[]> => {
+  const safeLimit = Math.min(LARGE_LIST_LIMIT, Math.max(1, Math.floor(limitCount)));
+  const q = query(
+    collection(db, 'users', uid, 'collections'),
+    orderBy('createdAt', 'desc'),
+    limit(safeLimit),
+  );
   const snapshot = await getDocs(q);
   return snapshot.docs.map((docSnap) => {
     const data = docSnap.data();
@@ -3062,7 +3071,11 @@ export const subscribeToTyping = (
   conversationId: string,
   callback: (typing: TypingIndicatorRead[]) => void,
 ): Unsubscribe => {
-  const q = query(collection(db, `conversations/${conversationId}/typing`));
+  const q = query(
+    collection(db, `conversations/${conversationId}/typing`),
+    orderBy('updatedAt', 'desc'),
+    limit(SMALL_LIST_LIMIT),
+  );
 
   return onSnapshot(q, (snapshot) => {
     const typingList = snapshot.docs.map((doc) => ({
