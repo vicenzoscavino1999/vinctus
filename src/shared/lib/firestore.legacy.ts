@@ -889,6 +889,7 @@ export async function sendGroupJoinRequest(input: {
     collection(db, 'group_requests'),
     where('fromUid', '==', input.fromUid),
     where('groupId', '==', input.groupId),
+    limit(1),
   );
   const existing = await getDocs(existingQuery);
 
@@ -922,12 +923,14 @@ export async function sendGroupJoinRequest(input: {
 
 export async function getPendingGroupJoinRequests(
   ownerId: string,
+  limitCount: number = SMALL_LIST_LIMIT,
 ): Promise<GroupJoinRequestRead[]> {
   const q = query(
     collection(db, 'group_requests'),
     where('toUid', '==', ownerId),
     where('status', '==', 'pending'),
     orderBy('createdAt', 'desc'),
+    limit(limitCount),
   );
   const snapshot = await getDocs(q);
   return snapshot.docs.map((docSnap) => {
@@ -1238,6 +1241,7 @@ export async function getGroupJoinStatus(groupId: string, uid: string): Promise<
     where('groupId', '==', groupId),
     where('fromUid', '==', uid),
     where('status', '==', 'pending'),
+    limit(1),
   );
   const reqSnap = await getDocs(reqQuery);
   return reqSnap.empty ? 'none' : 'pending';
@@ -3989,6 +3993,7 @@ export async function sendFriendRequest(
     collection(db, 'friend_requests'),
     where('fromUid', '==', fromUid),
     where('toUid', '==', toUid),
+    limit(1),
   );
   const existing = await getDocs(existingQuery);
 
@@ -4014,6 +4019,7 @@ export async function sendFriendRequest(
     collection(db, 'friend_requests'),
     where('fromUid', '==', toUid),
     where('toUid', '==', fromUid),
+    limit(1),
   );
   const reverse = await getDocs(reverseQuery);
 
@@ -4090,6 +4096,7 @@ export async function getPendingFriendRequests(uid: string): Promise<FriendReque
     where('toUid', '==', uid),
     where('status', '==', 'pending'),
     orderBy('createdAt', 'desc'),
+    limit(SMALL_LIST_LIMIT),
   );
 
   const snapshot = await getDocs(q);
@@ -4119,6 +4126,7 @@ export async function getSentFriendRequests(uid: string): Promise<FriendRequestR
     where('fromUid', '==', uid),
     where('status', '==', 'pending'),
     orderBy('createdAt', 'desc'),
+    limit(SMALL_LIST_LIMIT),
   );
 
   const snapshot = await getDocs(q);
@@ -4142,12 +4150,16 @@ export async function getSentFriendRequests(uid: string): Promise<FriendRequestR
 /**
  * Get friends (accepted requests in both directions)
  */
-export async function getFriends(uid: string): Promise<PublicUserRead[]> {
+export async function getFriends(
+  uid: string,
+  limitCount: number = DEFAULT_LIMIT * 4,
+): Promise<PublicUserRead[]> {
   // Get accepted requests where user is sender
   const sentQ = query(
     collection(db, 'friend_requests'),
     where('fromUid', '==', uid),
     where('status', '==', 'accepted'),
+    limit(limitCount),
   );
 
   // Get accepted requests where user is receiver
@@ -4155,6 +4167,7 @@ export async function getFriends(uid: string): Promise<PublicUserRead[]> {
     collection(db, 'friend_requests'),
     where('toUid', '==', uid),
     where('status', '==', 'accepted'),
+    limit(limitCount),
   );
 
   const [sentSnap, receivedSnap] = await Promise.all([getDocs(sentQ), getDocs(receivedQ)]);
@@ -4203,6 +4216,7 @@ export async function getFriendshipStatus(
     collection(db, 'friend_requests'),
     where('fromUid', '==', currentUid),
     where('toUid', '==', targetUid),
+    limit(1),
   );
   const sentSnap = await getDocs(sentQ);
 
@@ -4221,6 +4235,7 @@ export async function getFriendshipStatus(
     collection(db, 'friend_requests'),
     where('fromUid', '==', targetUid),
     where('toUid', '==', currentUid),
+    limit(1),
   );
   const receivedSnap = await getDocs(receivedQ);
 
@@ -4783,6 +4798,7 @@ export async function sendCollaborationRequest(input: {
     collection(db, 'collaboration_requests'),
     where('fromUid', '==', input.fromUid),
     where('collaborationId', '==', input.collaborationId),
+    limit(1),
   );
   const existing = await getDocs(existingQuery);
 
@@ -4840,11 +4856,13 @@ export async function deleteCollaboration(
 
 export async function getPendingCollaborationRequests(
   uid: string,
+  limitCount: number = SMALL_LIST_LIMIT,
 ): Promise<CollaborationRequestRead[]> {
   const q = query(
     collection(db, 'collaboration_requests'),
     where('toUid', '==', uid),
     where('status', '==', 'pending'),
+    limit(limitCount),
   );
   const snapshot = await getDocs(q);
 
