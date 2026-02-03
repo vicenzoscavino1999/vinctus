@@ -1,3 +1,3 @@
-// Re-export context providers and hooks
-export { AppStateProvider, useAppState } from './AppState';
-export { AuthProvider, useAuth } from './AuthContext';
+// TODO: STUB REMOVE BY: 2026-03-31
+// Ticket: PHASE2-017
+export * from '@/app/providers';
