@@ -529,6 +529,7 @@ export interface PaginatedResult<T> {
 const DEFAULT_LIMIT = 30;
 const SMALL_LIST_LIMIT = 50;
 const LARGE_LIST_LIMIT = 200;
+const ID_SUBCOLLECTION_FETCH_LIMIT = 1000;
 const BATCH_CHUNK_SIZE = 450; // Max 500, use 450 for safety
 const ACTIVITY_SNIPPET_LIMIT = 160;
 
@@ -4618,17 +4619,23 @@ export async function isUserBlocked(currentUid: string, otherUid: string): Promi
 }
 
 export async function getBlockedUsers(uid: string): Promise<string[]> {
-  const snapshot = await getDocs(collection(db, 'users', uid, 'blockedUsers'));
+  const snapshot = await getDocs(
+    query(collection(db, 'users', uid, 'blockedUsers'), limit(ID_SUBCOLLECTION_FETCH_LIMIT)),
+  );
   return snapshot.docs.map((docSnap) => docSnap.id);
 }
 
 export async function getFollowingIds(uid: string): Promise<string[]> {
-  const snapshot = await getDocs(collection(db, 'users', uid, 'following'));
+  const snapshot = await getDocs(
+    query(collection(db, 'users', uid, 'following'), limit(ID_SUBCOLLECTION_FETCH_LIMIT)),
+  );
   return snapshot.docs.map((docSnap) => docSnap.id);
 }
 
 export async function getFollowerIds(uid: string): Promise<string[]> {
-  const snapshot = await getDocs(collection(db, 'users', uid, 'followers'));
+  const snapshot = await getDocs(
+    query(collection(db, 'users', uid, 'followers'), limit(ID_SUBCOLLECTION_FETCH_LIMIT)),
+  );
   return snapshot.docs.map((docSnap) => docSnap.id);
 }
 
