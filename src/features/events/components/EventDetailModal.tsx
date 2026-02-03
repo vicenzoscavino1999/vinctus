@@ -9,7 +9,7 @@ import {
   joinEvent,
   leaveEvent,
   type FirestoreEvent,
-} from '@/shared/lib/firestore';
+} from '@/features/events/api';
 
 interface EventDetailModalProps {
   isOpen: boolean;

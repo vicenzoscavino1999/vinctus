@@ -179,6 +179,38 @@ export default defineConfig([
     },
   },
   {
+    files: ['src/features/events/components/**/*.{js,jsx,ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/shared/lib/firestore',
+              message: 'En events/components importa desde @/features/events/api.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/features/collaborations/components/**/*.{js,jsx,ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/shared/lib/firestore',
+              message: 'En collaborations/components importa desde @/features/collaborations/api.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['functions/**/*.{js,ts}', 'playwright.config.ts'],
     languageOptions: {
       globals: globals.node,

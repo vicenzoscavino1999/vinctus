@@ -7,7 +7,7 @@ import {
   updateEvent,
   type EventVisibility,
   type FirestoreEvent,
-} from '@/shared/lib/firestore';
+} from '@/features/events/api';
 import { useToast } from '@/shared/ui/Toast';
 
 interface CreateEventModalProps {
