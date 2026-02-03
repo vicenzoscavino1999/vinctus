@@ -79,7 +79,16 @@ jobs:
           cache: npm
       - run: npm ci --include=optional
       - run: npm install --no-save @rollup/rollup-linux-x64-gnu@4.55.1
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
       - run: npm run functions:install
+        if: github.event_name != 'pull_request'
       - run: npm run functions:build
-      - run: npx playwright install --with-deps
+        if: github.event_name != 'pull_request'
+      - run: npx playwright install --with-deps chromium
+      - run: npx firebase emulators:exec --only auth,firestore,storage --project vinctus-dev "npm run seed && npm run test:e2e:smoke"
+        if: github.event_name == 'pull_request'
       - run: npx firebase emulators:exec --only auth,firestore,storage,functions --project vinctus-dev "npm run seed && npm run test:e2e"
+        if: github.event_name != 'pull_request'
