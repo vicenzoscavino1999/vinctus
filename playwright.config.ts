@@ -1,12 +1,15 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const isCI = !!process.env.CI;
+const isSmokeFastMode = isCI && process.env.PLAYWRIGHT_SMOKE_FAST === '1';
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: process.env.CI ? 'line' : 'html',
+  forbidOnly: isCI,
+  retries: isCI ? 1 : 0,
+  workers: isCI ? 1 : undefined,
+  reporter: isCI ? 'line' : 'html',
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
@@ -20,11 +23,13 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: process.env.CI
-      ? 'npm run build && npm run preview -- --port 5173'
-      : 'npm run dev -- --port 5173',
+    command: isSmokeFastMode
+      ? 'npm run dev -- --port 5173'
+      : isCI
+        ? 'npm run build && npm run preview -- --port 5173'
+        : 'npm run dev -- --port 5173',
     url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: !isCI,
     env: {
       VITE_USE_FIREBASE_EMULATOR: 'true',
       VITE_FIREBASE_EMULATOR_HOST: '127.0.0.1',
