@@ -211,6 +211,40 @@ export default defineConfig([
     },
   },
   {
+    files: ['src/features/collections/{pages,components}/**/*.{js,jsx,ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/shared/lib/firestore',
+              message:
+                'En collections/pages y collections/components importa desde @/features/collections/api.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/features/profile/{pages,components}/**/*.{js,jsx,ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/shared/lib/firestore',
+              message:
+                'En profile/pages y profile/components importa desde @/features/profile/api.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['functions/**/*.{js,ts}', 'playwright.config.ts'],
     languageOptions: {
       globals: globals.node,

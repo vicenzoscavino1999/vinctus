@@ -27,7 +27,7 @@ import {
   isUserBlocked,
   type FollowStatus,
   type UserProfileRead,
-} from '@/shared/lib/firestore';
+} from '@/features/profile/api';
 import ProfilePostsGrid from '@/features/posts/components/ProfilePostsGrid';
 import ContributionsSection from '@/features/profile/components/ContributionsSection';
 import { CATEGORIES } from '@/shared/constants/mockData';
