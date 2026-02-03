@@ -74,6 +74,34 @@ export default defineConfig([
     },
   },
   {
+    files: ['src/**/*.{js,jsx,ts,tsx}'],
+    ignores: [
+      'src/shared/lib/firestore.ts',
+      'src/lib/firestore.ts',
+      'src/lib/firestore-post-upload.ts',
+      'src/features/**/api/**/*.{js,jsx,ts,tsx}',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/shared/lib/firestore',
+              message:
+                'No importes Firestore legacy directo. Usa el modulo de dominio en src/features/<domain>/api.',
+            },
+            {
+              name: '@/shared/lib/firestore-post-upload',
+              message:
+                'No importes firestore-post-upload directo. Usa @/features/posts/api para acceso de dominio.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['src/shared/**/*.{js,jsx,ts,tsx}'],
     rules: {
       'no-restricted-imports': [
