@@ -55,6 +55,25 @@ export default defineConfig([
     },
   },
   {
+    files: ['src/**/*.{js,jsx,ts,tsx}'],
+    ignores: ['src/shared/lib/firestore.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ImportDeclaration[source.value=/firestore\\.legacy$/]',
+          message:
+            'No importes firestore legacy de forma directa. Usa puentes controlados o un modulo de dominio en src/features/*/api.',
+        },
+        {
+          selector: 'ImportDeclaration[source.value=/firestore\\.legacy\\//]',
+          message:
+            'No importes firestore legacy de forma directa. Usa puentes controlados o un modulo de dominio en src/features/*/api.',
+        },
+      ],
+    },
+  },
+  {
     files: ['src/shared/**/*.{js,jsx,ts,tsx}'],
     rules: {
       'no-restricted-imports': [
