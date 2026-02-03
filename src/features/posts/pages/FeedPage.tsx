@@ -47,6 +47,10 @@ type Post = {
   authorPhoto?: string | null;
 
   // Common
+  likeCount?: number;
+  commentCount?: number;
+  likesCount?: number;
+  commentsCount?: number;
   media?: {
     type: 'image' | 'video' | 'file';
     url: string;
@@ -106,6 +110,19 @@ const buildPostSummary = (post: Post): PostSummary => {
     media: post.media ?? [],
     createdAt: post.createdAt,
   };
+};
+
+const readPostCounter = (post: Post, primary: 'likeCount' | 'commentCount'): number | null => {
+  const secondary = primary === 'likeCount' ? 'likesCount' : 'commentsCount';
+  const first = post[primary];
+  if (typeof first === 'number' && Number.isFinite(first) && first >= 0) {
+    return first;
+  }
+  const fallback = post[secondary];
+  if (typeof fallback === 'number' && Number.isFinite(fallback) && fallback >= 0) {
+    return fallback;
+  }
+  return null;
 };
 
 const FeedPage = () => {
@@ -224,8 +241,35 @@ const FeedPage = () => {
     if (posts.length === 0) return;
     let isActive = true;
 
+    const embeddedLikeUpdates: Record<string, number> = {};
+    const embeddedCommentUpdates: Record<string, number> = {};
+    posts.forEach((post) => {
+      if (likeCounts[post.postId] === undefined) {
+        const embeddedLikeCount = readPostCounter(post, 'likeCount');
+        if (embeddedLikeCount !== null) {
+          embeddedLikeUpdates[post.postId] = embeddedLikeCount;
+        }
+      }
+      if (commentCounts[post.postId] === undefined) {
+        const embeddedCommentCount = readPostCounter(post, 'commentCount');
+        if (embeddedCommentCount !== null) {
+          embeddedCommentUpdates[post.postId] = embeddedCommentCount;
+        }
+      }
+    });
+
+    if (Object.keys(embeddedLikeUpdates).length > 0) {
+      setLikeCounts((prev) => ({ ...prev, ...embeddedLikeUpdates }));
+    }
+    if (Object.keys(embeddedCommentUpdates).length > 0) {
+      setCommentCounts((prev) => ({ ...prev, ...embeddedCommentUpdates }));
+    }
+
     const pendingCounts = posts.filter(
-      (post) => likeCounts[post.postId] === undefined || commentCounts[post.postId] === undefined,
+      (post) =>
+        (likeCounts[post.postId] === undefined && readPostCounter(post, 'likeCount') === null) ||
+        (commentCounts[post.postId] === undefined &&
+          readPostCounter(post, 'commentCount') === null),
     );
     const pendingLikes = user ? posts.filter((post) => likedByUser[post.postId] === undefined) : [];
     const pendingSaves = user ? posts.filter((post) => savedByUser[post.postId] === undefined) : [];
