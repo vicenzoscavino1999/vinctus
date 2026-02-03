@@ -46,6 +46,13 @@ import {
 import { db, dbLite } from './firebase';
 import { trackFirestoreListener, trackFirestoreRead, trackFirestoreWrite } from './devMetrics';
 
+const resolveSnapshotSize = (value: unknown): number => {
+  if (typeof value !== 'object' || value === null || !('size' in value)) return 1;
+  const size = (value as { size?: unknown }).size;
+  if (typeof size !== 'number' || !Number.isFinite(size) || size < 0) return 1;
+  return Math.max(1, Math.floor(size));
+};
+
 const getDoc = ((...args: unknown[]) => {
   trackFirestoreRead('firestore.getDoc');
   return (_getDoc as (...innerArgs: unknown[]) => unknown)(...args);
@@ -57,8 +64,22 @@ const getDocFromServer = ((...args: unknown[]) => {
 }) as typeof _getDocFromServer;
 
 const getDocs = ((...args: unknown[]) => {
-  trackFirestoreRead('firestore.getDocs');
-  return (_getDocs as (...innerArgs: unknown[]) => unknown)(...args);
+  const result = (_getDocs as (...innerArgs: unknown[]) => unknown)(...args);
+
+  if (
+    typeof result === 'object' &&
+    result !== null &&
+    'then' in result &&
+    typeof (result as Promise<unknown>).then === 'function'
+  ) {
+    return (result as Promise<unknown>).then((snapshot) => {
+      trackFirestoreRead('firestore.getDocs', resolveSnapshotSize(snapshot));
+      return snapshot;
+    });
+  }
+
+  trackFirestoreRead('firestore.getDocs', resolveSnapshotSize(result));
+  return result;
 }) as typeof _getDocs;
 
 const getCountFromServer = ((...args: unknown[]) => {

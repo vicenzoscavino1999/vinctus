@@ -109,29 +109,40 @@ const pushEvent = (state: MetricsState, event: Omit<MetricEvent, 'at'>): void =>
   }
 };
 
-const bumpSource = (counter: MetricsCounter, source: string): void => {
-  counter.bySource[source] = (counter.bySource[source] || 0) + 1;
+const normalizeCount = (count: number): number => {
+  if (!Number.isFinite(count)) return 1;
+  return Math.max(1, Math.floor(count));
 };
 
-const record = (kind: MetricKind, source: string, flowOverride?: string): void => {
+const bumpSource = (counter: MetricsCounter, source: string, count: number = 1): void => {
+  counter.bySource[source] = (counter.bySource[source] || 0) + count;
+};
+
+const record = (
+  kind: MetricKind,
+  source: string,
+  flowOverride?: string,
+  count: number = 1,
+): void => {
   const state = ensureState();
   if (!state.enabled) return;
 
   const flow = flowOverride || state.currentFlow || 'unknown';
   const flowCounter = getFlowCounter(state, flow);
+  const normalizedCount = ['read', 'write', 'call'].includes(kind) ? normalizeCount(count) : 1;
 
   switch (kind) {
     case 'read':
-      state.totals.reads += 1;
-      flowCounter.reads += 1;
+      state.totals.reads += normalizedCount;
+      flowCounter.reads += normalizedCount;
       break;
     case 'write':
-      state.totals.writes += 1;
-      flowCounter.writes += 1;
+      state.totals.writes += normalizedCount;
+      flowCounter.writes += normalizedCount;
       break;
     case 'call':
-      state.totals.calls += 1;
-      flowCounter.calls += 1;
+      state.totals.calls += normalizedCount;
+      flowCounter.calls += normalizedCount;
       break;
     case 'listener_start':
       state.totals.listenerStarts += 1;
@@ -154,8 +165,8 @@ const record = (kind: MetricKind, source: string, flowOverride?: string): void =
       break;
   }
 
-  bumpSource(state.totals, source);
-  bumpSource(flowCounter, source);
+  bumpSource(state.totals, source, normalizedCount);
+  bumpSource(flowCounter, source, normalizedCount);
   pushEvent(state, { kind, source, flow });
 };
 
@@ -166,16 +177,16 @@ export const setMetricsFlow = (flow: string): void => {
   pushEvent(state, { kind: 'flow', source: flow || 'unknown', flow: flow || 'unknown' });
 };
 
-export const trackFirestoreRead = (source: string): void => {
-  record('read', source);
+export const trackFirestoreRead = (source: string, count: number = 1): void => {
+  record('read', source, undefined, count);
 };
 
-export const trackFirestoreWrite = (source: string): void => {
-  record('write', source);
+export const trackFirestoreWrite = (source: string, count: number = 1): void => {
+  record('write', source, undefined, count);
 };
 
-export const trackAppCall = (source: string): void => {
-  record('call', source);
+export const trackAppCall = (source: string, count: number = 1): void => {
+  record('call', source, undefined, count);
 };
 
 export const trackFirestoreListener = (source: string, unsubscribe: () => void): (() => void) => {
