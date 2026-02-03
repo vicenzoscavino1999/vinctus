@@ -101,7 +101,7 @@ jobs:
       - run: npm run functions:build
         if: github.event_name != 'pull_request'
       - run: npx playwright install --with-deps chromium
-      - run: npx firebase emulators:exec --only auth,firestore,storage --project vinctus-dev "npm run seed && npm run test:e2e:smoke"
+      - run: npx firebase emulators:exec --only auth,firestore,storage --project vinctus-dev "npm run seed && PLAYWRIGHT_SMOKE_FAST=1 npm run test:e2e:smoke"
         if: github.event_name == 'pull_request'
       - run: npx firebase emulators:exec --only auth,firestore,storage,functions --project vinctus-dev "npm run seed && npm run test:e2e"
         if: github.event_name != 'pull_request'
