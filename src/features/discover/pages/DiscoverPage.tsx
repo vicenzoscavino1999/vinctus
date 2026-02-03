@@ -9,7 +9,6 @@ import { CATEGORIES, PUBLICATIONS } from '@/data';
 import { useToast } from '@/components/Toast';
 import {
   getGroupJoinStatus,
-  getGroupMemberCount,
   getGroupPostsWeekCount,
   getGroups,
   joinPublicGroup,
@@ -159,11 +158,11 @@ const DiscoverPage = () => {
         const updates: Record<string, { members: number; postsWeek: number }> = {};
         await Promise.all(
           pending.map(async (group) => {
-            const [members, postsWeek] = await Promise.all([
-              getGroupMemberCount(group.id),
-              getGroupPostsWeekCount(group.id),
-            ]);
-            updates[group.id] = { members, postsWeek };
+            const postsWeek = await getGroupPostsWeekCount(group.id);
+            updates[group.id] = {
+              members: group.memberCount ?? 0,
+              postsWeek,
+            };
           }),
         );
         if (isActive) {
