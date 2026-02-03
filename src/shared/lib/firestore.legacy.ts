@@ -53,6 +53,39 @@ const resolveSnapshotSize = (value: unknown): number => {
   return Math.max(1, Math.floor(size));
 };
 
+const trackSnapshotRead = (snapshot: unknown): void => {
+  trackFirestoreRead('firestore.onSnapshot', resolveSnapshotSize(snapshot));
+};
+
+const wrapSnapshotHandler = (handler: unknown): unknown => {
+  if (typeof handler !== 'function') return handler;
+
+  return (snapshot: unknown, ...rest: unknown[]) => {
+    trackSnapshotRead(snapshot);
+    return (handler as (...args: unknown[]) => unknown)(snapshot, ...rest);
+  };
+};
+
+const wrapSnapshotObserver = (observer: unknown): unknown => {
+  if (typeof observer !== 'object' || observer === null || !('next' in observer)) {
+    return observer;
+  }
+  const next = (observer as { next?: unknown }).next;
+  if (typeof next !== 'function') return observer;
+
+  const typedObserver = observer as {
+    next: (snapshot: unknown, ...rest: unknown[]) => unknown;
+  };
+
+  return {
+    ...typedObserver,
+    next: (snapshot: unknown, ...rest: unknown[]) => {
+      trackSnapshotRead(snapshot);
+      return typedObserver.next(snapshot, ...rest);
+    },
+  };
+};
+
 const getDoc = ((...args: unknown[]) => {
   trackFirestoreRead('firestore.getDoc');
   return (_getDoc as (...innerArgs: unknown[]) => unknown)(...args);
@@ -103,7 +136,22 @@ const deleteDoc = ((...args: unknown[]) => {
 }) as typeof _deleteDoc;
 
 const onSnapshot = ((...args: unknown[]) => {
-  const unsubscribe = (_onSnapshot as (...innerArgs: unknown[]) => Unsubscribe)(...args);
+  const wrappedArgs = [...args];
+  if (wrappedArgs.length > 1) {
+    const rawSecond = wrappedArgs[1];
+    const maybeObserver = wrapSnapshotObserver(rawSecond);
+    wrappedArgs[1] = maybeObserver;
+
+    if (maybeObserver === rawSecond) {
+      wrappedArgs[1] = wrapSnapshotHandler(rawSecond);
+    }
+  }
+
+  if (wrappedArgs.length > 2) {
+    wrappedArgs[2] = wrapSnapshotHandler(wrappedArgs[2]);
+  }
+
+  const unsubscribe = (_onSnapshot as (...innerArgs: unknown[]) => Unsubscribe)(...wrappedArgs);
   return trackFirestoreListener('firestore.onSnapshot', unsubscribe);
 }) as typeof _onSnapshot;
 
