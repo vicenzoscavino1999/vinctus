@@ -26,6 +26,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../../lib/firebase';
+import { trackAppCall, trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
 
 // Types
 interface AuthUser {
@@ -72,6 +73,7 @@ const mapUser = (firebaseUser: User | null): AuthUser | null => {
 const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
   try {
     const userRef = doc(db, 'users', firebaseUser.uid);
+    trackFirestoreRead('auth.ensureUserProfile.getUser');
     const snapshot = await getDoc(userRef);
 
     const displayName = firebaseUser.displayName ?? null;
@@ -100,6 +102,7 @@ const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
     const isNewUser = !snapshot.exists();
 
     if (isNewUser) {
+      trackFirestoreWrite('auth.ensureUserProfile.createUser');
       await setDoc(userRef, {
         uid: firebaseUser.uid,
         displayName,
@@ -166,6 +169,7 @@ const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
 
       if (Object.keys(updates).length > 0) {
         updates.updatedAt = serverTimestamp();
+        trackFirestoreWrite('auth.ensureUserProfile.updateUser');
         await setDoc(userRef, updates, { merge: true });
       }
     }
@@ -185,6 +189,7 @@ const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
       publicPayload.karmaByInterest = {};
     }
 
+    trackFirestoreWrite('auth.ensureUserProfile.upsertUserPublic');
     await setDoc(doc(db, 'users_public', firebaseUser.uid), publicPayload, { merge: true });
   } catch (error) {
     console.error('Error ensuring user profile:', error);
@@ -278,6 +283,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const signInWithGoogle = useCallback(async () => {
     setError(null);
     try {
+      trackAppCall('auth.signInWithGoogle');
       // Try popup first - works better on Safari/iOS than redirect
       await signInWithPopup(auth, googleProvider);
     } catch (err) {
@@ -290,6 +296,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         error.code === 'auth/cancelled-popup-request'
       ) {
         try {
+          trackAppCall('auth.signInWithGoogle.redirectFallback');
           // Fallback to redirect
           await signInWithRedirect(auth, googleProvider);
           return; // Redirect will handle the rest
@@ -310,6 +317,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const signInWithEmail = useCallback(async (email: string, password: string) => {
     setError(null);
     try {
+      trackAppCall('auth.signInWithEmail');
       await signInWithEmailAndPassword(auth, email, password);
     } catch (err) {
       const code = (err as { code?: string }).code || '';
@@ -323,6 +331,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     async (email: string, password: string, displayName?: string) => {
       setError(null);
       try {
+        trackAppCall('auth.signUpWithEmail');
         const result = await createUserWithEmailAndPassword(auth, email, password);
         // Update display name if provided
         if (displayName && result.user) {
@@ -349,6 +358,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const resetPassword = useCallback(async (email: string) => {
     setError(null);
     try {
+      trackAppCall('auth.resetPassword');
       await sendPasswordResetEmail(auth, email);
     } catch (err) {
       const code = (err as { code?: string }).code || '';
@@ -362,6 +372,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     async (phoneNumber: string, recaptchaContainerId: string) => {
       setError(null);
       try {
+        trackAppCall('auth.sendPhoneCode');
         // Clean up previous verifier if exists
         if (recaptchaVerifierRef.current) {
           recaptchaVerifierRef.current.clear();
@@ -402,6 +413,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         return;
       }
       try {
+        trackAppCall('auth.verifyPhoneCode');
         await confirmationResultRef.current.confirm(code);
         resetPhoneAuth();
       } catch (err) {
@@ -417,6 +429,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const signOut = useCallback(async () => {
     setError(null);
     try {
+      trackAppCall('auth.signOut');
       await firebaseSignOut(auth);
       resetPhoneAuth();
     } catch (err) {

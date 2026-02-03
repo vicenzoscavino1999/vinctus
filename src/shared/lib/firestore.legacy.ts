@@ -5,13 +5,13 @@ import {
   collection,
   collectionGroup,
   doc,
-  getDoc,
-  getDocFromServer,
-  getDocs,
-  getCountFromServer,
-  setDoc,
-  updateDoc,
-  deleteDoc,
+  getDoc as _getDoc,
+  getDocFromServer as _getDocFromServer,
+  getDocs as _getDocs,
+  getCountFromServer as _getCountFromServer,
+  setDoc as _setDoc,
+  updateDoc as _updateDoc,
+  deleteDoc as _deleteDoc,
   query,
   where,
   orderBy,
@@ -21,7 +21,7 @@ import {
   startAfter,
   startAt,
   endAt,
-  onSnapshot,
+  onSnapshot as _onSnapshot,
   writeBatch,
   increment,
   serverTimestamp,
@@ -44,6 +44,47 @@ import {
   writeBatch as writeBatchLite,
 } from 'firebase/firestore/lite';
 import { db, dbLite } from './firebase';
+import { trackFirestoreListener, trackFirestoreRead, trackFirestoreWrite } from './devMetrics';
+
+const getDoc = ((...args: unknown[]) => {
+  trackFirestoreRead('firestore.getDoc');
+  return (_getDoc as (...innerArgs: unknown[]) => unknown)(...args);
+}) as typeof _getDoc;
+
+const getDocFromServer = ((...args: unknown[]) => {
+  trackFirestoreRead('firestore.getDocFromServer');
+  return (_getDocFromServer as (...innerArgs: unknown[]) => unknown)(...args);
+}) as typeof _getDocFromServer;
+
+const getDocs = ((...args: unknown[]) => {
+  trackFirestoreRead('firestore.getDocs');
+  return (_getDocs as (...innerArgs: unknown[]) => unknown)(...args);
+}) as typeof _getDocs;
+
+const getCountFromServer = ((...args: unknown[]) => {
+  trackFirestoreRead('firestore.getCountFromServer');
+  return (_getCountFromServer as (...innerArgs: unknown[]) => unknown)(...args);
+}) as typeof _getCountFromServer;
+
+const setDoc = ((...args: unknown[]) => {
+  trackFirestoreWrite('firestore.setDoc');
+  return (_setDoc as (...innerArgs: unknown[]) => unknown)(...args);
+}) as typeof _setDoc;
+
+const updateDoc = ((...args: unknown[]) => {
+  trackFirestoreWrite('firestore.updateDoc');
+  return (_updateDoc as (...innerArgs: unknown[]) => unknown)(...args);
+}) as typeof _updateDoc;
+
+const deleteDoc = ((...args: unknown[]) => {
+  trackFirestoreWrite('firestore.deleteDoc');
+  return (_deleteDoc as (...innerArgs: unknown[]) => unknown)(...args);
+}) as typeof _deleteDoc;
+
+const onSnapshot = ((...args: unknown[]) => {
+  const unsubscribe = (_onSnapshot as (...innerArgs: unknown[]) => Unsubscribe)(...args);
+  return trackFirestoreListener('firestore.onSnapshot', unsubscribe);
+}) as typeof _onSnapshot;
 
 // ==================== Type Helpers ====================
 

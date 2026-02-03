@@ -16,6 +16,7 @@ import SidebarItem from '@/components/SidebarItem';
 import PageLoader from '@/components/PageLoader';
 import CreatePostModal from '@/features/posts/components/CreatePostModal';
 import { useAuth } from '@/context/AuthContext';
+import { setMetricsFlow } from '@/shared/lib/devMetrics';
 
 // Lazy loaded components
 const GroupDetailPage = lazy(() => import('@/features/groups/pages/GroupDetailPage'));
@@ -228,6 +229,20 @@ const AppLayout = () => {
   const location = useLocation();
   const pathname = location.pathname;
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
+
+  useEffect(() => {
+    if (pathname.startsWith('/messages')) {
+      setMetricsFlow('chat');
+      return;
+    }
+
+    if (pathname === '/feed' || pathname.startsWith('/post/')) {
+      setMetricsFlow('feed');
+      return;
+    }
+
+    setMetricsFlow('app');
+  }, [pathname]);
 
   const getActiveTab = () => {
     if (pathname.startsWith('/category')) return 'discover';
