@@ -3927,6 +3927,29 @@ export async function createStory(input: {
 
 export async function getFriendIds(uid: string): Promise<string[]> {
   try {
+    const indexedFriendsQ = query(
+      collection(db, 'users', uid, 'friends'),
+      orderBy('createdAt', 'desc'),
+      limit(LARGE_LIST_LIMIT),
+    );
+    const indexedFriendsSnap = await getDocs(indexedFriendsQ).catch((err) => {
+      const code = (err as { code?: string })?.code;
+      if (code === 'permission-denied') {
+        console.warn('[getFriendIds] permission-denied al leer friends index, usando fallback');
+        return null;
+      }
+      throw err;
+    });
+
+    if (indexedFriendsSnap && !indexedFriendsSnap.empty) {
+      const friendIds = indexedFriendsSnap.docs.map((docSnap) => docSnap.id);
+      console.log(
+        `[getFriendIds] Cargados ${friendIds.length} amigos (friends index) para uid ${uid}`,
+      );
+      return friendIds;
+    }
+
+    // Backward-compatible fallback for legacy users where friends index is not backfilled yet.
     const [followingIds, followerIds] = await Promise.all([
       getFollowingIds(uid).catch((err) => {
         const code = (err as { code?: string })?.code;
@@ -3947,9 +3970,9 @@ export async function getFriendIds(uid: string): Promise<string[]> {
     ]);
 
     const followerSet = new Set(followerIds);
-    const friendIds = followingIds.filter((id) => followerSet.has(id));
+    const friendIds = followingIds.filter((id) => followerSet.has(id)).slice(0, LARGE_LIST_LIMIT);
 
-    console.log(`[getFriendIds] Cargados ${friendIds.length} amigos para uid ${uid}`);
+    console.log(`[getFriendIds] Cargados ${friendIds.length} amigos (fallback) para uid ${uid}`);
     return friendIds;
   } catch (error) {
     console.error('[getFriendIds] Error inesperado:', error);
