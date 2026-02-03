@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Film, Image as ImageIcon, Loader2 } from 'lucide-react';
-import { getPostsByUser, type PaginatedResult, type PostRead } from '@/shared/lib/firestore';
+import { getPostsByUser, type PaginatedResult, type PostRead } from '@/features/posts/api';
 
 type MediaItem = {
   type: 'image' | 'video' | 'file';

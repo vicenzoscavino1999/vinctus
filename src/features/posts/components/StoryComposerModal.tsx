@@ -5,7 +5,7 @@ import imageCompression from 'browser-image-compression';
 import { collection, doc } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/shared/ui/Toast';
-import { createStory, type StoryMediaType } from '@/shared/lib/firestore';
+import { createStory, type StoryMediaType } from '@/features/posts/api';
 import { uploadStoryImage, uploadStoryVideo } from '@/shared/lib/storage';
 import { db } from '@/shared/lib/firebase';
 

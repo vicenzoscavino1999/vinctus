@@ -25,7 +25,7 @@ import {
   type PostRead,
   unlikePostWithSync,
   unsavePostWithSync,
-} from '@/shared/lib/firestore';
+} from '@/features/posts/api';
 
 type PostMediaItem = {
   type: 'image' | 'video' | 'file';

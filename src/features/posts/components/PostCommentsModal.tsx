@@ -9,7 +9,7 @@ import {
   getPostLikeCount,
   type PaginatedResult,
   type PostCommentRead,
-} from '@/shared/lib/firestore';
+} from '@/features/posts/api';
 import { useToast } from '@/shared/ui/Toast';
 
 type PostSummary = {

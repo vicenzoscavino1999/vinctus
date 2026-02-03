@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { X, Image as ImageIcon, Loader2, Film, FileText } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
-import { getNewPostId } from '@/shared/lib/firestore';
-import { createPostUploading, updatePost } from '@/shared/lib/firestore-post-upload';
+import { getNewPostId } from '@/features/posts/api';
+import { createPostUploading, updatePost } from '@/features/posts/api';
 import { compressToWebp, validateImage } from '@/shared/lib/compression';
 import { uploadPostMedia, deletePostAllMedia } from '@/shared/lib/storage';
 

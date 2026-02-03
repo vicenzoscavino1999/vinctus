@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/shared/ui/Toast';
-import { getFriendIds, getStoriesForOwners, type StoryRead } from '@/shared/lib/firestore';
+import { getFriendIds, getStoriesForOwners, type StoryRead } from '@/features/posts/api';
 import StoryComposerModal from '@/features/posts/components/StoryComposerModal';
 import StoryViewerModal from '@/features/posts/components/StoryViewerModal';
 
