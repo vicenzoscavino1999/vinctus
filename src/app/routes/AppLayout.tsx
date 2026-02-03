@@ -11,7 +11,7 @@ import {
   Search,
 } from 'lucide-react';
 
-import Header from '@/components/Header';
+import Header from '@/app/routes/Header';
 import SidebarItem from '@/components/SidebarItem';
 import PageLoader from '@/components/PageLoader';
 import CreatePostModal from '@/features/posts/components/CreatePostModal';
