@@ -35,22 +35,19 @@ test.describe('Flujo de Grupos', () => {
     await loginWithSeedUser(page);
 
     await page.goto('/group/1');
-    await page.waitForTimeout(1000);
 
     const joinButton = page.locator('button').filter({ hasText: /Unirme al grupo/i });
     const joinedButton = page.locator('button').filter({ hasText: /Unido/i });
+    await expect(joinButton.or(joinedButton)).toBeVisible({ timeout: 10000 });
 
     if (await joinButton.isVisible({ timeout: 3000 }).catch(() => false)) {
       await joinButton.click();
-      await page.waitForTimeout(500);
       await expect(joinedButton).toBeVisible({ timeout: 3000 });
 
       await joinedButton.click();
-      await page.waitForTimeout(500);
       await expect(joinButton).toBeVisible({ timeout: 3000 });
     } else if (await joinedButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await joinedButton.click();
-      await page.waitForTimeout(500);
       await expect(joinButton).toBeVisible({ timeout: 3000 });
     }
   });
