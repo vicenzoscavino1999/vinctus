@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '@/context';
+import { setMetricsFlow } from '@/shared/lib/devMetrics';
 
 type AuthMode = 'login' | 'register' | 'phone' | 'forgot_password';
 
@@ -26,6 +27,10 @@ const LoginScreen = () => {
   const [displayName, setDisplayName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
+
+  useEffect(() => {
+    setMetricsFlow('login');
+  }, []);
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
