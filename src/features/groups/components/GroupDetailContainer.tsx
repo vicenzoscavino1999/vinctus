@@ -31,7 +31,7 @@ import {
   removeGroupMember,
   type FirestoreGroup,
   type GroupJoinStatus,
-} from '@/shared/lib/firestore';
+} from '@/features/groups/api';
 
 const formatRelativeTime = (date: Date): string => {
   const now = new Date();

@@ -5,7 +5,7 @@ import { ArrowLeft, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/shared/ui/Toast';
 import { CATEGORIES } from '@/shared/constants';
-import { getGroup, updateGroup, type GroupVisibility } from '@/shared/lib/firestore';
+import { getGroup, updateGroup, type GroupVisibility } from '@/features/groups/api';
 import { compressToWebp, validateImage } from '@/shared/lib/compression';
 import { uploadGroupIcon } from '@/shared/lib/storage';
 
