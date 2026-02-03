@@ -1207,10 +1207,11 @@ export async function getEvent(eventId: string): Promise<FirestoreEvent | null> 
 export async function getUpcomingEvents(
   limitCount: number = DEFAULT_LIMIT,
 ): Promise<FirestoreEvent[]> {
+  const now = Timestamp.now();
   const upcomingQuery = query(
     collection(db, 'events'),
     where('visibility', '==', 'public'),
-    where('startAt', '>=', Timestamp.now()),
+    where('startAt', '>=', now),
     orderBy('startAt', 'asc'),
     limit(limitCount),
   );
@@ -1253,8 +1254,18 @@ export async function getUpcomingEvents(
   } catch (error) {
     const code = (error as { code?: string })?.code;
     if (code === 'failed-precondition') {
-      console.warn('Events fallback query requires an index; returning empty list until built.');
-      return [];
+      const fallbackScanLimit = Math.max(limitCount * 3, limitCount);
+      const fallbackSnap = await getDocs(
+        query(
+          collection(db, 'events'),
+          where('startAt', '>=', now),
+          orderBy('startAt', 'asc'),
+          limit(fallbackScanLimit),
+        ),
+      );
+      return mapSnap(fallbackSnap)
+        .filter((event) => event.visibility === 'public')
+        .slice(0, limitCount);
     }
     throw error;
   }
