@@ -55,6 +55,19 @@ jobs:
       - run: npm install --no-save @rollup/rollup-linux-x64-gnu@4.55.1
       - run: npm run test:run
 
+  rules:
+    name: rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --include=optional
+      - run: npm install --no-save @rollup/rollup-linux-x64-gnu@4.55.1
+      - run: npm run test:rules
+
   build:
     name: build
     runs-on: ubuntu-latest
