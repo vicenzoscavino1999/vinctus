@@ -27,7 +27,7 @@ import {
   savePostWithSync,
   unlikePostWithSync,
   unsavePostWithSync,
-} from '@/shared/lib/firestore';
+} from '@/features/posts/api';
 
 // Post type with BOTH schemas (new + legacy) for compatibility
 type Post = {

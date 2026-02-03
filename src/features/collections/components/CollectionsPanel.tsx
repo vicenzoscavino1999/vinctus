@@ -7,7 +7,7 @@ import {
   getUserCollections,
   type CollectionItemRead,
   type CollectionRead,
-} from '@/shared/lib/firestore';
+} from '@/features/collections/api';
 import { useToast } from '@/shared/ui/Toast';
 import { getCollectionIcon } from './collectionIcons';
 import CreateCollectionModal from './CreateCollectionModal';

@@ -12,7 +12,7 @@ import {
   type CreateGroupInput,
   type GroupVisibility,
   type UserProfileRead,
-} from '@/shared/lib/firestore';
+} from '@/features/groups/api';
 import { compressToWebp, validateImage } from '@/shared/lib/compression';
 import { uploadGroupIcon } from '@/shared/lib/storage';
 

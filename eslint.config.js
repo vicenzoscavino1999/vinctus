@@ -55,6 +55,53 @@ export default defineConfig([
     },
   },
   {
+    files: ['src/**/*.{js,jsx,ts,tsx}'],
+    ignores: ['src/shared/lib/firestore.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ImportDeclaration[source.value=/firestore\\.legacy$/]',
+          message:
+            'No importes firestore legacy de forma directa. Usa puentes controlados o un modulo de dominio en src/features/*/api.',
+        },
+        {
+          selector: 'ImportDeclaration[source.value=/firestore\\.legacy\\//]',
+          message:
+            'No importes firestore legacy de forma directa. Usa puentes controlados o un modulo de dominio en src/features/*/api.',
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/**/*.{js,jsx,ts,tsx}'],
+    ignores: [
+      'src/shared/lib/firestore.ts',
+      'src/lib/firestore.ts',
+      'src/lib/firestore-post-upload.ts',
+      'src/features/**/api/**/*.{js,jsx,ts,tsx}',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/shared/lib/firestore',
+              message:
+                'No importes Firestore legacy directo. Usa el modulo de dominio en src/features/<domain>/api.',
+            },
+            {
+              name: '@/shared/lib/firestore-post-upload',
+              message:
+                'No importes firestore-post-upload directo. Usa @/features/posts/api para acceso de dominio.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['src/shared/**/*.{js,jsx,ts,tsx}'],
     rules: {
       'no-restricted-imports': [
@@ -101,6 +148,124 @@ export default defineConfig([
                 '../../../../app/**',
               ],
               message: 'features no puede importar app. app debe orquestar providers y rutas.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/features/posts/{pages,components}/**/*.{js,jsx,ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/shared/lib/firestore',
+              message: 'En posts/pages y posts/components importa desde @/features/posts/api.',
+            },
+            {
+              name: '@/shared/lib/firestore-post-upload',
+              message: 'En posts/pages y posts/components importa desde @/features/posts/api.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/features/groups/{pages,components}/**/*.{js,jsx,ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/shared/lib/firestore',
+              message: 'En groups/pages y groups/components importa desde @/features/groups/api.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/features/chat/pages/**/*.{js,jsx,ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/shared/lib/firestore',
+              message: 'En chat/pages importa desde @/features/chat/api.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/features/events/components/**/*.{js,jsx,ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/shared/lib/firestore',
+              message: 'En events/components importa desde @/features/events/api.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/features/collaborations/components/**/*.{js,jsx,ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/shared/lib/firestore',
+              message: 'En collaborations/components importa desde @/features/collaborations/api.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/features/collections/{pages,components}/**/*.{js,jsx,ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/shared/lib/firestore',
+              message:
+                'En collections/pages y collections/components importa desde @/features/collections/api.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/features/profile/{pages,components}/**/*.{js,jsx,ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/shared/lib/firestore',
+              message:
+                'En profile/pages y profile/components importa desde @/features/profile/api.',
             },
           ],
         },

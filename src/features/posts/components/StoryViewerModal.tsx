@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
-import type { StoryRead } from '@/shared/lib/firestore';
+import type { StoryRead } from '@/features/posts/api';
 
 interface StoryViewerModalProps {
   isOpen: boolean;

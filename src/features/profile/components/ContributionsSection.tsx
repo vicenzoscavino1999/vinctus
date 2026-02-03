@@ -7,7 +7,7 @@ import {
   updateContributionFile,
   type ContributionRead,
   type ContributionType,
-} from '@/shared/lib/firestore';
+} from '@/features/profile/api';
 import { uploadContributionFile } from '@/shared/lib/storage';
 import { CATEGORIES } from '@/shared/constants';
 

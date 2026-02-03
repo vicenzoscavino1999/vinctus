@@ -6,7 +6,7 @@ import {
   deleteCollaboration,
   sendCollaborationRequest,
   type CollaborationRead,
-} from '@/shared/lib/firestore';
+} from '@/features/collaborations/api';
 import { useToast } from '@/shared/ui/Toast';
 
 interface CollaborationDetailModalProps {

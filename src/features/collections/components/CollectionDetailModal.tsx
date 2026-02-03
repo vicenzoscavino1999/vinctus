@@ -9,7 +9,7 @@ import {
   type CollectionItemRead,
   type CollectionItemType,
   type CollectionRead,
-} from '@/shared/lib/firestore';
+} from '@/features/collections/api';
 import { deleteCollectionFile, uploadCollectionFile } from '@/shared/lib/storage';
 import { useToast } from '@/shared/ui/Toast';
 import { getCollectionIcon } from './collectionIcons';
