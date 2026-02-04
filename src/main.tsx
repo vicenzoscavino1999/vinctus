@@ -1,13 +1,13 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import './registerSW'
-import App from './App'
-import { ErrorBoundary } from './components'
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import './index.css';
+import './registerSW';
+import App from './App';
+import ErrorBoundary from '@/shared/ui/ErrorBoundary';
 
-const rootElement = document.getElementById('root')
+const rootElement = document.getElementById('root');
 if (!rootElement) {
-  throw new Error('Root element not found')
+  throw new Error('Root element not found');
 }
 
 createRoot(rootElement).render(
@@ -16,5 +16,4 @@ createRoot(rootElement).render(
       <App />
     </ErrorBoundary>
   </StrictMode>,
-)
-
+);

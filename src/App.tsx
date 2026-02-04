@@ -2,10 +2,10 @@ import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
 import LoginScreen from '@/features/auth/components/LoginScreen';
-import PageLoader from './components/PageLoader';
-import { ToastProvider } from './components/Toast';
-import { AppStateProvider, AuthProvider, useAuth } from './context';
-import { initTheme } from './lib/theme';
+import { AppStateProvider, AuthProvider, useAuth } from '@/app/providers';
+import { initTheme } from '@/shared/lib/theme';
+import PageLoader from '@/shared/ui/PageLoader';
+import { ToastProvider } from '@/shared/ui/Toast';
 
 const getStoredItem = (key: string): string | null => {
   if (typeof window === 'undefined') return null;
@@ -31,7 +31,7 @@ const setStoredItem = (key: string, value: string): void => {
 };
 
 const OnboardingFlow = lazy(() => import('@/features/auth/components/OnboardingFlow'));
-const AppLayout = lazy(() => import('./components/AppLayout'));
+const AppLayout = lazy(() => import('@/app/routes/AppLayout'));
 
 // Inner app that uses auth context
 function AppContent() {

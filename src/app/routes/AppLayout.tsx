@@ -12,10 +12,10 @@ import {
 } from 'lucide-react';
 
 import Header from '@/app/routes/Header';
-import SidebarItem from '@/components/SidebarItem';
-import PageLoader from '@/components/PageLoader';
+import { useAuth } from '@/app/providers/AuthContext';
+import PageLoader from '@/shared/ui/PageLoader';
+import SidebarItem from '@/shared/ui/SidebarItem';
 import CreatePostModal from '@/features/posts/components/CreatePostModal';
-import { useAuth } from '@/context/AuthContext';
 import { setMetricsFlow } from '@/shared/lib/devMetrics';
 
 // Lazy loaded components
