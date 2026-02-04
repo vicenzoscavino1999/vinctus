@@ -9,7 +9,7 @@ let fetchBooks: ReturnType<typeof vi.fn>;
 let fetchNatureObservations: ReturnType<typeof vi.fn>;
 
 beforeAll(async () => {
-  vi.doMock('../../services/api', () => ({
+  vi.doMock('@/shared/lib/api', () => ({
     fetchArxivPapers: vi.fn(),
     fetchWikipediaArticles: vi.fn(),
     fetchHackerNews: vi.fn(),
@@ -17,7 +17,7 @@ beforeAll(async () => {
     fetchNatureObservations: vi.fn(),
   }));
 
-  const api = await import('../../services/api');
+  const api = await import('@/shared/lib/api');
   fetchArxivPapers = api.fetchArxivPapers as ReturnType<typeof vi.fn>;
   fetchWikipediaArticles = api.fetchWikipediaArticles as ReturnType<typeof vi.fn>;
   fetchHackerNews = api.fetchHackerNews as ReturnType<typeof vi.fn>;

@@ -8,8 +8,8 @@ import {
   type MouseEvent,
 } from 'react';
 import { X, Send, Sparkles, Loader2, Mic, Volume2, Square } from 'lucide-react';
-import { sendChatMessage, type GeminiMessage } from '@/lib/aiChat';
-import { useVoice } from '@/lib/voice';
+import { sendChatMessage, type GeminiMessage } from '@/shared/lib/aiChat';
+import { useVoice } from '@/shared/lib/voice';
 
 interface Message {
   id: string;

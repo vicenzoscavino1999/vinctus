@@ -6,7 +6,7 @@ import {
   fetchHackerNews,
   fetchBooks,
   fetchNatureObservations,
-} from '../../services/api';
+} from '@/shared/lib/api';
 import type { ToastContextType } from '../types';
 
 type ShowToastFn = ToastContextType['showToast'];

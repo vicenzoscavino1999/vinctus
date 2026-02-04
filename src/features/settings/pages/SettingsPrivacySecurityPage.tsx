@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { httpsCallable } from 'firebase/functions';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/shared/ui/Toast';
-import { functions } from '@/lib/firebase';
+import { functions } from '@/shared/lib/firebase';
 import {
   DEFAULT_PRIVACY_SETTINGS,
   getUserSettings,

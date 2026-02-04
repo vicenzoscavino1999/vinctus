@@ -13,7 +13,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import SupportModal from '@/shared/ui/SupportModal';
-import { applyTheme, getStoredTheme, setStoredTheme, type ThemeMode } from '@/lib/theme';
+import { applyTheme, getStoredTheme, setStoredTheme, type ThemeMode } from '@/shared/lib/theme';
 
 const SettingsPage = () => {
   const navigate = useNavigate();
