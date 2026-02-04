@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ArrowLeft, ChevronDown, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import SupportModal from '@/components/SupportModal';
+import SupportModal from '@/shared/ui/SupportModal';
 
 type FaqItem = {
   id: string;

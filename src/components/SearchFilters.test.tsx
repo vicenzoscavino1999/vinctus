@@ -9,14 +9,14 @@ const mockCategories: Array<{ id: string; label: string; icon: () => null }> = [
   { id: 'tech', label: 'Tecnologia', icon: (): null => null },
 ];
 
-let SearchFilters: typeof import('./SearchFilters').default;
+let SearchFilters: typeof import('@/features/discover/components/SearchFilters').default;
 
 beforeAll(async () => {
   vi.doMock('@/shared/constants', () => ({
     CATEGORIES: mockCategories,
   }));
 
-  const module = await import('./SearchFilters');
+  const module = await import('@/features/discover/components/SearchFilters');
   SearchFilters = module.default;
 });
 

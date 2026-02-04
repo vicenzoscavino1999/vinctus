@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Settings, MapPin, Mail, Edit3, Loader2, BookOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/shared/ui/Toast';
 import { useAuth } from '@/context/AuthContext';
 import { subscribeToUserProfile, type UserProfileRead } from '@/lib/firestore';
 import EditProfileModal from '@/features/profile/components/EditProfileModal';

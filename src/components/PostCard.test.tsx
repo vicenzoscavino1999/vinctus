@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import PostCard from './PostCard';
+import PostCard from '@/features/posts/components/PostCard';
 import { AppStateProvider } from '../context';
 
 // Mock useAuth to return null user (anonymous)

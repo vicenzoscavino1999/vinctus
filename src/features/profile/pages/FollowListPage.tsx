@@ -3,7 +3,7 @@ import { ArrowLeft, Loader2, UserCheck, UserPlus } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '@/context/AuthContext';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/shared/ui/Toast';
 import {
   acceptFollowRequest,
   declineFollowRequest,

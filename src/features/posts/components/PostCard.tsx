@@ -1,7 +1,7 @@
 import { Heart, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { KeyboardEvent, MouseEvent } from 'react';
-import ExpertBadge from '@/components/ExpertBadge';
+import ExpertBadge from '@/shared/ui/ExpertBadge';
 import { useAppState } from '@/context';
 import type { PostCardProps } from '@/shared/types';
 
