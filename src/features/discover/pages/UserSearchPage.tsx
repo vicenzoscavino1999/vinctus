@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Search, UserPlus, UserCheck, Check, Clock, X, MessageCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/shared/ui/Toast';
 import {
   getOrCreateDirectConversation,
   searchUsersByDisplayName,

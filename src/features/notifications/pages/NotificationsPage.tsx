@@ -21,7 +21,7 @@ import {
   type GroupJoinRequestRead,
   type PaginatedResult,
 } from '@/lib/firestore';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/shared/ui/Toast';
 
 const formatRelativeTime = (date: Date): string => {
   const now = new Date();

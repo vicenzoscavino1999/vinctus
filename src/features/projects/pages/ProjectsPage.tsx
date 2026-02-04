@@ -7,7 +7,7 @@ import {
   type CollaborationRead,
   type FirestoreEvent,
 } from '@/lib/firestore';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/shared/ui/Toast';
 import { useAuth } from '@/context/AuthContext';
 import CreateCollaborationModal from '@/features/collaborations/components/CreateCollaborationModal';
 import CollaborationDetailModal from '@/features/collaborations/components/CollaborationDetailModal';

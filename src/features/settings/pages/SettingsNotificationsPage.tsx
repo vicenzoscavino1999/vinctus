@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { ArrowLeft, Bell, Mail, AtSign, Calendar, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/shared/ui/Toast';
 import {
   DEFAULT_NOTIFICATION_SETTINGS,
   getUserSettings,
