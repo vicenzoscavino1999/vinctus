@@ -1,6 +1,6 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
-import { logErrorToService } from '../../services/errorLogging';
+import { logErrorToService } from '@/shared/lib/errorLogging';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
