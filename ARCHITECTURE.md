@@ -1,10 +1,10 @@
 # Architecture snapshot (baseline)
 
-This document captures the current state before migration. Update it only in Phase 0 and when a major change lands.
+This document captures the current state. Update it only at the end of a phase or when a major change lands.
 
 ## Routes and domains
 
-- Routes list (from `src/components/AppLayout.tsx`):
+- Routes list (from `src/app/routes/AppLayout.tsx`):
   - `/` -> Discover
   - `/discover`
   - `/search`
@@ -69,9 +69,9 @@ This document captures the current state before migration. Update it only in Pha
   - `messages` (collection group for conversations in functions)
 
 - Primary data access layer:
-  - `src/lib/firestore.ts` (queries, mutations, subscriptions)
-  - `src/lib/storage.ts` (uploads, downloads, deletes)
-  - `src/lib/firebase.ts` (Firebase config + auth/firestore/functions/storage)
+  - `src/features/*/api` (domain API modules)
+  - `src/shared/lib/firebase.ts` (Firebase config + auth/firestore/functions/storage)
+  - `src/shared/lib/storage.ts` (uploads, downloads, deletes)
 
 - Active listeners (examples):
   - user profile subscriptions
@@ -99,14 +99,14 @@ This document captures the current state before migration. Update it only in Pha
 
 - App shell/layout:
   - `src/App.tsx` (BrowserRouter + Auth/AppState + layout)
-  - `src/components/AppLayout.tsx` (routes + layout)
+  - `src/app/routes/AppLayout.tsx` (routes + layout)
 - Auth/session:
-  - `src/context/AuthContext.tsx`
-  - `src/lib/firebase.ts` (Auth, Google provider)
+  - `src/app/providers/AuthContext.tsx`
+  - `src/shared/lib/firebase.ts` (Auth, Google provider)
 - Data access layer:
-  - `src/lib/firestore.ts`, `src/lib/storage.ts`
+  - `src/features/*/api`, `src/shared/lib/storage.ts`
 - External APIs:
-  - `src/services/api.ts` (arXiv, Wikipedia, HackerNews, OpenLibrary, iNaturalist)
+  - `src/shared/lib/api.ts` (arXiv, Wikipedia, HackerNews, OpenLibrary, iNaturalist)
 
 ## Notes
 

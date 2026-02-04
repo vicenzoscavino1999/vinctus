@@ -13,7 +13,7 @@ import {
   type SetStateAction,
 } from 'react';
 import { collection, getDocs, limit, query } from 'firebase/firestore';
-import type { AppStateContextType } from '../../types';
+import type { AppStateContextType } from '@/shared/types';
 import { useAuth } from '@/app/providers/AuthContext';
 import { db } from '@/shared/lib/firebase';
 import { joinGroupWithSync, leaveGroupWithSync } from '@/features/groups/api';
