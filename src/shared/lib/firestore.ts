@@ -8,6 +8,9 @@
  */
 export * from './firestore/reports';
 export * from './firestore/blockedUsers';
+export * from './firestore/users';
+export * from './firestore/userSearch';
+export * from './firestore/accountVisibility';
 export * from './firestore/followIds';
 export * from './firestore/friendIds';
 export * from './firestore/publicUsers';
