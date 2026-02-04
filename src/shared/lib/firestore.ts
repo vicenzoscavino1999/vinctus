@@ -10,5 +10,7 @@ export * from './firestore/reports';
 export * from './firestore/blockedUsers';
 export * from './firestore/followIds';
 export * from './firestore/friendIds';
+export * from './firestore/publicUsers';
+export * from './firestore/follows';
 export * from './firestore/supportTickets';
 export * from './firestore.legacy';
