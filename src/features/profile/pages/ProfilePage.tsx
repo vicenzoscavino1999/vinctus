@@ -9,7 +9,7 @@ import CollectionsPanel from '@/features/collections/components/CollectionsPanel
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
 import ProfilePostsGrid from '@/features/posts/components/ProfilePostsGrid';
 import ContributionsSection from '@/features/profile/components/ContributionsSection';
-import { CATEGORIES } from '@/data/mockData';
+import { CATEGORIES } from '@/shared/constants';
 
 const ProfilePage = () => {
   const navigate = useNavigate();
