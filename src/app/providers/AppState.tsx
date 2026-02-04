@@ -12,8 +12,10 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react';
+import { collection, getDocs, limit, query } from 'firebase/firestore';
 import type { AppStateContextType } from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import { db } from '../../lib/firebase';
 import {
   // Firestore operations
   joinGroupWithSync,
@@ -24,11 +26,6 @@ import {
   unsavePostWithSync,
   saveCategoryWithSync,
   unsaveCategoryWithSync,
-  // Real-time subscriptions
-  subscribeToUserMemberships,
-  subscribeToSavedCategories,
-  subscribeToLikedPosts,
-  subscribeToSavedPosts,
 } from '../../lib/firestore';
 
 // Create the context with proper typing
@@ -43,6 +40,7 @@ const STORAGE_KEYS = {
 } as const;
 
 const uniqueValues = (items: string[]): string[] => Array.from(new Set(items));
+const APP_STATE_REMOTE_LIMIT = 50;
 
 // Helper to safely parse JSON from localStorage
 const getStoredValue = <T,>(key: string, defaultValue: T): T => {
@@ -87,7 +85,7 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
     uniqueValues(getStoredValue<string[]>(STORAGE_KEYS.SAVED_POSTS, [])),
   );
 
-  // ==================== Firestore Real-time Sync ====================
+  // ==================== Firestore bootstrap sync ====================
 
   useEffect(() => {
     if (!uid) {
@@ -95,29 +93,36 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
       return;
     }
 
-    // Subscribe to real-time updates from Firestore
-    const unsubMemberships = subscribeToUserMemberships(uid, (groupIds) => {
-      setJoinedGroups(groupIds);
-    });
+    let isActive = true;
 
-    const unsubCategories = subscribeToSavedCategories(uid, (catIds) => {
-      setSavedCategories(catIds);
-    });
+    const loadRemoteState = async () => {
+      try {
+        const [membershipsSnap, categoriesSnap, likesSnap, savedSnap] = await Promise.all([
+          getDocs(
+            query(collection(db, 'users', uid, 'memberships'), limit(APP_STATE_REMOTE_LIMIT)),
+          ),
+          getDocs(
+            query(collection(db, 'users', uid, 'savedCategories'), limit(APP_STATE_REMOTE_LIMIT)),
+          ),
+          getDocs(query(collection(db, 'users', uid, 'likes'), limit(APP_STATE_REMOTE_LIMIT))),
+          getDocs(query(collection(db, 'users', uid, 'savedPosts'), limit(APP_STATE_REMOTE_LIMIT))),
+        ]);
 
-    const unsubLikes = subscribeToLikedPosts(uid, (postIds) => {
-      setLikedPosts(postIds);
-    });
+        if (!isActive) return;
 
-    const unsubSaved = subscribeToSavedPosts(uid, (postIds) => {
-      setSavedPosts(postIds);
-    });
+        setJoinedGroups(uniqueValues(membershipsSnap.docs.map((docSnap) => docSnap.id)));
+        setSavedCategories(uniqueValues(categoriesSnap.docs.map((docSnap) => docSnap.id)));
+        setLikedPosts(uniqueValues(likesSnap.docs.map((docSnap) => docSnap.id)));
+        setSavedPosts(uniqueValues(savedSnap.docs.map((docSnap) => docSnap.id)));
+      } catch (error) {
+        console.error('Failed to load app state from Firestore:', error);
+      }
+    };
 
-    // Cleanup subscriptions on logout or unmount
+    void loadRemoteState();
+
     return () => {
-      unsubMemberships();
-      unsubCategories();
-      unsubLikes();
-      unsubSaved();
+      isActive = false;
     };
   }, [uid]);
 

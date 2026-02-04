@@ -9,7 +9,6 @@ import { CATEGORIES, PUBLICATIONS } from '@/data';
 import { useToast } from '@/components/Toast';
 import {
   getGroupJoinStatus,
-  getGroupPostsWeekCount,
   getGroups,
   joinPublicGroup,
   sendGroupJoinRequest,
@@ -60,9 +59,6 @@ const DiscoverPage = () => {
   const [groups, setGroups] = useState<FirestoreGroup[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
-  const [groupStats, setGroupStats] = useState<
-    Record<string, { members: number; postsWeek: number }>
-  >({});
   const [groupJoinStatusMap, setGroupJoinStatusMap] = useState<Record<string, GroupJoinStatus>>({});
   const [groupActionLoading, setGroupActionLoading] = useState<string | null>(null);
 
@@ -146,39 +142,6 @@ const DiscoverPage = () => {
       isActive = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (groups.length === 0) return;
-    let isActive = true;
-    const pending = groups.filter((group) => groupStats[group.id] === undefined);
-    if (pending.length === 0) return;
-
-    const loadStats = async () => {
-      try {
-        const updates: Record<string, { members: number; postsWeek: number }> = {};
-        await Promise.all(
-          pending.map(async (group) => {
-            const postsWeek = await getGroupPostsWeekCount(group.id);
-            updates[group.id] = {
-              members: group.memberCount ?? 0,
-              postsWeek,
-            };
-          }),
-        );
-        if (isActive) {
-          setGroupStats((prev) => ({ ...prev, ...updates }));
-        }
-      } catch (statsError) {
-        console.error('Error loading group stats:', statsError);
-      }
-    };
-
-    loadStats();
-
-    return () => {
-      isActive = false;
-    };
-  }, [groups, groupStats]);
 
   useEffect(() => {
     if (!user || groups.length === 0) {
@@ -270,10 +233,9 @@ const DiscoverPage = () => {
   };
 
   const getGroupStats = (group: FirestoreGroup): { members: number; postsWeek: number } => {
-    const cached = groupStats[group.id];
     return {
-      members: cached?.members ?? group.memberCount ?? 0,
-      postsWeek: cached?.postsWeek ?? 0,
+      members: group.memberCount ?? 0,
+      postsWeek: 0,
     };
   };
 

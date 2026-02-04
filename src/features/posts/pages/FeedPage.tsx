@@ -14,14 +14,11 @@ import {
 import { db } from '@/shared/lib/firebase';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { useAppState } from '@/context';
 import { useToast } from '@/shared/ui/Toast';
 import PostCommentsModal from '@/features/posts/components/PostCommentsModal';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
 import {
-  getPostCommentCount,
-  getPostLikeCount,
-  isPostLiked,
-  isPostSaved,
   getBlockedUsers,
   likePostWithSync,
   savePostWithSync,
@@ -128,6 +125,7 @@ const readPostCounter = (post: Post, primary: 'likeCount' | 'commentCount'): num
 const FeedPage = () => {
   const location = useLocation();
   const { user } = useAuth();
+  const { likedPosts, savedPosts } = useAppState();
   const { showToast } = useToast();
   const [posts, setPosts] = useState<Post[]>([]);
   const [lastVisible, setLastVisible] = useState<DocumentSnapshot | null>(null);
@@ -238,8 +236,44 @@ const FeedPage = () => {
   };
 
   useEffect(() => {
+    if (!user) {
+      setLikedByUser({});
+      setSavedByUser({});
+      return;
+    }
+
+    const likedSet = new Set(likedPosts);
+    const savedSet = new Set(savedPosts);
+
+    setLikedByUser((prev) => {
+      const next: Record<string, boolean> = {};
+      let changed = Object.keys(prev).length !== posts.length;
+      posts.forEach((post) => {
+        const value = likedSet.has(post.postId);
+        next[post.postId] = value;
+        if (prev[post.postId] !== value) {
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+
+    setSavedByUser((prev) => {
+      const next: Record<string, boolean> = {};
+      let changed = Object.keys(prev).length !== posts.length;
+      posts.forEach((post) => {
+        const value = savedSet.has(post.postId);
+        next[post.postId] = value;
+        if (prev[post.postId] !== value) {
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [user, posts, likedPosts, savedPosts]);
+
+  useEffect(() => {
     if (posts.length === 0) return;
-    let isActive = true;
 
     const embeddedLikeUpdates: Record<string, number> = {};
     const embeddedCommentUpdates: Record<string, number> = {};
@@ -265,75 +299,60 @@ const FeedPage = () => {
       setCommentCounts((prev) => ({ ...prev, ...embeddedCommentUpdates }));
     }
 
-    const pendingCounts = posts.filter(
+    const missingLikeCountIds = posts
+      .filter(
+        (post) =>
+          likeCounts[post.postId] === undefined && readPostCounter(post, 'likeCount') === null,
+      )
+      .map((post) => post.postId);
+    const missingCommentCountIds = posts
+      .filter(
+        (post) =>
+          commentCounts[post.postId] === undefined &&
+          readPostCounter(post, 'commentCount') === null,
+      )
+      .map((post) => post.postId);
+
+    if (missingLikeCountIds.length > 0) {
+      setLikeCounts((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        missingLikeCountIds.forEach((postId) => {
+          if (next[postId] === undefined) {
+            next[postId] = 0;
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    }
+
+    if (missingCommentCountIds.length > 0) {
+      setCommentCounts((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        missingCommentCountIds.forEach((postId) => {
+          if (next[postId] === undefined) {
+            next[postId] = 0;
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    }
+
+    const pendingEmbeddedCounts = posts.filter(
       (post) =>
         (likeCounts[post.postId] === undefined && readPostCounter(post, 'likeCount') === null) ||
         (commentCounts[post.postId] === undefined &&
           readPostCounter(post, 'commentCount') === null),
     );
-    const pendingLikes = user ? posts.filter((post) => likedByUser[post.postId] === undefined) : [];
-    const pendingSaves = user ? posts.filter((post) => savedByUser[post.postId] === undefined) : [];
 
-    if (pendingCounts.length === 0 && pendingLikes.length === 0 && pendingSaves.length === 0) {
-      return;
+    if (pendingEmbeddedCounts.length > 0) {
+      // Keep zero-valued fallbacks for legacy posts without embedded counters.
+      // Counter writes still update these values optimistically on user actions.
     }
-
-    const loadMetrics = async () => {
-      try {
-        const likeUpdates: Record<string, number> = {};
-        const commentUpdates: Record<string, number> = {};
-        await Promise.all(
-          pendingCounts.map(async (post) => {
-            const [likesCount, commentsCount] = await Promise.all([
-              getPostLikeCount(post.postId),
-              getPostCommentCount(post.postId),
-            ]);
-            likeUpdates[post.postId] = likesCount;
-            commentUpdates[post.postId] = commentsCount;
-          }),
-        );
-
-        const likedUpdates: Record<string, boolean> = {};
-        const savedUpdates: Record<string, boolean> = {};
-
-        if (user) {
-          await Promise.all(
-            pendingLikes.map(async (post) => {
-              likedUpdates[post.postId] = await isPostLiked(post.postId, user.uid);
-            }),
-          );
-
-          await Promise.all(
-            pendingSaves.map(async (post) => {
-              savedUpdates[post.postId] = await isPostSaved(post.postId, user.uid);
-            }),
-          );
-        }
-
-        if (!isActive) return;
-        if (Object.keys(likeUpdates).length > 0) {
-          setLikeCounts((prev) => ({ ...prev, ...likeUpdates }));
-        }
-        if (Object.keys(commentUpdates).length > 0) {
-          setCommentCounts((prev) => ({ ...prev, ...commentUpdates }));
-        }
-        if (Object.keys(likedUpdates).length > 0) {
-          setLikedByUser((prev) => ({ ...prev, ...likedUpdates }));
-        }
-        if (Object.keys(savedUpdates).length > 0) {
-          setSavedByUser((prev) => ({ ...prev, ...savedUpdates }));
-        }
-      } catch (error) {
-        console.error('Error loading post metrics:', error);
-      }
-    };
-
-    loadMetrics();
-
-    return () => {
-      isActive = false;
-    };
-  }, [posts, user, likeCounts, commentCounts, likedByUser, savedByUser]);
+  }, [posts, likeCounts, commentCounts]);
 
   const handleToggleLike = async (postId: string) => {
     if (!user) {

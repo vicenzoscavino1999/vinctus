@@ -1,0 +1,83 @@
+{
+  "capturedAt": "2026-02-04T01:34:24.292Z",
+  "feed": {
+    "open": {
+      "reads": 8,
+      "writes": 0,
+      "calls": 0,
+      "listenersActive": 0,
+      "listenersPeak": 0,
+      "listenerStarts": 0,
+      "listenerStops": 0
+    },
+    "listenersActiveAfterLeave": 0
+  },
+  "chat": {
+    "open": {
+      "reads": 11,
+      "writes": 0,
+      "calls": 0,
+      "listenersActive": 0,
+      "listenersPeak": 5,
+      "listenerStarts": 5,
+      "listenerStops": 5
+    },
+    "listenersActiveAfterLeave": 0
+  },
+  "createPost": {
+    "reads": 8,
+    "writes": 0,
+    "calls": 0,
+    "listenersActive": 0,
+    "listenersPeak": 0,
+    "listenerStarts": 0,
+    "listenerStops": 0
+  },
+  "totals": {
+    "feedOpen": {
+      "reads": 9,
+      "writes": 1,
+      "calls": 0,
+      "listenerStarts": 0,
+      "listenerStops": 0,
+      "listenersActive": 0,
+      "listenersPeak": 0,
+      "bySource": {
+        "auth.ensureUserProfile.getUser": 1,
+        "auth.ensureUserProfile.upsertUserPublic": 1,
+        "firestore.getDocs": 8
+      }
+    },
+    "chatOpen": {
+      "reads": 29,
+      "writes": 1,
+      "calls": 0,
+      "listenerStarts": 8,
+      "listenerStops": 8,
+      "listenersActive": 0,
+      "listenersPeak": 5,
+      "bySource": {
+        "auth.ensureUserProfile.getUser": 1,
+        "auth.ensureUserProfile.upsertUserPublic": 1,
+        "firestore.onSnapshot": 21,
+        "firestore.getDocs": 8,
+        "firestore.getDoc": 11,
+        "firestore.getCountFromServer": 4
+      }
+    },
+    "createPost": {
+      "reads": 9,
+      "writes": 1,
+      "calls": 0,
+      "listenerStarts": 0,
+      "listenerStops": 0,
+      "listenersActive": 0,
+      "listenersPeak": 0,
+      "bySource": {
+        "auth.ensureUserProfile.getUser": 1,
+        "auth.ensureUserProfile.upsertUserPublic": 1,
+        "firestore.getDocs": 8
+      }
+    }
+  }
+}

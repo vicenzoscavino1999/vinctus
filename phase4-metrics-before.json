@@ -1,0 +1,87 @@
+{
+  "capturedAt": "2026-02-03T23:42:35.172Z",
+  "feed": {
+    "open": {
+      "reads": 20,
+      "writes": 0,
+      "calls": 0,
+      "listenersActive": 4,
+      "listenersPeak": 4,
+      "listenerStarts": 8,
+      "listenerStops": 4
+    },
+    "listenersActiveAfterLeave": 4
+  },
+  "chat": {
+    "open": {
+      "reads": 16,
+      "writes": 0,
+      "calls": 0,
+      "listenersActive": 4,
+      "listenersPeak": 9,
+      "listenerStarts": 13,
+      "listenerStops": 9
+    },
+    "listenersActiveAfterLeave": 4
+  },
+  "createPost": {
+    "reads": 20,
+    "writes": 0,
+    "calls": 0,
+    "listenersActive": 4,
+    "listenersPeak": 4,
+    "listenerStarts": 8,
+    "listenerStops": 4
+  },
+  "totals": {
+    "feedOpen": {
+      "reads": 21,
+      "writes": 1,
+      "calls": 0,
+      "listenerStarts": 8,
+      "listenerStops": 4,
+      "listenersActive": 4,
+      "listenersPeak": 4,
+      "bySource": {
+        "auth.ensureUserProfile.getUser": 1,
+        "auth.ensureUserProfile.upsertUserPublic": 1,
+        "firestore.onSnapshot": 16,
+        "firestore.getDoc": 8,
+        "firestore.getDocs": 8
+      }
+    },
+    "chatOpen": {
+      "reads": 34,
+      "writes": 1,
+      "calls": 0,
+      "listenerStarts": 16,
+      "listenerStops": 12,
+      "listenersActive": 4,
+      "listenersPeak": 9,
+      "bySource": {
+        "auth.ensureUserProfile.getUser": 1,
+        "auth.ensureUserProfile.upsertUserPublic": 1,
+        "firestore.onSnapshot": 37,
+        "firestore.getDocs": 8,
+        "firestore.getDoc": 11,
+        "firestore.getCountFromServer": 5
+      }
+    },
+    "createPost": {
+      "reads": 21,
+      "writes": 1,
+      "calls": 0,
+      "listenerStarts": 8,
+      "listenerStops": 4,
+      "listenersActive": 4,
+      "listenersPeak": 4,
+      "bySource": {
+        "auth.ensureUserProfile.getUser": 1,
+        "auth.ensureUserProfile.upsertUserPublic": 1,
+        "firestore.onSnapshot": 16,
+        "firestore.getDoc": 8,
+        "firestore.getDocs": 8
+      }
+    }
+  }
+}
