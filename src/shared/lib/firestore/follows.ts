@@ -26,6 +26,7 @@ import {
 import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
 import { db, dbLite } from '@/shared/lib/firebase';
 import { getPublicUsersByIds, type FollowUserRead } from './publicUsers';
+import type { AccountVisibility } from './users';
 
 type PaginatedResult<T> = {
   items: T[];
@@ -65,7 +66,7 @@ export type FollowStatus = 'none' | 'following' | 'pending_sent' | 'pending_rece
 export async function getFollowStatus(
   currentUid: string,
   targetUid: string,
-  targetVisibility?: 'public' | 'private',
+  targetVisibility?: AccountVisibility,
 ): Promise<{ status: FollowStatus; requestId?: string; isMutual?: boolean }> {
   try {
     trackFirestoreRead('firestore.getDoc');

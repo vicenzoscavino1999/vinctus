@@ -6,7 +6,6 @@ import {
   collectionGroup,
   doc,
   getDoc as _getDoc,
-  getDocFromServer as _getDocFromServer,
   getDocs as _getDocs,
   getCountFromServer as _getCountFromServer,
   setDoc as _setDoc,
@@ -19,8 +18,6 @@ import {
   limit,
   limitToLast,
   startAfter,
-  startAt,
-  endAt,
   onSnapshot as _onSnapshot,
   writeBatch,
   increment,
@@ -42,6 +39,7 @@ import {
 import { db, dbLite } from './firebase';
 import { trackFirestoreListener, trackFirestoreRead, trackFirestoreWrite } from './devMetrics';
 import { getPublicUsersByIds } from './firestore/publicUsers';
+import type { AccountVisibility, PublicUserRead } from './firestore/users';
 
 const resolveSnapshotSize = (value: unknown): number => {
   if (typeof value !== 'object' || value === null || !('size' in value)) return 1;
@@ -87,11 +85,6 @@ const getDoc = ((...args: unknown[]) => {
   trackFirestoreRead('firestore.getDoc');
   return (_getDoc as (...innerArgs: unknown[]) => unknown)(...args);
 }) as typeof _getDoc;
-
-const getDocFromServer = ((...args: unknown[]) => {
-  trackFirestoreRead('firestore.getDocFromServer');
-  return (_getDocFromServer as (...innerArgs: unknown[]) => unknown)(...args);
-}) as typeof _getDocFromServer;
 
 const getDocs = ((...args: unknown[]) => {
   const result = (_getDocs as (...innerArgs: unknown[]) => unknown)(...args);
@@ -196,13 +189,6 @@ export interface SavedPostRead {
 export interface SavedCategoryRead {
   categoryId: string;
   createdAt: Timestamp;
-}
-
-export interface PublicUserRead {
-  uid: string;
-  displayName: string | null;
-  photoURL: string | null;
-  accountVisibility?: AccountVisibility;
 }
 
 export type StoryVisibility = 'friends';
@@ -311,8 +297,6 @@ export interface NotificationSettings {
   weeklyDigest: boolean;
   productUpdates: boolean;
 }
-
-export type AccountVisibility = 'public' | 'private';
 
 export interface PrivacySettings {
   accountVisibility: AccountVisibility;
@@ -3051,78 +3035,6 @@ export const subscribeToTyping = (
   });
 };
 
-// ==================== User Search ====================
-
-export const searchUsersByDisplayName = async (
-  queryText: string,
-  limitCount = 10,
-): Promise<PublicUserRead[]> => {
-  const normalized = queryText.trim().toLowerCase();
-  if (!normalized) return [];
-
-  const q = query(
-    collection(db, 'users_public'),
-    orderBy('displayNameLowercase'),
-    startAt(normalized),
-    endAt(`${normalized}\uf8ff`),
-    limit(limitCount),
-  );
-
-  const snapshot = await getDocs(q);
-
-  return snapshot.docs.map((docSnap) => {
-    const data = docSnap.data() as {
-      displayName?: string | null;
-      photoURL?: string | null;
-      accountVisibility?: AccountVisibility;
-    };
-    const accountVisibility: AccountVisibility =
-      data.accountVisibility === 'private' ? 'private' : 'public';
-    return {
-      uid: docSnap.id,
-      displayName: data.displayName ?? null,
-      photoURL: data.photoURL ?? null,
-      accountVisibility,
-    };
-  });
-};
-
-/**
- * Get recent/suggested users (for initial display on search page)
- * Returns users ordered by most recently updated
- */
-export const getRecentUsers = async (
-  limitCount = 15,
-  excludeUid?: string,
-): Promise<PublicUserRead[]> => {
-  const q = query(
-    collection(db, 'users_public'),
-    orderBy('updatedAt', 'desc'),
-    limit(limitCount + 1), // Fetch one extra in case we need to exclude current user
-  );
-
-  const snapshot = await getDocs(q);
-
-  const users = snapshot.docs.map((docSnap) => {
-    const data = docSnap.data() as {
-      displayName?: string | null;
-      photoURL?: string | null;
-      accountVisibility?: AccountVisibility;
-    };
-    const accountVisibility: AccountVisibility =
-      data.accountVisibility === 'private' ? 'private' : 'public';
-    return {
-      uid: docSnap.id,
-      displayName: data.displayName ?? null,
-      photoURL: data.photoURL ?? null,
-      accountVisibility,
-    };
-  });
-
-  // Filter out current user and limit
-  return users.filter((u) => u.uid !== excludeUid).slice(0, limitCount);
-};
-
 // ==================== Posts Types ====================
 
 /**
@@ -3531,22 +3443,6 @@ export async function getUserProfile(uid: string): Promise<UserProfileRead | nul
     createdAt: toDate(privateData?.createdAt ?? publicData?.createdAt) ?? new Date(),
     updatedAt: toDate(privateData?.updatedAt ?? publicData?.updatedAt) ?? new Date(),
   };
-}
-
-export async function getAccountVisibilityServer(uid: string): Promise<AccountVisibility> {
-  try {
-    const snap = await getDocFromServer(doc(db, 'users_public', uid));
-    const data = snap.data() as { accountVisibility?: AccountVisibility } | undefined;
-    return data?.accountVisibility === 'private' ? 'private' : 'public';
-  } catch (error) {
-    try {
-      const snap = await getDoc(doc(db, 'users_public', uid));
-      const data = snap.data() as { accountVisibility?: AccountVisibility } | undefined;
-      return data?.accountVisibility === 'private' ? 'private' : 'public';
-    } catch {
-      return 'public';
-    }
-  }
 }
 
 /**
