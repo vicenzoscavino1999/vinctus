@@ -15,7 +15,7 @@ import {
 import { collection, getDocs, limit, query } from 'firebase/firestore';
 import type { AppStateContextType } from '../../types';
 import { useAuth } from '@/app/providers/AuthContext';
-import { db } from '../../lib/firebase';
+import { db } from '@/shared/lib/firebase';
 import {
   // Firestore operations
   joinGroupWithSync,

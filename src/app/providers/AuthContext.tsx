@@ -25,7 +25,7 @@ import {
   type ConfirmationResult,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, googleProvider, db } from '../../lib/firebase';
+import { auth, googleProvider, db } from '@/shared/lib/firebase';
 import { trackAppCall, trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
 
 // Types
