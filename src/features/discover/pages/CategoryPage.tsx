@@ -12,8 +12,8 @@ import {
 import { SkeletonContentGrid, EmptyState, ErrorState } from '@/shared/ui/SkeletonLoader';
 import { useToast } from '@/shared/ui/Toast';
 import ApiContentCard from '@/features/discover/components/ApiContentCard';
-import { useApiContent } from '@/hooks';
-import { CATEGORIES } from '@/data';
+import { useApiContent } from '@/shared/hooks';
+import { CATEGORIES } from '@/shared/constants';
 import {
   getContributionsByCategory,
   getGroupsByCategory,

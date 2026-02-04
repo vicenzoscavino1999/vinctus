@@ -5,7 +5,7 @@ import SearchFilters from '@/features/discover/components/SearchFilters';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
 import { useAppState } from '@/context';
 import { useAuth } from '@/context/AuthContext';
-import { CATEGORIES, PUBLICATIONS } from '@/data';
+import { CATEGORIES, PUBLICATIONS } from '@/shared/constants';
 import { useToast } from '@/shared/ui/Toast';
 import {
   getGroupJoinStatus,
