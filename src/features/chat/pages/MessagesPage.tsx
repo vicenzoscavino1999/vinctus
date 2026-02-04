@@ -1,24 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  Search,
-  ChevronRight,
-  Users,
-  ArrowLeft,
-  Send,
-  X,
-  ExternalLink,
-  Pencil,
-  LogOut,
-  Bell,
-  BellOff,
-  Share2,
-  Paperclip,
-  FileText,
-  Image as ImageIcon,
-  Flag,
-} from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useToast } from '@/shared/ui/Toast';
 import {
   getOrCreateGroupConversation,
@@ -38,37 +21,19 @@ import {
   type ConversationMemberRead,
   type FirestoreGroup,
   type MessageRead,
-  type MessageAttachmentRead,
   type UserReportReason,
 } from '@/features/chat/api';
+import ChatConversationHeader from '@/features/chat/components/ChatConversationHeader';
+import ConversationListItem from '@/features/chat/components/ConversationListItem';
+import ConversationSearchModal from '@/features/chat/components/ConversationSearchModal';
+import GroupFilesModal, { type GroupFileItem } from '@/features/chat/components/GroupFilesModal';
+import GroupMuteModal from '@/features/chat/components/GroupMuteModal';
+import GroupOptionsOverlay from '@/features/chat/components/GroupOptionsOverlay';
+import GroupReportModal from '@/features/chat/components/GroupReportModal';
+import MemberGroupCard from '@/features/chat/components/MemberGroupCard';
+import MessageComposer from '@/features/chat/components/MessageComposer';
+import MessageThread from '@/features/chat/components/MessageThread';
 import CreateGroupModal from '@/features/groups/components/CreateGroupModal';
-
-// Helper to format relative time
-const formatRelativeTime = (date: Date): string => {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'ahora';
-  if (diffMins < 60) return `${diffMins} min`;
-  if (diffHours < 24) return `${diffHours}h`;
-  if (diffDays < 7) return `${diffDays}d`;
-  return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-};
-
-const formatBytes = (value: number): string => {
-  if (!Number.isFinite(value) || value <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let size = value;
-  let unitIndex = 0;
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
-};
 
 const parseDirectMemberIds = (conversationId: string): string[] | null => {
   if (!conversationId.startsWith('dm_')) return null;
@@ -81,14 +46,6 @@ interface GroupInfo {
   name: string;
   iconUrl?: string;
 }
-
-const REPORT_REASON_OPTIONS: Array<{ value: UserReportReason; label: string }> = [
-  { value: 'spam', label: 'Spam o publicidad' },
-  { value: 'harassment', label: 'Acoso' },
-  { value: 'abuse', label: 'Abuso' },
-  { value: 'fake', label: 'Suplantacion' },
-  { value: 'other', label: 'Otro' },
-];
 
 const CLEARED_STORAGE_KEY = 'vinctus:clearedConversations';
 
@@ -752,579 +709,114 @@ export default function MessagesPage() {
       ? messages.filter((msg) => msg.createdAt.getTime() > clearedAt)
       : messages;
 
-    const attachmentItems = visibleMessages.flatMap((msg) => {
-      const attachments = msg.attachments ?? [];
-      return attachments.map((att) => ({
+    const attachmentItems: GroupFileItem[] = visibleMessages.flatMap((msg) =>
+      (msg.attachments ?? []).map((attachment) => ({
         messageId: msg.id,
-        senderId: msg.senderId,
-        createdAt: msg.createdAt,
-        attachment: att,
-      }));
-    });
+        attachment,
+      })),
+    );
 
     return (
       <div className="page-feed pt-0 max-w-3xl mx-auto h-[calc(100vh-120px)] flex flex-col">
         {/* Chat Header */}
-        <div className="flex items-center gap-4 py-4 border-b border-neutral-800/50">
-          <button
-            onClick={handleBackToList}
-            className="p-2 -ml-2 text-neutral-400 hover:text-white transition-colors"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500/20 to-amber-600/20 border border-amber-500/30 flex items-center justify-center">
-            <Users size={18} className="text-amber-500" />
-          </div>
-          {activeConversation.type === 'direct' ? (
-            <button
-              type="button"
-              onClick={handleOpenDetails}
-              aria-label="Ver detalles del chat"
-              className="flex-1 text-left hover:opacity-80 transition-opacity cursor-pointer"
-            >
-              <h2 className="text-white font-medium">{getConversationName(activeConversation)}</h2>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleOpenGroupOptions}
-              aria-label="Opciones del grupo"
-              className="flex-1 text-left hover:opacity-80 transition-opacity cursor-pointer"
-            >
-              <h2 className="text-white font-medium">{getConversationName(activeConversation)}</h2>
-              {activeConversation.type === 'group' && (
-                <span className="text-xs text-neutral-500">Grupo</span>
-              )}
-            </button>
-          )}
-        </div>
+        <ChatConversationHeader
+          conversation={activeConversation}
+          title={getConversationName(activeConversation)}
+          onBack={handleBackToList}
+          onOpenDetails={handleOpenDetails}
+          onOpenGroupOptions={handleOpenGroupOptions}
+        />
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto py-6 space-y-4 chat-scroll">
-          {visibleMessages.length === 0 ? (
-            <div className="text-center text-neutral-500 py-10">
-              {clearedAt ? (
-                <div className="space-y-3">
-                  <p>Chat limpiado localmente.</p>
-                  <button
-                    type="button"
-                    onClick={handleRestoreChatLocal}
-                    className="px-4 py-2 rounded-lg bg-neutral-800 text-neutral-200 hover:bg-neutral-700 transition-colors text-sm"
-                  >
-                    Mostrar mensajes
-                  </button>
-                </div>
-              ) : (
-                'No hay mensajes aún. ¡Envía el primero!'
-              )}
-            </div>
-          ) : (
-            visibleMessages.map((msg) => (
-              <div
-                key={msg.id}
-                id={`msg-${msg.id}`}
-                className={`flex ${msg.senderId === user?.uid ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[75%] px-4 py-3 rounded-2xl ${
-                    msg.senderId === user?.uid
-                      ? 'bg-amber-600 text-white'
-                      : 'bg-neutral-800/80 text-neutral-100'
-                  } ${highlightMessageId === msg.id ? 'ring-2 ring-amber-400' : ''}`}
-                >
-                  <div className="text-sm leading-relaxed">{msg.text}</div>
-                  <div className="text-xs opacity-60 mt-1.5 text-right">
-                    {new Date(msg.createdAt).toLocaleTimeString('es-ES', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        <MessageThread
+          messages={visibleMessages}
+          currentUserId={user?.uid}
+          highlightMessageId={highlightMessageId}
+          clearedAt={clearedAt}
+          onRestoreChatLocal={handleRestoreChatLocal}
+        />
 
         {/* Input */}
-        <form onSubmit={handleSendMessage} className="py-4 border-t border-neutral-800/50">
-          <div className="flex gap-3">
-            <input
-              type="text"
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Escribe un mensaje..."
-              className="flex-1 px-5 py-3 bg-neutral-900/50 border border-neutral-800 rounded-full text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-            />
-            <button
-              type="submit"
-              disabled={!newMessage.trim()}
-              className="px-5 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-black rounded-full hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-medium flex items-center gap-2"
-            >
-              <Send size={18} />
-            </button>
-          </div>
-        </form>
+        <MessageComposer
+          value={newMessage}
+          onValueChange={setNewMessage}
+          onSubmit={handleSendMessage}
+        />
 
         {/* Group Options Modal (Full Page Style) */}
-        {showGroupOptions && activeConversation.type === 'group' && (
-          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm overflow-y-auto">
-            <div className="page-feed pt-6 max-w-3xl mx-auto pb-10">
-              {/* Header */}
-              <div className="flex items-center gap-4 mb-8">
-                <button
-                  type="button"
-                  onClick={() => setShowGroupOptions(false)}
-                  aria-label="Volver al chat"
-                  className="p-2 -ml-2 text-neutral-400 hover:text-white transition-colors"
-                >
-                  <ArrowLeft size={20} />
-                </button>
-                <h1 className="text-2xl font-serif font-light text-white">Detalles del Grupo</h1>
-              </div>
-
-              {/* Group Info */}
-              <div className="flex flex-col items-center py-8 border-b border-neutral-800/50">
-                <div className="w-24 h-24 rounded-full bg-neutral-800 border-2 border-neutral-700 overflow-hidden flex items-center justify-center mb-4">
-                  {groupOptionsGroup?.iconUrl ? (
-                    <img
-                      src={groupOptionsGroup.iconUrl}
-                      alt={groupOptionsGroup?.name || 'Grupo'}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-2xl text-neutral-400">
-                      {(groupOptionsGroup?.name || getConversationName(activeConversation) || 'G')
-                        .charAt(0)
-                        .toUpperCase()}
-                    </span>
-                  )}
-                </div>
-                <h2 className="text-xl font-medium text-white mb-1">
-                  {groupOptionsGroup?.name || getConversationName(activeConversation)}
-                </h2>
-                <p className="text-sm text-neutral-500">Grupo</p>
-              </div>
-
-              {/* Actions */}
-              <div className="mt-8 space-y-2">
-                {groupOptionsLoading && <div className="text-sm text-neutral-500">Cargando...</div>}
-                {groupMemberData?.muted ? (
-                  <button
-                    type="button"
-                    onClick={handleUnmuteGroup}
-                    disabled={isTogglingGroupMute}
-                    className="w-full flex items-center gap-4 p-4 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 hover:border-amber-500/50 rounded-xl transition-all text-left cursor-pointer disabled:opacity-50"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
-                      <BellOff size={18} className="text-amber-500" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-amber-400 font-medium">Quitar silencio</p>
-                      <p className="text-xs text-amber-300">{getGroupMuteStatusText()}</p>
-                    </div>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowGroupMuteModal(true)}
-                    disabled={isTogglingGroupMute}
-                    className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-neutral-900/40 border border-neutral-800/50 hover:border-neutral-700/50 rounded-xl transition-all text-left cursor-pointer disabled:opacity-50"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
-                      <Bell size={18} className="text-amber-500" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-white font-medium">Silenciar</p>
-                      <p className="text-xs text-neutral-500">No recibir notificaciones</p>
-                    </div>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handleShareGroup}
-                  className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-neutral-900/40 border border-neutral-800/50 hover:border-neutral-700/50 rounded-xl transition-all text-left cursor-pointer"
-                >
-                  <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
-                    <Share2 size={18} className="text-amber-500" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-white font-medium">Compartir enlace</p>
-                    <p className="text-xs text-neutral-500">Copia el enlace del grupo</p>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowGroupFiles(true)}
-                  className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-neutral-900/40 border border-neutral-800/50 hover:border-neutral-700/50 rounded-xl transition-all text-left cursor-pointer"
-                >
-                  <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
-                    <Paperclip size={18} className="text-amber-500" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-white font-medium">Ver archivos</p>
-                    <p className="text-xs text-neutral-500">Adjuntos del chat</p>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSearchConversation}
-                  className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-neutral-900/40 border border-neutral-800/50 hover:border-neutral-700/50 rounded-xl transition-all text-left cursor-pointer"
-                >
-                  <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
-                    <Search size={18} className="text-amber-500" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-white font-medium">Buscar en la conversacion</p>
-                    <p className="text-xs text-neutral-500">Encuentra mensajes</p>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowGroupReportModal(true)}
-                  className="w-full flex items-center gap-4 p-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500/50 rounded-xl transition-all text-left cursor-pointer"
-                >
-                  <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center flex-shrink-0">
-                    <Flag size={18} className="text-red-400" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-red-200 font-medium">Reportar grupo</p>
-                    <p className="text-xs text-red-300">Denunciar comportamiento</p>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleClearChatLocal}
-                  className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-neutral-900/40 border border-neutral-800/50 hover:border-neutral-700/50 rounded-xl transition-all text-left cursor-pointer"
-                >
-                  <div className="w-10 h-10 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center flex-shrink-0">
-                    <X size={18} className="text-neutral-400" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-white font-medium">Limpiar chat local</p>
-                    <p className="text-xs text-neutral-500">No borra mensajes del servidor</p>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (activeConversation.groupId) {
-                      navigate(`/group/${activeConversation.groupId}`);
-                    }
-                    setShowGroupOptions(false);
-                  }}
-                  className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-neutral-900/40 border border-neutral-800/50 hover:border-neutral-700/50 rounded-xl transition-all text-left cursor-pointer"
-                >
-                  <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
-                    <ExternalLink size={18} className="text-amber-500" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-white font-medium">Ver grupo</p>
-                    <p className="text-xs text-neutral-500">Ir a la pagina del grupo</p>
-                  </div>
-                </button>
-                {groupOptionsGroup?.ownerId === user?.uid && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (activeConversation.groupId) {
-                        navigate(`/group/${activeConversation.groupId}/edit`);
-                      }
-                      setShowGroupOptions(false);
-                    }}
-                    className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-neutral-900/40 border border-neutral-800/50 hover:border-neutral-700/50 rounded-xl transition-all text-left cursor-pointer"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
-                      <Pencil size={18} className="text-amber-500" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-white font-medium">Editar grupo</p>
-                      <p className="text-xs text-neutral-500">Cambiar nombre o detalles</p>
-                    </div>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handleLeaveGroup}
-                  className="w-full flex items-center gap-4 p-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500/50 rounded-xl transition-all text-left cursor-pointer"
-                >
-                  <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center flex-shrink-0">
-                    <LogOut size={18} className="text-red-400" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-red-200 font-medium">Salir del grupo</p>
-                    <p className="text-xs text-red-300">Dejaras de ver el chat</p>
-                  </div>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <GroupOptionsOverlay
+          open={showGroupOptions && activeConversation.type === 'group'}
+          groupName={groupOptionsGroup?.name || getConversationName(activeConversation)}
+          groupIconUrl={groupOptionsGroup?.iconUrl}
+          loading={groupOptionsLoading}
+          muted={groupMemberData?.muted ?? false}
+          muteStatusText={getGroupMuteStatusText()}
+          isTogglingMute={isTogglingGroupMute}
+          isOwner={groupOptionsGroup?.ownerId === user?.uid}
+          onClose={() => setShowGroupOptions(false)}
+          onUnmute={handleUnmuteGroup}
+          onOpenMuteModal={() => setShowGroupMuteModal(true)}
+          onShare={handleShareGroup}
+          onOpenFiles={() => setShowGroupFiles(true)}
+          onSearch={handleSearchConversation}
+          onOpenReportModal={() => setShowGroupReportModal(true)}
+          onClearChatLocal={handleClearChatLocal}
+          onViewGroup={() => {
+            if (activeConversation.groupId) {
+              navigate(`/group/${activeConversation.groupId}`);
+            }
+            setShowGroupOptions(false);
+          }}
+          onEditGroup={() => {
+            if (activeConversation.groupId) {
+              navigate(`/group/${activeConversation.groupId}/edit`);
+            }
+            setShowGroupOptions(false);
+          }}
+          onLeaveGroup={handleLeaveGroup}
+        />
 
         {/* Conversation Search Modal */}
-        {showSearchModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div
-              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-              onClick={() => setShowSearchModal(false)}
-            />
-            <div className="relative w-full max-w-lg mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
-                <h3 className="text-lg font-medium text-white">Buscar en la conversacion</h3>
-                <button
-                  onClick={() => setShowSearchModal(false)}
-                  className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <div className="p-4 space-y-4">
-                <input
-                  value={searchConversationQuery}
-                  onChange={(event) => setSearchConversationQuery(event.target.value)}
-                  placeholder="Escribe para buscar..."
-                  className="w-full bg-neutral-800/60 border border-neutral-700 rounded-lg px-4 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/60 transition-colors"
-                />
-                <div className="max-h-[45vh] overflow-y-auto space-y-2">
-                  {searchConversationQuery.trim() === '' ? (
-                    <div className="text-sm text-neutral-500 text-center py-8">
-                      Escribe un termino para buscar.
-                    </div>
-                  ) : (
-                    visibleMessages
-                      .filter((msg) =>
-                        msg.text
-                          .toLowerCase()
-                          .includes(searchConversationQuery.trim().toLowerCase()),
-                      )
-                      .map((msg) => (
-                        <button
-                          key={msg.id}
-                          type="button"
-                          onClick={() => handleJumpToMessage(msg.id)}
-                          className="w-full text-left p-3 rounded-xl bg-neutral-900/40 border border-neutral-800/60 hover:bg-neutral-800/60 transition-colors"
-                        >
-                          <p className="text-sm text-white truncate">{msg.text}</p>
-                          <p className="text-xs text-neutral-500 mt-1">
-                            {msg.senderId === user?.uid ? 'Tu' : 'Miembro'} ·{' '}
-                            {new Date(msg.createdAt).toLocaleTimeString('es-ES', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </p>
-                        </button>
-                      ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <ConversationSearchModal
+          open={showSearchModal}
+          query={searchConversationQuery}
+          messages={visibleMessages}
+          currentUserId={user?.uid}
+          onClose={() => setShowSearchModal(false)}
+          onQueryChange={setSearchConversationQuery}
+          onJumpToMessage={handleJumpToMessage}
+        />
 
         {/* Group Report Modal */}
-        {showGroupReportModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div
-              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-              onClick={() => {
-                setShowGroupReportModal(false);
-                resetGroupReportForm();
-              }}
-            />
-            <div className="relative w-full max-w-md mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
-                <h3 className="text-lg font-medium text-white">Reportar grupo</h3>
-                <button
-                  onClick={() => {
-                    setShowGroupReportModal(false);
-                    resetGroupReportForm();
-                  }}
-                  className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
-                  aria-label="Cerrar"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <div className="p-4 space-y-4">
-                <div>
-                  <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
-                    Motivo
-                  </label>
-                  <select
-                    value={groupReportReason}
-                    onChange={(event) =>
-                      setGroupReportReason(event.target.value as UserReportReason)
-                    }
-                    className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-red-500/50 transition-colors"
-                  >
-                    {REPORT_REASON_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+        <GroupReportModal
+          open={showGroupReportModal}
+          reason={groupReportReason}
+          details={groupReportDetails}
+          error={groupReportError}
+          isSubmitting={isSubmittingGroupReport}
+          onClose={() => {
+            setShowGroupReportModal(false);
+            resetGroupReportForm();
+          }}
+          onReasonChange={setGroupReportReason}
+          onDetailsChange={setGroupReportDetails}
+          onSubmit={handleSubmitGroupReport}
+        />
 
-                <div>
-                  <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
-                    Detalles (opcional)
-                  </label>
-                  <textarea
-                    value={groupReportDetails}
-                    onChange={(event) => setGroupReportDetails(event.target.value)}
-                    rows={4}
-                    maxLength={2000}
-                    className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-red-500/50 transition-colors resize-none"
-                    placeholder="Describe el motivo del reporte"
-                  />
-                  <div className="text-right text-xs text-neutral-500 mt-1">
-                    {groupReportDetails.length}/2000
-                  </div>
-                </div>
-
-                {groupReportError && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
-                    {groupReportError}
-                  </div>
-                )}
-
-                <div className="flex items-center justify-end gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowGroupReportModal(false);
-                      resetGroupReportForm();
-                    }}
-                    className="px-4 py-2 rounded-lg text-neutral-300 hover:text-white transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSubmitGroupReport}
-                    disabled={isSubmittingGroupReport}
-                    className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSubmittingGroupReport ? 'Enviando...' : 'Enviar reporte'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
         {/* Group Mute Options */}
-        {showGroupMuteModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div
-              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-              onClick={() => setShowGroupMuteModal(false)}
-            />
-            <div className="relative w-full max-w-sm mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
-                <h3 className="text-lg font-medium text-white">Silenciar grupo</h3>
-                <button
-                  onClick={() => setShowGroupMuteModal(false)}
-                  className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <div className="p-4 space-y-2">
-                <button
-                  onClick={() => handleMuteGroup(1)}
-                  disabled={isTogglingGroupMute}
-                  className="w-full p-3 text-left text-white hover:bg-neutral-800 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  1 hora
-                </button>
-                <button
-                  onClick={() => handleMuteGroup(4)}
-                  disabled={isTogglingGroupMute}
-                  className="w-full p-3 text-left text-white hover:bg-neutral-800 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  4 horas
-                </button>
-                <button
-                  onClick={() => handleMuteGroup(8)}
-                  disabled={isTogglingGroupMute}
-                  className="w-full p-3 text-left text-white hover:bg-neutral-800 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  8 horas
-                </button>
-                <button
-                  onClick={() => handleMuteGroup(null)}
-                  disabled={isTogglingGroupMute}
-                  className="w-full p-3 text-left text-white hover:bg-neutral-800 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  Para siempre
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <GroupMuteModal
+          open={showGroupMuteModal}
+          isToggling={isTogglingGroupMute}
+          onClose={() => setShowGroupMuteModal(false)}
+          onMute={handleMuteGroup}
+        />
 
         {/* Group Files */}
-        {showGroupFiles && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div
-              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-              onClick={() => setShowGroupFiles(false)}
-            />
-            <div className="relative w-full max-w-lg mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
-                <h3 className="text-lg font-medium text-white">Archivos del chat</h3>
-                <button
-                  onClick={() => setShowGroupFiles(false)}
-                  className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
-                {attachmentItems.length === 0 ? (
-                  <div className="text-center text-neutral-500 py-8">
-                    No hay archivos compartidos en este chat.
-                  </div>
-                ) : (
-                  attachmentItems.map((item) => {
-                    const att = item.attachment as MessageAttachmentRead;
-                    const isImage = att.kind === 'image';
-                    const title = isImage ? 'Imagen' : att.fileName || 'Archivo';
-                    return (
-                      <button
-                        key={`${item.messageId}_${att.path}`}
-                        type="button"
-                        onClick={() => window.open(att.url, '_blank')}
-                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-neutral-900/40 border border-neutral-800/60 text-left hover:bg-neutral-800/60 transition-colors"
-                      >
-                        <div className="w-12 h-12 rounded-lg bg-neutral-800 flex items-center justify-center overflow-hidden">
-                          {isImage ? (
-                            att.thumbUrl ? (
-                              <img
-                                src={att.thumbUrl}
-                                alt={title}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <ImageIcon size={18} className="text-amber-400" />
-                            )
-                          ) : (
-                            <FileText size={18} className="text-amber-400" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white text-sm truncate">{title}</p>
-                          <p className="text-xs text-neutral-500">
-                            {isImage ? 'Imagen' : att.contentType} · {formatBytes(att.size || 0)}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        <GroupFilesModal
+          open={showGroupFiles}
+          items={attachmentItems}
+          onClose={() => setShowGroupFiles(false)}
+        />
       </div>
     );
   }
@@ -1409,56 +901,15 @@ export default function MessagesPage() {
           activeConversations.map((conv) => {
             const groupInfo = conv.groupId ? groupInfoCache[conv.groupId] : null;
             const name = getConversationName(conv);
-            const lastMessageTime = conv.lastMessage?.createdAt
-              ? formatRelativeTime(new Date(conv.lastMessage.createdAt))
-              : '';
 
             return (
-              <button
+              <ConversationListItem
                 key={conv.id}
-                onClick={() => handleSelectConversation(conv.id)}
-                className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-neutral-900/40 border border-neutral-800/50 hover:border-neutral-700/50 rounded-xl transition-all group"
-              >
-                {/* Icon */}
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-neutral-800 to-neutral-900 border border-neutral-700/50 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                  {groupInfo?.iconUrl ? (
-                    <img
-                      src={groupInfo.iconUrl}
-                      alt={name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <Users size={22} className="text-neutral-500" />
-                  )}
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0 text-left">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-white font-medium truncate">{name}</span>
-                    {conv.type === 'group' && (
-                      <span className="flex items-center gap-1 px-2 py-0.5 bg-neutral-800/80 text-neutral-400 text-xs rounded-full">
-                        <Users size={10} />
-                        Grupo
-                      </span>
-                    )}
-                  </div>
-                  {conv.lastMessage && (
-                    <p className="text-neutral-500 text-sm truncate">{conv.lastMessage.text}</p>
-                  )}
-                </div>
-
-                {/* Right side */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {lastMessageTime && (
-                    <span className="text-neutral-500 text-sm">{lastMessageTime}</span>
-                  )}
-                  <ChevronRight
-                    size={18}
-                    className="text-neutral-600 group-hover:text-neutral-400 transition-colors"
-                  />
-                </div>
-              </button>
+                conversation={conv}
+                name={name}
+                groupIconUrl={groupInfo?.iconUrl}
+                onSelect={() => handleSelectConversation(conv.id)}
+              />
             );
           })
         )}
@@ -1487,67 +938,14 @@ export default function MessagesPage() {
                 {filteredMemberGroups.map((group) => {
                   const stats = getGroupStats(group);
                   return (
-                    <div
+                    <MemberGroupCard
                       key={group.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => navigate(`/group/${group.id}`)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          navigate(`/group/${group.id}`);
-                        }
-                      }}
-                      className="bg-surface-1 border border-neutral-800/50 rounded-lg p-5 cursor-pointer hover:border-neutral-700/70 transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3 min-w-0">
-                          <div className="w-12 h-12 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center overflow-hidden">
-                            {group.iconUrl ? (
-                              <img
-                                src={group.iconUrl}
-                                alt={group.name}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <Users size={20} className="text-neutral-500" />
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <h3 className="text-white font-medium text-lg truncate">
-                              {group.name}
-                            </h3>
-                            <p className="text-neutral-500 text-sm mt-1 line-clamp-2">
-                              {group.description || 'Sin descripcion.'}
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void handleOpenMemberGroup(group);
-                          }}
-                          className="px-3 py-1.5 rounded text-xs bg-neutral-800 text-neutral-200 hover:bg-neutral-700"
-                        >
-                          Chat
-                        </button>
-                      </div>
-                      <div className="flex items-center justify-between pt-3 border-t border-neutral-800/50 mt-4">
-                        <div className="text-neutral-500 text-xs">
-                          {stats.members.toLocaleString('es-ES')} miembros - {stats.postsWeek}{' '}
-                          posts/semana
-                        </div>
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            navigate(`/group/${group.id}`);
-                          }}
-                          className="text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
-                        >
-                          Ver grupo
-                        </button>
-                      </div>
-                    </div>
+                      group={group}
+                      members={stats.members}
+                      postsWeek={stats.postsWeek}
+                      onNavigateGroup={() => navigate(`/group/${group.id}`)}
+                      onOpenChat={() => void handleOpenMemberGroup(group)}
+                    />
                   );
                 })}
               </div>
