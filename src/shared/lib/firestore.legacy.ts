@@ -331,19 +331,8 @@ export interface UserSettingsRead {
   privacy: PrivacySettings;
 }
 
-// Support tickets (Help & Feedback)
-export type UserReportReason = 'spam' | 'harassment' | 'abuse' | 'fake' | 'other';
+// Reports & blocking (Help & Feedback)
 export type BlockedUserStatus = 'active';
-
-export interface UserReportWrite {
-  reporterUid: string;
-  reportedUid: string;
-  reason: UserReportReason;
-  details: string | null;
-  conversationId: string | null;
-  status: 'open';
-  createdAt: FieldValue;
-}
 
 export interface BlockedUserWrite {
   blockedUid: string;
@@ -3776,51 +3765,6 @@ export async function updatePrivacySettings(uid: string, settings: PrivacySettin
     { merge: true },
   );
   await batch.commit();
-}
-
-export async function createUserReport(input: {
-  reporterUid: string;
-  reportedUid: string;
-  reason: UserReportReason;
-  details?: string | null;
-  conversationId?: string | null;
-}): Promise<string> {
-  const reportRef = doc(collection(db, 'reports'));
-  await setDoc(
-    reportRef,
-    {
-      reporterUid: input.reporterUid,
-      reportedUid: input.reportedUid,
-      reason: input.reason,
-      details: input.details ?? null,
-      conversationId: input.conversationId ?? null,
-      status: 'open',
-      createdAt: serverTimestamp(),
-    } as UserReportWrite,
-    { merge: false },
-  );
-  return reportRef.id;
-}
-
-export async function createGroupReport(input: {
-  reporterUid: string;
-  groupId: string;
-  reason: UserReportReason;
-  details?: string | null;
-  conversationId?: string | null;
-}): Promise<string> {
-  const details = input.details?.trim();
-  const mergedDetails = details
-    ? `[Grupo ${input.groupId}] ${details}`
-    : `Reporte de grupo ${input.groupId}`;
-
-  return createUserReport({
-    reporterUid: input.reporterUid,
-    reportedUid: input.groupId,
-    reason: input.reason,
-    details: mergedDetails,
-    conversationId: input.conversationId ?? `grp_${input.groupId}`,
-  });
 }
 
 // ==================== Stories ====================
