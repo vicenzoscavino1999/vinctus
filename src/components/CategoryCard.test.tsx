@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Atom } from 'lucide-react';
 import CategoryCard from '@/features/discover/components/CategoryCard';
-import type { Category } from '../types';
+import type { Category } from '@/shared/types';
 
 const mockCategory: Category = {
   id: 'science',
