@@ -92,6 +92,13 @@ export default defineConfig([
                 'No importes firestore-post-upload directo. Usa @/features/posts/api para acceso de dominio.',
             },
           ],
+          patterns: [
+            {
+              group: ['@/shared/lib/firestore/*', '@/shared/lib/firestore/**'],
+              message:
+                'No importes Firestore directo (incluye subpaths). Usa el modulo de dominio en src/features/<domain>/api.',
+            },
+          ],
         },
       ],
     },
