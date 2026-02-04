@@ -24,15 +24,15 @@ const PostDetailPage = lazy(() => import('@/features/posts/pages/PostDetailPage'
 const UserProfilePage = lazy(() => import('@/features/profile/components/UserProfilePage'));
 
 // Lazy loaded pages
-const DiscoverPage = lazy(() => import('@/pages/DiscoverPage'));
-const UserSearchPage = lazy(() => import('@/pages/UserSearchPage'));
-const CategoryPage = lazy(() => import('@/pages/CategoryPage'));
+const DiscoverPage = lazy(() => import('@/features/discover/pages/DiscoverPage'));
+const UserSearchPage = lazy(() => import('@/features/discover/pages/UserSearchPage'));
+const CategoryPage = lazy(() => import('@/features/discover/pages/CategoryPage'));
 const FeedPage = lazy(() => import('@/features/posts/pages/FeedPage'));
-const ProjectsPage = lazy(() => import('@/pages/ProjectsPage'));
-const LibraryPage = lazy(() => import('@/pages/LibraryPage'));
-const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
-const FollowListPage = lazy(() => import('@/pages/FollowListPage'));
-const NotificationsPage = lazy(() => import('@/pages/NotificationsPage'));
+const ProjectsPage = lazy(() => import('@/features/projects/pages/ProjectsPage'));
+const LibraryPage = lazy(() => import('@/features/collections/pages/LibraryPage'));
+const ProfilePage = lazy(() => import('@/features/profile/pages/ProfilePage'));
+const FollowListPage = lazy(() => import('@/features/profile/pages/FollowListPage'));
+const NotificationsPage = lazy(() => import('@/features/notifications/pages/NotificationsPage'));
 const MessagesPage = lazy(() => import('@/features/chat/pages/MessagesPage'));
 const ConversationDetailsPage = lazy(() => import('@/features/chat/pages/ConversationDetailsPage'));
 const GroupConversationDetailsPage = lazy(
@@ -41,10 +41,14 @@ const GroupConversationDetailsPage = lazy(
 const GroupEditPage = lazy(() => import('@/features/groups/pages/GroupEditPage'));
 
 // Settings page (lazy loaded)
-const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
-const SettingsNotificationsPage = lazy(() => import('@/pages/SettingsNotificationsPage'));
-const SettingsPrivacySecurityPage = lazy(() => import('@/pages/SettingsPrivacySecurityPage'));
-const HelpPage = lazy(() => import('@/pages/HelpPage'));
+const SettingsPage = lazy(() => import('@/features/settings/pages/SettingsPage'));
+const SettingsNotificationsPage = lazy(
+  () => import('@/features/settings/pages/SettingsNotificationsPage'),
+);
+const SettingsPrivacySecurityPage = lazy(
+  () => import('@/features/settings/pages/SettingsPrivacySecurityPage'),
+);
+const HelpPage = lazy(() => import('@/features/help/pages/HelpPage'));
 
 type NavProps = {
   activeTab: string;
