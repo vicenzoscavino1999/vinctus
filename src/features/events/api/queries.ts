@@ -1,1 +1,1 @@
-export { isEventAttendee } from '@/shared/lib/firestore';
+export { getEventAttendeeCount, getUpcomingEvents, isEventAttendee } from '@/shared/lib/firestore';

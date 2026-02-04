@@ -14,7 +14,7 @@ import {
   sendGroupJoinRequest,
   type FirestoreGroup,
   type GroupJoinStatus,
-} from '@/lib/firestore';
+} from '@/features/groups/api';
 
 type SearchFiltersState = {
   category: string | null;

@@ -18,7 +18,7 @@ import {
   isUserBlocked,
   type FollowStatus,
   type PublicUserRead,
-} from '@/lib/firestore';
+} from '@/features/profile/api';
 
 const MIN_QUERY_LENGTH = 2;
 

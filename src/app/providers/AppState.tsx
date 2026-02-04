@@ -16,17 +16,14 @@ import { collection, getDocs, limit, query } from 'firebase/firestore';
 import type { AppStateContextType } from '../../types';
 import { useAuth } from '@/app/providers/AuthContext';
 import { db } from '@/shared/lib/firebase';
+import { joinGroupWithSync, leaveGroupWithSync } from '@/features/groups/api';
 import {
-  // Firestore operations
-  joinGroupWithSync,
-  leaveGroupWithSync,
   likePostWithSync,
-  unlikePostWithSync,
   savePostWithSync,
+  unlikePostWithSync,
   unsavePostWithSync,
-  saveCategoryWithSync,
-  unsaveCategoryWithSync,
-} from '../../lib/firestore';
+} from '@/features/posts/api';
+import { saveCategoryWithSync, unsaveCategoryWithSync } from '@/features/profile/api';
 
 // Create the context with proper typing
 const AppStateContext = createContext<AppStateContextType | null>(null);

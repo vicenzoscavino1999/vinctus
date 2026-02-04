@@ -27,20 +27,21 @@ vi.mock('@/app/providers/AuthContext', async () => {
   };
 });
 
-// Mock Firestore functions
-vi.mock('../lib/firestore', () => ({
+vi.mock('@/features/groups/api', () => ({
   joinGroupWithSync: vi.fn(() => Promise.resolve()),
   leaveGroupWithSync: vi.fn(() => Promise.resolve()),
+}));
+
+vi.mock('@/features/posts/api', () => ({
   likePostWithSync: vi.fn(() => Promise.resolve()),
   unlikePostWithSync: vi.fn(() => Promise.resolve()),
   savePostWithSync: vi.fn(() => Promise.resolve()),
   unsavePostWithSync: vi.fn(() => Promise.resolve()),
+}));
+
+vi.mock('@/features/profile/api', () => ({
   saveCategoryWithSync: vi.fn(() => Promise.resolve()),
   unsaveCategoryWithSync: vi.fn(() => Promise.resolve()),
-  subscribeToUserMemberships: vi.fn(() => () => {}),
-  subscribeToSavedCategories: vi.fn(() => () => {}),
-  subscribeToLikedPosts: vi.fn(() => () => {}),
-  subscribeToSavedPosts: vi.fn(() => () => {}),
 }));
 
 // Wrapper con providers necesarios
