@@ -75,12 +75,7 @@ export default defineConfig([
   },
   {
     files: ['src/**/*.{js,jsx,ts,tsx}'],
-    ignores: [
-      'src/shared/lib/firestore.ts',
-      'src/lib/firestore.ts',
-      'src/lib/firestore-post-upload.ts',
-      'src/features/**/api/**/*.{js,jsx,ts,tsx}',
-    ],
+    ignores: ['src/shared/lib/firestore.ts', 'src/features/**/api/**/*.{js,jsx,ts,tsx}'],
     rules: {
       'no-restricted-imports': [
         'error',
