@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Lightbulb, HelpCircle, Mail, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { useToast } from './Toast';
+import { useToast } from '@/shared/ui/Toast';
 import {
   createSupportTicket,
   type SupportTicketContext,
   type SupportTicketType,
-} from '@/lib/firestore';
+} from '@/features/help/api';
 
 interface SupportModalProps {
   isOpen: boolean;

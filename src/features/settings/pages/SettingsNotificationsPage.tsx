@@ -8,7 +8,7 @@ import {
   getUserSettings,
   updateNotificationSettings,
   type NotificationSettings,
-} from '@/lib/firestore';
+} from '@/features/settings/api';
 
 type ToggleRowProps = {
   label: string;

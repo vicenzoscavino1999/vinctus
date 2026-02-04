@@ -13,7 +13,7 @@ import {
   type FollowUserRead,
   type PaginatedResult,
   type UserProfileRead,
-} from '@/lib/firestore';
+} from '@/features/profile/api';
 
 type FollowTab = 'followers' | 'following';
 

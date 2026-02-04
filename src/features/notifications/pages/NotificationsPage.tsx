@@ -4,23 +4,29 @@ import { Search } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import {
   acceptCollaborationRequest,
-  acceptFollowRequest,
+  getPendingCollaborationRequests,
+  rejectCollaborationRequest,
+  type CollaborationRequestRead,
+} from '@/features/collaborations/api';
+import {
   acceptGroupJoinRequest,
+  getPendingGroupJoinRequests,
+  rejectGroupJoinRequest,
+  type GroupJoinRequestRead,
+} from '@/features/groups/api';
+import {
+  acceptFollowRequest,
+  declineFollowRequest,
   getIncomingFollowRequests,
   getOrCreateDirectConversation,
-  getPendingCollaborationRequests,
-  getPendingGroupJoinRequests,
-  getUserActivity,
-  rejectCollaborationRequest,
-  rejectGroupJoinRequest,
-  declineFollowRequest,
-  type ActivityRead,
-  type CollaborationRequestRead,
   type FollowRequestRead,
   type FollowUserRead,
-  type GroupJoinRequestRead,
+} from '@/features/profile/api';
+import {
+  getUserActivity,
+  type ActivityRead,
   type PaginatedResult,
-} from '@/lib/firestore';
+} from '@/features/notifications/api';
 import { useToast } from '@/shared/ui/Toast';
 
 const formatRelativeTime = (date: Date): string => {

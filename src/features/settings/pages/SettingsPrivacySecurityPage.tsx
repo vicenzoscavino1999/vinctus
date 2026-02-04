@@ -10,7 +10,7 @@ import {
   getUserSettings,
   updatePrivacySettings,
   type PrivacySettings,
-} from '@/lib/firestore';
+} from '@/features/settings/api';
 
 type ToggleRowProps = {
   label: string;

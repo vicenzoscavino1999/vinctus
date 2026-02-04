@@ -1,6 +1,7 @@
 export type {
   CreateGroupInput,
   FirestoreGroup,
+  GroupJoinRequestRead,
   GroupJoinStatus,
   GroupVisibility,
   UserProfileRead,

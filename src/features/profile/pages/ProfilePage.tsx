@@ -3,7 +3,7 @@ import { Settings, MapPin, Mail, Edit3, Loader2, BookOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/shared/ui/Toast';
 import { useAuth } from '@/context/AuthContext';
-import { subscribeToUserProfile, type UserProfileRead } from '@/lib/firestore';
+import { subscribeToUserProfile, type UserProfileRead } from '@/features/profile/api';
 import EditProfileModal from '@/features/profile/components/EditProfileModal';
 import CollectionsPanel from '@/features/collections/components/CollectionsPanel';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';

@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
 import { MapPin, User, ArrowRight, Plus } from 'lucide-react';
+import { getCollaborations, type CollaborationRead } from '@/features/collaborations/api';
 import {
-  getCollaborations,
   getEventAttendeeCount,
   getUpcomingEvents,
-  type CollaborationRead,
   type FirestoreEvent,
-} from '@/lib/firestore';
+} from '@/features/events/api';
 import { useToast } from '@/shared/ui/Toast';
 import { useAuth } from '@/context/AuthContext';
 import CreateCollaborationModal from '@/features/collaborations/components/CreateCollaborationModal';

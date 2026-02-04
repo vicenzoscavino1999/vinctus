@@ -14,14 +14,13 @@ import { useToast } from '@/shared/ui/Toast';
 import ApiContentCard from '@/features/discover/components/ApiContentCard';
 import { useApiContent } from '@/shared/hooks';
 import { CATEGORIES } from '@/shared/constants';
+import { getGroupsByCategory, type FirestoreGroup } from '@/features/groups/api';
 import {
   getContributionsByCategory,
-  getGroupsByCategory,
   getUserProfile,
   type ContributionRead,
   type ContributionType,
-  type FirestoreGroup,
-} from '@/lib/firestore';
+} from '@/features/profile/api';
 
 type ContributionLibraryItem = ContributionRead & {
   authorName: string;
