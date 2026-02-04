@@ -12,7 +12,6 @@ export { default as PageLoader } from './PageLoader';
 export { default as UserProfilePage } from './UserProfilePage';
 export { default as LoginScreen } from './LoginScreen';
 export { default as OnboardingFlow } from './OnboardingFlow';
-export { default as GroupDetailPage } from './GroupDetailPage';
 export { default as SearchFilters } from './SearchFilters';
 export { default as ErrorBoundary } from './ErrorBoundary';
 export { SkeletonCard, SkeletonContentGrid, EmptyState, ErrorState } from './SkeletonLoader';
