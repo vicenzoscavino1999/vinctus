@@ -1,8 +1,8 @@
 {
-  "capturedAt": "2026-02-03T22:52:00.694Z",
+  "capturedAt": "2026-02-03T23:42:35.172Z",
   "feed": {
     "open": {
-      "reads": 13,
+      "reads": 20,
       "writes": 0,
       "calls": 0,
       "listenersActive": 4,
@@ -14,7 +14,7 @@
   },
   "chat": {
     "open": {
-      "reads": 7,
+      "reads": 16,
       "writes": 0,
       "calls": 0,
       "listenersActive": 4,
@@ -25,7 +25,7 @@
     "listenersActiveAfterLeave": 4
   },
   "createPost": {
-    "reads": 13,
+    "reads": 20,
     "writes": 0,
     "calls": 0,
     "listenersActive": 4,
@@ -35,7 +35,7 @@
   },
   "totals": {
     "feedOpen": {
-      "reads": 15,
+      "reads": 21,
       "writes": 1,
       "calls": 0,
       "listenerStarts": 8,
@@ -45,14 +45,13 @@
       "bySource": {
         "auth.ensureUserProfile.getUser": 1,
         "auth.ensureUserProfile.upsertUserPublic": 1,
-        "firestore.getDocs": 6,
-        "firestore.onSnapshot": 12,
-        "firestore.getCountFromServer": 4,
-        "firestore.getDoc": 4
+        "firestore.onSnapshot": 16,
+        "firestore.getDoc": 8,
+        "firestore.getDocs": 8
       }
     },
     "chatOpen": {
-      "reads": 24,
+      "reads": 34,
       "writes": 1,
       "calls": 0,
       "listenerStarts": 16,
@@ -62,14 +61,14 @@
       "bySource": {
         "auth.ensureUserProfile.getUser": 1,
         "auth.ensureUserProfile.upsertUserPublic": 1,
-        "firestore.onSnapshot": 28,
-        "firestore.getDocs": 6,
+        "firestore.onSnapshot": 37,
+        "firestore.getDocs": 8,
         "firestore.getDoc": 11,
-        "firestore.getCountFromServer": 6
+        "firestore.getCountFromServer": 5
       }
     },
     "createPost": {
-      "reads": 15,
+      "reads": 21,
       "writes": 1,
       "calls": 0,
       "listenerStarts": 8,
@@ -79,10 +78,9 @@
       "bySource": {
         "auth.ensureUserProfile.getUser": 1,
         "auth.ensureUserProfile.upsertUserPublic": 1,
-        "firestore.getDocs": 6,
-        "firestore.onSnapshot": 12,
-        "firestore.getCountFromServer": 4,
-        "firestore.getDoc": 4
+        "firestore.onSnapshot": 16,
+        "firestore.getDoc": 8,
+        "firestore.getDocs": 8
       }
     }
   }

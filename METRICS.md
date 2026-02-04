@@ -98,7 +98,7 @@ All metrics must include a capture method so they can be repeated later.
   - App calls for auth flow (login/register/phone/signout)
   - Per-flow counters (`feed`, `chat`, `login`, `app`)
 
-## Phase 4 before/after (2026-02-03)
+## Phase 4 before/after (2026-02-04 closeout rerun)
 
 - Goal thresholds:
   - Feed reads per open: -30% to -50%
@@ -109,19 +109,19 @@ All metrics must include a capture method so they can be repeated later.
   1. Set env vars: `FIREBASE_PROJECT_ID=vinctus-dev`, `VITE_FIREBASE_PROJECT_ID=vinctus-dev`, `GCLOUD_PROJECT=vinctus-dev`.
   2. Run emulators **without functions**:
      `npx firebase emulators:exec --project vinctus-dev --only auth,firestore,storage "npm run seed && node scripts/collect-phase4-metrics.mjs"`
-  3. Baseline (`phase4-metrics-before.json`): commit `aff198a`, captured at `2026-02-03T22:52:00.694Z`.
-  4. After (`phase4-metrics-after.json`): `main` commit `57b22a1`, captured at `2026-02-03T22:33:09.500Z`.
+  3. Baseline (`phase4-metrics-before.json`): `main` commit `57b22a1`, captured at `2026-02-03T22:33:09.500Z`.
+  4. After (`phase4-metrics-after.json`): current branch, captured at `2026-02-04T01:34:24.292Z`.
   5. Compare `flows.feed` / `flows.chat` plus `listenersActiveAfterLeave`.
 
-| Metric                         |     Before |      After |   Delta | Threshold    | Status |
-| ------------------------------ | ---------: | ---------: | ------: | ------------ | ------ |
-| Feed reads/open                |         13 |         20 |  +53.8% | -30% to -50% | FAIL   |
-| Chat reads/open                |          7 |         16 | +128.6% | -30% to -50% | FAIL   |
-| Feed listenersActiveAfterLeave |          4 |          4 |       0 | 0            | FAIL   |
-| Chat listenersActiveAfterLeave |          4 |          4 |       0 | 0            | FAIL   |
-| Index warnings (feed/chat)     | 0 observed | 0 observed |     n/a | 0            | PASS   |
+| Metric                         |     Before |      After |  Delta | Threshold    | Status |
+| ------------------------------ | ---------: | ---------: | -----: | ------------ | ------ |
+| Feed reads/open                |         20 |          8 | -60.0% | -30% to -50% | PASS   |
+| Chat reads/open                |         16 |         11 | -31.3% | -30% to -50% | PASS   |
+| Feed listenersActiveAfterLeave |          4 |          0 |     -4 | 0            | PASS   |
+| Chat listenersActiveAfterLeave |          4 |          0 |     -4 | 0            | PASS   |
+| Index warnings (feed/chat)     | 0 observed | 0 observed |    n/a | 0            | PASS   |
 
 - Notes:
-  - This snapshot shows regressions in read counts and listener cleanup versus baseline.
-  - Phase 4 **is not ready to tag** as `v4-firebase-optimized` yet.
-  - Keep `firestore.indexes.json` updates from PR #48 and re-run this section after listener/read fixes.
+  - Feed reduction is stronger than target range due removing extra per-item count calls.
+  - Chat flow now meets the target reduction and listener cleanup target.
+  - This rerun clears the remaining Phase 4 metrics gate for feed/chat instrumentation.

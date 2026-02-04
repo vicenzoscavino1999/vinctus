@@ -22,7 +22,6 @@ import {
 import { useToast } from '@/shared/ui/Toast';
 import {
   getOrCreateGroupConversation,
-  getGroupPostsWeekCount,
   setConversationMute,
   clearConversationMute,
   subscribeToConversations,
@@ -127,6 +126,7 @@ export default function MessagesPage() {
     Record<string, { members: number; postsWeek: number }>
   >({});
   const [memberGroups, setMemberGroups] = useState<FirestoreGroup[]>([]);
+  const memberGroupsRef = useRef<FirestoreGroup[]>([]);
   const [memberGroupsLoading, setMemberGroupsLoading] = useState(false);
   const [memberGroupsError, setMemberGroupsError] = useState<string | null>(null);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
@@ -171,6 +171,10 @@ export default function MessagesPage() {
   useEffect(() => {
     groupInfoCacheRef.current = groupInfoCache;
   }, [groupInfoCache]);
+
+  useEffect(() => {
+    memberGroupsRef.current = memberGroups;
+  }, [memberGroups]);
 
   const getOtherMemberId = useCallback(
     (conv: ConversationRead): string | null => {
@@ -231,6 +235,20 @@ export default function MessagesPage() {
         convs.forEach(async (conv) => {
           if (conv.type === 'group' && conv.groupId && !groupInfoCacheRef.current[conv.groupId]) {
             try {
+              const existingGroup = memberGroupsRef.current.find(
+                (group) => group.id === conv.groupId,
+              );
+              if (existingGroup) {
+                setGroupInfoCache((prev) => ({
+                  ...prev,
+                  [conv.groupId!]: {
+                    name: existingGroup.name,
+                    iconUrl: existingGroup.iconUrl ?? undefined,
+                  },
+                }));
+                return;
+              }
+
               const group = await getGroup(conv.groupId);
               if (group) {
                 setGroupInfoCache((prev) => ({
@@ -255,39 +273,6 @@ export default function MessagesPage() {
   }, [user]);
 
   useEffect(() => {
-    if (memberGroups.length === 0) return;
-    let isActive = true;
-    const pending = memberGroups.filter((group) => groupStats[group.id] === undefined);
-    if (pending.length === 0) return;
-
-    const loadStats = async () => {
-      try {
-        const updates: Record<string, { members: number; postsWeek: number }> = {};
-        await Promise.all(
-          pending.map(async (group) => {
-            const postsWeek = await getGroupPostsWeekCount(group.id);
-            updates[group.id] = {
-              members: group.memberCount ?? 0,
-              postsWeek,
-            };
-          }),
-        );
-        if (isActive) {
-          setGroupStats((prev) => ({ ...prev, ...updates }));
-        }
-      } catch (statsError) {
-        console.error('Error loading group stats:', statsError);
-      }
-    };
-
-    loadStats();
-
-    return () => {
-      isActive = false;
-    };
-  }, [memberGroups, groupStats]);
-
-  useEffect(() => {
     if (!user) {
       setMemberGroups([]);
       setMemberGroupsError(null);
@@ -306,9 +291,31 @@ export default function MessagesPage() {
 
       void (async () => {
         try {
-          const groupDocs = await Promise.all(groupIds.map((id) => getGroup(id)));
+          const uniqueGroupIds = Array.from(new Set(groupIds));
+          const existingById = new Map(
+            memberGroupsRef.current.map((group) => [group.id, group] as const),
+          );
+          const reusedGroups: FirestoreGroup[] = [];
+          const missingIds: string[] = [];
+
+          uniqueGroupIds.forEach((groupId) => {
+            const existing = existingById.get(groupId);
+            if (existing) {
+              reusedGroups.push(existing);
+            } else {
+              missingIds.push(groupId);
+            }
+          });
+
+          const fetchedGroups =
+            missingIds.length > 0 ? await Promise.all(missingIds.map((id) => getGroup(id))) : [];
+
           if (!isActive || currentRequest !== requestId) return;
-          const resolved = groupDocs.filter(Boolean) as FirestoreGroup[];
+
+          const resolved = [
+            ...reusedGroups,
+            ...(fetchedGroups.filter(Boolean) as FirestoreGroup[]),
+          ];
           setMemberGroups(resolved);
           setMemberGroupsLoading(false);
           setGroupInfoCache((prev) => {
