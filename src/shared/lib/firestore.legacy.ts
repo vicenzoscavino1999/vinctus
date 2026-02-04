@@ -45,6 +45,7 @@ import {
 } from 'firebase/firestore/lite';
 import { db, dbLite } from './firebase';
 import { trackFirestoreListener, trackFirestoreRead, trackFirestoreWrite } from './devMetrics';
+import { getFollowerIds, getFollowingIds } from './firestore/followIds';
 
 const resolveSnapshotSize = (value: unknown): number => {
   if (typeof value !== 'object' || value === null || !('size' in value)) return 1;
@@ -485,7 +486,6 @@ export interface PaginatedResult<T> {
 const DEFAULT_LIMIT = 30;
 const SMALL_LIST_LIMIT = 50;
 const LARGE_LIST_LIMIT = 200;
-const ID_SUBCOLLECTION_FETCH_LIMIT = 1000;
 const BATCH_CHUNK_SIZE = 450; // Max 500, use 450 for safety
 const ACTIVITY_SNIPPET_LIMIT = 160;
 
@@ -4465,20 +4465,6 @@ export async function unfollowUser(followerUid: string, targetUid: string): Prom
   batch.delete(followerRef);
   batch.delete(followingRef);
   await batch.commit();
-}
-
-export async function getFollowingIds(uid: string): Promise<string[]> {
-  const snapshot = await getDocs(
-    query(collection(db, 'users', uid, 'following'), limit(ID_SUBCOLLECTION_FETCH_LIMIT)),
-  );
-  return snapshot.docs.map((docSnap) => docSnap.id);
-}
-
-export async function getFollowerIds(uid: string): Promise<string[]> {
-  const snapshot = await getDocs(
-    query(collection(db, 'users', uid, 'followers'), limit(ID_SUBCOLLECTION_FETCH_LIMIT)),
-  );
-  return snapshot.docs.map((docSnap) => docSnap.id);
 }
 
 export async function getFollowList(

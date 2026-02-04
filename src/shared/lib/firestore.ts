@@ -8,5 +8,6 @@
  */
 export * from './firestore/reports';
 export * from './firestore/blockedUsers';
+export * from './firestore/followIds';
 export * from './firestore/supportTickets';
 export * from './firestore.legacy';
