@@ -332,32 +332,8 @@ export interface UserSettingsRead {
 }
 
 // Support tickets (Help & Feedback)
-export type SupportTicketType = 'issue' | 'feature';
 export type UserReportReason = 'spam' | 'harassment' | 'abuse' | 'fake' | 'other';
 export type BlockedUserStatus = 'active';
-
-export interface SupportTicketContext {
-  path: string;
-  href: string;
-  userAgent: string;
-  platform: string;
-  locale: string;
-  screen: { width: number; height: number };
-  viewport: { width: number; height: number };
-  timezoneOffset: number;
-}
-
-export interface SupportTicketWrite {
-  uid: string;
-  email: string | null;
-  type: SupportTicketType;
-  title: string;
-  message: string;
-  context: SupportTicketContext | null;
-  appVersion: string;
-  status: 'open';
-  createdAt: FieldValue;
-}
 
 export interface UserReportWrite {
   reporterUid: string;
@@ -3800,34 +3776,6 @@ export async function updatePrivacySettings(uid: string, settings: PrivacySettin
     { merge: true },
   );
   await batch.commit();
-}
-
-export async function createSupportTicket(input: {
-  uid: string;
-  email: string | null;
-  type: SupportTicketType;
-  title: string;
-  message: string;
-  context: SupportTicketContext | null;
-  appVersion: string;
-}): Promise<string> {
-  const ticketRef = doc(collection(db, 'support_tickets'));
-  await setDoc(
-    ticketRef,
-    {
-      uid: input.uid,
-      email: input.email ?? null,
-      type: input.type,
-      title: input.title,
-      message: input.message,
-      context: input.context ?? null,
-      appVersion: input.appVersion,
-      status: 'open',
-      createdAt: serverTimestamp(),
-    } as SupportTicketWrite,
-    { merge: false },
-  );
-  return ticketRef.id;
 }
 
 export async function createUserReport(input: {

@@ -1,1 +1,1 @@
-export { createSupportTicket } from '@/shared/lib/firestore';
+export { createSupportTicket } from '@/shared/lib/firestore/supportTickets';
