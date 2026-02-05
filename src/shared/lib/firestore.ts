@@ -17,6 +17,7 @@ export * from './firestore/publicUsers';
 export * from './firestore/follows';
 export * from './firestore/friendRequests';
 export * from './firestore/collaborations';
+export * from './firestore/savedItems';
 export * from './firestore/supportTickets';
 export * from './firestore/stories';
 export * from './firestore.legacy';
