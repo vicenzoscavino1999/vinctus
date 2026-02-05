@@ -49,3 +49,4 @@ test-results/
 # Lighthouse reports (may contain API keys)
 lighthouse-report.json
 *.lighthouse.json
+.lighthouseci/
