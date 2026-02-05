@@ -179,16 +179,6 @@ export interface UserLikeRead {
   createdAt: Timestamp;
 }
 
-export interface SavedPostRead {
-  postId: string;
-  createdAt: Timestamp;
-}
-
-export interface SavedCategoryRead {
-  categoryId: string;
-  createdAt: Timestamp;
-}
-
 // ==================== Activity Notifications ====================
 
 export type ActivityType = 'post_like' | 'post_comment' | 'follow';
@@ -296,16 +286,6 @@ export interface PostLikeWrite {
 
 export interface UserLikeWrite {
   postId: string;
-  createdAt: FieldValue;
-}
-
-export interface SavedPostWrite {
-  postId: string;
-  createdAt: FieldValue;
-}
-
-export interface SavedCategoryWrite {
-  categoryId: string;
   createdAt: FieldValue;
 }
 
@@ -1586,76 +1566,6 @@ export async function createPostCommentActivity(input: {
   } as ActivityWrite);
   return ref.id;
 }
-
-// ==================== Saved Posts (Offline-First) ====================
-
-/**
- * Save a post
- */
-export const savePostWithSync = async (postId: string, uid: string): Promise<void> => {
-  const batch = writeBatch(db);
-  batch.set(
-    doc(db, 'users', uid, 'savedPosts', postId),
-    {
-      postId,
-      createdAt: serverTimestamp(),
-    } as SavedPostWrite,
-    { merge: false },
-  );
-  await batch.commit();
-};
-
-/**
- * Unsave a post
- */
-export const unsavePostWithSync = async (postId: string, uid: string): Promise<void> => {
-  const batch = writeBatch(db);
-  batch.delete(doc(db, 'users', uid, 'savedPosts', postId));
-  await batch.commit();
-};
-
-/**
- * Check if post is saved
- */
-export const isPostSaved = async (postId: string, uid: string): Promise<boolean> => {
-  const docSnap = await getDoc(doc(db, 'users', uid, 'savedPosts', postId));
-  return docSnap.exists();
-};
-
-// ==================== Saved Categories (Offline-First) ====================
-
-/**
- * Save a category
- */
-export const saveCategoryWithSync = async (categoryId: string, uid: string): Promise<void> => {
-  const batch = writeBatch(db);
-  batch.set(
-    doc(db, 'users', uid, 'savedCategories', categoryId),
-    {
-      categoryId,
-      createdAt: serverTimestamp(),
-    } as SavedCategoryWrite,
-    { merge: false },
-  );
-  await batch.commit();
-};
-
-/**
- * Unsave a category
- */
-export const unsaveCategoryWithSync = async (categoryId: string, uid: string): Promise<void> => {
-  const batch = writeBatch(db);
-  batch.delete(doc(db, 'users', uid, 'savedCategories', categoryId));
-  await batch.commit();
-};
-
-/**
- * Check if category is saved
- */
-export const isCategorySaved = async (categoryId: string, uid: string): Promise<boolean> => {
-  const docSnap = await getDoc(doc(db, 'users', uid, 'savedCategories', categoryId));
-  return docSnap.exists();
-};
 
 // ==================== Collections ====================
 
