@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { DocumentSnapshot } from 'firebase/firestore';
 
 import { useAuth } from '@/context/AuthContext';
@@ -14,6 +14,7 @@ import {
 import CreatePostModal from '@/features/posts/components/CreatePostModal';
 import GroupMembersPanel, { type GroupMemberItem } from './GroupMembersPanel';
 import { useToast } from '@/shared/ui/Toast';
+import { getUserProfilesByIds } from '@/features/profile/api';
 import {
   getGroup,
   getGroupJoinStatus,
@@ -23,7 +24,6 @@ import {
   getGroupMembersPage,
   getPostsByGroup,
   getOrCreateGroupConversation,
-  getUserProfile,
   joinPublicGroup,
   leaveGroupWithSync,
   sendGroupJoinRequest,
@@ -121,8 +121,13 @@ export const GroupDetailContainer = () => {
           return;
         }
 
+        const membersCountPromise =
+          typeof groupDoc.memberCount === 'number'
+            ? Promise.resolve(groupDoc.memberCount)
+            : getGroupMemberCount(groupIdStr).catch(() => 0);
+
         const [members, posts, status, postsResult, memberRows] = await Promise.all([
-          getGroupMemberCount(groupIdStr).catch(() => groupDoc.memberCount ?? 0),
+          membersCountPromise,
           getGroupPostsWeekCount(groupIdStr).catch(() => 0),
           user
             ? getGroupJoinStatus(groupIdStr, user.uid)
@@ -142,16 +147,19 @@ export const GroupDetailContainer = () => {
           time: formatRelativeTime(post.createdAt.toDate()),
         })) as RecentPost[];
 
-        const topMembersData = await Promise.all(
-          memberRows.map(async (member) => {
-            const profile = await getUserProfile(member.uid);
-            return {
+        const profilesById =
+          memberRows.length > 0
+            ? await getUserProfilesByIds(memberRows.map((member) => member.uid))
+            : new Map();
+
+        const topMembersData = memberRows.map(
+          (member) =>
+            ({
               id: member.uid,
-              name: profile?.displayName ?? 'Usuario',
+              name: profilesById.get(member.uid)?.displayName ?? 'Usuario',
               role: formatRole(member.role),
               posts: 0,
-            } as TopMember;
-          }),
+            }) as TopMember,
         );
 
         if (!isActive) return;
@@ -300,60 +308,72 @@ export const GroupDetailContainer = () => {
     setShowMembersPanel(true);
   };
 
-  const loadMembersPanel = async (reset = false) => {
-    if (!groupIdStr) return;
-    if (reset) {
-      setMembersPanelLoading(true);
-      setMembersPanelError(null);
-      setMembersPanelItems([]);
-      setMembersPanelLastDoc(null);
-      setMembersPanelHasMore(false);
-    } else {
-      setMembersPanelLoadingMore(true);
-    }
-    try {
-      const result = await getGroupMembersPage(
-        groupIdStr,
-        30,
-        reset ? undefined : (membersPanelLastDoc ?? undefined),
-      );
-      const profiles = await Promise.all(
-        result.items.map((member) => getUserProfile(member.uid).catch(() => null)),
-      );
-      const items: GroupMemberItem[] = result.items.map((member, index) => ({
-        uid: member.uid,
-        role: member.role,
-        name: profiles[index]?.displayName ?? 'Usuario',
-        photoURL: profiles[index]?.photoURL ?? null,
-      }));
-      setMembersPanelItems((prev) => {
-        if (reset) return items;
-        const map = new Map(prev.map((item) => [item.uid, item]));
-        items.forEach((item) => {
-          map.set(item.uid, item);
+  const loadMembersPanel = useCallback(
+    async (options?: { reset?: boolean; cursor?: DocumentSnapshot | null }) => {
+      const reset = options?.reset ?? false;
+      const cursor = options?.cursor ?? null;
+
+      if (!groupIdStr) return;
+      if (reset) {
+        setMembersPanelLoading(true);
+        setMembersPanelError(null);
+        setMembersPanelItems([]);
+        setMembersPanelLastDoc(null);
+        setMembersPanelHasMore(false);
+      } else {
+        setMembersPanelLoadingMore(true);
+      }
+      try {
+        const result = await getGroupMembersPage(
+          groupIdStr,
+          30,
+          reset ? undefined : (cursor ?? undefined),
+        );
+
+        const profilesById =
+          result.items.length > 0
+            ? await getUserProfilesByIds(result.items.map((member) => member.uid))
+            : new Map();
+
+        const items: GroupMemberItem[] = result.items.map((member) => {
+          const profile = profilesById.get(member.uid);
+          return {
+            uid: member.uid,
+            role: member.role,
+            name: profile?.displayName ?? 'Usuario',
+            photoURL: profile?.photoURL ?? null,
+          };
         });
-        return Array.from(map.values());
-      });
-      setMembersPanelLastDoc(result.lastDoc);
-      setMembersPanelHasMore(result.hasMore);
-    } catch (membersError) {
-      console.error('Error loading members:', membersError);
-      setMembersPanelError('No se pudieron cargar los miembros.');
-    } finally {
-      setMembersPanelLoading(false);
-      setMembersPanelLoadingMore(false);
-    }
-  };
+        setMembersPanelItems((prev) => {
+          if (reset) return items;
+          const map = new Map(prev.map((item) => [item.uid, item]));
+          items.forEach((item) => {
+            map.set(item.uid, item);
+          });
+          return Array.from(map.values());
+        });
+        setMembersPanelLastDoc(result.lastDoc);
+        setMembersPanelHasMore(result.hasMore);
+      } catch (membersError) {
+        console.error('Error loading members:', membersError);
+        setMembersPanelError('No se pudieron cargar los miembros.');
+      } finally {
+        setMembersPanelLoading(false);
+        setMembersPanelLoadingMore(false);
+      }
+    },
+    [groupIdStr],
+  );
 
   useEffect(() => {
     if (!showMembersPanel) return;
     setMembersPanelSearch('');
-    void loadMembersPanel(true);
-  }, [showMembersPanel]);
+    void loadMembersPanel({ reset: true });
+  }, [showMembersPanel, loadMembersPanel]);
 
   const handleLoadMoreMembers = () => {
     if (membersPanelLoadingMore || !membersPanelHasMore) return;
-    void loadMembersPanel(false);
+    void loadMembersPanel({ reset: false, cursor: membersPanelLastDoc });
   };
 
   const handleChangeMemberRole = async (uid: string, role: 'member' | 'moderator' | 'admin') => {

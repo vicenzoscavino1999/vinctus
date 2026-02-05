@@ -1,7 +1,7 @@
 // React hook for using the voice system
 // Handles lifecycle, debouncing, and state management
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { WebSpeechProvider } from './WebSpeechProvider';
 import type { VoiceState, VoiceConfig } from './types';
 
@@ -31,7 +31,18 @@ interface UseVoiceReturn {
 }
 
 export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
-  const { debounceMs = 100, ...config } = options;
+  const { debounceMs = 100, lang, continuous, interimResults, ttsRate, ttsPitch } = options;
+
+  const config = useMemo<VoiceConfig>(
+    () => ({
+      lang,
+      continuous,
+      interimResults,
+      ttsRate,
+      ttsPitch,
+    }),
+    [continuous, interimResults, lang, ttsPitch, ttsRate],
+  );
 
   const [state, setState] = useState<VoiceState>('idle');
   const [interimText, setInterimText] = useState('');
@@ -86,7 +97,7 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
       provider.destroy();
       providerRef.current = null;
     };
-  }, []); // Only run once on mount
+  }, [config, debounceMs]);
 
   const startListening = useCallback(() => {
     setInterimText('');

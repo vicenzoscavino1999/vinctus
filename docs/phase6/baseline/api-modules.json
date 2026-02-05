@@ -1,0 +1,116 @@
+{
+  "generatedAt": "2026-02-04T17:29:53.636Z",
+  "totalModulesWithApi": 10,
+  "totalApiFiles": 39,
+  "modules": [
+    {
+      "module": "chat",
+      "apiDir": "src\\features\\chat\\api",
+      "count": 5,
+      "files": [
+        "src\\features\\chat\\api\\index.ts",
+        "src\\features\\chat\\api\\mutations.ts",
+        "src\\features\\chat\\api\\queries.ts",
+        "src\\features\\chat\\api\\subscriptions.ts",
+        "src\\features\\chat\\api\\types.ts"
+      ]
+    },
+    {
+      "module": "collaborations",
+      "apiDir": "src\\features\\collaborations\\api",
+      "count": 4,
+      "files": [
+        "src\\features\\collaborations\\api\\index.ts",
+        "src\\features\\collaborations\\api\\mutations.ts",
+        "src\\features\\collaborations\\api\\queries.ts",
+        "src\\features\\collaborations\\api\\types.ts"
+      ]
+    },
+    {
+      "module": "collections",
+      "apiDir": "src\\features\\collections\\api",
+      "count": 4,
+      "files": [
+        "src\\features\\collections\\api\\index.ts",
+        "src\\features\\collections\\api\\mutations.ts",
+        "src\\features\\collections\\api\\queries.ts",
+        "src\\features\\collections\\api\\types.ts"
+      ]
+    },
+    {
+      "module": "events",
+      "apiDir": "src\\features\\events\\api",
+      "count": 4,
+      "files": [
+        "src\\features\\events\\api\\index.ts",
+        "src\\features\\events\\api\\mutations.ts",
+        "src\\features\\events\\api\\queries.ts",
+        "src\\features\\events\\api\\types.ts"
+      ]
+    },
+    {
+      "module": "groups",
+      "apiDir": "src\\features\\groups\\api",
+      "count": 4,
+      "files": [
+        "src\\features\\groups\\api\\index.ts",
+        "src\\features\\groups\\api\\mutations.ts",
+        "src\\features\\groups\\api\\queries.ts",
+        "src\\features\\groups\\api\\types.ts"
+      ]
+    },
+    {
+      "module": "posts",
+      "apiDir": "src\\features\\posts\\api",
+      "count": 4,
+      "files": [
+        "src\\features\\posts\\api\\index.ts",
+        "src\\features\\posts\\api\\mutations.ts",
+        "src\\features\\posts\\api\\queries.ts",
+        "src\\features\\posts\\api\\types.ts"
+      ]
+    },
+    {
+      "module": "profile",
+      "apiDir": "src\\features\\profile\\api",
+      "count": 4,
+      "files": [
+        "src\\features\\profile\\api\\index.ts",
+        "src\\features\\profile\\api\\mutations.ts",
+        "src\\features\\profile\\api\\queries.ts",
+        "src\\features\\profile\\api\\types.ts"
+      ]
+    },
+    {
+      "module": "settings",
+      "apiDir": "src\\features\\settings\\api",
+      "count": 4,
+      "files": [
+        "src\\features\\settings\\api\\index.ts",
+        "src\\features\\settings\\api\\mutations.ts",
+        "src\\features\\settings\\api\\queries.ts",
+        "src\\features\\settings\\api\\types.ts"
+      ]
+    },
+    {
+      "module": "help",
+      "apiDir": "src\\features\\help\\api",
+      "count": 3,
+      "files": [
+        "src\\features\\help\\api\\index.ts",
+        "src\\features\\help\\api\\mutations.ts",
+        "src\\features\\help\\api\\types.ts"
+      ]
+    },
+    {
+      "module": "notifications",
+      "apiDir": "src\\features\\notifications\\api",
+      "count": 3,
+      "files": [
+        "src\\features\\notifications\\api\\index.ts",
+        "src\\features\\notifications\\api\\queries.ts",
+        "src\\features\\notifications\\api\\types.ts"
+      ]
+    }
+  ]
+}

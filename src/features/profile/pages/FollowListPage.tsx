@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Loader2, UserCheck, UserPlus } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
@@ -76,41 +76,47 @@ const FollowListPage = () => {
     };
   }, [userId]);
 
-  const loadList = async (reset = false) => {
-    if (!userId) return;
-    if (reset) {
-      setLoading(true);
-      setItems([]);
-      setCursor(null);
-      setHasMore(false);
-    } else {
-      setLoadingMore(true);
-    }
-    setError(null);
-    try {
-      const data = await getFollowList(
-        userId,
-        activeTab,
-        FOLLOW_PAGE_SIZE,
-        reset ? undefined : (cursor ?? undefined),
-      );
-      setItems((prev) => (reset ? data.items : [...prev, ...data.items]));
-      setCursor(data.lastDoc);
-      setHasMore(data.hasMore);
-    } catch (loadError) {
-      console.error('Error loading follow list:', loadError);
-      setError('No se pudieron cargar los usuarios.');
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  };
+  const loadList = useCallback(
+    async (options?: { reset?: boolean; cursor?: PaginatedResult<FollowUserRead>['lastDoc'] }) => {
+      const reset = options?.reset ?? false;
+      const pageCursor = options?.cursor ?? null;
+
+      if (!userId) return;
+      if (reset) {
+        setLoading(true);
+        setItems([]);
+        setCursor(null);
+        setHasMore(false);
+      } else {
+        setLoadingMore(true);
+      }
+      setError(null);
+      try {
+        const data = await getFollowList(
+          userId,
+          activeTab,
+          FOLLOW_PAGE_SIZE,
+          reset ? undefined : (pageCursor ?? undefined),
+        );
+        setItems((prev) => (reset ? data.items : [...prev, ...data.items]));
+        setCursor(data.lastDoc);
+        setHasMore(data.hasMore);
+      } catch (loadError) {
+        console.error('Error loading follow list:', loadError);
+        setError('No se pudieron cargar los usuarios.');
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    [activeTab, userId],
+  );
 
   useEffect(() => {
-    void loadList(true);
-  }, [userId, activeTab]);
+    void loadList({ reset: true });
+  }, [loadList]);
 
-  const loadRequests = async () => {
+  const loadRequests = useCallback(async () => {
     if (!userId || !isOwner || activeTab !== 'followers') return;
     setLoadingRequests(true);
     try {
@@ -128,18 +134,18 @@ const FollowListPage = () => {
     } finally {
       setLoadingRequests(false);
     }
-  };
+  }, [activeTab, isOwner, userId]);
 
   useEffect(() => {
     void loadRequests();
-  }, [userId, activeTab, isOwner]);
+  }, [loadRequests]);
 
   const handleAccept = async (requestId: string, fromUid: string) => {
     if (!userId) return;
     try {
       await acceptFollowRequest(fromUid, userId);
       setRequests((prev) => prev.filter((item) => item.requestId !== requestId));
-      void loadList(true);
+      void loadList({ reset: true });
     } catch (error) {
       console.error('Error accepting follow request:', error);
       showToast('No se pudo aceptar la solicitud.', 'error');
@@ -323,7 +329,7 @@ const FollowListPage = () => {
         {hasMore && (
           <div className="flex justify-center mt-6">
             <button
-              onClick={() => void loadList(false)}
+              onClick={() => void loadList({ reset: false, cursor })}
               disabled={loadingMore}
               className="px-5 py-2 rounded-full text-xs uppercase tracking-widest border border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >

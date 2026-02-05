@@ -11,8 +11,31 @@ import type { ToastContextType } from '../types';
 
 type ShowToastFn = ToastContextType['showToast'];
 
+export interface ApiContentEntry {
+  id: string | number;
+  title?: string;
+  type?: string;
+  link?: string;
+  url?: string;
+  summary?: string;
+  authors?: string;
+  published?: string;
+  time?: string;
+  score?: number;
+  comments?: number;
+  cover?: string | null;
+  firstPublished?: number | string;
+  thumbnail?: string | null;
+  species?: string;
+  scientificName?: string;
+  location?: string;
+  photo?: string | null;
+  observer?: string;
+  artist?: string;
+}
+
 interface UseApiContentReturn {
-  data: any[];
+  data: ApiContentEntry[];
   loading: boolean;
   error: string | null;
 }
@@ -25,7 +48,7 @@ export function useApiContent(
   limit: number = 8,
   showToast: ShowToastFn | null = null,
 ): UseApiContentReturn {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<ApiContentEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +60,7 @@ export function useApiContent(
       setError(null);
 
       try {
-        let result: any[] = [];
+        let result: ApiContentEntry[] = [];
 
         switch (apiSource) {
           case 'arxiv':

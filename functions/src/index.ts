@@ -13,6 +13,34 @@
 
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
+
+/**
+ * Compatibility:
+ * Some Firebase CLI / runtime paths still attempt to invoke `functions.config()`.
+ * `functions.config()` was removed in firebase-functions v7 and will throw at runtime.
+ *
+ * We patch it into a safe no-op to prevent worker crashes in the emulator/runtime, since this codebase
+ * does not rely on runtime config.
+ */
+const functionsDefault = require('firebase-functions') as unknown as { config?: () => unknown };
+const functionsV1 = require('firebase-functions/v1') as unknown as { config?: () => unknown };
+
+const patchConfig = (target: { config?: () => unknown }) => {
+  if (typeof target.config !== 'function') return;
+
+  try {
+    target.config();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('functions.config() has been removed')) {
+      target.config = () => ({});
+    }
+  }
+};
+
+patchConfig(functionsDefault);
+patchConfig(functionsV1);
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -149,14 +177,26 @@ async function deduplicatedIncrement(
       return;
     }
 
+    const parentDoc = await tx.get(docRef);
+
+    // If parent doesn't exist, skip (already deleted / cleared)
+    if (!parentDoc.exists) {
+      functions.logger.warn("Parent document doesn't exist, skipping increment", {
+        path: docRef.path,
+        field,
+        delta,
+      });
+      return;
+    }
+
     // Mark as processed and increment
     tx.create(dedupRef, {
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       processedAt: new Date().toISOString(),
     });
     tx.update(docRef, {
-      [field]: admin.firestore.FieldValue.increment(delta),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      [field]: FieldValue.increment(delta),
+      updatedAt: FieldValue.serverTimestamp(),
     });
   });
 }
@@ -206,12 +246,12 @@ async function deduplicatedDecrement(
 
     // Mark as processed and decrement
     tx.create(dedupRef, {
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       processedAt: new Date().toISOString(),
     });
     tx.update(docRef, {
       [field]: currentValue - 1,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
   });
 }
@@ -276,7 +316,7 @@ async function handlePostLikeChange(eventId: string, postId: string, delta: numb
     const karmaUpdates: Record<string, unknown> = {
       karmaGlobal: nextKarma,
       reputation: nextReputation,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     };
 
     if (categoryId) {
@@ -291,18 +331,65 @@ async function handlePostLikeChange(eventId: string, postId: string, delta: numb
     }
 
     tx.create(dedupRef, {
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       processedAt: new Date().toISOString(),
     });
 
     tx.update(postRef, {
       likesCount: nextLikes,
       likeCount: nextLikes,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
 
     tx.set(userRef, karmaUpdates, { merge: true });
     tx.set(userPublicRef, karmaUpdates, { merge: true });
+  });
+}
+
+// ==========================================================
+// 💬 POST COMMENT COUNTERS (Posts Comments)
+// ==========================================================
+
+async function handlePostCommentChange(
+  eventId: string,
+  postId: string,
+  delta: number,
+): Promise<void> {
+  const dedupRef = db.collection('_dedup_events').doc(eventId);
+  const postRef = db.doc(`posts/${postId}`);
+
+  await db.runTransaction(async (tx) => {
+    const dedupDoc = await tx.get(dedupRef);
+    if (dedupDoc.exists) {
+      functions.logger.info('Event already processed, skipping', { eventId });
+      return;
+    }
+
+    const postSnap = await tx.get(postRef);
+    if (!postSnap.exists) {
+      functions.logger.warn('Post not found, skipping comment update', { postId });
+      return;
+    }
+
+    const postData = postSnap.data() || {};
+    const currentComments =
+      typeof postData.commentsCount === 'number'
+        ? postData.commentsCount
+        : typeof postData.commentCount === 'number'
+          ? postData.commentCount
+          : 0;
+    const nextComments = Math.max(0, currentComments + delta);
+
+    tx.create(dedupRef, {
+      createdAt: FieldValue.serverTimestamp(),
+      processedAt: new Date().toISOString(),
+    });
+
+    tx.update(postRef, {
+      commentsCount: nextComments,
+      commentCount: nextComments,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
   });
 }
 
@@ -331,7 +418,7 @@ async function deduplicatedUserCounterUpdate(
     const userSnap = await tx.get(userRef);
     if (!userSnap.exists) {
       tx.create(dedupRef, {
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
         processedAt: new Date().toISOString(),
       });
       functions.logger.warn('User document missing for counter update', { userId, field });
@@ -342,7 +429,7 @@ async function deduplicatedUserCounterUpdate(
     const nextValue = Math.max(0, currentValue + delta);
 
     tx.create(dedupRef, {
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       processedAt: new Date().toISOString(),
     });
     tx.set(userRef, { [field]: nextValue }, { merge: true });
@@ -405,7 +492,7 @@ export const onUserFollowerCreated = functions.firestore
           postId: null,
           postSnippet: null,
           commentText: null,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
           read: false,
         },
         { merge: true },
@@ -508,14 +595,14 @@ export const onFollowRequestUpdated = functions.firestore
         }
 
         tx.create(dedupRef, {
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
           processedAt: new Date().toISOString(),
         });
         tx.set(
           followerRef,
           {
             uid: fromUid,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: FieldValue.serverTimestamp(),
           },
           { merge: true },
         );
@@ -523,7 +610,7 @@ export const onFollowRequestUpdated = functions.firestore
           followingRef,
           {
             uid: toUid,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: FieldValue.serverTimestamp(),
           },
           { merge: true },
         );
@@ -626,14 +713,16 @@ async function ensureGroupConversationForMember(groupId: string, uid: string): P
   const memberRef = db.doc(`conversations/${conversationId}/members/${uid}`);
 
   await db.runTransaction(async (tx) => {
-    const convSnap = await tx.get(convRef);
+    // Firestore transactions require all reads before all writes.
+    const [convSnap, memberSnap] = await Promise.all([tx.get(convRef), tx.get(memberRef)]);
+
     if (!convSnap.exists) {
       tx.create(convRef, {
         type: 'group',
         groupId,
         lastMessage: null,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       });
     } else {
       const data = convSnap.data() || {};
@@ -645,19 +734,18 @@ async function ensureGroupConversationForMember(groupId: string, uid: string): P
         updates.groupId = groupId;
       }
       if (Object.keys(updates).length > 0) {
-        updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+        updates.updatedAt = FieldValue.serverTimestamp();
         tx.set(convRef, updates, { merge: true });
       }
     }
 
-    const memberSnap = await tx.get(memberRef);
     if (!memberSnap.exists) {
       tx.create(memberRef, {
         uid,
         role: 'member',
-        joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+        joinedAt: FieldValue.serverTimestamp(),
         lastReadClientAt: Date.now(),
-        lastReadAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastReadAt: FieldValue.serverTimestamp(),
         muted: false,
       });
     }
@@ -714,6 +802,62 @@ export const onPostLikeDeleted = functions.firestore
       functions.logger.error('Failed to process unlike', {
         postId,
         userId,
+        eventId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+// ==========================================================
+// 💬 POST COMMENT COUNTERS (With Deduplication)
+// ==========================================================
+
+/**
+ * Increment commentCount when a user comments a post
+ * Trigger: onCreate posts/{postId}/comments/{commentId}
+ */
+export const onPostCommentCreated = functions.firestore
+  .document('posts/{postId}/comments/{commentId}')
+  .onCreate(async (_snap, context) => {
+    const { postId, commentId } = context.params;
+    const eventId = context.eventId;
+
+    try {
+      functions.logger.info('Post commented', { postId, commentId, eventId });
+
+      await handlePostCommentChange(eventId, postId, 1);
+
+      functions.logger.info('Comment processed (post)', { postId, eventId });
+    } catch (error) {
+      functions.logger.error('Failed to process comment create', {
+        postId,
+        commentId,
+        eventId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+/**
+ * Decrement commentCount when a comment is deleted
+ * Trigger: onDelete posts/{postId}/comments/{commentId}
+ */
+export const onPostCommentDeleted = functions.firestore
+  .document('posts/{postId}/comments/{commentId}')
+  .onDelete(async (_snap, context) => {
+    const { postId, commentId } = context.params;
+    const eventId = context.eventId;
+
+    try {
+      functions.logger.info('Post comment deleted', { postId, commentId, eventId });
+
+      await handlePostCommentChange(eventId, postId, -1);
+
+      functions.logger.info('Comment deletion processed (post)', { postId, eventId });
+    } catch (error) {
+      functions.logger.error('Failed to process comment delete', {
+        postId,
+        commentId,
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -1022,7 +1166,7 @@ export const onUserPublicProfileUpdated = functions.firestore
         batch.update(doc.ref, {
           senderName,
           senderPhotoURL,
-          senderUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          senderUpdatedAt: FieldValue.serverTimestamp(),
         });
       });
 
@@ -1066,11 +1210,11 @@ export const onFriendRequestWrite = functions.firestore
       if (isAccepted) {
         const payload = {
           uid: toUid,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
         };
         const reversePayload = {
           uid: fromUid,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
         };
         await Promise.all([
           fromRef.set(payload, { merge: true }),
@@ -1155,7 +1299,7 @@ export const onDirectConversationWrite = functions.firestore
       return;
     }
 
-    const updatedAt = after.updatedAt ?? admin.firestore.FieldValue.serverTimestamp();
+    const updatedAt = after.updatedAt ?? FieldValue.serverTimestamp();
     const [firstUid, secondUid] = memberIds;
 
     const [firstBlockedSnap, secondBlockedSnap] = await Promise.all([

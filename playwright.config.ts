@@ -33,13 +33,24 @@ export default defineConfig({
     env: {
       VITE_USE_FIREBASE_EMULATOR: 'true',
       VITE_FIREBASE_EMULATOR_HOST: '127.0.0.1',
-      VITE_FIREBASE_PROJECT_ID: process.env.VITE_FIREBASE_PROJECT_ID || 'vinctus-dev',
-      VITE_FIREBASE_API_KEY: process.env.VITE_FIREBASE_API_KEY || 'test',
-      VITE_FIREBASE_AUTH_DOMAIN: process.env.VITE_FIREBASE_AUTH_DOMAIN || 'localhost',
-      VITE_FIREBASE_STORAGE_BUCKET:
-        process.env.VITE_FIREBASE_STORAGE_BUCKET || 'vinctus-dev.appspot.com',
-      VITE_FIREBASE_MESSAGING_SENDER_ID: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || 'test',
-      VITE_FIREBASE_APP_ID: process.env.VITE_FIREBASE_APP_ID || 'test',
+      ...(process.env.VITE_FIREBASE_PROJECT_ID
+        ? { VITE_FIREBASE_PROJECT_ID: process.env.VITE_FIREBASE_PROJECT_ID }
+        : {}),
+      ...(process.env.VITE_FIREBASE_API_KEY
+        ? { VITE_FIREBASE_API_KEY: process.env.VITE_FIREBASE_API_KEY }
+        : {}),
+      ...(process.env.VITE_FIREBASE_AUTH_DOMAIN
+        ? { VITE_FIREBASE_AUTH_DOMAIN: process.env.VITE_FIREBASE_AUTH_DOMAIN }
+        : {}),
+      ...(process.env.VITE_FIREBASE_STORAGE_BUCKET
+        ? { VITE_FIREBASE_STORAGE_BUCKET: process.env.VITE_FIREBASE_STORAGE_BUCKET }
+        : {}),
+      ...(process.env.VITE_FIREBASE_MESSAGING_SENDER_ID
+        ? { VITE_FIREBASE_MESSAGING_SENDER_ID: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID }
+        : {}),
+      ...(process.env.VITE_FIREBASE_APP_ID
+        ? { VITE_FIREBASE_APP_ID: process.env.VITE_FIREBASE_APP_ID }
+        : {}),
     },
   },
 });

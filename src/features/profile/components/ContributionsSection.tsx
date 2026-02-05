@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BookOpen, FileText, Link as LinkIcon, Loader2, Plus, UploadCloud, X } from 'lucide-react';
 import { useToast } from '@/shared/ui/Toast';
 import {
@@ -48,7 +48,7 @@ export default function ContributionsSection({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
-  const loadContributions = async () => {
+  const loadContributions = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
     setError(null);
@@ -61,11 +61,11 @@ export default function ContributionsSection({
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     void loadContributions();
-  }, [userId]);
+  }, [loadContributions]);
 
   const resetForm = () => {
     setTitle('');

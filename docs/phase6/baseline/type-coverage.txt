@@ -1,0 +1,773 @@
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firebase.ts:44:38: VITE_USE_FIREBASE_EMULATOR
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firebase.ts:45:7: emulatorHost
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firebase.ts:45:38: VITE_FIREBASE_EMULATOR_HOST
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firebase.ts:57:41: emulatorHost
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\devMetrics.ts:76:42: VITE_ENABLE_DEV_METRICS
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\devMetrics.ts:87:20: globalState[METRICS_STATE_KEY] as MetricsState | undefined
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\app\providers\AuthContext.tsx:258:23: err as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\app\providers\AuthContext.tsx:290:21: err as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\app\providers\AuthContext.tsx:304:33: redirectErr as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\app\providers\AuthContext.tsx:323:21: err as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\app\providers\AuthContext.tsx:349:23: err as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\app\providers\AuthContext.tsx:364:21: err as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\app\providers\AuthContext.tsx:398:23: err as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\app\providers\AuthContext.tsx:420:23: err as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\app\providers\AuthContext.tsx:436:21: err as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore\friendIds.ts:16:70: err
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore\friendIds.ts:22:13: err
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore\friendIds.ts:39:35: err
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore\friendIds.ts:45:15: err
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore\friendIds.ts:47:34: err
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore\friendIds.ts:53:15: err
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore\follows.ts:80:23: error as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore\follows.ts:88:19: error as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore\follows.ts:109:19: error as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore\follows.ts:126:19: error as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore\follows.ts:143:19: error as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore\follows.ts:190:19: error as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore\follows.ts:313:18: docSnap.data() as {
+      fromUid: string;
+      toUid: string;
+      status: FollowRequestStatus;
+      createdAt?: Timestamp;
+      updatedAt?: Timestamp;
+    }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:60:13: handler as (...args: unknown[]) => unknown
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:71:25: observer as {
+    next: (snapshot: unknown, ...rest: unknown[]) => unknown;
+  }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:84:16: ((...args: unknown[]) => {
+  trackFirestoreRead('firestore.getDoc');
+  return (_getDoc as (...innerArgs: unknown[]) => unknown)(...args);
+}) as typeof _getDoc
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:86:11: _getDoc as (...innerArgs: unknown[]) => unknown
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:89:17: ((...args: unknown[]) => {
+  const result = (_getDocs as (...innerArgs: unknown[]) => unknown)(...args);
+
+  if (
+    typeof result === 'object' &&
+    result !== null &&
+    'then' in result &&
+    typeof (result as Promise<unknown>).then === 'function'
+  ) {
+    return (result as Promise<unknown>).then((snapshot) => {
+      trackFirestoreRead('firestore.getDocs', resolveSnapshotSize(snapshot));
+      return snapshot;
+    });
+  }
+
+  trackFirestoreRead('firestore.getDocs', resolveSnapshotSize(result));
+  return result;
+}) as typeof _getDocs
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:90:19: _getDocs as (...innerArgs: unknown[]) => unknown
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:96:13: result as Promise<unknown>
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:98:13: result as Promise<unknown>
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:108:28: ((...args: unknown[]) => {
+  trackFirestoreRead('firestore.getCountFromServer');
+  return (_getCountFromServer as (...innerArgs: unknown[]) => unknown)(...args);
+}) as typeof _getCountFromServer
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:110:11: _getCountFromServer as (...innerArgs: unknown[]) => unknown
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:113:16: ((...args: unknown[]) => {
+  trackFirestoreWrite('firestore.setDoc');
+  return (_setDoc as (...innerArgs: unknown[]) => unknown)(...args);
+}) as typeof _setDoc
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:115:11: _setDoc as (...innerArgs: unknown[]) => unknown
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:118:19: ((...args: unknown[]) => {
+  trackFirestoreWrite('firestore.updateDoc');
+  return (_updateDoc as (...innerArgs: unknown[]) => unknown)(...args);
+}) as typeof _updateDoc
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:120:11: _updateDoc as (...innerArgs: unknown[]) => unknown
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:123:19: ((...args: unknown[]) => {
+  trackFirestoreWrite('firestore.deleteDoc');
+  return (_deleteDoc as (...innerArgs: unknown[]) => unknown)(...args);
+}) as typeof _deleteDoc
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:125:11: _deleteDoc as (...innerArgs: unknown[]) => unknown
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:144:24: _onSnapshot as (...innerArgs: unknown[]) => Unsubscribe
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:536:12: {
+      id: d.id,
+      ...data,
+      createdAt: toDate(data.createdAt),
+      updatedAt: toDate(data.updatedAt),
+    } as FirestoreGroup
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:539:30: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:540:30: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:550:12: {
+      id: d.id,
+      ...data,
+      createdAt: toDate(data.createdAt),
+      updatedAt: toDate(data.updatedAt),
+    } as FirestoreGroup
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:553:30: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:554:30: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:563:10: {
+    id: docSnap.id,
+    ...data,
+    createdAt: toDate(data.createdAt),
+    updatedAt: toDate(data.updatedAt),
+  } as FirestoreGroup
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:566:28: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:567:28: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:790:23: displayName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:791:32: displayNameLowercase
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:792:20: photoURL
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:797:20: username
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:798:22: reputation
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:799:29: accountVisibility
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:800:26: followersCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:801:26: followingCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:802:22: postsCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:803:21: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:803:46: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:804:21: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:804:46: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:906:14: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:909:14: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:947:21: groupId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:948:23: groupName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:949:21: fromUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:950:19: toUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:951:21: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:952:21: message
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:953:26: fromUserName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:954:27: fromUserPhoto
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:955:30: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:956:30: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:969:12: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:971:24: groupId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:972:26: fromUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1127:17: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1128:23: description
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1129:26: startAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1130:24: endAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1131:16: city
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1132:17: venue
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1133:27: capacity
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1134:33: attendeesCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1135:23: visibility
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1136:21: createdBy
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1137:20: coverUrl
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1138:28: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1139:28: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1160:9: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1160:21: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1161:9: description
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1161:27: description
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1162:30: startAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1163:28: endAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1164:9: city
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1164:20: city
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1165:9: venue
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1165:21: venue
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1166:31: capacity
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1167:37: attendeesCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1168:27: visibility
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1169:9: createdBy
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1169:25: createdBy
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1170:9: coverUrl
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1170:24: coverUrl
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1171:32: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1172:32: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1191:19: error as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1215:40: visibility
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1497:35: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1500:20: postId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1501:22: authorId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1503:27: authorSnapshot
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1503:43: displayName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1504:24: authorSnapshot
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1504:40: photoURL
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1506:18: text
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1554:18: type
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1555:19: toUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1556:21: fromUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1557:26: fromUserName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1558:27: fromUserPhoto
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1559:20: postId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1560:25: postSnippet
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1561:25: commentText
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1562:30: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1563:18: read
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1715:18: name
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1716:18: icon
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1717:30: itemCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1718:30: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1719:30: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1774:21: ownerId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1775:26: collectionId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1776:28: collectionName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1777:18: type
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1778:19: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1779:17: url
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1780:18: text
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1781:22: fileName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1782:29: fileSize
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1783:25: contentType
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1784:25: storagePath
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1785:30: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1854:14: data?.ownerId as string
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1855:19: data?.collectionId as string
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1856:22: data?.collectionName as string
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1857:11: data?.type as CollectionItemType
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1858:12: data?.title as string
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1859:11: data?.url as string
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1860:12: data?.text as string
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1861:16: data?.fileName as string
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1863:19: data?.contentType as string
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1864:19: data?.storagePath as string
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1915:19: error as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1933:20: userId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1934:18: type
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1935:19: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1936:25: description
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1937:24: categoryId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1938:18: link
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1939:21: fileUrl
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1940:22: filePath
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1941:22: fileName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1942:29: fileSize
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1943:22: fileType
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1944:30: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1945:30: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1967:20: userId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1968:18: type
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1969:19: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1970:25: description
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1971:24: categoryId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1972:18: link
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1973:21: fileUrl
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1974:22: filePath
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1975:22: fileName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1976:29: fileSize
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1977:22: fileType
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1978:30: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:1979:30: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2448:19: error as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2474:61: memberIdsValue
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2484:25: updateError as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2509:21: error as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2594:21: error as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2739:14: memberIds
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2739:32: item
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2739:48: item
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2741:29: data.lastMessage as { createdAt?: unknown } | null | undefined
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2743:12: {
+      id,
+      type,
+      groupId,
+      memberIds,
+      lastMessage: lastMessageData
+        ? {
+            ...(lastMessageData as Record<string, unknown>),
+            createdAt: toDate(lastMessageData.createdAt) || new Date(),
+          }
+        : null,
+      createdAt: toDate(data.createdAt) || new Date(),
+      updatedAt: toDate(data.updatedAt) || new Date(),
+    } as ConversationRead
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2874:46: attachments
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2875:16: attachments
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2887:14: {
+        id: doc.id,
+        senderId: data.senderId,
+        senderName: data.senderName ?? null,
+        senderPhotoURL: data.senderPhotoURL ?? null,
+        text: typeof data.text === 'string' ? data.text : '',
+        attachments,
+        createdAt: toDate(data.createdAt) || new Date(),
+        clientCreatedAt: data.clientCreatedAt,
+        clientId: data.clientId,
+      } as MessageRead
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2889:24: senderId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2890:26: senderName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2891:30: senderPhotoURL
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2892:27: text
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2894:32: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2895:31: clientCreatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2896:24: clientId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:2916:19: error as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3006:16: role
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3007:27: joinedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3008:28: lastReadClientAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3009:29: lastReadAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3010:17: muted
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3011:22: mutedUntil
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3011:47: mutedUntil
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3029:24: snapshot.docs.map((doc) => ({
+      uid: doc.id,
+      ...doc.data(),
+      updatedAt: toDate(doc.data().updatedAt) || new Date(),
+    })) as TypingIndicatorRead[]
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3032:36: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3154:20: authorId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3155:22: authorName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3156:26: authorUsername
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3157:23: authorPhoto
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3158:24: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3159:19: content
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3160:17: media
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3161:19: groupId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3162:22: categoryId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3163:21: likeCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3164:24: commentCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3165:21: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3166:21: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3195:7: ({
+        id: d.id,
+        ...d.data(),
+      }) as PostRead
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3233:7: ({
+        id: d.id,
+        ...d.data(),
+      }) as PostRead
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3271:7: ({
+        id: d.id,
+        ...d.data(),
+      }) as PostRead
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3303:7: ({
+        id: d.id,
+        ...d.data(),
+      }) as PostRead
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3350:7: privateData
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3351:7: publicData
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3357:7: privateData
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3361:9: error
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3361:16: code
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3359:12: error
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3372:7: publicData
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3385:18: settings
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3385:28: privacy
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3385:37: accountVisibility
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3387:21: accountVisibility
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3391:24: followersCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3393:29: followersCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3397:24: followingCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3399:29: followingCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3403:24: postsCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3405:29: postsCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3409:25: reputation
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3411:28: reputation
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3415:25: karmaGlobal
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3417:28: karmaGlobal
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3420:41: karmaByInterest
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3420:72: karmaByInterest
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3427:31: displayName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3427:58: displayName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3429:20: displayNameLowercase
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3429:56: displayNameLowercase
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3430:28: photoURL
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3430:52: photoURL
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3431:25: email
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3432:23: bio
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3433:24: role
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3434:28: location
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3435:28: username
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3435:52: username
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3443:36: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3443:61: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3444:36: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3444:61: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3517:29: settings
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3517:39: privacy
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3520:19: uid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3521:27: displayName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3522:36: displayNameLowercase
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3523:24: photoURL
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3524:21: email
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3525:19: bio
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3526:20: role
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3527:24: location
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3528:24: username
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3529:26: reputation
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3530:34: karmaGlobal
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3532:23: karmaByInterest
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3533:21: karmaByInterest
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3536:37: followersCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3537:37: followingCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3538:33: postsCount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3539:32: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3540:32: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3661:15: data.ownerId as string
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3666:17: data.mediaType as StoryMediaType
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3667:16: data.mediaUrl as string
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3668:17: data.mediaPath as string
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3669:16: data.thumbUrl as string
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3670:17: data.thumbPath as string
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3671:18: data.visibility as StoryVisibility
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3773:27: reason
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3840:14: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3843:14: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3866:14: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3874:14: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3891:5: toUserName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3891:28: displayName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3892:5: toUserPhoto
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3892:29: photoURL
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3944:7: fromUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3944:21: fromUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3945:7: toUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3945:19: toUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3946:7: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3946:20: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3947:7: fromUserName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3947:26: fromUserName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3948:7: fromUserPhoto
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3948:27: fromUserPhoto
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3949:7: toUserName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3949:24: toUserName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3950:7: toUserPhoto
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3950:25: toUserPhoto
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3951:30: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3952:30: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3974:7: fromUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3974:21: fromUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3975:7: toUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3975:19: toUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3976:7: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3976:20: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3977:7: fromUserName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3977:26: fromUserName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3978:7: fromUserPhoto
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3978:27: fromUserPhoto
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3979:7: toUserName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3979:24: toUserName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3980:7: toUserPhoto
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3980:25: toUserPhoto
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3981:30: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:3982:30: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4016:25: toUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4021:25: fromUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4032:27: displayName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4033:24: photoURL
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4062:14: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4065:14: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4081:14: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4084:14: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4122:30: (data?.authorSnapshot ?? {}) as Record<string, unknown>
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4125:50: tags
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4125:63: tag
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4125:78: tag
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4259:14: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4262:14: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4322:35: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4323:35: updatedAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4327:29: collaborationId
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4328:32: collaborationTitle
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4329:21: fromUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4330:19: toUid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4331:21: status
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4332:21: message
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4333:26: fromUserName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\firestore.legacy.ts:4334:27: fromUserPhoto
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\aiChat.ts:54:9: payload
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\aiChat.ts:57:9: payload
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\aiChat.ts:57:27: payload
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\aiChat.ts:57:35: response
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\aiChat.ts:59:19: payload
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\aiChat.ts:59:27: response
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\aiChat.ts:60:32: payload
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\aiChat.ts:60:40: history
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\aiChat.ts:60:51: payload
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\aiChat.ts:60:59: history
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\aiChat.ts:63:11: errorMessage
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\aiChat.ts:64:7: payload
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\aiChat.ts:64:25: payload
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\aiChat.ts:64:33: error
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\aiChat.ts:65:11: payload
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\aiChat.ts:65:19: error
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\voice\WebSpeechProvider.ts:38:6: window as unknown as { SpeechRecognition?: SpeechRecognitionType }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\voice\WebSpeechProvider.ts:39:6: window as unknown as { webkitSpeechRecognition?: SpeechRecognitionType }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\storage.ts:111:57: reason
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\storage.ts:229:57: reason
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\CreatePostModal.tsx:149:16: err
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\CreatePostModal.tsx:149:20: message
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\CreatePostModal.tsx:148:14: err
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\CreatePostModal.tsx:296:45: err
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\CreatePostModal.tsx:297:16: err
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\CreatePostModal.tsx:297:20: message
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\CreatePostModal.tsx:303:75: cleanupErr
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\CreatePostModal.tsx:304:43: cleanupErr
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\CreatePostModal.tsx:295:14: err
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\groups\components\GroupMembersPanel.tsx:137:52: event.target.value as MemberRole
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\PostCommentsModal.tsx:44:13: value as { toDate: () => Date }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\PostDetailPage.tsx:43:13: value as { toDate: () => Date }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\profile\components\ContributionsSection.tsx:269:48: event.target.value as ContributionType
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\profile\components\UserProfilePage.tsx:115:25: err as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\profile\components\UserProfilePage.tsx:135:25: err as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\StoryComposerModal.tsx:97:26: heic2any
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\StoryComposerModal.tsx:98:15: converted
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\StoryComposerModal.tsx:98:33: heic2any
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\StoryComposerModal.tsx:103:15: blob
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\StoryComposerModal.tsx:103:36: converted
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\StoryComposerModal.tsx:103:49: converted
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\StoryComposerModal.tsx:103:64: converted
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\components\StoriesWidget.tsx:52:21: ownError as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\pages\DiscoverPage.tsx:30:9: userInterests
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\pages\DiscoverPage.tsx:33:13: parsed
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\pages\DiscoverPage.tsx:35:28: parsed
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\pages\DiscoverPage.tsx:35:38: parsed
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\pages\DiscoverPage.tsx:69:9: userInterests
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\pages\DiscoverPage.tsx:71:29: userInterests
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\pages\DiscoverPage.tsx:72:29: userInterests
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\pages\UserSearchPage.tsx:182:25: err as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\pages\UserSearchPage.tsx:208:25: err as { code?: string }
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:6:7: CORS_PROXY
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:6:36: VITE_CORS_PROXY
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:7:32: CORS_PROXY
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:40:27: CORS_PROXY
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:176:52: page
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:177:13: extract
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:177:23: page
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:177:28: extract
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:179:9: id
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:179:13: page
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:179:18: pageid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:180:9: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:180:16: page
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:180:21: titles
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:180:29: normalized
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:180:43: page
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:180:48: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:181:18: extract
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:181:28: extract
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:181:36: substring
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:182:9: thumbnail
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:182:20: page
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:182:25: thumbnail
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:182:36: source
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:183:67: page
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:183:72: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:212:11: stories
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:221:12: stories
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:222:16: s
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:222:27: s
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:222:32: s
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:222:34: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:223:13: story
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:224:9: id
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:224:13: story
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:224:19: id
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:225:9: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:225:16: story
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:225:22: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:226:9: url
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:226:14: story
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:226:20: url
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:226:67: story
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:226:73: id
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:227:9: author
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:227:17: story
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:227:23: by
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:228:9: score
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:228:16: story
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:228:22: score
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:229:9: comments
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:229:19: story
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:229:25: descendants
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:230:24: story
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:230:30: time
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:231:15: story
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:231:21: type
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:246:36: work
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:247:7: id
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:247:11: work
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:247:16: key
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:248:7: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:248:14: work
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:248:19: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:249:7: authors
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:249:16: work
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:249:21: authors
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:249:30: map
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:249:35: a
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:249:46: a
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:249:48: name
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:249:54: join
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:250:14: work
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:250:19: cover_id
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:250:69: work
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:250:74: cover_id
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:251:7: firstPublished
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:251:23: work
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:251:28: first_publish_year
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:252:39: work
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:252:44: key
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:280:38: obs
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:281:7: id
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:281:11: obs
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:281:15: id
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:282:7: species
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:282:16: obs
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:282:20: taxon
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:282:27: preferred_common_name
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:282:52: obs
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:282:56: taxon
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:282:63: name
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:283:7: scientificName
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:283:23: obs
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:283:27: taxon
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:283:34: name
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:284:7: location
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:284:17: obs
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:284:21: place_guess
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:285:7: photo
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:285:14: obs
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:285:18: photos
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:285:31: url
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:285:36: replace
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:286:7: observer
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:286:17: obs
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:286:21: user
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:286:27: login
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:287:7: date
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:287:13: obs
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:287:17: observed_on
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:288:57: obs
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:288:61: id
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:315:44: track
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:316:7: id
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:316:11: track
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:316:17: mbid
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:316:25: track
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:316:31: name
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:317:7: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:317:14: track
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:317:20: name
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:318:7: artist
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:318:15: track
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:318:21: artist
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:318:29: name
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:319:7: playcount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:319:18: track
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:319:24: playcount
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:320:7: listeners
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:320:18: track
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:320:24: listeners
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:321:7: link
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:321:13: track
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\lib\api.ts:321:19: url
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.ts:15:3: data
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.ts:28:10: data
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.ts:40:13: result
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.ts:44:13: result
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.ts:47:13: result
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.ts:50:13: result
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.ts:53:13: result
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.ts:56:13: result
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.ts:60:13: result
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.ts:106:13: result
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.ts:137:12: data
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\pages\CategoryPage.tsx:72:17: liveContent
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\pages\CategoryPage.tsx:228:34: liveContent
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\pages\CategoryPage.tsx:230:16: liveContent
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\pages\CategoryPage.tsx:230:33: item
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\pages\CategoryPage.tsx:231:38: item
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\pages\CategoryPage.tsx:231:43: id
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\pages\CategoryPage.tsx:237:34: liveContent
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:59:3: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:70:3: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:73:17: value
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:74:8: value
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:75:7: value
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:75:13: toDate
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:75:28: value
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:75:34: toDate
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:76:7: value
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:80:29: value
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:81:23: value
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:108:5: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:108:21: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:126:9: location
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:139:46: location
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:149:50: d.data() as any
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:191:15: data
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:191:22: docSnap.data() as any
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:217:48: d.data() as any
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\posts\pages\FeedPage.tsx:447:54: createdAt
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\collaborations\components\CreateCollaborationModal.tsx:218:46: event.target.value as CollaborationMode
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\collaborations\components\CreateCollaborationModal.tsx:246:47: event.target.value as CollaborationLevel
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\events\components\CreateEventModal.tsx:215:52: event.target.value as EventVisibility
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\events\components\EventDetailModal.tsx:36:17: [event.city, event.venue].filter(Boolean) as string[]
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\events\components\EventDetailModal.tsx:40:7: GOOGLE_MAPS_KEY
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\events\components\EventDetailModal.tsx:40:41: VITE_GOOGLE_MAPS_KEY
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\events\components\EventDetailModal.tsx:103:9: GOOGLE_MAPS_KEY
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\events\components\EventDetailModal.tsx:104:64: GOOGLE_MAPS_KEY
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\projects\pages\ProjectsPage.tsx:60:17: [event.city, event.venue].filter(Boolean) as string[]
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\collections\components\CollectionDetailModal.tsx:314:52: event.target.value as CollectionItemType
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\profile\pages\FollowListPage.tsx:29:20: searchParams.get('tab') as FollowTab | null
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\notifications\pages\NotificationsPage.tsx:483:54: event.target.value as 'recent' | 'oldest'
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\chat\components\GroupReportModal.tsx:58:51: event.target.value as UserReportReason
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\groups\components\CreateGroupModal.tsx:261:54: event.target.value as GroupVisibility
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\chat\pages\MessagesPage.tsx:201:20: conv.groupId!
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\chat\pages\MessagesPage.tsx:213:20: conv.groupId!
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\chat\pages\MessagesPage.tsx:274:17: fetchedGroups.filter(Boolean) as FirestoreGroup[]
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\chat\pages\ConversationDetailsPage.tsx:468:56: event.target.value as UserReportReason
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\chat\pages\GroupConversationDetailsPage.tsx:607:61: event.target.value as UserReportReason
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\groups\pages\GroupEditPage.tsx:271:50: event.target.value as GroupVisibility
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\app\routes\AppLayout.tsx:66:56: event.target as Node
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\app\routes\AppLayout.tsx:233:9: location
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\app\routes\AppLayout.tsx:234:20: location
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\context\AppState.test.tsx:132:13: stored
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\context\AppState.test.tsx:133:14: stored
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\context\AppState.test.tsx:155:13: stored
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\context\AppState.test.tsx:156:14: stored
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\context\AppState.test.tsx:191:13: stored
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\context\AppState.test.tsx:192:14: stored
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\context\AppState.test.tsx:227:13: stored
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\context\AppState.test.tsx:228:14: stored
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\context\AppState.test.tsx:243:13: stored
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\context\AppState.test.tsx:244:14: stored
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\context\AppState.test.tsx:244:22: not
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\test\setup.ts:17:30: _auth
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\test\setup.ts:17:37: callback
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\test\setup.ts:19:5: callback
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\test\setup.ts:34:22: _ref
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\test\setup.ts:34:28: callback
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\test\setup.ts:35:5: callback
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\test\setup.ts:39:20: args
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\test\setup.ts:39:29: args
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\test\setup.ts:44:32: _db
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\test\setup.ts:44:37: callback
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\test\setup.ts:50:12: callback
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:21:22: api.fetchArxivPapers as ReturnType<typeof vi.fn>
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:22:28: api.fetchWikipediaArticles as ReturnType<typeof vi.fn>
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:23:21: api.fetchHackerNews as ReturnType<typeof vi.fn>
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:24:16: api.fetchBooks as ReturnType<typeof vi.fn>
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:25:29: api.fetchNatureObservations as ReturnType<typeof vi.fn>
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:38:27: value
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:39:13: pendingFetch
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:42:8: fetchArxivPapers as any
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:42:33: mockReturnValueOnce
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:42:53: pendingFetch
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:46:29: data
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:66:8: fetchArxivPapers as any
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:66:33: mockResolvedValueOnce
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:84:8: fetchArxivPapers as any
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:84:33: mockResolvedValueOnce
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:92:29: data
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:100:8: fetchWikipediaArticles as any
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:100:39: mockResolvedValueOnce
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:108:29: data
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:115:8: fetchHackerNews as any
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:115:32: mockResolvedValueOnce
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:123:29: data
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:130:8: fetchBooks as any
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:130:27: mockResolvedValueOnce
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:138:29: data
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:145:8: fetchNatureObservations as any
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:145:40: mockResolvedValueOnce
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:153:29: data
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:160:8: fetchArxivPapers as any
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:160:33: mockRejectedValueOnce
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:169:29: data
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:174:8: fetchArxivPapers as any
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:174:33: mockRejectedValueOnce
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:189:8: fetchArxivPapers as any
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:189:33: mockResolvedValueOnce
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:210:29: data
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:211:29: data
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:211:37: title
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\shared\hooks\useApiContent.test.ts:221:29: data
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\components\SearchFilters.test.tsx:189:24: container.firstChild as HTMLElement
+C:\Users\Vicenzo\Documents\antygravity\vinctus\src\features\discover\components\SearchFilters.test.tsx:205:22: screen.getByText('Filtros').parentElement as HTMLElement
+(41007 / 41684) 98.37%
+type-coverage success.

@@ -32,12 +32,7 @@ const StoryViewerModal = ({
   initialIndex = 0,
   onClose,
 }: StoryViewerModalProps) => {
-  const [activeIndex, setActiveIndex] = useState(initialIndex);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setActiveIndex(initialIndex);
-  }, [isOpen, initialIndex, stories.length]);
+  const [activeIndex, setActiveIndex] = useState(() => Math.max(0, initialIndex));
 
   useEffect(() => {
     if (!isOpen) return;

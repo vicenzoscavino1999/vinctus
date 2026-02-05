@@ -17,7 +17,7 @@ import { CATEGORIES } from '@/shared/constants';
 import { getGroupsByCategory, type FirestoreGroup } from '@/features/groups/api';
 import {
   getContributionsByCategory,
-  getUserProfile,
+  getUserProfilesByIds,
   type ContributionRead,
   type ContributionType,
 } from '@/features/profile/api';
@@ -78,7 +78,7 @@ const CategoryPage = () => {
       setGroupsLoading(true);
       setGroupsError(null);
       try {
-        const items = await getGroupsByCategory(category.id);
+        const items = await getGroupsByCategory(category.id, 50);
         if (!active) return;
         setCommunityGroups(items);
       } catch (loadError) {
@@ -103,20 +103,12 @@ const CategoryPage = () => {
       setLibraryError(null);
       try {
         const contributions = await getContributionsByCategory(category.id, 16);
-        const uniqueAuthors = Array.from(new Set(contributions.map((item) => item.userId)));
-        const profiles = await Promise.all(
-          uniqueAuthors.map(async (uid) => {
-            try {
-              const profile = await getUserProfile(uid);
-              return { uid, profile };
-            } catch {
-              return { uid, profile: null };
-            }
-          }),
+        const uniqueAuthors = Array.from(
+          new Set(contributions.map((item) => item.userId).filter((value) => value)),
         );
-        const profileMap = new Map(profiles.map(({ uid, profile }) => [uid, profile]));
+        const profilesById = await getUserProfilesByIds(uniqueAuthors);
         const items: ContributionLibraryItem[] = contributions.map((item) => {
-          const profile = profileMap.get(item.userId);
+          const profile = profilesById.get(item.userId) ?? null;
           return {
             ...item,
             authorName: profile?.displayName ?? profile?.username ?? 'Usuario',

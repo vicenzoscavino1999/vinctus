@@ -16,8 +16,6 @@ import { useToast } from '@/shared/ui/Toast';
 import PostCommentsModal from '@/features/posts/components/PostCommentsModal';
 import {
   getPost,
-  getPostCommentCount,
-  getPostLikeCount,
   isPostLiked,
   isPostSaved,
   likePostWithSync,
@@ -101,13 +99,19 @@ const PostDetailPage = () => {
         if (!data) {
           setError('Publicacion no encontrada');
           setPost(null);
+          setLikeCount(0);
+          setCommentCount(0);
           return;
         }
         setPost(data);
+        setLikeCount(data.likeCount);
+        setCommentCount(data.commentCount);
       } catch (loadError) {
         if (!active) return;
         console.error('Error loading post:', loadError);
         setError('No se pudo cargar la publicacion.');
+        setLikeCount(0);
+        setCommentCount(0);
       } finally {
         if (active) setLoading(false);
       }
@@ -119,34 +123,6 @@ const PostDetailPage = () => {
       active = false;
     };
   }, [postId]);
-
-  useEffect(() => {
-    let active = true;
-    if (!postId || !post)
-      return () => {
-        active = false;
-      };
-
-    const loadMetrics = async () => {
-      try {
-        const [likes, comments] = await Promise.all([
-          getPostLikeCount(postId),
-          getPostCommentCount(postId),
-        ]);
-        if (!active) return;
-        setLikeCount(likes);
-        setCommentCount(comments);
-      } catch (metricsError) {
-        console.error('Error loading post metrics:', metricsError);
-      }
-    };
-
-    void loadMetrics();
-
-    return () => {
-      active = false;
-    };
-  }, [postId, post]);
 
   useEffect(() => {
     let active = true;
@@ -188,7 +164,7 @@ const PostDetailPage = () => {
   const fallbackTitle = trimmedBody ? (trimmedBody.split('\n')[0] ?? trimmedBody) : '';
   const titleText = post?.title?.trim() || fallbackTitle || 'Publicacion';
   const isLongContent = trimmedBody.length > 140;
-  const showBody = !!post?.title ? trimmedBody.length > 0 : isLongContent;
+  const showBody = post?.title ? trimmedBody.length > 0 : isLongContent;
 
   const commentsSummary = useMemo(() => {
     if (!post || !postId) return null;
@@ -201,8 +177,10 @@ const PostDetailPage = () => {
       imageUrl: primaryImage?.url ?? null,
       media,
       createdAt: post.createdAt,
+      likeCount,
+      commentCount,
     };
-  }, [post, postId, primaryImage, media]);
+  }, [commentCount, likeCount, media, post, postId, primaryImage]);
 
   const handleLike = async () => {
     if (!postId) return;
@@ -221,7 +199,7 @@ const PostDetailPage = () => {
       } else {
         await unlikePostWithSync(postId, user.uid);
       }
-    } catch (err) {
+    } catch {
       setLiked(!nextLiked);
       setLikeCount((prev) => Math.max(0, prev + (nextLiked ? -1 : 1)));
       showToast('No se pudo actualizar el like', 'error');
@@ -243,7 +221,7 @@ const PostDetailPage = () => {
       } else {
         await unsavePostWithSync(postId, user.uid);
       }
-    } catch (err) {
+    } catch {
       setSaved(!nextSaved);
       showToast('No se pudo actualizar el guardado', 'error');
     }
@@ -419,14 +397,9 @@ const PostDetailPage = () => {
         isOpen={commentsOpen}
         post={commentsSummary}
         onClose={() => setCommentsOpen(false)}
-        onCommentAdded={async () => {
-          if (!postId) return;
-          try {
-            const total = await getPostCommentCount(postId);
-            setCommentCount(total);
-          } catch (err) {
-            console.error('Error updating comment count:', err);
-          }
+        onCommentAdded={(id) => {
+          if (id !== postId) return;
+          setCommentCount((prev) => prev + 1);
         }}
       />
     </div>

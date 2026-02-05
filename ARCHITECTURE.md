@@ -111,3 +111,7 @@ This document captures the current state. Update it only at the end of a phase o
 ## Notes
 
 - This file is a snapshot; update only at the end of a phase or when the architecture materially changes.
+- Phase 6 quality gates in active use:
+  - `npm run validate` (typecheck + guardrails + coverage + build)
+  - `npm run phase6:day14` (type coverage + test coverage + LHCI)
+  - `npm run phase6:day15` (validate + critical E2E on emulators)

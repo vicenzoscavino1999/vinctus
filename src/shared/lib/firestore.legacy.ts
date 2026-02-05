@@ -785,23 +785,28 @@ export async function removeGroupMember(groupId: string, uid: string): Promise<v
  * Returns array of UserProfileRead for display in UI
  */
 export async function getFollowing(uid: string): Promise<UserProfileRead[]> {
-  const buildProfile = (id: string, data: Record<string, any>): UserProfileRead => ({
+  const toStringOrNull = (value: unknown): string | null =>
+    typeof value === 'string' ? value : null;
+  const toNumberOrDefault = (value: unknown, fallback = 0): number =>
+    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+
+  const buildProfile = (id: string, data: Record<string, unknown>): UserProfileRead => ({
     uid: id,
-    displayName: data.displayName ?? null,
-    displayNameLowercase: data.displayNameLowercase ?? null,
-    photoURL: data.photoURL ?? null,
+    displayName: toStringOrNull(data.displayName),
+    displayNameLowercase: toStringOrNull(data.displayNameLowercase),
+    photoURL: toStringOrNull(data.photoURL),
     email: null,
     bio: null,
     role: null,
     location: null,
-    username: data.username ?? null,
-    reputation: data.reputation ?? 0,
-    accountVisibility: data.accountVisibility ?? 'public',
-    followersCount: data.followersCount ?? 0,
-    followingCount: data.followingCount ?? 0,
-    postsCount: data.postsCount ?? 0,
-    createdAt: data.createdAt ? (toDate(data.createdAt) ?? new Date()) : new Date(),
-    updatedAt: data.updatedAt ? (toDate(data.updatedAt) ?? new Date()) : new Date(),
+    username: toStringOrNull(data.username),
+    reputation: toNumberOrDefault(data.reputation),
+    accountVisibility: data.accountVisibility === 'private' ? 'private' : 'public',
+    followersCount: toNumberOrDefault(data.followersCount),
+    followingCount: toNumberOrDefault(data.followingCount),
+    postsCount: toNumberOrDefault(data.postsCount),
+    createdAt: toDate(data.createdAt) ?? new Date(),
+    updatedAt: toDate(data.updatedAt) ?? new Date(),
   });
 
   let followingIds: string[] = [];
@@ -835,7 +840,7 @@ export async function getFollowing(uid: string): Promise<UserProfileRead[]> {
       );
       const profilesSnap = await getDocsLite(profilesQuery);
       profilesSnap.docs.forEach((doc) => {
-        profilesMap.set(doc.id, buildProfile(doc.id, doc.data() as Record<string, any>));
+        profilesMap.set(doc.id, buildProfile(doc.id, doc.data() as Record<string, unknown>));
       });
     }
   } catch (error) {
@@ -846,7 +851,7 @@ export async function getFollowing(uid: string): Promise<UserProfileRead[]> {
   if (missingIds.length > 0) {
     const usersMap = await getPublicUsersByIds(missingIds);
     usersMap.forEach((data, id) => {
-      profilesMap.set(id, buildProfile(id, data as Record<string, any>));
+      profilesMap.set(id, buildProfile(id, data as unknown as Record<string, unknown>));
     });
   }
 
@@ -3356,9 +3361,14 @@ export async function getUserProfile(uid: string): Promise<UserProfileRead | nul
     if (userDoc.exists()) {
       privateData = userDoc.data();
     }
-  } catch (error: any) {
+  } catch (error) {
     // Log permission-denied for debugging
-    if (error?.code === 'permission-denied') {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: string }).code === 'permission-denied'
+    ) {
       console.log(
         '[getUserProfile] Permission denied for users/' + uid + ', falling back to public',
       );

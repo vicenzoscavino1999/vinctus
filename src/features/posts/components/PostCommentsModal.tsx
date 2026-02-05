@@ -4,13 +4,13 @@ import { ChevronLeft, Heart, Loader2, MessageCircle, User, FileText } from 'luci
 import { useAuth } from '@/context/AuthContext';
 import {
   addPostComment,
-  getPostCommentCount,
   getPostComments,
-  getPostLikeCount,
   type PaginatedResult,
   type PostCommentRead,
 } from '@/features/posts/api';
 import { useToast } from '@/shared/ui/Toast';
+
+const COMMENTS_PAGE_SIZE = 12;
 
 type PostSummary = {
   postId: string;
@@ -28,6 +28,8 @@ type PostSummary = {
     size?: number;
   }[];
   createdAt?: unknown;
+  likeCount?: number;
+  commentCount?: number;
 };
 
 interface PostCommentsModalProps {
@@ -74,6 +76,7 @@ const formatBytes = (value: number | undefined): string => {
 const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommentsModalProps) => {
   const { user } = useAuth();
   const { showToast } = useToast();
+  const postId = post?.postId ?? null;
   const [comments, setComments] = useState<PostCommentRead[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -87,11 +90,9 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
   const [likeTotal, setLikeTotal] = useState<number | null>(null);
   const [isComposerOpen, setIsComposerOpen] = useState(false);
 
-  const COMMENTS_PAGE_SIZE = 12;
-
   const loadComments = useCallback(
     async (loadMore = false, cursor?: PaginatedResult<PostCommentRead>['lastDoc']) => {
-      if (!post) return;
+      if (!postId) return;
       try {
         setError(null);
         if (loadMore) {
@@ -99,24 +100,14 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
         } else {
           setLoading(true);
         }
-        const [data, total, likes] = await Promise.all([
-          getPostComments(
-            post.postId,
-            COMMENTS_PAGE_SIZE,
-            loadMore ? (cursor ?? undefined) : undefined,
-          ),
-          loadMore ? Promise.resolve(null) : getPostCommentCount(post.postId),
-          loadMore ? Promise.resolve(null) : getPostLikeCount(post.postId),
-        ]);
+        const data = await getPostComments(
+          postId,
+          COMMENTS_PAGE_SIZE,
+          loadMore ? (cursor ?? undefined) : undefined,
+        );
         setComments((prev) => (loadMore ? [...prev, ...data.items] : data.items));
         setCommentsCursor(data.lastDoc);
         setHasMore(data.hasMore);
-        if (!loadMore && total !== null) {
-          setCommentTotal(total);
-        }
-        if (!loadMore && likes !== null) {
-          setLikeTotal(likes);
-        }
       } catch (loadError) {
         console.error('Error loading comments:', loadError);
         setError('No se pudieron cargar los comentarios.');
@@ -125,11 +116,11 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
         setLoadingMore(false);
       }
     },
-    [post],
+    [postId],
   );
 
   useEffect(() => {
-    if (!isOpen || !post) return;
+    if (!isOpen || !postId) return;
     setComments([]);
     setCommentsCursor(null);
     setHasMore(false);
@@ -138,13 +129,19 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
     setIsComposerOpen(false);
     loadComments();
     setMessage('');
-  }, [isOpen, post, loadComments]);
+  }, [isOpen, loadComments, postId]);
+
+  useEffect(() => {
+    if (!isOpen || !postId) return;
+    setCommentTotal(typeof post?.commentCount === 'number' ? post.commentCount : null);
+    setLikeTotal(typeof post?.likeCount === 'number' ? post.likeCount : null);
+  }, [isOpen, post?.commentCount, post?.likeCount, postId]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
 
-    if (!post) return;
+    if (!postId) return;
     if (!user) {
       setError('Inicia sesion para comentar.');
       return;
@@ -159,7 +156,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
     setSubmitting(true);
     try {
       await addPostComment(
-        post.postId,
+        postId,
         user.uid,
         {
           displayName: user.displayName || 'Usuario',
@@ -169,7 +166,8 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
       );
       setMessage('');
       showToast('Comentario enviado', 'success');
-      onCommentAdded(post.postId);
+      setCommentTotal((prev) => (prev ?? 0) + 1);
+      onCommentAdded(postId);
       await loadComments(false);
       setIsComposerOpen(false);
     } catch (submitError) {
@@ -184,7 +182,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
 
   const postCreatedAt = toDate(post.createdAt);
   const postTimestamp = postCreatedAt ? formatRelativeTime(postCreatedAt) : null;
-  const totalComments = commentTotal ?? comments.length;
+  const totalComments = Math.max(commentTotal ?? 0, comments.length);
   const totalLikes = likeTotal ?? 0;
   const postParagraphs = post.text
     ? post.text

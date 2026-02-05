@@ -47,5 +47,6 @@ test-results/
 /playwright/.cache/
 
 # Lighthouse reports (may contain API keys)
+.lighthouseci/
 lighthouse-report.json
 *.lighthouse.json

@@ -1,1 +1,1 @@
-export type { EventVisibility, FirestoreEvent } from '@/shared/lib/firestore';
+export type { CreateEventInput, EventVisibility, FirestoreEvent } from '@/shared/lib/firestore';
