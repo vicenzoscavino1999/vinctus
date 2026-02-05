@@ -111,7 +111,7 @@ const GroupEditPage = () => {
         if (prev) URL.revokeObjectURL(prev.url);
         return { file: compressed, url: URL.createObjectURL(compressed) };
       });
-    } catch (err) {
+    } catch {
       showToast('Error procesando la imagen.', 'error');
     }
   };

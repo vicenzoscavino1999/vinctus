@@ -105,6 +105,60 @@ interface MusicTrack {
   type: string;
 }
 
+interface WikipediaApiPage {
+  pageid?: number;
+  title?: string;
+  extract?: string;
+  titles?: {
+    normalized?: string;
+  };
+  thumbnail?: {
+    source?: string;
+  };
+}
+
+interface HackerNewsItemResponse {
+  id?: number;
+  title?: string;
+  url?: string;
+  by?: string;
+  score?: number;
+  descendants?: number;
+  time?: number;
+  type?: string;
+}
+
+interface OpenLibraryWork {
+  key?: string;
+  title?: string;
+  authors?: Array<{ name?: string }>;
+  cover_id?: number;
+  first_publish_year?: number | string;
+}
+
+interface INaturalistObservation {
+  id?: number;
+  taxon?: {
+    preferred_common_name?: string;
+    name?: string;
+  };
+  place_guess?: string;
+  photos?: Array<{ url?: string }>;
+  user?: { login?: string };
+  observed_on?: string;
+}
+
+interface LastFmTrackResponse {
+  mbid?: string;
+  name?: string;
+  artist?: {
+    name?: string;
+  };
+  playcount?: string;
+  listeners?: string;
+  url?: string;
+}
+
 // ===== arXiv API (Science) =====
 export async function fetchArxivPapers(
   category: string = 'physics',
@@ -171,16 +225,17 @@ export async function fetchWikipediaArticles(
   const url = `https://en.wikipedia.org/api/rest_v1/page/related/${encodeURIComponent(topic)}`;
 
   try {
-    const data = await fetchJsonOrThrow<{ pages?: any[] }>(url, 'Wikipedia');
+    const data = await fetchJsonOrThrow<{ pages?: WikipediaApiPage[] }>(url, 'Wikipedia');
 
-    return (data.pages || []).slice(0, limit).map((page: any) => {
+    return (data.pages || []).slice(0, limit).map((page, index) => {
       const extract = page.extract;
+      const safeTitle = page.titles?.normalized || page.title || 'Sin titulo';
       return {
-        id: page.pageid,
-        title: page.titles?.normalized || page.title || 'Sin titulo',
+        id: page.pageid ?? index,
+        title: safeTitle,
         summary: extract ? extract.substring(0, 200) + '...' : 'Sin resumen disponible',
         thumbnail: page.thumbnail?.source || null,
-        link: `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title || '')}`,
+        link: `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title || safeTitle)}`,
         type: 'Articulo',
       };
     });
@@ -211,7 +266,7 @@ export async function fetchHackerNews(
 
     const stories = await Promise.all(
       ids.slice(0, limit).map(async (id) => {
-        return fetchJsonOrThrow<any>(
+        return fetchJsonOrThrow<HackerNewsItemResponse>(
           `https://hacker-news.firebaseio.com/v0/item/${id}.json`,
           `Hacker News item ${id}`,
         );
@@ -219,15 +274,18 @@ export async function fetchHackerNews(
     );
 
     return stories
-      .filter((s: any) => s && s.title)
-      .map((story: any) => ({
-        id: story.id,
+      .filter(
+        (story): story is HackerNewsItemResponse & { title: string } =>
+          !!story && typeof story.title === 'string',
+      )
+      .map((story, index) => ({
+        id: story.id ?? index,
         title: story.title,
-        url: story.url || `https://news.ycombinator.com/item?id=${story.id}`,
-        author: story.by,
-        score: story.score,
+        url: story.url || `https://news.ycombinator.com/item?id=${story.id ?? index}`,
+        author: story.by || 'Anonimo',
+        score: story.score ?? 0,
         comments: story.descendants || 0,
-        time: new Date(story.time * 1000).toLocaleDateString('es-ES'),
+        time: new Date((story.time ?? 0) * 1000).toLocaleDateString('es-ES'),
         type: story.type === 'job' ? 'Empleo' : 'Noticia',
       }));
   } catch (error) {
@@ -241,15 +299,19 @@ export async function fetchBooks(subject: string = 'fiction', limit: number = 10
   const url = `https://openlibrary.org/subjects/${subject}.json?limit=${limit}`;
 
   try {
-    const data = await fetchJsonOrThrow<{ works?: any[] }>(url, 'Open Library');
+    const data = await fetchJsonOrThrow<{ works?: OpenLibraryWork[] }>(url, 'Open Library');
 
-    return (data.works || []).map((work: any) => ({
-      id: work.key,
-      title: work.title,
-      authors: work.authors?.map((a: any) => a.name).join(', ') || 'Anonimo',
+    return (data.works || []).map((work, index) => ({
+      id: work.key || `work-${index}`,
+      title: work.title || 'Sin titulo',
+      authors:
+        work.authors
+          ?.map((author) => author.name)
+          .filter(Boolean)
+          .join(', ') || 'Anonimo',
       cover: work.cover_id ? `https://covers.openlibrary.org/b/id/${work.cover_id}-M.jpg` : null,
       firstPublished: work.first_publish_year || 'Desconocido',
-      link: `https://openlibrary.org${work.key}`,
+      link: `https://openlibrary.org${work.key || ''}`,
       type: 'Libro',
     }));
   } catch (error) {
@@ -275,10 +337,10 @@ export async function fetchNatureObservations(
   const url = `https://api.inaturalist.org/v1/observations?taxon_id=${taxonId}&quality_grade=research&per_page=${limit}&order=desc&order_by=created_at`;
 
   try {
-    const data = await fetchJsonOrThrow<{ results?: any[] }>(url, 'iNaturalist');
+    const data = await fetchJsonOrThrow<{ results?: INaturalistObservation[] }>(url, 'iNaturalist');
 
-    return (data.results || []).map((obs: any) => ({
-      id: obs.id,
+    return (data.results || []).map((obs, index) => ({
+      id: obs.id ?? index,
       species: obs.taxon?.preferred_common_name || obs.taxon?.name || 'Especie desconocida',
       scientificName: obs.taxon?.name || '',
       location: obs.place_guess || 'Ubicacion desconocida',
@@ -310,11 +372,14 @@ export async function fetchMusicInfo(
   const url = `https://ws.audioscrobbler.com/2.0/?method=chart.gettoptracks&api_key=${LASTFM_API_KEY}&format=json&limit=${limit}`;
 
   try {
-    const data = await fetchJsonOrThrow<{ tracks?: { track?: any[] } }>(url, 'Last.fm');
+    const data = await fetchJsonOrThrow<{ tracks?: { track?: LastFmTrackResponse[] } }>(
+      url,
+      'Last.fm',
+    );
 
-    return (data.tracks?.track || []).map((track: any) => ({
-      id: track.mbid || track.name,
-      title: track.name,
+    return (data.tracks?.track || []).map((track, index) => ({
+      id: track.mbid || track.name || `track-${index}`,
+      title: track.name || 'Sin titulo',
       artist: track.artist?.name || 'Desconocido',
       playcount: track.playcount,
       listeners: track.listeners,

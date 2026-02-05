@@ -39,6 +39,7 @@ export default defineConfig([
       'no-undef': 'off',
       'no-unused-vars': 'off',
       'no-extra-boolean-cast': 'warn',
+      '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': [
         'warn',
         { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^_' },
@@ -272,6 +273,16 @@ export default defineConfig([
           ],
         },
       ],
+    },
+  },
+  {
+    files: [
+      'src/features/posts/api/**/*.{js,jsx,ts,tsx}',
+      'src/features/chat/api/**/*.{js,jsx,ts,tsx}',
+      'src/features/groups/api/**/*.{js,jsx,ts,tsx}',
+    ],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
     },
   },
   {

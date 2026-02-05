@@ -29,10 +29,7 @@ const StoriesWidget = () => {
   }>({ isOpen: false, ownerName: '', ownerPhoto: null, stories: [] });
 
   const refreshStories = useCallback(async () => {
-    if (!user) {
-      setStories([]);
-      return;
-    }
+    if (!user) return;
     setLoading(true);
     setError(null);
 
@@ -74,7 +71,8 @@ const StoriesWidget = () => {
     }
 
     if (nextStories.length === 0 && hadFailure) {
-      setError('No se pudieron cargar historias.');
+      // No mostrar error visual al usuario
+      console.warn('[StoriesWidget] Hubo fallos cargando historias');
     }
 
     setStories(nextStories);
@@ -82,12 +80,14 @@ const StoriesWidget = () => {
   }, [user]);
 
   useEffect(() => {
-    if (!user) {
-      setStories([]);
-      return;
-    }
-    refreshStories();
-  }, [user?.uid, refreshStories]);
+    if (!user) return;
+    const timer = window.setTimeout(() => {
+      void refreshStories();
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [user, refreshStories]);
 
   const groups = useMemo(() => {
     if (!user) return [];
@@ -250,6 +250,7 @@ const StoriesWidget = () => {
       />
 
       <StoryViewerModal
+        key={viewerState.isOpen ? `open-${viewerState.stories[0]?.id ?? 'empty'}` : 'closed'}
         isOpen={viewerState.isOpen}
         stories={viewerState.stories}
         ownerName={viewerState.ownerName}

@@ -1,27 +1,28 @@
 {
-    "name": "vinctus-functions",
-    "description": "Cloud Functions for Vinctus - Atomic counters and triggers",
-    "version": "1.0.0",
-    "scripts": {
-        "build": "tsc",
-        "build:watch": "tsc --watch",
-        "serve": "npm run build && firebase emulators:start --only functions",
-        "shell": "npm run build && firebase functions:shell",
-        "start": "npm run shell",
-        "deploy": "firebase deploy --only functions",
-        "logs": "firebase functions:log"
-    },
-    "engines": {
-        "node": "20"
-    },
-    "main": "lib/index.js",
-    "dependencies": {
-        "firebase-admin": "^13.6.0",
-        "firebase-functions": "^7.0.3"
-    },
-    "devDependencies": {
-        "@types/node": "^20.19.30",
-        "typescript": "^5.3.0"
-    },
-    "private": true
+  "name": "vinctus-functions",
+  "description": "Cloud Functions for Vinctus - Atomic counters and triggers",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^6.6.0",
+    "vinctus": "file:.."
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.30",
+    "typescript": "^5.3.0"
+  },
+  "private": true
 }

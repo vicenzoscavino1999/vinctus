@@ -1,0 +1,5 @@
+capturedAt: 2026-02-04T17:30:01.922Z
+statements: 3.68%
+branches: 2.34%
+functions: 4.10%
+lines: 3.92%

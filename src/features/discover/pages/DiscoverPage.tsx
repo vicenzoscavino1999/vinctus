@@ -112,7 +112,7 @@ const DiscoverPage = () => {
       setGroupsLoading(true);
       setGroupsError(null);
       try {
-        const data = await getGroups();
+        const data = await getGroups(50);
         const sorted = [...data].sort((a, b) => {
           const aMembers = a.memberCount ?? 0;
           const bMembers = b.memberCount ?? 0;

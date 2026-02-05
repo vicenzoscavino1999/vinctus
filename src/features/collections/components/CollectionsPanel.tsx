@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowRight, File, FileText, FolderPlus, Link2, Search } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -47,7 +47,7 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
   const [selectedCollection, setSelectedCollection] = useState<CollectionRead | null>(null);
   const [selectedRecent, setSelectedRecent] = useState<CollectionItemRead | null>(null);
 
-  const loadCollections = async () => {
+  const loadCollections = useCallback(async () => {
     if (!user) return;
     try {
       setCollectionsError(null);
@@ -60,9 +60,9 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
     } finally {
       setLoadingCollections(false);
     }
-  };
+  }, [user]);
 
-  const loadRecents = async () => {
+  const loadRecents = useCallback(async () => {
     if (!user) return;
     try {
       setRecentsError(null);
@@ -75,7 +75,7 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
     } finally {
       setLoadingRecents(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     if (!user) {
@@ -85,7 +85,7 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
     }
     loadCollections();
     loadRecents();
-  }, [user]);
+  }, [user, loadCollections, loadRecents]);
 
   const filteredCollections = useMemo(() => {
     if (!searchQuery.trim()) return collections;

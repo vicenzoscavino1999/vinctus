@@ -54,14 +54,15 @@ const EventDetailModal = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [localCount, setLocalCount] = useState(attendeeCount);
+  const eventId = event?.id ?? null;
 
   useEffect(() => {
-    if (!isOpen || !event) return;
+    if (!isOpen || !eventId) return;
     setLocalCount(attendeeCount);
-  }, [isOpen, event?.id, attendeeCount]);
+  }, [isOpen, eventId, attendeeCount]);
 
   useEffect(() => {
-    if (!isOpen || !event) return;
+    if (!isOpen || !eventId) return;
     if (!user) {
       setIsAttending(false);
       return;
@@ -70,7 +71,7 @@ const EventDetailModal = ({
     let isActive = true;
     const loadStatus = async () => {
       try {
-        const joined = await isEventAttendee(event.id, user.uid);
+        const joined = await isEventAttendee(eventId, user.uid);
         if (isActive) {
           setIsAttending(joined);
         }
@@ -84,7 +85,7 @@ const EventDetailModal = ({
     return () => {
       isActive = false;
     };
-  }, [isOpen, event?.id, user]);
+  }, [isOpen, eventId, user]);
 
   const locationLabel = useMemo(() => {
     if (!event) return null;

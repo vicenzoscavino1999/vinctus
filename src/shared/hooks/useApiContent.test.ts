@@ -35,11 +35,11 @@ describe('useApiContent Hook', () => {
 
   describe('Estado inicial', () => {
     it('inicia con loading true cuando hay apiSource y query', async () => {
-      let resolveFetch!: (value: any[]) => void;
-      const pendingFetch = new Promise<any[]>((resolve) => {
+      let resolveFetch!: (value: unknown[]) => void;
+      const pendingFetch = new Promise<unknown[]>((resolve) => {
         resolveFetch = resolve;
       });
-      (fetchArxivPapers as any).mockReturnValueOnce(pendingFetch);
+      fetchArxivPapers.mockReturnValueOnce(pendingFetch);
       const { result } = renderHook(() => useApiContent('arxiv', 'physics', 5));
 
       expect(result.current.loading).toBe(true);
@@ -63,7 +63,7 @@ describe('useApiContent Hook', () => {
     });
 
     it('usa fallback cuando query es null', async () => {
-      (fetchArxivPapers as any).mockResolvedValueOnce([]);
+      fetchArxivPapers.mockResolvedValueOnce([]);
       const { result } = renderHook(() => useApiContent('arxiv', null, 5));
 
       await waitFor(() => {
@@ -81,7 +81,7 @@ describe('useApiContent Hook', () => {
         { id: '2', title: 'Paper 2', type: 'Paper' },
       ];
 
-      (fetchArxivPapers as any).mockResolvedValueOnce(mockData);
+      fetchArxivPapers.mockResolvedValueOnce(mockData);
 
       const { result } = renderHook(() => useApiContent('arxiv', 'physics', 5));
 
@@ -97,7 +97,7 @@ describe('useApiContent Hook', () => {
     it('carga datos de Wikipedia correctamente', async () => {
       const mockData = [{ id: 1, title: 'Article 1', type: 'Articulo' }];
 
-      (fetchWikipediaArticles as any).mockResolvedValueOnce(mockData);
+      fetchWikipediaArticles.mockResolvedValueOnce(mockData);
 
       const { result } = renderHook(() => useApiContent('wikipedia', 'history', 3));
 
@@ -112,7 +112,7 @@ describe('useApiContent Hook', () => {
     it('carga datos de Hacker News correctamente', async () => {
       const mockData = [{ id: 1, title: 'Story 1', type: 'Noticia' }];
 
-      (fetchHackerNews as any).mockResolvedValueOnce(mockData);
+      fetchHackerNews.mockResolvedValueOnce(mockData);
 
       const { result } = renderHook(() => useApiContent('hackernews', 'top', 10));
 
@@ -127,7 +127,7 @@ describe('useApiContent Hook', () => {
     it('carga datos de OpenLibrary correctamente', async () => {
       const mockData = [{ id: '/works/1', title: 'Book 1', type: 'Libro' }];
 
-      (fetchBooks as any).mockResolvedValueOnce(mockData);
+      fetchBooks.mockResolvedValueOnce(mockData);
 
       const { result } = renderHook(() => useApiContent('openlibrary', 'fiction', 5));
 
@@ -142,7 +142,7 @@ describe('useApiContent Hook', () => {
     it('carga datos de iNaturalist correctamente', async () => {
       const mockData = [{ id: 1, species: 'Oak', type: 'Observacion' }];
 
-      (fetchNatureObservations as any).mockResolvedValueOnce(mockData);
+      fetchNatureObservations.mockResolvedValueOnce(mockData);
 
       const { result } = renderHook(() => useApiContent('inaturalist', 'plants', 5));
 
@@ -157,7 +157,7 @@ describe('useApiContent Hook', () => {
 
   describe('Manejo de errores', () => {
     it('maneja error de fetch correctamente', async () => {
-      (fetchArxivPapers as any).mockRejectedValueOnce(new Error('Network error'));
+      fetchArxivPapers.mockRejectedValueOnce(new Error('Network error'));
 
       const { result } = renderHook(() => useApiContent('arxiv', 'physics', 5));
 
@@ -171,7 +171,7 @@ describe('useApiContent Hook', () => {
 
     it('llama showToast cuando hay error y showToast esta disponible', async () => {
       const mockShowToast = vi.fn();
-      (fetchArxivPapers as any).mockRejectedValueOnce(new Error('API failed'));
+      fetchArxivPapers.mockRejectedValueOnce(new Error('API failed'));
 
       const { result } = renderHook(() => useApiContent('arxiv', 'physics', 5, mockShowToast));
 
@@ -186,7 +186,7 @@ describe('useApiContent Hook', () => {
   describe('Datos vacios', () => {
     it('no muestra warning cuando API retorna array vacio', async () => {
       const mockShowToast = vi.fn();
-      (fetchArxivPapers as any).mockResolvedValueOnce([]);
+      fetchArxivPapers.mockResolvedValueOnce([]);
 
       const { result } = renderHook(() => useApiContent('arxiv', 'physics', 5, mockShowToast));
 

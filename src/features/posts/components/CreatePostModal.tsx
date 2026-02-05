@@ -145,8 +145,9 @@ const CreatePostModal = ({
           previewUrl: URL.createObjectURL(compressedFile),
         });
       }
-    } catch (err: any) {
-      setError(err.message || 'Error procesando imagenes');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error procesando imagenes';
+      setError(message);
     }
   };
 
@@ -292,9 +293,10 @@ const CreatePostModal = ({
       if (redirectTo) {
         navigate(redirectTo);
       }
-    } catch (err: any) {
-      console.error('Error creating post:', err);
-      setError(err.message || 'Error al publicar');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error al publicar';
+      console.error('Error creating post:', error);
+      setError(message);
 
       if (created) {
         await updatePost(postId, { status: 'failed' }).catch(() => {});

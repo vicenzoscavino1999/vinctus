@@ -3,6 +3,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { useToast } from '@/shared/ui/Toast';
+import { getUserProfilesByIds } from '@/features/profile/api';
 import {
   getOrCreateGroupConversation,
   setConversationMute,
@@ -15,7 +16,6 @@ import {
   getGroup,
   leaveGroupWithSync,
   createGroupReport,
-  getUserProfile,
   getBlockedUsers,
   type ConversationRead,
   type ConversationMemberRead,
@@ -333,26 +333,39 @@ export default function MessagesPage() {
 
     if (missingIds.size === 0) return;
 
-    missingIds.forEach((uid) => {
-      void (async () => {
-        try {
-          const profile = await getUserProfile(uid);
-          if (!profile) return;
-          setDirectInfoCache((prev) => {
-            if (prev[uid]) return prev;
-            return {
-              ...prev,
-              [uid]: {
-                name: profile.displayName ?? 'Usuario',
-                photoURL: profile.photoURL ?? null,
-              },
+    const missing = Array.from(missingIds);
+    let isActive = true;
+
+    void (async () => {
+      try {
+        const profilesById = await getUserProfilesByIds(missing);
+        if (!isActive) return;
+
+        setDirectInfoCache((prev) => {
+          const next = { ...prev };
+          let changed = false;
+
+          missing.forEach((uid) => {
+            if (next[uid]) return;
+            const profile = profilesById.get(uid);
+            if (!profile) return;
+            next[uid] = {
+              name: profile.displayName ?? 'Usuario',
+              photoURL: profile.photoURL ?? null,
             };
+            changed = true;
           });
-        } catch (err) {
-          console.error('Error fetching user profile:', err);
-        }
-      })();
-    });
+
+          return changed ? next : prev;
+        });
+      } catch (err) {
+        console.error('Error fetching user profiles:', err);
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
   }, [conversations, user, directInfoCache, getOtherMemberId]);
 
   // Subscribe to messages of selected conversation
@@ -394,12 +407,12 @@ export default function MessagesPage() {
     }
   };
 
-  const handleBackToList = () => {
+  const handleBackToList = useCallback(() => {
     setSelectedConversationId(null);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete('conversation');
     setSearchParams(nextParams, { replace: true });
-  };
+  }, [searchParams, setSearchParams]);
 
   const handleOpenDetails = () => {
     if (!activeConversation || activeConversation.type !== 'direct') return;
@@ -690,7 +703,13 @@ export default function MessagesPage() {
     if (otherId && blockedUsers.has(otherId)) {
       handleBackToList();
     }
-  }, [selectedConversationId, activeConversation, blockedUsers, getOtherMemberId]);
+  }, [
+    selectedConversationId,
+    activeConversation,
+    blockedUsers,
+    getOtherMemberId,
+    handleBackToList,
+  ]);
 
   if (loading) {
     return (

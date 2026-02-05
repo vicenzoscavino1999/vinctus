@@ -5,9 +5,9 @@ loadEnv({ path: '.env.local' });
 loadEnv({ path: '.env' });
 
 const projectId =
+  process.env.GCLOUD_PROJECT ||
   process.env.FIREBASE_PROJECT_ID ||
   process.env.VITE_FIREBASE_PROJECT_ID ||
-  process.env.GCLOUD_PROJECT ||
   'vinctus-dev';
 
 const emulatorHost = process.env.FIREBASE_EMULATOR_HOST || '127.0.0.1';

@@ -1,30 +1,9 @@
 import { expect, test } from '@playwright/test';
-
-const loginWithSeedUser = async (page: import('@playwright/test').Page) => {
-  const createPostButton = page.getByLabel(/Crear publicaci/i);
-
-  await page.goto('/');
-
-  if (await createPostButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-    return;
-  }
-
-  await page.locator('input[type="email"]').fill('alice@vinctus.local');
-  await page.locator('input[type="password"]').fill('password123');
-  await page
-    .locator('form')
-    .getByRole('button', { name: /Entrar/i })
-    .click();
-
-  await expect(createPostButton).toBeVisible({ timeout: 15000 });
-};
+import { loginWithSeedUser, resetClientState } from './helpers/session';
 
 test.describe('Smoke e2e', () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.clear();
-      localStorage.setItem('vinctus_onboarding_complete', 'true');
-    });
+    await resetClientState(page);
   });
 
   test('@smoke login + crear post', async ({ page }) => {

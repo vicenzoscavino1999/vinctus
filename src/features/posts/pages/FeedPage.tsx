@@ -1,18 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Bookmark, Heart, Link2, MessageCircle, Film, FileText } from 'lucide-react';
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  startAfter,
-  type DocumentSnapshot,
-} from 'firebase/firestore';
-import { db } from '@/shared/lib/firebase';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useAppState } from '@/context';
 import { useToast } from '@/shared/ui/Toast';
@@ -20,64 +8,39 @@ import PostCommentsModal from '@/features/posts/components/PostCommentsModal';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
 import {
   getBlockedUsers,
+  getFeedPostById,
+  getFeedPostsPage,
   likePostWithSync,
   savePostWithSync,
   unlikePostWithSync,
   unsavePostWithSync,
+  type FeedPost,
+  type PaginatedResult,
 } from '@/features/posts/api';
-
-// Post type with BOTH schemas (new + legacy) for compatibility
-type Post = {
-  postId: string;
-  authorId?: string;
-
-  // New schema
-  authorSnapshot?: { displayName: string; photoURL: string | null };
-  title?: string | null;
-  text?: string;
-  status?: 'ready' | 'uploading' | 'failed';
-
-  // Legacy schema
-  content?: string;
-  authorName?: string;
-  authorUsername?: string;
-  authorPhoto?: string | null;
-
-  // Common
-  likeCount?: number;
-  commentCount?: number;
-  likesCount?: number;
-  commentsCount?: number;
-  media?: {
-    type: 'image' | 'video' | 'file';
-    url: string;
-    path: string;
-    fileName?: string;
-    contentType?: string;
-    size?: number;
-  }[];
-  createdAt?: any;
-};
 
 type PostSummary = {
   postId: string;
   authorName: string;
   authorPhoto: string | null;
-  title?: string | null;
+  title: string | null;
   text: string;
   imageUrl: string | null;
-  media: Post['media'];
-  createdAt?: any;
+  media: FeedPost['media'];
+  createdAt: unknown;
+  likeCount: number;
+  commentCount: number;
 };
 
-const toDate = (value: any): Date | null => {
+const toDate = (value: unknown): Date | null => {
   if (!value) return null;
-  if (value.toDate) return value.toDate();
   if (value instanceof Date) return value;
+  if (typeof value === 'object' && value && 'toDate' in value) {
+    return (value as { toDate: () => Date }).toDate();
+  }
   return null;
 };
 
-const formatRelativeTime = (value: any): string => {
+const formatRelativeTime = (value: unknown): string => {
   const date = toDate(value);
   if (!date) return 'Ahora';
   const diffMs = Date.now() - date.getTime();
@@ -91,44 +54,32 @@ const formatRelativeTime = (value: any): string => {
   return `Hace ${days} d`;
 };
 
-const buildPostSummary = (post: Post): PostSummary => {
-  const displayText = post.text ?? post.content ?? '';
-  const authorName = post.authorSnapshot?.displayName ?? post.authorName ?? 'Usuario';
-  const authorPhoto = post.authorSnapshot?.photoURL ?? post.authorPhoto ?? null;
-  const imageUrl = post.media?.find((item) => item.type === 'image')?.url ?? null;
+const buildPostSummary = (post: FeedPost): PostSummary => {
+  const imageUrl = post.media.find((item) => item.type === 'image')?.url ?? null;
 
   return {
     postId: post.postId,
-    authorName,
-    authorPhoto,
-    title: post.title ?? null,
-    text: displayText,
+    authorName: post.authorName,
+    authorPhoto: post.authorPhoto,
+    title: post.title,
+    text: post.text,
     imageUrl,
-    media: post.media ?? [],
+    media: post.media,
     createdAt: post.createdAt,
+    likeCount: post.likeCount,
+    commentCount: post.commentCount,
   };
-};
-
-const readPostCounter = (post: Post, primary: 'likeCount' | 'commentCount'): number | null => {
-  const secondary = primary === 'likeCount' ? 'likesCount' : 'commentsCount';
-  const first = post[primary];
-  if (typeof first === 'number' && Number.isFinite(first) && first >= 0) {
-    return first;
-  }
-  const fallback = post[secondary];
-  if (typeof fallback === 'number' && Number.isFinite(fallback) && fallback >= 0) {
-    return fallback;
-  }
-  return null;
 };
 
 const FeedPage = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { likedPosts, savedPosts } = useAppState();
   const { showToast } = useToast();
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [lastVisible, setLastVisible] = useState<DocumentSnapshot | null>(null);
+  const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [lastVisible, setLastVisible] = useState<PaginatedResult<FeedPost>['lastDoc']>(null);
+  const [hasMorePosts, setHasMorePosts] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
@@ -139,17 +90,14 @@ const FeedPage = () => {
   const postFromSearch = new URLSearchParams(location.search).get('post');
   const [blockedUsers, setBlockedUsers] = useState<Set<string>>(new Set());
 
-  // Initial load with getDocs (NO realtime to avoid pagination conflicts)
+  // Initial load (NO realtime to avoid pagination conflicts)
   useEffect(() => {
     const loadInitial = async () => {
       try {
-        const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(20));
-
-        const snap = await getDocs(q);
-        const list = snap.docs.map((d) => ({ ...(d.data() as any), postId: d.id })) as Post[];
-        const visible = list.filter((p) => !p.status || p.status === 'ready');
-        setPosts(visible);
-        setLastVisible(snap.docs[snap.docs.length - 1] ?? null);
+        const page = await getFeedPostsPage(20);
+        setPosts(page.items);
+        setLastVisible(page.lastDoc);
+        setHasMorePosts(page.hasMore);
       } catch (error) {
         console.error('Error loading posts:', error);
       } finally {
@@ -157,7 +105,7 @@ const FeedPage = () => {
       }
     };
 
-    loadInitial();
+    void loadInitial();
   }, []);
 
   useEffect(() => {
@@ -180,54 +128,51 @@ const FeedPage = () => {
     if (!postFromSearch || activePost?.postId === postFromSearch) return;
     const existing = posts.find((post) => post.postId === postFromSearch);
     if (existing) {
-      setActivePost(buildPostSummary(existing));
+      setActivePost({
+        ...buildPostSummary(existing),
+        likeCount: likeCounts[existing.postId] ?? existing.likeCount,
+        commentCount: commentCounts[existing.postId] ?? existing.commentCount,
+      });
       return;
     }
 
     const loadById = async () => {
       try {
-        const docSnap = await getDoc(doc(db, 'posts', postFromSearch));
-        if (!docSnap.exists()) return;
-        const data = docSnap.data() as any;
-        const post = { ...data, postId: docSnap.id } as Post;
-        if (post.status && post.status !== 'ready') return;
-        setActivePost(buildPostSummary(post));
+        const post = await getFeedPostById(postFromSearch);
+        if (!post) return;
+        setActivePost({
+          ...buildPostSummary(post),
+          likeCount: likeCounts[post.postId] ?? post.likeCount,
+          commentCount: commentCounts[post.postId] ?? post.commentCount,
+        });
       } catch (error) {
         console.error('Error loading post by id:', error);
       }
     };
 
-    loadById();
-  }, [postFromSearch, posts, activePost?.postId]);
+    void loadById();
+  }, [postFromSearch, posts, activePost?.postId, commentCounts, likeCounts]);
 
   // Load more posts (pagination)
   const loadMore = async () => {
-    if (!lastVisible || loadingMore) return;
+    if (!hasMorePosts || !lastVisible || loadingMore) return;
     setLoadingMore(true);
 
     try {
-      const q2 = query(
-        collection(db, 'posts'),
-        orderBy('createdAt', 'desc'),
-        startAfter(lastVisible),
-        limit(20),
-      );
-
-      const snap = await getDocs(q2);
-      const more = snap.docs.map((d) => ({ ...(d.data() as any), postId: d.id })) as Post[];
-      const moreVisible = more.filter((p) => !p.status || p.status === 'ready');
+      const page = await getFeedPostsPage(20, lastVisible);
 
       // Merge without duplicates using Map
       setPosts((prev) => {
         const seen = new Set(prev.map((p) => p.postId));
         const merged = [...prev];
-        for (const p of moreVisible) {
+        for (const p of page.items) {
           if (!seen.has(p.postId)) merged.push(p);
         }
         return merged;
       });
 
-      setLastVisible(snap.docs[snap.docs.length - 1] ?? lastVisible);
+      setLastVisible(page.lastDoc);
+      setHasMorePosts(page.hasMore);
     } catch (error) {
       console.error('Error loading more posts:', error);
     } finally {
@@ -275,84 +220,34 @@ const FeedPage = () => {
   useEffect(() => {
     if (posts.length === 0) return;
 
-    const embeddedLikeUpdates: Record<string, number> = {};
-    const embeddedCommentUpdates: Record<string, number> = {};
-    posts.forEach((post) => {
-      if (likeCounts[post.postId] === undefined) {
-        const embeddedLikeCount = readPostCounter(post, 'likeCount');
-        if (embeddedLikeCount !== null) {
-          embeddedLikeUpdates[post.postId] = embeddedLikeCount;
+    setLikeCounts((prev) => {
+      const next = { ...prev };
+      let changed = false;
+
+      posts.forEach((post) => {
+        if (next[post.postId] === undefined) {
+          next[post.postId] = post.likeCount;
+          changed = true;
         }
-      }
-      if (commentCounts[post.postId] === undefined) {
-        const embeddedCommentCount = readPostCounter(post, 'commentCount');
-        if (embeddedCommentCount !== null) {
-          embeddedCommentUpdates[post.postId] = embeddedCommentCount;
-        }
-      }
+      });
+
+      return changed ? next : prev;
     });
 
-    if (Object.keys(embeddedLikeUpdates).length > 0) {
-      setLikeCounts((prev) => ({ ...prev, ...embeddedLikeUpdates }));
-    }
-    if (Object.keys(embeddedCommentUpdates).length > 0) {
-      setCommentCounts((prev) => ({ ...prev, ...embeddedCommentUpdates }));
-    }
+    setCommentCounts((prev) => {
+      const next = { ...prev };
+      let changed = false;
 
-    const missingLikeCountIds = posts
-      .filter(
-        (post) =>
-          likeCounts[post.postId] === undefined && readPostCounter(post, 'likeCount') === null,
-      )
-      .map((post) => post.postId);
-    const missingCommentCountIds = posts
-      .filter(
-        (post) =>
-          commentCounts[post.postId] === undefined &&
-          readPostCounter(post, 'commentCount') === null,
-      )
-      .map((post) => post.postId);
-
-    if (missingLikeCountIds.length > 0) {
-      setLikeCounts((prev) => {
-        const next = { ...prev };
-        let changed = false;
-        missingLikeCountIds.forEach((postId) => {
-          if (next[postId] === undefined) {
-            next[postId] = 0;
-            changed = true;
-          }
-        });
-        return changed ? next : prev;
+      posts.forEach((post) => {
+        if (next[post.postId] === undefined) {
+          next[post.postId] = post.commentCount;
+          changed = true;
+        }
       });
-    }
 
-    if (missingCommentCountIds.length > 0) {
-      setCommentCounts((prev) => {
-        const next = { ...prev };
-        let changed = false;
-        missingCommentCountIds.forEach((postId) => {
-          if (next[postId] === undefined) {
-            next[postId] = 0;
-            changed = true;
-          }
-        });
-        return changed ? next : prev;
-      });
-    }
-
-    const pendingEmbeddedCounts = posts.filter(
-      (post) =>
-        (likeCounts[post.postId] === undefined && readPostCounter(post, 'likeCount') === null) ||
-        (commentCounts[post.postId] === undefined &&
-          readPostCounter(post, 'commentCount') === null),
-    );
-
-    if (pendingEmbeddedCounts.length > 0) {
-      // Keep zero-valued fallbacks for legacy posts without embedded counters.
-      // Counter writes still update these values optimistically on user actions.
-    }
-  }, [posts, likeCounts, commentCounts]);
+      return changed ? next : prev;
+    });
+  }, [posts]);
 
   const handleToggleLike = async (postId: string) => {
     if (!user) {
@@ -434,7 +329,9 @@ const FeedPage = () => {
           {posts
             .filter((post) => !post.authorId || !blockedUsers.has(post.authorId))
             .map((p) => {
-              const summary = buildPostSummary(p);
+              const likeCount = likeCounts[p.postId] ?? p.likeCount;
+              const commentCount = commentCounts[p.postId] ?? p.commentCount;
+              const summary = { ...buildPostSummary(p), likeCount, commentCount };
               const displayText = summary.text;
               const titleText = summary.title?.trim() || '';
               const bodyText = displayText.trim();
@@ -445,8 +342,6 @@ const FeedPage = () => {
               const authorInitial = authorName.charAt(0).toUpperCase();
               const imageUrl = summary.imageUrl;
               const timeLabel = formatRelativeTime(p.createdAt);
-              const likeCount = likeCounts[p.postId] ?? 0;
-              const commentCount = commentCounts[p.postId] ?? 0;
               const isLiked = likedByUser[p.postId] ?? false;
               const isSaved = savedByUser[p.postId] ?? false;
               const hasVideo = (summary.media ?? []).some((item) => item.type === 'video');
@@ -581,7 +476,7 @@ const FeedPage = () => {
       )}
 
       {/* Load more button */}
-      {lastVisible && (
+      {hasMorePosts && lastVisible && (
         <div className="mt-6 flex justify-center">
           <button
             className="px-6 py-2.5 border border-neutral-700 rounded-lg text-neutral-300 hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -596,7 +491,12 @@ const FeedPage = () => {
       <PostCommentsModal
         isOpen={!!activePost}
         post={activePost}
-        onClose={() => setActivePost(null)}
+        onClose={() => {
+          setActivePost(null);
+          if (postFromSearch) {
+            navigate('/feed', { replace: true });
+          }
+        }}
         onCommentAdded={(postId) => {
           setCommentCounts((prev) => ({
             ...prev,
