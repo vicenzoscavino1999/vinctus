@@ -58,7 +58,7 @@ const EventDetailModal = ({
   useEffect(() => {
     if (!isOpen || !event) return;
     setLocalCount(attendeeCount);
-  }, [isOpen, event?.id, attendeeCount]);
+  }, [isOpen, event, attendeeCount]);
 
   useEffect(() => {
     if (!isOpen || !event) return;
@@ -84,7 +84,7 @@ const EventDetailModal = ({
     return () => {
       isActive = false;
     };
-  }, [isOpen, event?.id, user]);
+  }, [isOpen, event, user]);
 
   const locationLabel = useMemo(() => {
     if (!event) return null;

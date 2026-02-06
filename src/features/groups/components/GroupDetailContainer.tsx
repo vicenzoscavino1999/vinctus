@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DocumentSnapshot } from 'firebase/firestore';
 
 import { useAuth } from '@/context';
@@ -86,6 +86,7 @@ export const GroupDetailContainer = () => {
   const [membersPanelBusyUid, setMembersPanelBusyUid] = useState<string | null>(null);
   const [membersPanelSearch, setMembersPanelSearch] = useState('');
   const [membersPanelLastDoc, setMembersPanelLastDoc] = useState<DocumentSnapshot | null>(null);
+  const membersPanelLastDocRef = useRef<DocumentSnapshot | null>(null);
   const [membersPanelHasMore, setMembersPanelHasMore] = useState(false);
   const [membersPanelLoadingMore, setMembersPanelLoadingMore] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -300,56 +301,64 @@ export const GroupDetailContainer = () => {
     setShowMembersPanel(true);
   };
 
-  const loadMembersPanel = async (reset = false) => {
-    if (!groupIdStr) return;
-    if (reset) {
-      setMembersPanelLoading(true);
-      setMembersPanelError(null);
-      setMembersPanelItems([]);
-      setMembersPanelLastDoc(null);
-      setMembersPanelHasMore(false);
-    } else {
-      setMembersPanelLoadingMore(true);
-    }
-    try {
-      const result = await getGroupMembersPage(
-        groupIdStr,
-        30,
-        reset ? undefined : (membersPanelLastDoc ?? undefined),
-      );
-      const profiles = await Promise.all(
-        result.items.map((member) => getUserProfile(member.uid).catch(() => null)),
-      );
-      const items: GroupMemberItem[] = result.items.map((member, index) => ({
-        uid: member.uid,
-        role: member.role,
-        name: profiles[index]?.displayName ?? 'Usuario',
-        photoURL: profiles[index]?.photoURL ?? null,
-      }));
-      setMembersPanelItems((prev) => {
-        if (reset) return items;
-        const map = new Map(prev.map((item) => [item.uid, item]));
-        items.forEach((item) => {
-          map.set(item.uid, item);
+  useEffect(() => {
+    membersPanelLastDocRef.current = membersPanelLastDoc;
+  }, [membersPanelLastDoc]);
+
+  const loadMembersPanel = useCallback(
+    async (reset = false) => {
+      if (!groupIdStr) return;
+      if (reset) {
+        setMembersPanelLoading(true);
+        setMembersPanelError(null);
+        setMembersPanelItems([]);
+        setMembersPanelLastDoc(null);
+        setMembersPanelHasMore(false);
+      } else {
+        setMembersPanelLoadingMore(true);
+      }
+      try {
+        const result = await getGroupMembersPage(
+          groupIdStr,
+          30,
+          reset ? undefined : (membersPanelLastDocRef.current ?? undefined),
+        );
+        const profiles = await Promise.all(
+          result.items.map((member) => getUserProfile(member.uid).catch(() => null)),
+        );
+        const items: GroupMemberItem[] = result.items.map((member, index) => ({
+          uid: member.uid,
+          role: member.role,
+          name: profiles[index]?.displayName ?? 'Usuario',
+          photoURL: profiles[index]?.photoURL ?? null,
+        }));
+        setMembersPanelItems((prev) => {
+          if (reset) return items;
+          const map = new Map(prev.map((item) => [item.uid, item]));
+          items.forEach((item) => {
+            map.set(item.uid, item);
+          });
+          return Array.from(map.values());
         });
-        return Array.from(map.values());
-      });
-      setMembersPanelLastDoc(result.lastDoc);
-      setMembersPanelHasMore(result.hasMore);
-    } catch (membersError) {
-      console.error('Error loading members:', membersError);
-      setMembersPanelError('No se pudieron cargar los miembros.');
-    } finally {
-      setMembersPanelLoading(false);
-      setMembersPanelLoadingMore(false);
-    }
-  };
+        setMembersPanelLastDoc(result.lastDoc);
+        membersPanelLastDocRef.current = result.lastDoc;
+        setMembersPanelHasMore(result.hasMore);
+      } catch (membersError) {
+        console.error('Error loading members:', membersError);
+        setMembersPanelError('No se pudieron cargar los miembros.');
+      } finally {
+        setMembersPanelLoading(false);
+        setMembersPanelLoadingMore(false);
+      }
+    },
+    [groupIdStr],
+  );
 
   useEffect(() => {
     if (!showMembersPanel) return;
     setMembersPanelSearch('');
     void loadMembersPanel(true);
-  }, [showMembersPanel]);
+  }, [showMembersPanel, loadMembersPanel]);
 
   const handleLoadMoreMembers = () => {
     if (membersPanelLoadingMore || !membersPanelHasMore) return;
