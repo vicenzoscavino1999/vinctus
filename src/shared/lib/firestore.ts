@@ -24,6 +24,7 @@ export * from './firestore/stories';
 export * from './firestore/posts';
 export * from './firestore/postEngagement';
 export * from './firestore/contributions';
+export * from './firestore/userSubcollections';
 export * from './firestore/profile';
 export * from './firestore/events';
 export * from './firestore/groups';
