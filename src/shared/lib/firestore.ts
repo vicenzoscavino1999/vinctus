@@ -19,6 +19,7 @@ export * from './firestore/friendRequests';
 export * from './firestore/collaborations';
 export * from './firestore/savedItems';
 export * from './firestore/collections';
+export * from './firestore/contributions';
 export * from './firestore/supportTickets';
 export * from './firestore/stories';
 export * from './firestore.legacy';
