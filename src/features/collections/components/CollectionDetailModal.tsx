@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState, type FormEvent } from 'react';
 import { File, FileText, Link2, Trash2, X } from 'lucide-react';
 
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/context';
 import {
   createCollectionItem,
   deleteCollectionItem,

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ChevronLeft, Heart, Loader2, MessageCircle, User, FileText } from 'lucide-react';
 
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/context';
 import {
   addPostComment,
   getPostCommentCount,

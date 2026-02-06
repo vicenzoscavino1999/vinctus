@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'r
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Image as ImageIcon, Loader2 } from 'lucide-react';
 
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/context';
 import { useToast } from '@/shared/ui/Toast';
 import { CATEGORIES } from '@/shared/constants';
 import { getGroup, updateGroup, type GroupVisibility } from '@/features/groups/api';

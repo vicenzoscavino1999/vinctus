@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase';
 import { useLocation } from 'react-router-dom';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/context';
 import { useAppState } from '@/context';
 import { useToast } from '@/shared/ui/Toast';
 import PostCommentsModal from '@/features/posts/components/PostCommentsModal';

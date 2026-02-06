@@ -2,7 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import type { DocumentSnapshot } from 'firebase/firestore';
 
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/context';
 import { CATEGORIES } from '@/shared/constants';
 import {
   GroupDetailView,

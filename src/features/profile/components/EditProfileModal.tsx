@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type FormEvent, type ChangeEvent } from 'react';
 import { X, User, MapPin, Briefcase, FileText, Loader2 } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/context';
 import { getUserProfile, updateUserProfile } from '@/features/profile/api';
 import { uploadProfilePhoto } from '@/shared/lib/storage';
 import { useToast } from '@/shared/ui/Toast';

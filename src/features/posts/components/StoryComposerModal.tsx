@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Film, Image as ImageIcon, Upload, X } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { collection, doc } from 'firebase/firestore';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/context';
 import { useToast } from '@/shared/ui/Toast';
 import { createStory, type StoryMediaType } from '@/features/posts/api';
 import { uploadStoryImage, uploadStoryVideo } from '@/shared/lib/storage';
