@@ -1,11 +1,10 @@
 /**
- * @deprecated Legacy Firestore API surface.
+ * Firestore API surface.
  *
- * This module is frozen. Do not add new data access code here.
+ * Do not add new data access code directly in this barrel.
  * New data-access code must live under `src/features/<domain>/api`.
- *
- * Note: we keep re-exports here temporarily while extracting functions out of `firestore.legacy.ts`.
  */
+export * from './firestore/sharedTypes';
 export * from './firestore/reports';
 export * from './firestore/blockedUsers';
 export * from './firestore/users';
@@ -29,4 +28,3 @@ export * from './firestore/profile';
 export * from './firestore/events';
 export * from './firestore/groups';
 export * from './firestore/messaging';
-export * from './firestore.legacy';

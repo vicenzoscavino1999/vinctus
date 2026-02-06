@@ -1,10 +1,5 @@
-// LEGACY Firestore service layer for Vinctus.
-// Frozen in Phase 3. Do not add new code here; move new APIs to src/features/*/api.
-
 import type { DocumentSnapshot, FieldValue, Timestamp } from 'firebase/firestore';
-import type { AccountVisibility } from './firestore/users';
-
-// ==================== Read Types (from Firestore) ====================
+import type { AccountVisibility } from '@/shared/lib/firestore/users';
 
 export interface GroupMemberRead {
   uid: string;
@@ -28,8 +23,6 @@ export interface UserLikeRead {
   postId: string;
   createdAt: Timestamp;
 }
-
-// ==================== Activity Notifications ====================
 
 export type ActivityType = 'post_like' | 'post_comment' | 'follow';
 
@@ -60,7 +53,6 @@ export interface ActivityWrite {
   read: boolean;
 }
 
-// Extended user profile data
 export interface UserProfileRead {
   uid: string;
   displayName: string | null;
@@ -91,7 +83,6 @@ export interface UserProfileUpdate {
   username?: string;
 }
 
-// User settings (preferences)
 export interface NotificationSettings {
   pushEnabled: boolean;
   emailEnabled: boolean;
@@ -113,8 +104,6 @@ export interface UserSettingsRead {
   notifications: NotificationSettings;
   privacy: PrivacySettings;
 }
-
-// ==================== Write Types (to Firestore) ====================
 
 export interface GroupMemberWrite {
   uid: string;
@@ -139,8 +128,6 @@ export interface UserLikeWrite {
   createdAt: FieldValue;
 }
 
-// ==================== Group Type ====================
-
 export interface FirestoreGroup {
   id: string;
   name: string;
@@ -157,14 +144,11 @@ export interface FirestoreGroup {
 
 export type GroupVisibility = 'public' | 'private';
 
-// Pagination result
 export interface PaginatedResult<T> {
   items: T[];
   lastDoc: DocumentSnapshot | null;
   hasMore: boolean;
 }
-
-// ==================== Constants ====================
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   pushEnabled: true,
@@ -182,9 +166,6 @@ export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   allowFriendRequests: true,
   blockedUsers: [],
 };
-
-// ==================== Groups (Read) ====================
-// Moved to ./firestore/groups.ts
 
 export interface CreateGroupInput {
   name: string;
@@ -209,8 +190,6 @@ export interface GroupJoinRequestRead {
   createdAt: Date;
   updatedAt: Date;
 }
-
-// ==================== Events (Encuentros) ====================
 
 export type EventVisibility = 'public' | 'private';
 

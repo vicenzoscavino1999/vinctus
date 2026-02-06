@@ -16,10 +16,6 @@ function isSourceFile(filePath) {
 function isAllowedOnSnapshotFile(relativePath) {
   const posixPath = toPosix(relativePath);
 
-  if (posixPath === 'src/shared/lib/firestore.legacy.ts') {
-    return true;
-  }
-
   if (/^src\/features\/[^/]+\/api\/.+\.(ts|tsx)$/.test(posixPath)) {
     return true;
   }
