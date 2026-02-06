@@ -1,61 +1,8 @@
 // LEGACY Firestore service layer for Vinctus.
 // Frozen in Phase 3. Do not add new code here; move new APIs to src/features/*/api.
 
-import {
-  collection,
-  getDocs as _getDocs,
-  documentId,
-  Timestamp,
-  type FieldValue,
-  type DocumentSnapshot,
-} from 'firebase/firestore';
-import {
-  getDocs as getDocsLite,
-  collection as collectionLite,
-  query as queryLite,
-  where as whereLite,
-} from 'firebase/firestore/lite';
-import { db, dbLite } from './firebase';
-import { trackFirestoreRead } from './devMetrics';
-import { getPublicUsersByIds } from './firestore/publicUsers';
+import type { DocumentSnapshot, FieldValue, Timestamp } from 'firebase/firestore';
 import type { AccountVisibility } from './firestore/users';
-
-const resolveSnapshotSize = (value: unknown): number => {
-  if (typeof value !== 'object' || value === null || !('size' in value)) return 1;
-  const size = (value as { size?: unknown }).size;
-  if (typeof size !== 'number' || !Number.isFinite(size) || size < 0) return 1;
-  return Math.max(1, Math.floor(size));
-};
-
-const getDocs = ((...args: unknown[]) => {
-  const result = (_getDocs as (...innerArgs: unknown[]) => unknown)(...args);
-
-  if (
-    typeof result === 'object' &&
-    result !== null &&
-    'then' in result &&
-    typeof (result as Promise<unknown>).then === 'function'
-  ) {
-    return (result as Promise<unknown>).then((snapshot) => {
-      trackFirestoreRead('firestore.getDocs', resolveSnapshotSize(snapshot));
-      return snapshot;
-    });
-  }
-
-  trackFirestoreRead('firestore.getDocs', resolveSnapshotSize(result));
-  return result;
-}) as typeof _getDocs;
-
-// ==================== Type Helpers ====================
-
-/**
- * Convert Firestore Timestamp to JS Date
- */
-const toDate = (value: unknown): Date | undefined => {
-  if (value instanceof Timestamp) return value.toDate();
-  if (value instanceof Date) return value;
-  return undefined;
-};
 
 // ==================== Read Types (from Firestore) ====================
 
@@ -245,82 +192,6 @@ export interface CreateGroupInput {
   categoryId: string | null;
   visibility: GroupVisibility;
   iconUrl: string | null;
-}
-
-/**
- * Get list of users that current user follows
- * Uses Firestore Lite for iOS compatibility
- * Returns array of UserProfileRead for display in UI
- */
-export async function getFollowing(uid: string): Promise<UserProfileRead[]> {
-  const buildProfile = (id: string, data: Record<string, any>): UserProfileRead => ({
-    uid: id,
-    displayName: data.displayName ?? null,
-    displayNameLowercase: data.displayNameLowercase ?? null,
-    photoURL: data.photoURL ?? null,
-    email: null,
-    bio: null,
-    role: null,
-    location: null,
-    username: data.username ?? null,
-    reputation: data.reputation ?? 0,
-    accountVisibility: data.accountVisibility ?? 'public',
-    followersCount: data.followersCount ?? 0,
-    followingCount: data.followingCount ?? 0,
-    postsCount: data.postsCount ?? 0,
-    createdAt: data.createdAt ? (toDate(data.createdAt) ?? new Date()) : new Date(),
-    updatedAt: data.updatedAt ? (toDate(data.updatedAt) ?? new Date()) : new Date(),
-  });
-
-  let followingIds: string[] = [];
-  try {
-    const followingQuery = queryLite(collectionLite(dbLite, 'users', uid, 'following'));
-    const snapshot = await getDocsLite(followingQuery);
-    followingIds = snapshot.docs.map((doc) => doc.id);
-  } catch (error) {
-    console.warn('getFollowing lite failed, falling back to full Firestore.', error);
-  }
-
-  if (followingIds.length === 0) {
-    try {
-      const snapshot = await getDocs(collection(db, 'users', uid, 'following'));
-      followingIds = snapshot.docs.map((docSnap) => docSnap.id);
-    } catch (error) {
-      console.error('getFollowing fallback failed.', error);
-      return [];
-    }
-  }
-
-  if (followingIds.length === 0) return [];
-
-  const profilesMap = new Map<string, UserProfileRead>();
-  try {
-    for (let i = 0; i < followingIds.length; i += 10) {
-      const chunk = followingIds.slice(i, i + 10);
-      const profilesQuery = queryLite(
-        collectionLite(dbLite, 'users_public'),
-        whereLite(documentId(), 'in', chunk),
-      );
-      const profilesSnap = await getDocsLite(profilesQuery);
-      profilesSnap.docs.forEach((doc) => {
-        profilesMap.set(doc.id, buildProfile(doc.id, doc.data() as Record<string, any>));
-      });
-    }
-  } catch (error) {
-    console.warn('getFollowing lite profiles failed, falling back to full Firestore.', error);
-  }
-
-  const missingIds = followingIds.filter((id) => !profilesMap.has(id));
-  if (missingIds.length > 0) {
-    const usersMap = await getPublicUsersByIds(missingIds);
-    usersMap.forEach((data, id) => {
-      profilesMap.set(id, buildProfile(id, data as Record<string, any>));
-    });
-  }
-
-  return followingIds
-    .map((id) => profilesMap.get(id))
-    .filter((item): item is UserProfileRead => !!item);
 }
 
 export type GroupJoinRequestStatus = 'pending' | 'accepted' | 'rejected';
