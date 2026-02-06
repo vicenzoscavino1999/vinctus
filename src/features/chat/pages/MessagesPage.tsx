@@ -394,12 +394,12 @@ export default function MessagesPage() {
     }
   };
 
-  const handleBackToList = () => {
+  const handleBackToList = useCallback(() => {
     setSelectedConversationId(null);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete('conversation');
     setSearchParams(nextParams, { replace: true });
-  };
+  }, [searchParams, setSearchParams]);
 
   const handleOpenDetails = () => {
     if (!activeConversation || activeConversation.type !== 'direct') return;
@@ -690,7 +690,13 @@ export default function MessagesPage() {
     if (otherId && blockedUsers.has(otherId)) {
       handleBackToList();
     }
-  }, [selectedConversationId, activeConversation, blockedUsers, getOtherMemberId]);
+  }, [
+    selectedConversationId,
+    activeConversation,
+    blockedUsers,
+    getOtherMemberId,
+    handleBackToList,
+  ]);
 
   if (loading) {
     return (

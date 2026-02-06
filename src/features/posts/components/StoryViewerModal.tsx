@@ -36,11 +36,6 @@ const StoryViewerModal = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    setActiveIndex(initialIndex);
-  }, [isOpen, initialIndex, stories.length]);
-
-  useEffect(() => {
-    if (!isOpen) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const handleKey = (event: KeyboardEvent) => {
@@ -55,9 +50,10 @@ const StoryViewerModal = ({
     };
   }, [isOpen, onClose]);
 
-  const activeStory = stories[activeIndex];
-  const canGoPrev = activeIndex > 0;
-  const canGoNext = activeIndex < stories.length - 1;
+  const clampedActiveIndex = Math.min(activeIndex, Math.max(stories.length - 1, 0));
+  const activeStory = stories[clampedActiveIndex];
+  const canGoPrev = clampedActiveIndex > 0;
+  const canGoNext = clampedActiveIndex < stories.length - 1;
 
   const displayTime = useMemo(() => {
     if (!activeStory) return '';
@@ -78,7 +74,7 @@ const StoryViewerModal = ({
             {stories.map((_, index) => (
               <div
                 key={index}
-                className={`h-1 flex-1 rounded-full ${index <= activeIndex ? 'bg-white' : 'bg-white/20'}`}
+                className={`h-1 flex-1 rounded-full ${index <= clampedActiveIndex ? 'bg-white' : 'bg-white/20'}`}
               />
             ))}
           </div>
@@ -138,7 +134,9 @@ const StoryViewerModal = ({
         )}
         {canGoNext && (
           <button
-            onClick={() => setActiveIndex((prev) => Math.min(prev + 1, stories.length - 1))}
+            onClick={() =>
+              setActiveIndex((prev) => Math.min(prev + 1, Math.max(stories.length - 1, 0)))
+            }
             className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/40 hover:bg-black/60 transition-colors"
             aria-label="Siguiente"
           >
