@@ -21,4 +21,5 @@ export * from './firestore/savedItems';
 export * from './firestore/collections';
 export * from './firestore/supportTickets';
 export * from './firestore/stories';
+export * from './firestore/groups';
 export * from './firestore.legacy';
