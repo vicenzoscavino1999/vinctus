@@ -188,7 +188,7 @@ const PostDetailPage = () => {
   const fallbackTitle = trimmedBody ? (trimmedBody.split('\n')[0] ?? trimmedBody) : '';
   const titleText = post?.title?.trim() || fallbackTitle || 'Publicacion';
   const isLongContent = trimmedBody.length > 140;
-  const showBody = !!post?.title ? trimmedBody.length > 0 : isLongContent;
+  const showBody = post?.title ? trimmedBody.length > 0 : isLongContent;
 
   const commentsSummary = useMemo(() => {
     if (!post || !postId) return null;
@@ -221,7 +221,7 @@ const PostDetailPage = () => {
       } else {
         await unlikePostWithSync(postId, user.uid);
       }
-    } catch (err) {
+    } catch {
       setLiked(!nextLiked);
       setLikeCount((prev) => Math.max(0, prev + (nextLiked ? -1 : 1)));
       showToast('No se pudo actualizar el like', 'error');
@@ -243,7 +243,7 @@ const PostDetailPage = () => {
       } else {
         await unsavePostWithSync(postId, user.uid);
       }
-    } catch (err) {
+    } catch {
       setSaved(!nextSaved);
       showToast('No se pudo actualizar el guardado', 'error');
     }
@@ -424,8 +424,8 @@ const PostDetailPage = () => {
           try {
             const total = await getPostCommentCount(postId);
             setCommentCount(total);
-          } catch (err) {
-            console.error('Error updating comment count:', err);
+          } catch (error) {
+            console.error('Error updating comment count:', error);
           }
         }}
       />

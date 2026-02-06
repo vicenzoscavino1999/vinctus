@@ -82,12 +82,10 @@ const StoriesWidget = () => {
   }, [user]);
 
   useEffect(() => {
-    if (!user) {
-      setStories([]);
-      return;
-    }
-    refreshStories();
-  }, [user?.uid, refreshStories]);
+    queueMicrotask(() => {
+      void refreshStories();
+    });
+  }, [refreshStories]);
 
   const groups = useMemo(() => {
     if (!user) return [];
@@ -249,15 +247,17 @@ const StoriesWidget = () => {
         }}
       />
 
-      <StoryViewerModal
-        isOpen={viewerState.isOpen}
-        stories={viewerState.stories}
-        ownerName={viewerState.ownerName}
-        ownerPhoto={viewerState.ownerPhoto}
-        onClose={() =>
-          setViewerState({ isOpen: false, ownerName: '', ownerPhoto: null, stories: [] })
-        }
-      />
+      {viewerState.isOpen && (
+        <StoryViewerModal
+          isOpen={viewerState.isOpen}
+          stories={viewerState.stories}
+          ownerName={viewerState.ownerName}
+          ownerPhoto={viewerState.ownerPhoto}
+          onClose={() =>
+            setViewerState({ isOpen: false, ownerName: '', ownerPhoto: null, stories: [] })
+          }
+        />
+      )}
     </div>
   );
 };
