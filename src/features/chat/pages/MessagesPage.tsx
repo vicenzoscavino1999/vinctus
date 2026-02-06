@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/context';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { useToast } from '@/shared/ui/Toast';

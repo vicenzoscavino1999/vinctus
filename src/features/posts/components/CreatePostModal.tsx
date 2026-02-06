@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Image as ImageIcon, Loader2, Film, FileText } from 'lucide-react';
 
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/context';
 import { getNewPostId } from '@/features/posts/api';
 import { createPostUploading, updatePost } from '@/features/posts/api';
 import { compressToWebp, validateImage } from '@/shared/lib/compression';

@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/context';
 import { useToast } from '@/shared/ui/Toast';
 import {
   getUserProfile,

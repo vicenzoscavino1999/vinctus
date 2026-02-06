@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, File, FileText, FolderPlus, Link2, Search } from 'lucide-react';
 
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/context';
 import {
   getRecentCollectionItems,
   getUserCollections,

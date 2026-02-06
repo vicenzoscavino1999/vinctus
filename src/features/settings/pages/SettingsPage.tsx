@@ -11,7 +11,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/context';
 import SupportModal from '@/features/help/components/SupportModal';
 import { applyTheme, getStoredTheme, setStoredTheme, type ThemeMode } from '@/shared/lib/theme';
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { AppStateProvider, useAppState } from '../context/AppState';
+import { AppStateProvider, useAppState } from '@/context';
 import type { ReactNode } from 'react';
 
 // Mock useAuth to return null user (anonymous)
