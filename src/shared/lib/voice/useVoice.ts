@@ -40,6 +40,16 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
 
   const providerRef = useRef<WebSpeechProvider | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceMsRef = useRef(debounceMs);
+  const configRef = useRef(config);
+
+  useEffect(() => {
+    debounceMsRef.current = debounceMs;
+  }, [debounceMs]);
+
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
 
   // Initialize provider
   useEffect(() => {
@@ -52,7 +62,7 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
           }
           debounceRef.current = setTimeout(() => {
             setInterimText(text);
-          }, debounceMs);
+          }, debounceMsRef.current);
         },
         onFinal: (text) => {
           // Clear debounce and set final text immediately
@@ -72,7 +82,7 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
           }
         },
       },
-      config,
+      configRef.current,
     );
 
     providerRef.current = provider;

@@ -168,7 +168,7 @@ export class WebSpeechProvider implements VoiceProvider {
 
     try {
       this.recognition.start();
-    } catch (error) {
+    } catch {
       // Already started, ignore
       console.warn('Recognition already started');
     }

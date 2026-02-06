@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowRight, File, FileText, FolderPlus, Link2, Search } from 'lucide-react';
 
 import { useAuth } from '@/context';
@@ -46,13 +46,14 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedCollection, setSelectedCollection] = useState<CollectionRead | null>(null);
   const [selectedRecent, setSelectedRecent] = useState<CollectionItemRead | null>(null);
+  const userId = user?.uid ?? null;
 
-  const loadCollections = async () => {
-    if (!user) return;
+  const loadCollections = useCallback(async () => {
+    if (!userId) return;
     try {
       setCollectionsError(null);
       setLoadingCollections(true);
-      const data = await getUserCollections(user.uid);
+      const data = await getUserCollections(userId);
       setCollections(data);
     } catch (error) {
       console.error('Error loading collections:', error);
@@ -60,14 +61,14 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
     } finally {
       setLoadingCollections(false);
     }
-  };
+  }, [userId]);
 
-  const loadRecents = async () => {
-    if (!user) return;
+  const loadRecents = useCallback(async () => {
+    if (!userId) return;
     try {
       setRecentsError(null);
       setLoadingRecents(true);
-      const data = await getRecentCollectionItems(user.uid, 6);
+      const data = await getRecentCollectionItems(userId, 6);
       setRecents(data);
     } catch (error) {
       console.error('Error loading recents:', error);
@@ -75,17 +76,17 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
     } finally {
       setLoadingRecents(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setCollections([]);
       setRecents([]);
       return;
     }
-    loadCollections();
-    loadRecents();
-  }, [user]);
+    void loadCollections();
+    void loadRecents();
+  }, [userId, loadCollections, loadRecents]);
 
   const filteredCollections = useMemo(() => {
     if (!searchQuery.trim()) return collections;
