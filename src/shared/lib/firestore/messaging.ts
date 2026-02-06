@@ -78,7 +78,7 @@ const updateDoc = ((...args: unknown[]) => {
   return (_updateDoc as (...innerArgs: unknown[]) => unknown)(...args);
 }) as typeof _updateDoc;
 
-const onSnapshot = ((...args: unknown[]) => {
+const observeSnapshot = ((...args: unknown[]) => {
   const wrappedArgs = [...args];
   if (wrappedArgs.length > 1) {
     const rawSecond = wrappedArgs[1];
@@ -218,7 +218,7 @@ export const subscribeToUserMemberships = (
     limit(limitCount),
   );
 
-  return onSnapshot(q, (snapshot) => {
+  return observeSnapshot(q, (snapshot) => {
     const groupIds = snapshot.docs.map((d) => d.id);
     onUpdate(groupIds);
   });
@@ -236,7 +236,7 @@ export const subscribeToUserDirectConversations = (
     limit(limitCount),
   );
 
-  return onSnapshot(
+  return observeSnapshot(
     q,
     (snapshot) => {
       const conversationIds = snapshot.docs.map((d) => d.id);
@@ -586,7 +586,7 @@ export const subscribeToConversations = (
   ) => {
     if (conversationUnsubs.has(conversationId)) return;
     const convRef = doc(db, 'conversations', conversationId);
-    const unsubscribe = onSnapshot(
+    const unsubscribe = observeSnapshot(
       convRef,
       (convSnap) => {
         if (!convSnap.exists()) {
@@ -692,7 +692,7 @@ export const subscribeToMessages = (
     limit(50),
   );
 
-  return onSnapshot(q, (snapshot) => {
+  return observeSnapshot(q, (snapshot) => {
     const messages = snapshot.docs.map((docSnap) => {
       const data = docSnap.data();
       const attachments = Array.isArray(data.attachments)
@@ -830,7 +830,7 @@ export const subscribeToTyping = (
     limit(SMALL_LIST_LIMIT),
   );
 
-  return onSnapshot(q, (snapshot) => {
+  return observeSnapshot(q, (snapshot) => {
     const typingList = snapshot.docs.map((docSnap) => ({
       uid: docSnap.id,
       ...docSnap.data(),
