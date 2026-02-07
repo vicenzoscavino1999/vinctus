@@ -1,10 +1,8 @@
 import fs from 'node:fs/promises';
-import { spawn } from 'node:child_process';
-import net from 'node:net';
 import process from 'node:process';
 import { chromium } from '@playwright/test';
+import { createServer } from 'vite';
 
-const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const outFile = process.env.METRICS_OUT || 'phase4-metrics.json';
 const baseUrl = process.env.METRICS_BASE_URL || 'http://localhost:5173';
 
@@ -24,51 +22,31 @@ const env = {
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const waitForPort = (port, host = '127.0.0.1', timeoutMs = 30000) =>
-  new Promise((resolve, reject) => {
-    const start = Date.now();
-    const probe = () => {
-      const socket = net.createConnection(port, host);
-      socket.on('connect', () => {
-        socket.end();
-        resolve();
-      });
-      socket.on('error', () => {
-        socket.destroy();
-        if (Date.now() - start > timeoutMs) {
-          reject(new Error(`Timeout waiting for ${host}:${port}`));
-          return;
-        }
-        setTimeout(probe, 250);
-      });
-    };
-    probe();
-  });
-
-const startDevServer = async () => {
-  const child = spawn(npmCmd, ['run', 'dev', '--', '--port', '5173'], {
-    env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    shell: process.platform === 'win32',
-  });
-  child.stdout.on('data', (chunk) => process.stdout.write(chunk));
-  child.stderr.on('data', (chunk) => process.stderr.write(chunk));
-  await waitForPort(5173);
-  return child;
+const applyMetricEnv = () => {
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value === 'string') {
+      process.env[key] = value;
+    }
+  }
 };
 
-const stopProcess = async (child) =>
-  new Promise((resolve) => {
-    if (!child || child.killed) {
-      resolve();
-      return;
-    }
-    child.once('exit', () => resolve());
-    child.kill('SIGINT');
-    setTimeout(() => {
-      if (!child.killed) child.kill('SIGKILL');
-    }, 4000);
+const startDevServer = async () => {
+  applyMetricEnv();
+  const server = await createServer({
+    server: {
+      host: '127.0.0.1',
+      port: 5173,
+      strictPort: true,
+    },
   });
+  await server.listen();
+  return server;
+};
+
+const stopProcess = async (server) => {
+  if (!server) return;
+  await server.close();
+};
 
 const isLoggedIn = async (page) => {
   const createBtn = page.locator('button[aria-label*="Crear"]');

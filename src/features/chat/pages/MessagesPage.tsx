@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useAuth } from '@/context';
+import { useAuth } from '@/context/auth';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { useToast } from '@/shared/ui/Toast';
@@ -48,6 +48,7 @@ interface GroupInfo {
 }
 
 const CLEARED_STORAGE_KEY = 'vinctus:clearedConversations';
+const DIRECT_PROFILE_PREFETCH_LIMIT = 50;
 
 const loadClearedConversations = (): Record<string, number> => {
   if (typeof window === 'undefined') return {};
@@ -323,7 +324,11 @@ export default function MessagesPage() {
     if (!user || conversations.length === 0) return;
 
     const missingIds = new Set<string>();
-    for (const conv of conversations) {
+    const directConversations = conversations
+      .filter((conv) => conv.type === 'direct')
+      .slice(0, DIRECT_PROFILE_PREFETCH_LIMIT);
+
+    for (const conv of directConversations) {
       if (conv.type !== 'direct') continue;
       const otherId = getOtherMemberId(conv);
       if (otherId && !directInfoCache[otherId]) {

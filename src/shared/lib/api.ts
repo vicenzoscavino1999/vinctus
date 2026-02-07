@@ -105,6 +105,62 @@ interface MusicTrack {
   type: string;
 }
 
+interface WikipediaPage {
+  pageid: number;
+  title?: string;
+  titles?: {
+    normalized?: string;
+  };
+  extract?: string;
+  thumbnail?: {
+    source?: string;
+  };
+}
+
+interface HackerNewsItem {
+  id: number;
+  title?: string;
+  url?: string;
+  by?: string;
+  score?: number;
+  descendants?: number;
+  time?: number;
+  type?: string;
+}
+
+interface OpenLibraryWork {
+  key: string;
+  title?: string;
+  authors?: Array<{ name?: string }>;
+  cover_id?: number;
+  first_publish_year?: number | string;
+}
+
+interface INaturalistObservation {
+  id: number;
+  taxon?: {
+    preferred_common_name?: string;
+    name?: string;
+  };
+  place_guess?: string;
+  photos?: Array<{ url?: string }>;
+  user?: {
+    login?: string;
+  };
+  observed_on?: string;
+}
+
+interface LastFmTrack {
+  mbid?: string;
+  name?: string;
+  artist?: {
+    name?: string;
+  };
+  playcount?: string;
+  listeners?: string;
+  url?: string;
+}
+
 // ===== arXiv API (Science) =====
 export async function fetchArxivPapers(
   category: string = 'physics',
@@ -171,9 +227,9 @@ export async function fetchWikipediaArticles(
   const url = `https://en.wikipedia.org/api/rest_v1/page/related/${encodeURIComponent(topic)}`;
 
   try {
-    const data = await fetchJsonOrThrow<{ pages?: any[] }>(url, 'Wikipedia');
+    const data = await fetchJsonOrThrow<{ pages?: WikipediaPage[] }>(url, 'Wikipedia');
 
-    return (data.pages || []).slice(0, limit).map((page: any) => {
+    return (data.pages || []).slice(0, limit).map((page) => {
       const extract = page.extract;
       return {
         id: page.pageid,
@@ -211,7 +267,7 @@ export async function fetchHackerNews(
 
     const stories = await Promise.all(
       ids.slice(0, limit).map(async (id) => {
-        return fetchJsonOrThrow<any>(
+        return fetchJsonOrThrow<HackerNewsItem>(
           `https://hacker-news.firebaseio.com/v0/item/${id}.json`,
           `Hacker News item ${id}`,
         );
@@ -219,15 +275,15 @@ export async function fetchHackerNews(
     );
 
     return stories
-      .filter((s: any) => s && s.title)
-      .map((story: any) => ({
+      .filter((story): story is HackerNewsItem => Boolean(story?.title))
+      .map((story) => ({
         id: story.id,
-        title: story.title,
+        title: story.title || 'Sin titulo',
         url: story.url || `https://news.ycombinator.com/item?id=${story.id}`,
-        author: story.by,
-        score: story.score,
+        author: story.by || 'Anonimo',
+        score: story.score || 0,
         comments: story.descendants || 0,
-        time: new Date(story.time * 1000).toLocaleDateString('es-ES'),
+        time: new Date((story.time || 0) * 1000).toLocaleDateString('es-ES'),
         type: story.type === 'job' ? 'Empleo' : 'Noticia',
       }));
   } catch (error) {
@@ -241,12 +297,16 @@ export async function fetchBooks(subject: string = 'fiction', limit: number = 10
   const url = `https://openlibrary.org/subjects/${subject}.json?limit=${limit}`;
 
   try {
-    const data = await fetchJsonOrThrow<{ works?: any[] }>(url, 'Open Library');
+    const data = await fetchJsonOrThrow<{ works?: OpenLibraryWork[] }>(url, 'Open Library');
 
-    return (data.works || []).map((work: any) => ({
+    return (data.works || []).map((work) => ({
       id: work.key,
-      title: work.title,
-      authors: work.authors?.map((a: any) => a.name).join(', ') || 'Anonimo',
+      title: work.title || 'Sin titulo',
+      authors:
+        work.authors
+          ?.map((author) => author.name)
+          .filter(Boolean)
+          .join(', ') || 'Anonimo',
       cover: work.cover_id ? `https://covers.openlibrary.org/b/id/${work.cover_id}-M.jpg` : null,
       firstPublished: work.first_publish_year || 'Desconocido',
       link: `https://openlibrary.org${work.key}`,
@@ -275,9 +335,9 @@ export async function fetchNatureObservations(
   const url = `https://api.inaturalist.org/v1/observations?taxon_id=${taxonId}&quality_grade=research&per_page=${limit}&order=desc&order_by=created_at`;
 
   try {
-    const data = await fetchJsonOrThrow<{ results?: any[] }>(url, 'iNaturalist');
+    const data = await fetchJsonOrThrow<{ results?: INaturalistObservation[] }>(url, 'iNaturalist');
 
-    return (data.results || []).map((obs: any) => ({
+    return (data.results || []).map((obs) => ({
       id: obs.id,
       species: obs.taxon?.preferred_common_name || obs.taxon?.name || 'Especie desconocida',
       scientificName: obs.taxon?.name || '',
@@ -310,11 +370,11 @@ export async function fetchMusicInfo(
   const url = `https://ws.audioscrobbler.com/2.0/?method=chart.gettoptracks&api_key=${LASTFM_API_KEY}&format=json&limit=${limit}`;
 
   try {
-    const data = await fetchJsonOrThrow<{ tracks?: { track?: any[] } }>(url, 'Last.fm');
+    const data = await fetchJsonOrThrow<{ tracks?: { track?: LastFmTrack[] } }>(url, 'Last.fm');
 
-    return (data.tracks?.track || []).map((track: any) => ({
-      id: track.mbid || track.name,
-      title: track.name,
+    return (data.tracks?.track || []).map((track, index) => ({
+      id: track.mbid || track.name || `track-${index}`,
+      title: track.name || 'Sin titulo',
       artist: track.artist?.name || 'Desconocido',
       playcount: track.playcount,
       listeners: track.listeners,

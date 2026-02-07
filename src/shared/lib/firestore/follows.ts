@@ -67,7 +67,21 @@ type FollowingProfileRead = {
 };
 
 export async function getFollowing(uid: string): Promise<FollowingProfileRead[]> {
-  const buildProfile = (id: string, data: Record<string, any>): FollowingProfileRead => ({
+  type PublicUserRaw = {
+    displayName?: string | null;
+    displayNameLowercase?: string | null;
+    photoURL?: string | null;
+    username?: string | null;
+    reputation?: number;
+    accountVisibility?: AccountVisibility;
+    followersCount?: number;
+    followingCount?: number;
+    postsCount?: number;
+    createdAt?: unknown;
+    updatedAt?: unknown;
+  };
+
+  const buildProfile = (id: string, data: PublicUserRaw): FollowingProfileRead => ({
     uid: id,
     displayName: data.displayName ?? null,
     displayNameLowercase: data.displayNameLowercase ?? null,
@@ -118,10 +132,7 @@ export async function getFollowing(uid: string): Promise<FollowingProfileRead[]>
       );
       const profilesSnap = await getDocsLite(profilesQuery);
       profilesSnap.docs.forEach((docSnap) => {
-        profilesMap.set(
-          docSnap.id,
-          buildProfile(docSnap.id, docSnap.data() as Record<string, any>),
-        );
+        profilesMap.set(docSnap.id, buildProfile(docSnap.id, docSnap.data() as PublicUserRaw));
       });
     }
   } catch (error) {
@@ -132,7 +143,7 @@ export async function getFollowing(uid: string): Promise<FollowingProfileRead[]>
   if (missingIds.length > 0) {
     const usersMap = await getPublicUsersByIds(missingIds);
     usersMap.forEach((data, id) => {
-      profilesMap.set(id, buildProfile(id, data as Record<string, any>));
+      profilesMap.set(id, buildProfile(id, { ...data }));
     });
   }
 

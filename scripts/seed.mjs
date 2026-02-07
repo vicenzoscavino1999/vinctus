@@ -4,10 +4,13 @@ import admin from 'firebase-admin';
 loadEnv({ path: '.env.local' });
 loadEnv({ path: '.env' });
 
+const allowViteProjectIdFallback = process.env.ALLOW_VITE_PROJECT_ID_FOR_SEED === 'true';
 const projectId =
+  process.env.SEED_PROJECT_ID ||
   process.env.FIREBASE_PROJECT_ID ||
-  process.env.VITE_FIREBASE_PROJECT_ID ||
   process.env.GCLOUD_PROJECT ||
+  process.env.PROJECT_ID ||
+  (allowViteProjectIdFallback ? process.env.VITE_FIREBASE_PROJECT_ID : undefined) ||
   'vinctus-dev';
 
 const emulatorHost = process.env.FIREBASE_EMULATOR_HOST || '127.0.0.1';

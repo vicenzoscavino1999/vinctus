@@ -15,7 +15,7 @@ import {
   Share2,
   X,
 } from 'lucide-react';
-import { useAuth } from '@/context';
+import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
 import {
   clearConversationMute,

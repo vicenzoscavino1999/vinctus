@@ -12,6 +12,25 @@ type UploadProgress = {
   totalBytes: number;
 };
 
+const IMMUTABLE_CACHE_CONTROL = 'public,max-age=31536000,immutable';
+
+const resolveContentType = (file: File, fallback: string): string =>
+  file.type && file.type.trim().length > 0 ? file.type : fallback;
+
+const buildUploadMetadata = (file: File, fallback: string) => ({
+  contentType: resolveContentType(file, fallback),
+  cacheControl: IMMUTABLE_CACHE_CONTROL,
+});
+
+const uploadBytesResumableWithCache = (
+  storageRef: ReturnType<typeof ref>,
+  file: File,
+  fallback: string,
+) => uploadBytesResumable(storageRef, file, buildUploadMetadata(file, fallback));
+
+const uploadBytesWithCache = (storageRef: ReturnType<typeof ref>, file: File, fallback: string) =>
+  uploadBytes(storageRef, file, buildUploadMetadata(file, fallback));
+
 /**
  * Upload single image with progress tracking
  * Returns Promise with URL and storage path
@@ -26,7 +45,7 @@ export function uploadPostImage(
   return new Promise((resolve, reject) => {
     const storagePath = `posts/${userId}/${postId}/images/${index}.webp`;
     const storageRef = ref(storage, storagePath);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'image/webp');
 
     uploadTask.on(
       'state_changed',
@@ -162,7 +181,11 @@ export async function uploadPostMedia(
       new Promise<PostMediaUploadResult>((resolve, reject) => {
         const storagePath = buildPostMediaPath(item.kind, userId, postId, item.file.name);
         const storageRef = ref(storage, storagePath);
-        const uploadTask = uploadBytesResumable(storageRef, item.file);
+        const uploadTask = uploadBytesResumableWithCache(
+          storageRef,
+          item.file,
+          'application/octet-stream',
+        );
 
         uploadTask.on(
           'state_changed',
@@ -273,7 +296,7 @@ export function uploadCollectionFile(
     const safeName = sanitizeFileName(file.name);
     const storagePath = `collections/${userId}/${collectionId}/${itemId}/${safeName}`;
     const storageRef = ref(storage, storagePath);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'application/octet-stream');
 
     uploadTask.on(
       'state_changed',
@@ -321,7 +344,7 @@ export function uploadContributionFile(
     const safeName = sanitizeFileName(file.name);
     const storagePath = `contributions/${userId}/${contributionId}/${safeName}`;
     const storageRef = ref(storage, storagePath);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'application/pdf');
 
     uploadTask.on(
       'state_changed',
@@ -382,7 +405,7 @@ export async function uploadConversationImage(
   const storageName = `${Date.now()}_${safeName}`;
   const storagePath = `conversations/${conversationId}/attachments/${userId}/${messageId}/${storageName}`;
   const storageRef = ref(storage, storagePath);
-  const uploadTask = uploadBytesResumable(storageRef, file);
+  const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'image/jpeg');
 
   const url = await new Promise<string>((resolve, reject) => {
     uploadTask.on(
@@ -419,7 +442,7 @@ export async function uploadConversationImage(
     thumbPath = `conversations/${conversationId}/thumbnails/${userId}/${messageId}/${thumbStorageName}`;
     const thumbRef = ref(storage, thumbPath);
     try {
-      await uploadBytes(thumbRef, thumbFile);
+      await uploadBytesWithCache(thumbRef, thumbFile, 'image/webp');
       thumbUrl = await getDownloadURL(thumbRef);
     } catch (error) {
       console.error('Thumbnail upload failed:', error);
@@ -444,7 +467,7 @@ export function uploadConversationFile(
     const storageName = `${Date.now()}_${safeName}`;
     const storagePath = `conversations/${conversationId}/attachments/${userId}/${messageId}/${storageName}`;
     const storageRef = ref(storage, storagePath);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'application/octet-stream');
 
     uploadTask.on(
       'state_changed',
@@ -487,7 +510,7 @@ export function uploadProfilePhoto(
     const safeName = sanitizeFileName(file.name);
     const storagePath = `profiles/${userId}/avatar/${Date.now()}_${safeName}`;
     const storageRef = ref(storage, storagePath);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'image/jpeg');
 
     uploadTask.on(
       'state_changed',
@@ -530,7 +553,7 @@ export function uploadGroupIcon(
   return new Promise((resolve, reject) => {
     const storagePath = `groups/${ownerId}/${groupId}/icon/${Date.now()}.webp`;
     const storageRef = ref(storage, storagePath);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'image/webp');
 
     uploadTask.on(
       'state_changed',
@@ -575,7 +598,7 @@ export async function uploadStoryImage(
   const storageName = `${Date.now()}_${safeName}`;
   const storagePath = `stories/${userId}/${storyId}/original/${storageName}`;
   const storageRef = ref(storage, storagePath);
-  const uploadTask = uploadBytesResumable(storageRef, file);
+  const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'image/jpeg');
 
   const url = await new Promise<string>((resolve, reject) => {
     uploadTask.on(
@@ -612,7 +635,7 @@ export async function uploadStoryImage(
     thumbPath = `stories/${userId}/${storyId}/thumb/${thumbStorageName}`;
     const thumbRef = ref(storage, thumbPath);
     try {
-      await uploadBytes(thumbRef, thumbFile);
+      await uploadBytesWithCache(thumbRef, thumbFile, 'image/webp');
       thumbUrl = await getDownloadURL(thumbRef);
     } catch (error) {
       console.error('Thumbnail upload failed:', error);
@@ -636,7 +659,7 @@ export function uploadStoryVideo(
     const storageName = `${Date.now()}_${safeName}`;
     const storagePath = `stories/${userId}/${storyId}/original/${storageName}`;
     const storageRef = ref(storage, storagePath);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'video/mp4');
 
     uploadTask.on(
       'state_changed',

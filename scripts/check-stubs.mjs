@@ -6,6 +6,11 @@ const SOURCE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.d.ts']);
 const STUB_DATE_REGEX = /TODO:\s*STUB REMOVE BY:\s*(\d{4}-\d{2}-\d{2})/g;
 const TICKET_REGEX = /Ticket:\s*([A-Za-z0-9_-]+(?:-[A-Za-z0-9_-]+)*)/;
 const LOOKAHEAD_LINES = 5;
+const FORBIDDEN_LEGACY_FILES = [
+  'src/context/AuthContext.tsx',
+  'src/context/AppState.tsx',
+  'src/shared/lib/firestore.legacy.ts',
+];
 
 function isSourceFile(filePath) {
   if (filePath.endsWith('.d.ts')) return true;
@@ -56,6 +61,17 @@ async function main() {
   const files = await collectFiles(ROOT);
   const errors = [];
   const today = todayUtc();
+
+  for (const legacyFile of FORBIDDEN_LEGACY_FILES) {
+    const absolutePath = path.resolve(process.cwd(), legacyFile);
+    const exists = await fs
+      .access(absolutePath)
+      .then(() => true)
+      .catch(() => false);
+    if (exists) {
+      errors.push(`${legacyFile} forbidden legacy file exists`);
+    }
+  }
 
   for (const filePath of files) {
     const raw = await fs.readFile(filePath, 'utf8');

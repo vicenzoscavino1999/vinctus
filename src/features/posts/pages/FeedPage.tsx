@@ -11,10 +11,11 @@ import {
   startAfter,
   type DocumentSnapshot,
 } from 'firebase/firestore';
+import { trackFirestoreRead } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
 import { useLocation } from 'react-router-dom';
-import { useAuth } from '@/context';
-import { useAppState } from '@/context';
+import { useAuth } from '@/context/auth';
+import { useAppState } from '@/context/app-state';
 import { useToast } from '@/shared/ui/Toast';
 import PostCommentsModal from '@/features/posts/components/PostCommentsModal';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
@@ -56,7 +57,7 @@ type Post = {
     contentType?: string;
     size?: number;
   }[];
-  createdAt?: any;
+  createdAt?: unknown;
 };
 
 type PostSummary = {
@@ -66,18 +67,37 @@ type PostSummary = {
   title?: string | null;
   text: string;
   imageUrl: string | null;
+  likeCount: number;
+  commentCount: number;
   media: Post['media'];
-  createdAt?: any;
+  createdAt?: unknown;
 };
 
-const toDate = (value: any): Date | null => {
+const FEED_PAGE_SIZE = 12;
+const FEED_INITIAL_CACHE_TTL_MS = 30_000;
+
+type FeedInitialCacheEntry = {
+  posts: Post[];
+  lastVisible: DocumentSnapshot | null;
+  fetchedAt: number;
+};
+
+let feedInitialCache: FeedInitialCacheEntry | null = null;
+let feedInitialPromise: Promise<FeedInitialCacheEntry> | null = null;
+
+const toDate = (value: unknown): Date | null => {
   if (!value) return null;
-  if (value.toDate) return value.toDate();
+  if (typeof value === 'object' && value !== null && 'toDate' in value) {
+    const toDateCandidate = (value as { toDate?: unknown }).toDate;
+    if (typeof toDateCandidate === 'function') {
+      return toDateCandidate.call(value) as Date;
+    }
+  }
   if (value instanceof Date) return value;
   return null;
 };
 
-const formatRelativeTime = (value: any): string => {
+const formatRelativeTime = (value: unknown): string => {
   const date = toDate(value);
   if (!date) return 'Ahora';
   const diffMs = Date.now() - date.getTime();
@@ -96,6 +116,8 @@ const buildPostSummary = (post: Post): PostSummary => {
   const authorName = post.authorSnapshot?.displayName ?? post.authorName ?? 'Usuario';
   const authorPhoto = post.authorSnapshot?.photoURL ?? post.authorPhoto ?? null;
   const imageUrl = post.media?.find((item) => item.type === 'image')?.url ?? null;
+  const likeCount = readPostCounter(post, 'likeCount') ?? 0;
+  const commentCount = readPostCounter(post, 'commentCount') ?? 0;
 
   return {
     postId: post.postId,
@@ -104,6 +126,8 @@ const buildPostSummary = (post: Post): PostSummary => {
     title: post.title ?? null,
     text: displayText,
     imageUrl,
+    likeCount,
+    commentCount,
     media: post.media ?? [],
     createdAt: post.createdAt,
   };
@@ -141,23 +165,67 @@ const FeedPage = () => {
 
   // Initial load with getDocs (NO realtime to avoid pagination conflicts)
   useEffect(() => {
+    let cancelled = false;
+
     const loadInitial = async () => {
       try {
-        const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(20));
+        const now = Date.now();
+        if (feedInitialCache && now - feedInitialCache.fetchedAt <= FEED_INITIAL_CACHE_TTL_MS) {
+          if (!cancelled) {
+            setPosts(feedInitialCache.posts);
+            setLastVisible(feedInitialCache.lastVisible);
+          }
+          return;
+        }
 
-        const snap = await getDocs(q);
-        const list = snap.docs.map((d) => ({ ...(d.data() as any), postId: d.id })) as Post[];
-        const visible = list.filter((p) => !p.status || p.status === 'ready');
-        setPosts(visible);
-        setLastVisible(snap.docs[snap.docs.length - 1] ?? null);
+        if (!feedInitialPromise) {
+          feedInitialPromise = (async () => {
+            const q = query(
+              collection(db, 'posts'),
+              orderBy('createdAt', 'desc'),
+              limit(FEED_PAGE_SIZE),
+            );
+            const snap = await getDocs(q);
+            if (!snap.metadata.fromCache) {
+              trackFirestoreRead('feed.getDocs', Math.max(1, snap.size));
+            }
+            const list = snap.docs.map((d) => ({ ...(d.data() as Post), postId: d.id })) as Post[];
+            const visible = list.filter((p) => !p.status || p.status === 'ready');
+            const entry: FeedInitialCacheEntry = {
+              posts: visible,
+              lastVisible: snap.docs[snap.docs.length - 1] ?? null,
+              fetchedAt: Date.now(),
+            };
+            feedInitialCache = entry;
+            return entry;
+          })()
+            .catch((error) => {
+              feedInitialCache = null;
+              throw error;
+            })
+            .finally(() => {
+              feedInitialPromise = null;
+            });
+        }
+
+        const entry = await feedInitialPromise;
+        if (!cancelled) {
+          setPosts(entry.posts);
+          setLastVisible(entry.lastVisible);
+        }
       } catch (error) {
         console.error('Error loading posts:', error);
       } finally {
-        setLoadingInitial(false);
+        if (!cancelled) {
+          setLoadingInitial(false);
+        }
       }
     };
 
     loadInitial();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -187,8 +255,11 @@ const FeedPage = () => {
     const loadById = async () => {
       try {
         const docSnap = await getDoc(doc(db, 'posts', postFromSearch));
+        if (!docSnap.metadata.fromCache) {
+          trackFirestoreRead('feed.getDoc');
+        }
         if (!docSnap.exists()) return;
-        const data = docSnap.data() as any;
+        const data = docSnap.data() as Post;
         const post = { ...data, postId: docSnap.id } as Post;
         if (post.status && post.status !== 'ready') return;
         setActivePost(buildPostSummary(post));
@@ -210,11 +281,14 @@ const FeedPage = () => {
         collection(db, 'posts'),
         orderBy('createdAt', 'desc'),
         startAfter(lastVisible),
-        limit(20),
+        limit(FEED_PAGE_SIZE),
       );
 
       const snap = await getDocs(q2);
-      const more = snap.docs.map((d) => ({ ...(d.data() as any), postId: d.id })) as Post[];
+      if (!snap.metadata.fromCache) {
+        trackFirestoreRead('feed.getDocs', Math.max(1, snap.size));
+      }
+      const more = snap.docs.map((d) => ({ ...(d.data() as Post), postId: d.id })) as Post[];
       const moreVisible = more.filter((p) => !p.status || p.status === 'ready');
 
       // Merge without duplicates using Map
@@ -434,7 +508,13 @@ const FeedPage = () => {
           {posts
             .filter((post) => !post.authorId || !blockedUsers.has(post.authorId))
             .map((p) => {
-              const summary = buildPostSummary(p);
+              const likeCount = likeCounts[p.postId] ?? 0;
+              const commentCount = commentCounts[p.postId] ?? 0;
+              const summary = {
+                ...buildPostSummary(p),
+                likeCount,
+                commentCount,
+              };
               const displayText = summary.text;
               const titleText = summary.title?.trim() || '';
               const bodyText = displayText.trim();
@@ -445,8 +525,6 @@ const FeedPage = () => {
               const authorInitial = authorName.charAt(0).toUpperCase();
               const imageUrl = summary.imageUrl;
               const timeLabel = formatRelativeTime(p.createdAt);
-              const likeCount = likeCounts[p.postId] ?? 0;
-              const commentCount = commentCounts[p.postId] ?? 0;
               const isLiked = likedByUser[p.postId] ?? false;
               const isSaved = savedByUser[p.postId] ?? false;
               const hasVideo = (summary.media ?? []).some((item) => item.type === 'video');

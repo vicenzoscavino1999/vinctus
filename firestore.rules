@@ -20,6 +20,11 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/users/$(viewerUid)/followers/$(ownerUid));
     }
 
+    function isFriendByIndex(viewerUid, ownerUid) {
+      return exists(/databases/$(database)/documents/users/$(viewerUid)/friends/$(ownerUid))
+        || exists(/databases/$(database)/documents/users/$(ownerUid)/friends/$(viewerUid));
+    }
+
     function isFollower(viewerUid, ownerUid) {
       return exists(/databases/$(database)/documents/users/$(ownerUid)/followers/$(viewerUid));
     }
@@ -33,17 +38,9 @@ service cloud.firestore {
 
     function isAccountPrivate(uid) {
       let publicDoc = get(/databases/$(database)/documents/users_public/$(uid));
-      let publicVisibility = (publicDoc != null && publicDoc.data != null)
-        ? publicDoc.data.accountVisibility
-        : null;
-      let userDoc = get(/databases/$(database)/documents/users/$(uid));
-      let privateFromUserDoc = userDoc != null
-        && userDoc.data != null
-        && userDoc.data.settings is map
-        && userDoc.data.settings.privacy is map
-        && userDoc.data.settings.privacy.accountVisibility == 'private';
-      return publicVisibility == 'private'
-        || (publicVisibility != 'public' && privateFromUserDoc);
+      return publicDoc != null
+        && publicDoc.data != null
+        && publicDoc.data.accountVisibility == 'private';
     }
 
     function isAccountPublic(uid) {
@@ -147,6 +144,48 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
     }
 
+    function isValidFriendRequestCreate() {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'fromUid', 'toUid', 'status', 'fromUserName', 'fromUserPhoto',
+          'toUserName', 'toUserPhoto', 'createdAt', 'updatedAt'
+        ])
+        && data.fromUid == request.auth.uid
+        && data.toUid is string
+        && data.toUid.size() > 0
+        && data.toUid != request.auth.uid
+        && data.status == 'pending'
+        && (data.fromUserName == null || (data.fromUserName is string && data.fromUserName.size() > 0 && data.fromUserName.size() <= 120))
+        && (data.fromUserPhoto == null || (data.fromUserPhoto is string && data.fromUserPhoto.size() <= 600))
+        && (data.toUserName == null || (data.toUserName is string && data.toUserName.size() > 0 && data.toUserName.size() <= 120))
+        && (data.toUserPhoto == null || (data.toUserPhoto is string && data.toUserPhoto.size() <= 600))
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function isValidFriendRequestUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let prevStatus = resource.data.status;
+      let nextStatus = request.resource.data.status;
+      return changed.hasOnly(['status', 'updatedAt'])
+        && request.resource.data.fromUid == resource.data.fromUid
+        && request.resource.data.toUid == resource.data.toUid
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.fromUserName == resource.data.fromUserName
+        && request.resource.data.fromUserPhoto == resource.data.fromUserPhoto
+        && request.resource.data.toUserName == resource.data.toUserName
+        && request.resource.data.toUserPhoto == resource.data.toUserPhoto
+        && request.resource.data.updatedAt == request.time
+        && (
+          (resource.data.toUid == request.auth.uid
+            && prevStatus == 'pending'
+            && nextStatus in ['accepted', 'rejected'])
+          || (resource.data.fromUid == request.auth.uid
+            && prevStatus == 'rejected'
+            && nextStatus == 'pending')
+        );
+    }
+
     // friend_requests/{requestId}
     // Friend request system
     match /friend_requests/{requestId} {
@@ -155,21 +194,10 @@ service cloud.firestore {
         && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
       
       // Users can create requests where they are the sender
-      allow create: if isAuthenticated()
-        && request.resource.data.fromUid == request.auth.uid
-        && request.resource.data.toUid != request.auth.uid
-        && request.resource.data.keys().hasAll(['fromUid', 'toUid', 'status', 'createdAt', 'updatedAt'])
-        && request.resource.data.status == 'pending';
+      allow create: if isAuthenticated() && isValidFriendRequestCreate();
       
       // Sender can update to re-send (if rejected), receiver can accept/reject
-      allow update: if isAuthenticated()
-        && (
-          // Sender can update status back to pending (re-send after rejection)
-          (resource.data.fromUid == request.auth.uid && request.resource.data.status == 'pending')
-          ||
-          // Receiver can accept or reject
-          (resource.data.toUid == request.auth.uid && request.resource.data.status in ['accepted', 'rejected'])
-        );
+      allow update: if isAuthenticated() && isValidFriendRequestUpdate();
       
       // Sender can delete (cancel) their request
       allow delete: if isAuthenticated() && resource.data.fromUid == request.auth.uid;
@@ -178,6 +206,11 @@ service cloud.firestore {
     // follow_requests/{requestId}
     // Follow request system (private accounts)
     match /follow_requests/{requestId} {
+      // Only participants can read/list existing docs.
+      allow read: if isAuthenticated()
+        && resource != null
+        && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
+
       // Allow get for participants. If the doc doesn't exist, allow get only
       // when the requestId includes the current user's uid (incoming/outgoing check).
       allow get: if isAuthenticated()
@@ -189,9 +222,6 @@ service cloud.firestore {
             && (requestId.matches('^' + request.auth.uid + '_.*')
               || requestId.matches('.*_' + request.auth.uid + '$')))
         );
-      // Allow listing for authenticated users so they can query their own pending requests.
-      // The client still filters by toUid and status.
-      allow list: if isAuthenticated();
 
       allow create: if isAuthenticated()
         && request.resource.data.fromUid == request.auth.uid
@@ -451,8 +481,11 @@ service cloud.firestore {
       match /stories/{storyId} {
         allow read: if isAuthenticated()
           && resource.data.visibility == 'friends'
-          && (resource.data.ownerId == request.auth.uid
-            || isFriend(request.auth.uid, resource.data.ownerId));
+          && (
+            resource.data.ownerId == request.auth.uid
+            || isFriend(request.auth.uid, resource.data.ownerId)
+            || isFriendByIndex(request.auth.uid, resource.data.ownerId)
+          );
 
       allow create: if isAuthenticated() && isValidStoryCreate();
       allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
@@ -1305,6 +1338,85 @@ service cloud.firestore {
             && exists(/databases/$(database)/documents/groups/$(conv.data.groupId)/members/$(uid)))
         );
     }
+
+    function isConversationBlocked(uidA, uidB) {
+      return exists(/databases/$(database)/documents/users/$(uidA)/blockedUsers/$(uidB))
+        || exists(/databases/$(database)/documents/users/$(uidB)/blockedUsers/$(uidA));
+    }
+
+    function canStartDirectConversation(uidA, uidB) {
+      return uidA is string
+        && uidB is string
+        && uidA != uidB
+        && !isConversationBlocked(uidA, uidB)
+        && (
+          isFriendByIndex(uidA, uidB)
+          || isFollower(uidA, uidB)
+          || isFollower(uidB, uidA)
+        );
+    }
+
+    function isValidDirectConversationCreate(conversationId) {
+      let data = request.resource.data;
+      let memberIds = data.memberIds;
+      let firstUid = (memberIds is list && memberIds.size() > 0) ? memberIds[0] : null;
+      let secondUid = (memberIds is list && memberIds.size() > 1) ? memberIds[1] : null;
+      return data.keys().hasOnly(['type', 'memberIds', 'lastMessage', 'createdAt', 'updatedAt'])
+        && conversationId.matches('^dm_.*$')
+        && data.type == 'direct'
+        && memberIds is list
+        && memberIds.size() == 2
+        && firstUid is string
+        && secondUid is string
+        && firstUid != secondUid
+        && memberIds.hasAny([request.auth.uid])
+        && (
+          conversationId == 'dm_' + firstUid + '_' + secondUid
+          || conversationId == 'dm_' + secondUid + '_' + firstUid
+        )
+        && data.lastMessage == null
+        && data.createdAt == request.time
+        && data.updatedAt == request.time
+        && canStartDirectConversation(firstUid, secondUid);
+    }
+
+    function isValidGroupConversationCreate(conversationId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['type', 'groupId', 'lastMessage', 'createdAt', 'updatedAt'])
+        && data.type == 'group'
+        && data.groupId is string
+        && data.groupId.size() > 0
+        && conversationId == 'grp_' + data.groupId
+        && data.lastMessage == null
+        && data.createdAt == request.time
+        && data.updatedAt == request.time
+        && exists(/databases/$(database)/documents/groups/$(data.groupId)/members/$(request.auth.uid));
+    }
+
+    function isValidMessageCreate(messageId) {
+      let data = request.resource.data;
+      let hasText = data.text is string && data.text.size() > 0;
+      let hasAttachments = data.attachments is list && data.attachments.size() > 0;
+      return data.keys().hasOnly([
+          'senderId', 'senderName', 'senderPhotoURL', 'text', 'attachments',
+          'createdAt', 'clientCreatedAt', 'clientId', 'messageType'
+        ])
+        && data.senderId == request.auth.uid
+        && (data.senderName == null || (data.senderName is string && data.senderName.size() <= 120))
+        && (data.senderPhotoURL == null || (data.senderPhotoURL is string && data.senderPhotoURL.size() <= 600))
+        && data.text is string
+        && data.text.size() <= 4000
+        && (!data.keys().hasAny(['attachments']) || (data.attachments is list && data.attachments.size() <= 10))
+        && (hasText || hasAttachments)
+        && data.createdAt == request.time
+        && data.clientCreatedAt is int
+        && data.clientCreatedAt > 0
+        && data.clientId is string
+        && data.clientId.size() > 0
+        && data.clientId.size() <= 120
+        && messageId == data.clientId
+        && (!data.keys().hasAny(['messageType']) || data.messageType in ['text', 'media', 'system']);
+    }
     
     function isValidConversationMemberCreate(uid) {
       return request.resource.data.keys().hasAll(['uid', 'role', 'joinedAt', 'lastReadClientAt', 'lastReadAt', 'muted'])
@@ -1324,14 +1436,8 @@ service cloud.firestore {
       
       // Restrict creation (no spam conversations)
       allow create: if isAuthenticated()
-        && request.resource.data.type in ['direct', 'group']
-        && (request.resource.data.type == 'direct' 
-            ? request.resource.data.memberIds is list
-              && request.resource.data.memberIds.size() == 2
-              && request.resource.data.memberIds.hasAny([request.auth.uid])
-            : request.resource.data.type == 'group' 
-              && request.resource.data.groupId is string
-              && exists(/databases/$(database)/documents/groups/$(request.resource.data.groupId)/members/$(request.auth.uid)));
+        && (isValidDirectConversationCreate(conversationId)
+          || isValidGroupConversationCreate(conversationId));
       
       allow update: if (canAccessConversationData(resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'updatedAt']))
@@ -1361,7 +1467,7 @@ service cloud.firestore {
         allow read: if isAuthenticated() && canAccessConversation(conversationId);
         allow create: if isAuthenticated() 
           && canAccessConversation(conversationId)
-          && request.resource.data.senderId == request.auth.uid;
+          && isValidMessageCreate(messageId);
       }
       
       // Typing

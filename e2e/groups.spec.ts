@@ -1,29 +1,14 @@
 import { test, expect } from '@playwright/test';
-
-const loginWithSeedUser = async (page) => {
-  const createPostButton = page.getByLabel(/Crear publicaci/i);
-
-  await page.goto('/');
-
-  if (await createPostButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-    return;
-  }
-
-  await page.locator('input[type="email"]').fill('alice@vinctus.local');
-  await page.locator('input[type="password"]').fill('password123');
-  await page
-    .locator('form')
-    .getByRole('button', { name: /Entrar/i })
-    .click();
-  await expect(createPostButton).toBeVisible({ timeout: 15000 });
-};
+import { waitForGroupDetailReady } from './helpers/group';
+import {
+  loginWithSeedUser,
+  prepareOnboardingState,
+  waitForAuthenticatedShell,
+} from './helpers/session';
 
 test.describe('Flujo de Grupos', () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.clear();
-      localStorage.setItem('vinctus_onboarding_complete', 'true');
-    });
+    await prepareOnboardingState(page);
   });
 
   test('login con usuario seed', async ({ page }) => {
@@ -31,24 +16,37 @@ test.describe('Flujo de Grupos', () => {
     await expect(page.getByLabel(/Crear publicaci/i)).toBeVisible();
   });
 
-  test('toggle unirse/salir de grupo funciona', async ({ page }) => {
-    await loginWithSeedUser(page);
+  test('owner abre grupo y chat', async ({ page }) => {
+    await loginWithSeedUser(page, 'alice');
+    await waitForAuthenticatedShell(page);
 
     await page.goto('/group/1');
+    await waitForGroupDetailReady(page, /Mecanica Cuantica/i, 30000);
+    await expect(page.getByRole('heading', { name: /Mecanica Cuantica/i })).toBeVisible();
 
-    const joinButton = page.locator('button').filter({ hasText: /Unirme al grupo/i });
-    const joinedButton = page.locator('button').filter({ hasText: /Unido/i });
-    await expect(joinButton.or(joinedButton)).toBeVisible({ timeout: 10000 });
+    const statusButton = page.locator('button').filter({ hasText: /Tu grupo|Unido|Pendiente/i });
+    await expect(statusButton).toBeVisible({ timeout: 10000 });
 
-    if (await joinButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await joinButton.click();
-      await expect(joinedButton).toBeVisible({ timeout: 3000 });
+    await page.getByRole('button', { name: /Chat/i }).click();
+    await page.waitForURL(/\/messages\?conversation=grp_1/);
+    await expect(page.getByPlaceholder(/Escribe un mensaje/i)).toBeVisible({ timeout: 10000 });
+  });
 
-      await joinedButton.click();
-      await expect(joinButton).toBeVisible({ timeout: 3000 });
-    } else if (await joinedButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await joinedButton.click();
-      await expect(joinButton).toBeVisible({ timeout: 3000 });
-    }
+  test('miembro puede unirse y salir del grupo', async ({ page }) => {
+    await loginWithSeedUser(page, 'bob');
+    await waitForAuthenticatedShell(page);
+    await page.goto('/group/1');
+    await waitForGroupDetailReady(page, /Mecanica Cuantica/i, 30000);
+
+    const joinButton = page.locator('button').filter({ hasText: /Unirme al grupo|Solicitar/i });
+    await expect(joinButton).toBeVisible({ timeout: 10000 });
+    await joinButton.click();
+
+    const joinedButton = page.locator('button').filter({ hasText: /Unido|Pendiente/i });
+    await expect(joinedButton).toBeVisible({ timeout: 10000 });
+
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.getByRole('button', { name: /^Salir$/ }).click();
+    await expect(joinButton).toBeVisible({ timeout: 10000 });
   });
 });

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Image as ImageIcon, Loader2, Film, FileText } from 'lucide-react';
 
-import { useAuth } from '@/context';
+import { useAuth } from '@/context/auth';
 import { getNewPostId } from '@/features/posts/api';
 import { createPostUploading, updatePost } from '@/features/posts/api';
 import { compressToWebp, validateImage } from '@/shared/lib/compression';
@@ -52,6 +52,13 @@ const formatBytes = (value: number): string => {
     unitIndex += 1;
   }
   return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+};
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return fallback;
 };
 
 const CreatePostModal = ({
@@ -145,8 +152,8 @@ const CreatePostModal = ({
           previewUrl: URL.createObjectURL(compressedFile),
         });
       }
-    } catch (err: any) {
-      setError(err.message || 'Error procesando imagenes');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Error procesando imagenes'));
     }
   };
 
@@ -292,9 +299,9 @@ const CreatePostModal = ({
       if (redirectTo) {
         navigate(redirectTo);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error creating post:', err);
-      setError(err.message || 'Error al publicar');
+      setError(getErrorMessage(err, 'Error al publicar'));
 
       if (created) {
         await updatePost(postId, { status: 'failed' }).catch(() => {});

@@ -1,0 +1,236 @@
+{
+  "capturedAt": "2026-02-07T02:03:19.056Z",
+  "projectId": "vinctus-dev",
+  "baseUrl": "http://127.0.0.1:5173",
+  "dataset": {
+    "extraPosts": 120,
+    "extraDirectConversations": 80
+  },
+  "flows": {
+    "discover": {
+      "label": "discover_critical",
+      "route": "/discover",
+      "latencyMs": 2154,
+      "firestore": {
+        "reads": 10,
+        "writes": 1,
+        "deletes": 0,
+        "listenersActive": 0,
+        "listenersPeak": 0,
+        "listenerStarts": 0,
+        "listenerStops": 0,
+        "calls": 0
+      },
+      "listenersActiveAfterLeave": 0,
+      "network": {
+        "totalTransferBytes": 27000,
+        "storageEgressBytes": 0,
+        "functionsInvocations": 0,
+        "topHosts": [
+          {
+            "host": "127.0.0.1:5173",
+            "bytes": 27000
+          },
+          {
+            "host": "fonts.googleapis.com",
+            "bytes": 0
+          },
+          {
+            "host": "fonts.gstatic.com",
+            "bytes": 0
+          },
+          {
+            "host": "127.0.0.1:9099",
+            "bytes": 0
+          },
+          {
+            "host": "127.0.0.1:8080",
+            "bytes": 0
+          }
+        ],
+        "sampleCount": 162
+      }
+    },
+    "feed": {
+      "label": "feed_3_pages",
+      "route": "/feed",
+      "latencyMs": 4145,
+      "pagesLoaded": 3,
+      "visiblePosts": 60,
+      "readPerVisiblePost": 0.15,
+      "firestore": {
+        "reads": 9,
+        "writes": 1,
+        "deletes": 0,
+        "listenersActive": 0,
+        "listenersPeak": 0,
+        "listenerStarts": 0,
+        "listenerStops": 0,
+        "calls": 0
+      },
+      "listenersActiveAfterLeave": 0,
+      "listenersActiveAfterRoundTrip": 0,
+      "network": {
+        "totalTransferBytes": 191238,
+        "storageEgressBytes": 0,
+        "functionsInvocations": 0,
+        "topHosts": [
+          {
+            "host": "127.0.0.1:5173",
+            "bytes": 191238
+          },
+          {
+            "host": "fonts.googleapis.com",
+            "bytes": 0
+          },
+          {
+            "host": "fonts.gstatic.com",
+            "bytes": 0
+          },
+          {
+            "host": "127.0.0.1:9099",
+            "bytes": 0
+          },
+          {
+            "host": "127.0.0.1:8080",
+            "bytes": 0
+          }
+        ],
+        "sampleCount": 148
+      }
+    },
+    "post": {
+      "label": "post_open",
+      "route": "/post/post_1",
+      "latencyMs": 2106,
+      "firestore": {
+        "reads": 9,
+        "writes": 1,
+        "deletes": 0,
+        "listenersActive": 0,
+        "listenersPeak": 0,
+        "listenerStarts": 0,
+        "listenerStops": 0,
+        "calls": 0
+      },
+      "listenersActiveAfterLeave": 0,
+      "network": {
+        "totalTransferBytes": 83534,
+        "storageEgressBytes": 0,
+        "functionsInvocations": 0,
+        "topHosts": [
+          {
+            "host": "127.0.0.1:5173",
+            "bytes": 83534
+          },
+          {
+            "host": "fonts.googleapis.com",
+            "bytes": 0
+          },
+          {
+            "host": "fonts.gstatic.com",
+            "bytes": 0
+          },
+          {
+            "host": "127.0.0.1:9099",
+            "bytes": 0
+          },
+          {
+            "host": "127.0.0.1:8080",
+            "bytes": 0
+          }
+        ],
+        "sampleCount": 119
+      }
+    },
+    "chat": {
+      "label": "chat_open",
+      "route": "/messages",
+      "latencyMs": 2674,
+      "firestore": {
+        "reads": 803,
+        "writes": 1,
+        "deletes": 0,
+        "listenersActive": 85,
+        "listenersPeak": 86,
+        "listenerStarts": 89,
+        "listenerStops": 4,
+        "calls": 0
+      },
+      "listenersActiveAfterLeave": 0,
+      "listenersActiveAfterRoundTrip": 0,
+      "network": {
+        "totalTransferBytes": 479304,
+        "storageEgressBytes": 0,
+        "functionsInvocations": 0,
+        "topHosts": [
+          {
+            "host": "127.0.0.1:5173",
+            "bytes": 479304
+          },
+          {
+            "host": "fonts.googleapis.com",
+            "bytes": 0
+          },
+          {
+            "host": "fonts.gstatic.com",
+            "bytes": 0
+          },
+          {
+            "host": "127.0.0.1:9099",
+            "bytes": 0
+          },
+          {
+            "host": "127.0.0.1:8080",
+            "bytes": 0
+          }
+        ],
+        "sampleCount": 173
+      }
+    },
+    "profile": {
+      "label": "profile_critical",
+      "route": "/profile",
+      "latencyMs": 2100,
+      "firestore": {
+        "reads": 36,
+        "writes": 1,
+        "deletes": 0,
+        "listenersActive": 1,
+        "listenersPeak": 1,
+        "listenerStarts": 2,
+        "listenerStops": 1,
+        "calls": 0
+      },
+      "listenersActiveAfterLeave": 0,
+      "network": {
+        "totalTransferBytes": 439617,
+        "storageEgressBytes": 0,
+        "functionsInvocations": 0,
+        "topHosts": [
+          {
+            "host": "127.0.0.1:5173",
+            "bytes": 439617
+          },
+          {
+            "host": "fonts.googleapis.com",
+            "bytes": 0
+          },
+          {
+            "host": "fonts.gstatic.com",
+            "bytes": 0
+          },
+          {
+            "host": "127.0.0.1:9099",
+            "bytes": 0
+          },
+          {
+            "host": "127.0.0.1:8080",
+            "bytes": 0
+          }
+        ],
+        "sampleCount": 159
+      }
+    }
+  }
+}

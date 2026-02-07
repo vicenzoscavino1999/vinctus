@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Lightbulb, HelpCircle, Mail, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/context';
+import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
 import {
   createSupportTicket,

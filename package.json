@@ -14,15 +14,31 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:api": "vitest run --config vitest.api.config.ts",
+    "test:coverage": "vitest run --coverage",
     "test:rules:run": "vitest run --config vitest.rules.config.ts",
     "test:rules": "firebase emulators:exec --project vinctus-dev --only auth,firestore,storage \"npm run test:rules:run\"",
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test --grep @smoke",
+    "test:e2e:local-ci": "node scripts/run-e2e-local-ci.mjs",
+    "test:e2e:local-ci:smoke": "node scripts/run-e2e-local-ci.mjs --smoke",
     "test:e2e:ui": "playwright test --ui",
+    "lhci": "npm run build && node scripts/run-lhci.mjs",
+    "lhci:strict": "npm run build && node scripts/run-lhci.mjs --strict",
+    "lhci:collect": "lhci collect --config=.lighthouserc.cjs",
+    "lhci:assert": "lhci assert --config=.lighthouserc.cjs",
+    "lhci:upload": "lhci upload --config=.lighthouserc.cjs",
+    "lhci:install-browser": "playwright install chromium",
+    "lhci:emulators": "node scripts/run-lhci-emulators.mjs",
     "typecheck": "tsc --noEmit",
-    "ci": "npm run lint && npm run build && npm run test:run",
+    "validate": "npm run typecheck && npm run lint && npm run test:coverage && npm run test:api && npm run build",
+    "ci": "npm run validate",
     "emulators": "firebase emulators:start --only auth,firestore,storage,functions",
     "seed": "node scripts/seed.mjs",
+    "metrics:phase6:seed": "node scripts/seed-phase6-metrics.mjs",
+    "metrics:phase6:collect": "node scripts/collect-phase6-metrics.mjs",
+    "metrics:phase6:compare": "node scripts/compare-phase6-metrics.mjs",
+    "metrics:phase6:gate": "node scripts/check-phase6-gates.mjs",
     "dev:local": "node scripts/dev-local.mjs",
     "functions:install": "npm --prefix functions install",
     "functions:build": "npm --prefix functions run build",
@@ -40,11 +56,13 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.11.0",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@firebase/rules-unit-testing": "^5.0.0",
+    "@lhci/cli": "^0.15.1",
     "@playwright/test": "^1.57.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
@@ -55,6 +73,7 @@
     "@typescript-eslint/parser": "^8.0.0",
     "@vercel/node": "^5.5.28",
     "@vitejs/plugin-react": "^4.3.3",
+    "@vitest/coverage-v8": "^4.0.16",
     "autoprefixer": "^10.4.20",
     "dotenv": "^16.4.5",
     "eslint": "^9.39.1",
@@ -81,5 +100,8 @@
   },
   "simple-git-hooks": {
     "pre-commit": "npx lint-staged"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "4.55.1"
   }
 }

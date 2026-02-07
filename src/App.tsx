@@ -1,11 +1,10 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { BrowserRouter } from 'react-router-dom';
 
 import LoginScreen from '@/features/auth/components/LoginScreen';
-import { AppStateProvider, AuthProvider, useAuth } from '@/app/providers';
+import PasswordResetActionScreen from '@/features/auth/components/PasswordResetActionScreen';
+import { AuthProvider, useAuth } from '@/app/providers/AuthContext';
 import { initTheme } from '@/shared/lib/theme';
 import PageLoader from '@/shared/ui/PageLoader';
-import { ToastProvider } from '@/shared/ui/Toast';
 
 const getStoredItem = (key: string): string | null => {
   if (typeof window === 'undefined') return null;
@@ -30,17 +29,49 @@ const setStoredItem = (key: string, value: string): void => {
   }
 };
 
+type PasswordResetAction = {
+  oobCode: string;
+  continueUrl: string | null;
+};
+
+const getPasswordResetAction = (): PasswordResetAction | null => {
+  if (typeof window === 'undefined') return null;
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const mode = searchParams.get('mode');
+  const oobCode = searchParams.get('oobCode');
+
+  if (mode !== 'resetPassword' || !oobCode) {
+    return null;
+  }
+
+  return {
+    oobCode,
+    continueUrl: searchParams.get('continueUrl'),
+  };
+};
+
 const OnboardingFlow = lazy(() => import('@/features/auth/components/OnboardingFlow'));
-const AppLayout = lazy(() => import('@/app/routes/AppLayout'));
+const AuthenticatedAppShell = lazy(() => import('@/app/routes/AuthenticatedAppShell'));
 
 // Inner app that uses auth context
 function AppContent() {
   const { user, loading } = useAuth();
+  const passwordResetAction = getPasswordResetAction();
 
   useEffect(() => {
     const cleanup = initTheme();
     return () => cleanup();
   }, []);
+
+  if (passwordResetAction) {
+    return (
+      <PasswordResetActionScreen
+        oobCode={passwordResetAction.oobCode}
+        continueUrl={passwordResetAction.continueUrl}
+      />
+    );
+  }
 
   // Check if onboarding is complete
   const onboardingComplete = getStoredItem('vinctus_onboarding_complete') === 'true';
@@ -71,13 +102,7 @@ function AppContent() {
 
   return (
     <Suspense fallback={<PageLoader />}>
-      <BrowserRouter>
-        <AppStateProvider>
-          <ToastProvider>
-            <AppLayout />
-          </ToastProvider>
-        </AppStateProvider>
-      </BrowserRouter>
+      <AuthenticatedAppShell />
     </Suspense>
   );
 }

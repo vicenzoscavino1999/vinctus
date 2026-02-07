@@ -3,8 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, BookOpen, ArrowRight, Filter, Users } from 'lucide-react';
 import SearchFilters from '@/features/discover/components/SearchFilters';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
-import { useAppState } from '@/context';
-import { useAuth } from '@/context';
+import { useAppState } from '@/context/app-state';
+import { useAuth } from '@/context/auth';
 import { CATEGORIES, PUBLICATIONS } from '@/shared/constants';
 import { useToast } from '@/shared/ui/Toast';
 import {

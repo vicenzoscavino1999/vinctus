@@ -11,13 +11,11 @@ import {
   Share2,
   User,
 } from 'lucide-react';
-import { useAuth } from '@/context';
+import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
 import PostCommentsModal from '@/features/posts/components/PostCommentsModal';
 import {
   getPost,
-  getPostCommentCount,
-  getPostLikeCount,
   isPostLiked,
   isPostSaved,
   likePostWithSync,
@@ -104,6 +102,8 @@ const PostDetailPage = () => {
           return;
         }
         setPost(data);
+        setLikeCount(typeof data.likeCount === 'number' ? Math.max(0, data.likeCount) : 0);
+        setCommentCount(typeof data.commentCount === 'number' ? Math.max(0, data.commentCount) : 0);
       } catch (loadError) {
         if (!active) return;
         console.error('Error loading post:', loadError);
@@ -119,34 +119,6 @@ const PostDetailPage = () => {
       active = false;
     };
   }, [postId]);
-
-  useEffect(() => {
-    let active = true;
-    if (!postId || !post)
-      return () => {
-        active = false;
-      };
-
-    const loadMetrics = async () => {
-      try {
-        const [likes, comments] = await Promise.all([
-          getPostLikeCount(postId),
-          getPostCommentCount(postId),
-        ]);
-        if (!active) return;
-        setLikeCount(likes);
-        setCommentCount(comments);
-      } catch (metricsError) {
-        console.error('Error loading post metrics:', metricsError);
-      }
-    };
-
-    void loadMetrics();
-
-    return () => {
-      active = false;
-    };
-  }, [postId, post]);
 
   useEffect(() => {
     let active = true;
@@ -199,10 +171,12 @@ const PostDetailPage = () => {
       title: post.title ?? null,
       text: post.content ?? '',
       imageUrl: primaryImage?.url ?? null,
+      likeCount,
+      commentCount,
       media,
       createdAt: post.createdAt,
     };
-  }, [post, postId, primaryImage, media]);
+  }, [post, postId, primaryImage, media, likeCount, commentCount]);
 
   const handleLike = async () => {
     if (!postId) return;
@@ -419,14 +393,16 @@ const PostDetailPage = () => {
         isOpen={commentsOpen}
         post={commentsSummary}
         onClose={() => setCommentsOpen(false)}
-        onCommentAdded={async () => {
-          if (!postId) return;
-          try {
-            const total = await getPostCommentCount(postId);
-            setCommentCount(total);
-          } catch (error) {
-            console.error('Error updating comment count:', error);
-          }
+        onCommentAdded={() => {
+          setCommentCount((prev) => prev + 1);
+          setPost((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  commentCount: Math.max(0, (prev.commentCount || 0) + 1),
+                }
+              : prev,
+          );
         }}
       />
     </div>

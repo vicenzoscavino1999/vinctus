@@ -10,9 +10,23 @@ import {
 import type { ToastContextType } from '../types';
 
 type ShowToastFn = ToastContextType['showToast'];
+type LastFmFallbackTrack = {
+  id: number;
+  title: string;
+  artist: string;
+  type: string;
+  link: string;
+};
+type ApiContentItem =
+  | Awaited<ReturnType<typeof fetchArxivPapers>>[number]
+  | Awaited<ReturnType<typeof fetchWikipediaArticles>>[number]
+  | Awaited<ReturnType<typeof fetchHackerNews>>[number]
+  | Awaited<ReturnType<typeof fetchBooks>>[number]
+  | Awaited<ReturnType<typeof fetchNatureObservations>>[number]
+  | LastFmFallbackTrack;
 
 interface UseApiContentReturn {
-  data: any[];
+  data: ApiContentItem[];
   loading: boolean;
   error: string | null;
 }
@@ -25,7 +39,7 @@ export function useApiContent(
   limit: number = 8,
   showToast: ShowToastFn | null = null,
 ): UseApiContentReturn {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<ApiContentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +51,7 @@ export function useApiContent(
       setError(null);
 
       try {
-        let result: any[] = [];
+        let result: ApiContentItem[] = [];
 
         switch (apiSource) {
           case 'arxiv':

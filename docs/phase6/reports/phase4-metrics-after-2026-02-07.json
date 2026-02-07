@@ -1,0 +1,76 @@
+{
+  "capturedAt": "2026-02-07T13:59:22.251Z",
+  "feed": {
+    "open": {
+      "reads": 0,
+      "writes": 0,
+      "calls": 0,
+      "listenersActive": 0,
+      "listenersPeak": 0,
+      "listenerStarts": 0,
+      "listenerStops": 0
+    },
+    "listenersActiveAfterLeave": 0
+  },
+  "chat": {
+    "open": {
+      "reads": 3,
+      "writes": 0,
+      "calls": 0,
+      "listenersActive": 4,
+      "listenersPeak": 4,
+      "listenerStarts": 4,
+      "listenerStops": 0
+    },
+    "listenersActiveAfterLeave": 0
+  },
+  "createPost": {
+    "reads": 0,
+    "writes": 0,
+    "calls": 0,
+    "listenersActive": 0,
+    "listenersPeak": 0,
+    "listenerStarts": 0,
+    "listenerStops": 0
+  },
+  "totals": {
+    "feedOpen": {
+      "reads": 1,
+      "writes": 0,
+      "calls": 0,
+      "listenerStarts": 0,
+      "listenerStops": 0,
+      "listenersActive": 0,
+      "listenersPeak": 0,
+      "bySource": {
+        "auth.ensureUserProfile.getUser": 1
+      }
+    },
+    "chatOpen": {
+      "reads": 4,
+      "writes": 0,
+      "calls": 0,
+      "listenerStarts": 7,
+      "listenerStops": 3,
+      "listenersActive": 4,
+      "listenersPeak": 4,
+      "bySource": {
+        "auth.ensureUserProfile.getUser": 1,
+        "firestore.onSnapshot": 12,
+        "firestore.getDoc": 1
+      }
+    },
+    "createPost": {
+      "reads": 1,
+      "writes": 0,
+      "calls": 0,
+      "listenerStarts": 0,
+      "listenerStops": 0,
+      "listenersActive": 0,
+      "listenersPeak": 0,
+      "bySource": {
+        "auth.ensureUserProfile.getUser": 1
+      }
+    }
+  }
+}

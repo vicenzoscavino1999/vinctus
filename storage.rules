@@ -10,6 +10,39 @@ service firebase.storage {
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
+
+    function isConversationMember(conversationId) {
+      return isAuthenticated()
+        && firestore.exists(
+          /databases/(default)/documents/conversations/$(conversationId)/members/$(request.auth.uid)
+        );
+    }
+
+    function isMutualFollower(viewerUid, ownerUid) {
+      return firestore.exists(/databases/(default)/documents/users/$(ownerUid)/followers/$(viewerUid))
+        && firestore.exists(/databases/(default)/documents/users/$(viewerUid)/followers/$(ownerUid));
+    }
+
+    function isFriendByIndex(viewerUid, ownerUid) {
+      return firestore.exists(/databases/(default)/documents/users/$(viewerUid)/friends/$(ownerUid))
+        || firestore.exists(/databases/(default)/documents/users/$(ownerUid)/friends/$(viewerUid));
+    }
+
+    function canReadStoryMedia(userId, storyId) {
+      return isAuthenticated()
+        && (
+          isOwner(userId)
+          || (
+            firestore.exists(/databases/(default)/documents/stories/$(storyId))
+            && firestore.get(/databases/(default)/documents/stories/$(storyId)).data.ownerId == userId
+            && firestore.get(/databases/(default)/documents/stories/$(storyId)).data.visibility == 'friends'
+            && (
+              isMutualFollower(request.auth.uid, userId)
+              || isFriendByIndex(request.auth.uid, userId)
+            )
+          )
+        );
+    }
     
     // Strict image type validation
     function isValidImageType() {
@@ -161,7 +194,7 @@ service firebase.storage {
 
     // Story media: stories/{userId}/{storyId}/original/{filename}
     match /stories/{userId}/{storyId}/original/{filename} {
-      allow read: if isAuthenticated();
+      allow read: if canReadStoryMedia(userId, storyId);
 
       allow create: if isAuthenticated()
         && isOwner(userId)
@@ -177,7 +210,7 @@ service firebase.storage {
 
     // Story thumbnails: stories/{userId}/{storyId}/thumb/{filename}
     match /stories/{userId}/{storyId}/thumb/{filename} {
-      allow read: if isAuthenticated();
+      allow read: if canReadStoryMedia(userId, storyId);
 
       allow create: if isAuthenticated()
         && isOwner(userId)
@@ -191,31 +224,37 @@ service firebase.storage {
 
     // Conversation attachments: conversations/{conversationId}/attachments/{userId}/{messageId}/{filename}
     match /conversations/{conversationId}/attachments/{userId}/{messageId}/{filename} {
-      allow read: if isAuthenticated();
+      allow read: if isConversationMember(conversationId);
 
       allow create: if isAuthenticated()
         && isOwner(userId)
+        && isConversationMember(conversationId)
         && isNewFile()
         && (
           (isValidImageType() && isUnderImageSizeLimit())
           || (isValidChatFileType() && isUnderCollectionFileSizeLimit())
         );
 
-      allow delete: if isAuthenticated() && isOwner(userId);
+      allow delete: if isAuthenticated()
+        && isOwner(userId)
+        && isConversationMember(conversationId);
       allow update: if false;
     }
 
     // Conversation thumbnails: conversations/{conversationId}/thumbnails/{userId}/{messageId}/{filename}
     match /conversations/{conversationId}/thumbnails/{userId}/{messageId}/{filename} {
-      allow read: if isAuthenticated();
+      allow read: if isConversationMember(conversationId);
 
       allow create: if isAuthenticated()
         && isOwner(userId)
+        && isConversationMember(conversationId)
         && isNewFile()
         && isValidImageType()
         && isUnderImageSizeLimit();
 
-      allow delete: if isAuthenticated() && isOwner(userId);
+      allow delete: if isAuthenticated()
+        && isOwner(userId)
+        && isConversationMember(conversationId);
       allow update: if false;
     }
 

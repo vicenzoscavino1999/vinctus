@@ -227,7 +227,7 @@ export const subscribeToUserMemberships = (
 export const subscribeToUserDirectConversations = (
   uid: string,
   onUpdate: (conversationIds: string[]) => void,
-  limitCount: number = 200,
+  limitCount: number = SMALL_LIST_LIMIT,
   onError?: (error: unknown) => void,
 ): Unsubscribe => {
   const q = query(
@@ -639,7 +639,7 @@ export const subscribeToConversations = (
       nextIds.forEach((conversationId) => directConversationIds.add(conversationId));
       emit();
     },
-    200,
+    SMALL_LIST_LIMIT,
     handleError,
   );
 
@@ -666,7 +666,7 @@ export const subscribeToConversations = (
       nextIds.forEach((conversationId) => groupConversationIds.add(conversationId));
       emit();
     },
-    200,
+    SMALL_LIST_LIMIT,
   );
 
   return () => {

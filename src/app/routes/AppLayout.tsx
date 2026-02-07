@@ -240,8 +240,23 @@ const AppLayout = () => {
       return;
     }
 
-    if (pathname === '/feed' || pathname.startsWith('/post/')) {
+    if (pathname === '/feed') {
       setMetricsFlow('feed');
+      return;
+    }
+
+    if (pathname.startsWith('/post/')) {
+      setMetricsFlow('post');
+      return;
+    }
+
+    if (pathname === '/' || pathname === '/discover' || pathname.startsWith('/category')) {
+      setMetricsFlow('discover');
+      return;
+    }
+
+    if (pathname === '/profile' || pathname.startsWith('/user/')) {
+      setMetricsFlow('profile');
       return;
     }
 

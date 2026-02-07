@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ChevronLeft, Heart, Loader2, MessageCircle, User, FileText } from 'lucide-react';
 
-import { useAuth } from '@/context';
+import { useAuth } from '@/context/auth';
 import {
   addPostComment,
-  getPostCommentCount,
   getPostComments,
-  getPostLikeCount,
   type PaginatedResult,
   type PostCommentRead,
 } from '@/features/posts/api';
@@ -19,6 +17,8 @@ type PostSummary = {
   title?: string | null;
   text: string;
   imageUrl: string | null;
+  likeCount?: number;
+  commentCount?: number;
   media?: {
     type: 'image' | 'video' | 'file';
     url: string;
@@ -99,23 +99,25 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
         } else {
           setLoading(true);
         }
-        const [data, total, likes] = await Promise.all([
-          getPostComments(
-            post.postId,
-            COMMENTS_PAGE_SIZE,
-            loadMore ? (cursor ?? undefined) : undefined,
-          ),
-          loadMore ? Promise.resolve(null) : getPostCommentCount(post.postId),
-          loadMore ? Promise.resolve(null) : getPostLikeCount(post.postId),
-        ]);
+        const data = await getPostComments(
+          post.postId,
+          COMMENTS_PAGE_SIZE,
+          loadMore ? (cursor ?? undefined) : undefined,
+        );
         setComments((prev) => (loadMore ? [...prev, ...data.items] : data.items));
         setCommentsCursor(data.lastDoc);
         setHasMore(data.hasMore);
-        if (!loadMore && total !== null) {
-          setCommentTotal(total);
-        }
-        if (!loadMore && likes !== null) {
-          setLikeTotal(likes);
+        if (!loadMore) {
+          const embeddedCommentCount =
+            typeof post.commentCount === 'number' && Number.isFinite(post.commentCount)
+              ? Math.max(0, post.commentCount)
+              : null;
+          const embeddedLikeCount =
+            typeof post.likeCount === 'number' && Number.isFinite(post.likeCount)
+              ? Math.max(0, post.likeCount)
+              : null;
+          setCommentTotal(embeddedCommentCount);
+          setLikeTotal(embeddedLikeCount);
         }
       } catch (loadError) {
         console.error('Error loading comments:', loadError);
@@ -133,8 +135,16 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
     setComments([]);
     setCommentsCursor(null);
     setHasMore(false);
-    setCommentTotal(null);
-    setLikeTotal(null);
+    setCommentTotal(
+      typeof post.commentCount === 'number' && Number.isFinite(post.commentCount)
+        ? Math.max(0, post.commentCount)
+        : null,
+    );
+    setLikeTotal(
+      typeof post.likeCount === 'number' && Number.isFinite(post.likeCount)
+        ? Math.max(0, post.likeCount)
+        : null,
+    );
     setIsComposerOpen(false);
     loadComments();
     setMessage('');
@@ -169,6 +179,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
       );
       setMessage('');
       showToast('Comentario enviado', 'success');
+      setCommentTotal((prev) => (prev === null ? comments.length + 1 : prev + 1));
       onCommentAdded(post.postId);
       await loadComments(false);
       setIsComposerOpen(false);

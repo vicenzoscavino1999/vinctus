@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
-import { useAuth } from '@/context';
+import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
 import { getFriendIds, getStoriesForOwners, type StoryRead } from '@/features/posts/api';
 import StoryComposerModal from '@/features/posts/components/StoryComposerModal';

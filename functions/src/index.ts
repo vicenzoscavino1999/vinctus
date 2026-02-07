@@ -13,6 +13,7 @@
 
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -151,12 +152,12 @@ async function deduplicatedIncrement(
 
     // Mark as processed and increment
     tx.create(dedupRef, {
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       processedAt: new Date().toISOString(),
     });
     tx.update(docRef, {
-      [field]: admin.firestore.FieldValue.increment(delta),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      [field]: FieldValue.increment(delta),
+      updatedAt: FieldValue.serverTimestamp(),
     });
   });
 }
@@ -206,12 +207,12 @@ async function deduplicatedDecrement(
 
     // Mark as processed and decrement
     tx.create(dedupRef, {
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       processedAt: new Date().toISOString(),
     });
     tx.update(docRef, {
       [field]: currentValue - 1,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
   });
 }
@@ -276,7 +277,7 @@ async function handlePostLikeChange(eventId: string, postId: string, delta: numb
     const karmaUpdates: Record<string, unknown> = {
       karmaGlobal: nextKarma,
       reputation: nextReputation,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     };
 
     if (categoryId) {
@@ -291,14 +292,14 @@ async function handlePostLikeChange(eventId: string, postId: string, delta: numb
     }
 
     tx.create(dedupRef, {
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       processedAt: new Date().toISOString(),
     });
 
     tx.update(postRef, {
       likesCount: nextLikes,
       likeCount: nextLikes,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
 
     tx.set(userRef, karmaUpdates, { merge: true });
@@ -331,7 +332,7 @@ async function deduplicatedUserCounterUpdate(
     const userSnap = await tx.get(userRef);
     if (!userSnap.exists) {
       tx.create(dedupRef, {
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
         processedAt: new Date().toISOString(),
       });
       functions.logger.warn('User document missing for counter update', { userId, field });
@@ -342,7 +343,7 @@ async function deduplicatedUserCounterUpdate(
     const nextValue = Math.max(0, currentValue + delta);
 
     tx.create(dedupRef, {
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       processedAt: new Date().toISOString(),
     });
     tx.set(userRef, { [field]: nextValue }, { merge: true });
@@ -405,7 +406,7 @@ export const onUserFollowerCreated = functions.firestore
           postId: null,
           postSnippet: null,
           commentText: null,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
           read: false,
         },
         { merge: true },
@@ -508,14 +509,14 @@ export const onFollowRequestUpdated = functions.firestore
         }
 
         tx.create(dedupRef, {
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
           processedAt: new Date().toISOString(),
         });
         tx.set(
           followerRef,
           {
             uid: fromUid,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: FieldValue.serverTimestamp(),
           },
           { merge: true },
         );
@@ -523,7 +524,7 @@ export const onFollowRequestUpdated = functions.firestore
           followingRef,
           {
             uid: toUid,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: FieldValue.serverTimestamp(),
           },
           { merge: true },
         );
@@ -626,14 +627,15 @@ async function ensureGroupConversationForMember(groupId: string, uid: string): P
   const memberRef = db.doc(`conversations/${conversationId}/members/${uid}`);
 
   await db.runTransaction(async (tx) => {
-    const convSnap = await tx.get(convRef);
+    const [convSnap, memberSnap] = await Promise.all([tx.get(convRef), tx.get(memberRef)]);
+
     if (!convSnap.exists) {
       tx.create(convRef, {
         type: 'group',
         groupId,
         lastMessage: null,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       });
     } else {
       const data = convSnap.data() || {};
@@ -645,19 +647,18 @@ async function ensureGroupConversationForMember(groupId: string, uid: string): P
         updates.groupId = groupId;
       }
       if (Object.keys(updates).length > 0) {
-        updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+        updates.updatedAt = FieldValue.serverTimestamp();
         tx.set(convRef, updates, { merge: true });
       }
     }
 
-    const memberSnap = await tx.get(memberRef);
     if (!memberSnap.exists) {
       tx.create(memberRef, {
         uid,
         role: 'member',
-        joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+        joinedAt: FieldValue.serverTimestamp(),
         lastReadClientAt: Date.now(),
-        lastReadAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastReadAt: FieldValue.serverTimestamp(),
         muted: false,
       });
     }
@@ -1022,7 +1023,7 @@ export const onUserPublicProfileUpdated = functions.firestore
         batch.update(doc.ref, {
           senderName,
           senderPhotoURL,
-          senderUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          senderUpdatedAt: FieldValue.serverTimestamp(),
         });
       });
 
@@ -1066,11 +1067,11 @@ export const onFriendRequestWrite = functions.firestore
       if (isAccepted) {
         const payload = {
           uid: toUid,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
         };
         const reversePayload = {
           uid: fromUid,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
         };
         await Promise.all([
           fromRef.set(payload, { merge: true }),
@@ -1155,7 +1156,7 @@ export const onDirectConversationWrite = functions.firestore
       return;
     }
 
-    const updatedAt = after.updatedAt ?? admin.firestore.FieldValue.serverTimestamp();
+    const updatedAt = after.updatedAt ?? FieldValue.serverTimestamp();
     const [firstUid, secondUid] = memberIds;
 
     const [firstBlockedSnap, secondBlockedSnap] = await Promise.all([

@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Loader2, X } from 'lucide-react';
 
-import { useAuth } from '@/context';
+import { useAuth } from '@/context/auth';
 import { sendCollaborationRequest, type CollaborationRead } from '@/features/collaborations/api';
 import { useToast } from '@/shared/ui/Toast';
 

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import PostCard from '@/features/posts/components/PostCard';
-import { AppStateProvider } from '@/context';
+import { AppStateProvider } from '@/context/app-state';
 
 // Mock useAuth to return null user (anonymous)
 vi.mock('@/app/providers/AuthContext', async () => {
