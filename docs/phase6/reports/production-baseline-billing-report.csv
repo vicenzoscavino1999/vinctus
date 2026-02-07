@@ -1,0 +1,2 @@
+service,cost_pen,period_start,period_end,project_id,source,notes
+Cloud Run Functions,0.00,2026-01-31,2026-02-06,vinctus-daf32,Billing Reports,Normalized summary from manual production baseline capture
