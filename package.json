@@ -100,5 +100,8 @@
   },
   "simple-git-hooks": {
     "pre-commit": "npx lint-staged"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "4.55.1"
   }
 }
