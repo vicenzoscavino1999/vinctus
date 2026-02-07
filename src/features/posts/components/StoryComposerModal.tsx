@@ -3,11 +3,12 @@ import { createPortal } from 'react-dom';
 import { Film, Image as ImageIcon, Upload, X } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { collection, doc } from 'firebase/firestore';
-import { useAuth } from '@/context';
+import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
 import { createStory, type StoryMediaType } from '@/features/posts/api';
 import { uploadStoryImage, uploadStoryVideo } from '@/shared/lib/storage';
 import { db } from '@/shared/lib/firebase';
+import { loadHeic2Any } from '@/shared/lib/heic2any-loader';
 
 type StoryDraft = {
   type: StoryMediaType;
@@ -94,7 +95,7 @@ const StoryComposerModal = ({ isOpen, onClose, onCreated }: StoryComposerModalPr
     let sourceFile = file;
     if (isHeicFile(file)) {
       try {
-        const { default: heic2any } = await import('heic2any');
+        const heic2any = await loadHeic2Any();
         const converted = await heic2any({
           blob: file,
           toType: 'image/jpeg',

@@ -43,6 +43,7 @@ export default defineConfig([
         'warn',
         { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^_' },
       ],
+      '@typescript-eslint/no-explicit-any': 'warn',
       'react-hooks/exhaustive-deps': 'warn',
       'react-hooks/set-state-in-effect': 'warn',
       'react-refresh/only-export-components': [
@@ -272,6 +273,16 @@ export default defineConfig([
           ],
         },
       ],
+    },
+  },
+  {
+    files: [
+      'src/features/posts/api/**/*.{js,jsx,ts,tsx}',
+      'src/features/chat/api/**/*.{js,jsx,ts,tsx}',
+      'src/features/groups/api/**/*.{js,jsx,ts,tsx}',
+    ],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
     },
   },
   {

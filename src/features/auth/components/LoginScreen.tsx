@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useAuth } from '@/context';
+import { useAuth } from '@/context/auth';
 import { setMetricsFlow } from '@/shared/lib/devMetrics';
 
 type AuthMode = 'login' | 'register' | 'phone' | 'forgot_password';

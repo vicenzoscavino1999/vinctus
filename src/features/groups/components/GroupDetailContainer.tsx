@@ -2,7 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DocumentSnapshot } from 'firebase/firestore';
 
-import { useAuth } from '@/context';
+import { useAuth } from '@/context/auth';
 import { CATEGORIES } from '@/shared/constants';
 import {
   GroupDetailView,
@@ -143,7 +143,27 @@ export const GroupDetailContainer = () => {
           time: formatRelativeTime(post.createdAt.toDate()),
         })) as RecentPost[];
 
-        const topMembersData = await Promise.all(
+        if (!isActive) return;
+
+        const baseTopMembers = memberRows.map(
+          (member) =>
+            ({
+              id: member.uid,
+              name: 'Usuario',
+              role: formatRole(member.role),
+              posts: 0,
+            }) as TopMember,
+        );
+
+        setGroup(groupDoc);
+        setMembersCount(members);
+        setPostsPerWeek(posts);
+        setJoinStatus(status);
+        setRecentPosts(recent);
+        setTopMembers(baseTopMembers);
+        setIsLoading(false);
+
+        void Promise.all(
           memberRows.map(async (member) => {
             const profile = await getUserProfile(member.uid);
             return {
@@ -153,17 +173,14 @@ export const GroupDetailContainer = () => {
               posts: 0,
             } as TopMember;
           }),
-        );
-
-        if (!isActive) return;
-
-        setGroup(groupDoc);
-        setMembersCount(members);
-        setPostsPerWeek(posts);
-        setJoinStatus(status);
-        setRecentPosts(recent);
-        setTopMembers(topMembersData);
-        setIsLoading(false);
+        )
+          .then((topMembersData) => {
+            if (!isActive) return;
+            setTopMembers(topMembersData);
+          })
+          .catch((membersError) => {
+            console.error('Error loading top members:', membersError);
+          });
       } catch (loadError) {
         console.error('Error loading group:', loadError);
         if (!isActive) return;

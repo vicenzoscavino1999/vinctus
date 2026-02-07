@@ -48,7 +48,7 @@ export async function sendChatMessage(
       'Content-Type': 'application/json',
       ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
     },
-    body: JSON.stringify({ message, history, idToken: idToken ?? undefined }),
+    body: JSON.stringify({ message, history }),
   });
 
   const payload = await response.json().catch(() => null);

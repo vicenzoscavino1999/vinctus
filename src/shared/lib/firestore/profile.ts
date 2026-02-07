@@ -162,6 +162,14 @@ const toDate = (value: unknown): Date | undefined => {
   return undefined;
 };
 
+const getErrorCode = (error: unknown): string | null => {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return null;
+  }
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : null;
+};
+
 /**
  * Get user profile by UID
  * Handles multiple scenarios:
@@ -180,9 +188,9 @@ export async function getUserProfile(uid: string): Promise<UserProfileReadModel 
     if (userDoc.exists()) {
       privateData = userDoc.data();
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Log permission-denied for debugging
-    if (error?.code === 'permission-denied') {
+    if (getErrorCode(error) === 'permission-denied') {
       console.log(
         '[getUserProfile] Permission denied for users/' + uid + ', falling back to public',
       );

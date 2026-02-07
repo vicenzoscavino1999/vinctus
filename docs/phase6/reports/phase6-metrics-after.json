@@ -1,0 +1,256 @@
+{
+  "capturedAt": "2026-02-07T03:19:44.537Z",
+  "projectId": "vinctus-dev",
+  "baseUrl": "http://127.0.0.1:5173",
+  "dataset": {
+    "extraPosts": 120,
+    "extraDirectConversations": 80
+  },
+  "flows": {
+    "discover": {
+      "label": "discover_critical",
+      "route": "/discover",
+      "latencyMs": 2139,
+      "firestore": {
+        "reads": 1,
+        "writes": 0,
+        "deletes": 0,
+        "listenersActive": 0,
+        "listenersPeak": 0,
+        "listenerStarts": 0,
+        "listenerStops": 0,
+        "calls": 0,
+        "bySource": {
+          "auth.ensureUserProfile.getUser": 1
+        }
+      },
+      "listenersActiveAfterLeave": 0,
+      "network": {
+        "totalTransferBytes": 27000,
+        "storageEgressBytes": 0,
+        "functionsInvocations": 0,
+        "topHosts": [
+          {
+            "host": "127.0.0.1:5173",
+            "bytes": 27000
+          },
+          {
+            "host": "fonts.googleapis.com",
+            "bytes": 0
+          },
+          {
+            "host": "fonts.gstatic.com",
+            "bytes": 0
+          },
+          {
+            "host": "127.0.0.1:9099",
+            "bytes": 0
+          },
+          {
+            "host": "firestore.googleapis.com",
+            "bytes": 0
+          }
+        ],
+        "sampleCount": 118
+      }
+    },
+    "feed": {
+      "label": "feed_3_pages",
+      "route": "/feed",
+      "latencyMs": 7649,
+      "pagesLoaded": 3,
+      "visiblePosts": 36,
+      "readPerVisiblePost": 1,
+      "firestore": {
+        "reads": 45,
+        "writes": 1,
+        "deletes": 0,
+        "listenersActive": 0,
+        "listenersPeak": 0,
+        "listenerStarts": 0,
+        "listenerStops": 0,
+        "calls": 0,
+        "bySource": {
+          "auth.ensureUserProfile.getUser": 1,
+          "auth.ensureUserProfile.upsertUserPublic": 1,
+          "firestore.getDocs": 8,
+          "feed.getDocs": 36
+        },
+        "gateReads": 36
+      },
+      "listenersActiveAfterLeave": 0,
+      "listenersActiveAfterRoundTrip": 0,
+      "network": {
+        "totalTransferBytes": 198903,
+        "storageEgressBytes": 0,
+        "functionsInvocations": 0,
+        "topHosts": [
+          {
+            "host": "127.0.0.1:5173",
+            "bytes": 198903
+          },
+          {
+            "host": "fonts.googleapis.com",
+            "bytes": 0
+          },
+          {
+            "host": "fonts.gstatic.com",
+            "bytes": 0
+          },
+          {
+            "host": "127.0.0.1:9099",
+            "bytes": 0
+          },
+          {
+            "host": "firestore.googleapis.com",
+            "bytes": 0
+          }
+        ],
+        "sampleCount": 141
+      }
+    },
+    "post": {
+      "label": "post_open",
+      "route": "/post/post_1",
+      "latencyMs": 5660,
+      "firestore": {
+        "reads": 7,
+        "writes": 1,
+        "deletes": 0,
+        "listenersActive": 0,
+        "listenersPeak": 0,
+        "listenerStarts": 0,
+        "listenerStops": 0,
+        "calls": 0,
+        "bySource": {
+          "auth.ensureUserProfile.getUser": 1,
+          "firestore.getDoc": 6,
+          "auth.ensureUserProfile.upsertUserPublic": 1
+        }
+      },
+      "listenersActiveAfterLeave": 0,
+      "network": {
+        "totalTransferBytes": 81791,
+        "storageEgressBytes": 0,
+        "functionsInvocations": 0,
+        "topHosts": [
+          {
+            "host": "127.0.0.1:5173",
+            "bytes": 81791
+          },
+          {
+            "host": "fonts.googleapis.com",
+            "bytes": 0
+          },
+          {
+            "host": "fonts.gstatic.com",
+            "bytes": 0
+          },
+          {
+            "host": "127.0.0.1:9099",
+            "bytes": 0
+          },
+          {
+            "host": "127.0.0.1:8080",
+            "bytes": 0
+          }
+        ],
+        "sampleCount": 115
+      }
+    },
+    "chat": {
+      "label": "chat_open",
+      "route": "/messages",
+      "latencyMs": 2616,
+      "firestore": {
+        "reads": 5,
+        "writes": 0,
+        "deletes": 0,
+        "listenersActive": 5,
+        "listenersPeak": 5,
+        "listenerStarts": 8,
+        "listenerStops": 3,
+        "calls": 0,
+        "bySource": {
+          "auth.ensureUserProfile.getUser": 1,
+          "firestore.onSnapshot": 13,
+          "firestore.getDoc": 2
+        }
+      },
+      "listenersActiveAfterLeave": 0,
+      "listenersActiveAfterRoundTrip": 0,
+      "network": {
+        "totalTransferBytes": 479932,
+        "storageEgressBytes": 0,
+        "functionsInvocations": 0,
+        "topHosts": [
+          {
+            "host": "127.0.0.1:5173",
+            "bytes": 479932
+          },
+          {
+            "host": "fonts.googleapis.com",
+            "bytes": 0
+          },
+          {
+            "host": "fonts.gstatic.com",
+            "bytes": 0
+          },
+          {
+            "host": "127.0.0.1:9099",
+            "bytes": 0
+          }
+        ],
+        "sampleCount": 118
+      }
+    },
+    "profile": {
+      "label": "profile_critical",
+      "route": "/profile",
+      "latencyMs": 2097,
+      "firestore": {
+        "reads": 2,
+        "writes": 0,
+        "deletes": 0,
+        "listenersActive": 1,
+        "listenersPeak": 1,
+        "listenerStarts": 2,
+        "listenerStops": 1,
+        "calls": 0,
+        "bySource": {
+          "auth.ensureUserProfile.getUser": 1,
+          "firestore.onSnapshot": 4
+        }
+      },
+      "listenersActiveAfterLeave": 0,
+      "network": {
+        "totalTransferBytes": 439617,
+        "storageEgressBytes": 0,
+        "functionsInvocations": 0,
+        "topHosts": [
+          {
+            "host": "127.0.0.1:5173",
+            "bytes": 439617
+          },
+          {
+            "host": "fonts.googleapis.com",
+            "bytes": 0
+          },
+          {
+            "host": "fonts.gstatic.com",
+            "bytes": 0
+          },
+          {
+            "host": "127.0.0.1:9099",
+            "bytes": 0
+          },
+          {
+            "host": "firestore.googleapis.com",
+            "bytes": 0
+          }
+        ],
+        "sampleCount": 121
+      }
+    }
+  }
+}

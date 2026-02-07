@@ -149,7 +149,7 @@ const deleteDoc = ((...args: unknown[]) => {
 }) as typeof _deleteDoc;
 
 export const getGroups = async (): Promise<FirestoreGroup[]> => {
-  const snapshot = await getDocs(groupsCollection);
+  const snapshot = await getDocs(query(groupsCollection, limit(SMALL_LIST_LIMIT)));
   return snapshot.docs.map((docSnap) => {
     const data = docSnap.data();
     return {
@@ -162,7 +162,7 @@ export const getGroups = async (): Promise<FirestoreGroup[]> => {
 };
 
 export const getGroupsByCategory = async (categoryId: string): Promise<FirestoreGroup[]> => {
-  const q = query(groupsCollection, where('categoryId', '==', categoryId));
+  const q = query(groupsCollection, where('categoryId', '==', categoryId), limit(SMALL_LIST_LIMIT));
   const snapshot = await getDocs(q);
   return snapshot.docs.map((docSnap) => {
     const data = docSnap.data();

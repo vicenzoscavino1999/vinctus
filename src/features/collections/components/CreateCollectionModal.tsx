@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Loader2, X } from 'lucide-react';
 
-import { useAuth } from '@/context';
+import { useAuth } from '@/context/auth';
 import { createCollection } from '@/features/collections/api';
 import { useToast } from '@/shared/ui/Toast';
 import { COLLECTION_ICON_OPTIONS, getCollectionIcon } from './collectionIcons';

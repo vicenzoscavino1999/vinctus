@@ -3,7 +3,13 @@
 
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, connectAuthEmulator } from 'firebase/auth';
-import { initializeFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import {
+  connectFirestoreEmulator,
+  initializeFirestore,
+  memoryLocalCache,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore';
 import { getFirestore as getFirestoreLite } from 'firebase/firestore/lite';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
@@ -26,10 +32,39 @@ export const auth = getAuth(app);
 // Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();
 
-// Firestore instance (force long-polling to reduce WebChannel blocks)
-export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-});
+const createFirestore = () => {
+  const baseConfig = {
+    experimentalForceLongPolling: true,
+  } as const;
+
+  const persistenceDisabled =
+    import.meta.env.MODE === 'test' || import.meta.env.VITE_FIRESTORE_PERSISTENCE === 'false';
+
+  if (persistenceDisabled || typeof window === 'undefined') {
+    return initializeFirestore(app, {
+      ...baseConfig,
+      localCache: memoryLocalCache(),
+    });
+  }
+
+  try {
+    return initializeFirestore(app, {
+      ...baseConfig,
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    });
+  } catch (error) {
+    console.warn('[firebase] persistent cache unavailable, falling back to memory cache', error);
+    return initializeFirestore(app, {
+      ...baseConfig,
+      localCache: memoryLocalCache(),
+    });
+  }
+};
+
+// Firestore instance (long-polling + IndexedDB cache when available)
+export const db = createFirestore();
 
 // Firestore Lite instance (REST) for operations sensitive to WebChannel blocks
 export const dbLite = getFirestoreLite(app);
@@ -40,8 +75,8 @@ export const functions = getFunctions(app);
 // Storage instance
 export const storage = getStorage(app);
 
-// Emulator wiring (local dev)
-const useEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true';
+// Emulator wiring (local dev only, never in production builds)
+const useEmulators = import.meta.env.DEV && import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true';
 const emulatorHost = import.meta.env.VITE_FIREBASE_EMULATOR_HOST || '127.0.0.1';
 const emulatorPorts = {
   auth: 9099,

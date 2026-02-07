@@ -10,7 +10,7 @@ import {
   BellOff,
   X,
 } from 'lucide-react';
-import { useAuth } from '@/context';
+import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
 import {
   getUserProfile,

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import { useAuth } from '@/context';
+import { useAuth } from '@/context/auth';
 import {
   acceptCollaborationRequest,
   getPendingCollaborationRequests,

@@ -1,113 +1,56 @@
-# Architecture snapshot (baseline)
+# Architecture snapshot (Phase 6 Day 15)
 
-This document captures the current state. Update it only at the end of a phase or when a major change lands.
+This document is a short technical snapshot of the current production design.
 
-## Routes and domains
+## Runtime topology
 
-- Routes list (from `src/app/routes/AppLayout.tsx`):
-  - `/` -> Discover
-  - `/discover`
-  - `/search`
-  - `/category/:categoryId`
-  - `/feed`
-  - `/projects`
-  - `/library`
-  - `/settings`
-  - `/settings/notifications`
-  - `/settings/privacy`
-  - `/help`
-  - `/profile`
-  - `/user/:userId`
-  - `/user/:userId/connections`
-  - `/notifications`
-  - `/messages`
-  - `/messages/:conversationId/details`
-  - `/messages/:conversationId/group-details`
-  - `/group/:groupId`
-  - `/group/:groupId/edit`
-  - `/post/:postId`
-  - `*` -> Discover
+- Frontend: React 19 + Vite SPA.
+- Hosting: Vercel (`vercel.json`) with SPA rewrites and `/api/*` serverless routes.
+- Backend platform: Firebase Auth, Firestore, Storage, Cloud Functions.
+- Serverless API: `api/chat.ts` (Gemini + Firebase Admin actions).
 
-- Domain map (features suggested by current routes and data):
-  - Discover (categories, groups, posts)
-  - Search + user profiles
-  - Feed (global and category feeds)
-  - Messaging (conversations, messages, typing)
-  - Groups (group detail, members, edit)
-  - Posts (detail, comments, likes)
-  - Projects / collaborations / events
-  - Library / collections
-  - Notifications
-  - Settings + privacy + help
-  - Auth + onboarding
+## Application composition
 
-## Firebase usage
+- `src/App.tsx`
+  - wraps the app with `AuthProvider`
+  - gates login/onboarding
+  - lazy loads `AuthenticatedAppShell` for authenticated runtime
+- `src/app/routes/AuthenticatedAppShell.tsx`
+  - mounts `BrowserRouter`
+  - mounts `AppStateProvider` and `ToastProvider`
+  - lazy loads `AppLayout`
+- `src/app/routes/AppLayout.tsx`
+  - route map and global layout (header, nav, mobile nav)
+  - page-level lazy loading for feature pages
+- `src/app/providers/AppState.tsx`
+  - optimistic UI actions (groups, likes, saves)
+  - Firestore bootstrap state using bounded reads (`limit(50)`)
 
-- Firestore collections (top-level):
-  - `users`, `users_public`
-  - `posts`, `groups`, `events`, `stories`
-  - `conversations`
-  - `notifications`
-  - `friend_requests`, `follow_requests`, `group_requests`
-  - `collaborations`, `collaboration_requests`
-  - `collections` (user collections live under users)
-  - `contributions`, `reports`, `support_tickets`
+## Route domains
 
-- Firestore subcollections (known):
-  - `groups/{groupId}/members`
-  - `posts/{postId}/comments`, `posts/{postId}/likes`
-  - `events/{eventId}/attendees`
-  - `conversations/{conversationId}/messages`, `conversations/{conversationId}/members`, `conversations/{conversationId}/typing`
-  - `users/{uid}/followers`, `users/{uid}/following`, `users/{uid}/friends`
-  - `users/{uid}/blockedUsers`, `users/{uid}/memberships`, `users/{uid}/likes`
-  - `users/{uid}/savedPosts`, `users/{uid}/savedCategories`
-  - `users/{uid}/collections/{collectionId}/items`
-  - `users/{uid}/directConversations`
+- Discover and search: `/`, `/discover`, `/search`, `/category/:categoryId`
+- Feed and posts: `/feed`, `/post/:postId`
+- Groups: `/group/:groupId`, `/group/:groupId/edit`
+- Chat: `/messages`, `/messages/:conversationId/details`, `/messages/:conversationId/group-details`
+- Social graph and profile: `/profile`, `/user/:userId`, `/user/:userId/connections`
+- Supporting modules: `/projects`, `/library`, `/notifications`, `/settings`, `/help`
 
-- CollectionGroup usage:
-  - `items` (collection group for collection items)
-  - `messages` (collection group for conversations in functions)
+## Data and integrations
 
-- Primary data access layer:
-  - `src/features/*/api` (domain API modules)
-  - `src/shared/lib/firebase.ts` (Firebase config + auth/firestore/functions/storage)
-  - `src/shared/lib/storage.ts` (uploads, downloads, deletes)
+- Domain APIs: `src/features/*/api/{queries,mutations,types}.ts`
+- Shared reliability layer:
+  - `src/shared/lib/errors.ts`
+  - `src/shared/lib/validators.ts`
+  - `src/shared/lib/firebase-helpers.ts`
+- Firestore index contract: `docs/firestore-indexes.md`
+- Cloud Functions trigger surface: `functions/src/index.ts`
 
-- Active listeners (examples):
-  - user profile subscriptions
-  - memberships, likes, saved posts/categories
-  - conversations/messages/typing subscriptions
+## Quality gates in use
 
-- Cloud Functions (from `functions/src/index.ts`):
-  - `onEventAttendeeCreated`, `onEventAttendeeDeleted`
-  - `onUserFollowerCreated`, `onUserFollowerDeleted`
-  - `onUserFollowingCreated`, `onUserFollowingDeleted`
-  - `onFollowRequestUpdated`
-  - `onGroupMemberCreated`, `onGroupMemberDeleted`
-  - `onPostLikeCreated`, `onPostLikeDeleted`
-  - `onGroupDeleted`, `onEventDeleted`
-  - `onPostCreated`, `onPostDeleted`
-  - `onCollectionItemDeleted`, `onCollectionDeleted`
-  - `onUserPublicProfileUpdated`
-  - `onFriendRequestWrite`, `onDirectConversationWrite`
-  - `revokeUserSessions`
-
-- Admin/backfill scripts (in `functions/scripts/`):
-  - backfill counters, friends, direct conversations, group conversations, orphan groups, karma
-
-## Critical dependencies
-
-- App shell/layout:
-  - `src/App.tsx` (BrowserRouter + Auth/AppState + layout)
-  - `src/app/routes/AppLayout.tsx` (routes + layout)
-- Auth/session:
-  - `src/app/providers/AuthContext.tsx`
-  - `src/shared/lib/firebase.ts` (Auth, Google provider)
-- Data access layer:
-  - `src/features/*/api`, `src/shared/lib/storage.ts`
-- External APIs:
-  - `src/shared/lib/api.ts` (arXiv, Wikipedia, HackerNews, OpenLibrary, iNaturalist)
-
-## Notes
-
-- This file is a snapshot; update only at the end of a phase or when the architecture materially changes.
+- Validation gate: `npm run validate`
+  - `typecheck` + `lint` + `test:coverage` + `build`
+- Coverage gate (Phase 6 scoped): statements/functions/lines `>= 85`, branches `>= 80`
+  - scope documented in `docs/phase6/reports/coverage-scope.md`
+- Lighthouse gate: Home/Feed/Chat/Groups `>= 0.90`
+  - baseline and commands in `docs/phase6/reports/lhci-day14.md`
+- E2E critical flows: login, feed, post detail, chat, group/chat handoff (`e2e/*.spec.ts`)

@@ -47,6 +47,61 @@ async function seedPost(postId = 'post_alpha') {
   });
 }
 
+async function seedPostComment(
+  postId = 'post_alpha',
+  commentId = 'comment_alpha',
+  authorId = 'user_a',
+) {
+  const env = await getRulesTestEnv();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await db.doc(`posts/${postId}/comments/${commentId}`).set({
+      postId,
+      authorId,
+      authorSnapshot: { displayName: 'Alice', photoURL: null },
+      text: 'Comentario de prueba',
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    });
+  });
+}
+
+async function seedStory(storyId = 'story_alpha', ownerId = 'user_b') {
+  const env = await getRulesTestEnv();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await db.doc(`stories/${storyId}`).set({
+      ownerId,
+      ownerSnapshot: {
+        displayName: 'User B',
+        photoURL: null,
+      },
+      mediaType: 'image',
+      mediaUrl: 'https://example.com/story.jpg',
+      mediaPath: `stories/${ownerId}/${storyId}/original/story.jpg`,
+      thumbUrl: null,
+      thumbPath: null,
+      visibility: 'friends',
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      expiresAt: new Date('2026-01-02T00:00:00Z'),
+    });
+  });
+}
+
+async function seedFriendIndex(uid = 'user_a', friendUid = 'user_b') {
+  const env = await getRulesTestEnv();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await db.doc(`users/${uid}/friends/${friendUid}`).set({
+      uid: friendUid,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    });
+    await db.doc(`users/${friendUid}/friends/${uid}`).set({
+      uid,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    });
+  });
+}
+
 async function seedDirectConversation(conversationId = 'dm_user_b_user_c') {
   const env = await getRulesTestEnv();
   await env.withSecurityRulesDisabled(async (ctx) => {
@@ -55,6 +110,71 @@ async function seedDirectConversation(conversationId = 'dm_user_b_user_c') {
       type: 'direct',
       memberIds: ['user_b', 'user_c'],
       updatedAt: new Date('2026-01-01T00:00:00Z'),
+    });
+  });
+}
+
+async function seedFollowRequest(
+  requestId = 'user_a_user_b',
+  fromUid = 'user_a',
+  toUid = 'user_b',
+  status: 'pending' | 'accepted' | 'declined' = 'pending',
+) {
+  const env = await getRulesTestEnv();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await db.doc(`follow_requests/${requestId}`).set({
+      fromUid,
+      toUid,
+      status,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    });
+  });
+}
+
+async function seedFriendRequest(
+  requestId = 'friend_req_1',
+  fromUid = 'user_a',
+  toUid = 'user_b',
+  status: 'pending' | 'accepted' | 'rejected' = 'pending',
+) {
+  const env = await getRulesTestEnv();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await db.doc(`friend_requests/${requestId}`).set({
+      fromUid,
+      toUid,
+      status,
+      fromUserName: 'User A',
+      fromUserPhoto: null,
+      toUserName: 'User B',
+      toUserPhoto: null,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    });
+  });
+}
+
+async function seedFollower(ownerUid = 'user_b', followerUid = 'user_a') {
+  const env = await getRulesTestEnv();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await db.doc(`users/${ownerUid}/followers/${followerUid}`).set({
+      uid: followerUid,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    });
+  });
+}
+
+async function seedBlockedUser(ownerUid = 'user_b', blockedUid = 'user_a') {
+  const env = await getRulesTestEnv();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await db.doc(`users/${ownerUid}/blockedUsers/${blockedUid}`).set({
+      blockedUid,
+      status: 'active',
+      blockedAt: new Date('2026-01-01T00:00:00Z'),
     });
   });
 }
@@ -173,6 +293,315 @@ describe('Firestore Rules - critical access controls', () => {
     await assertSucceeds(
       db.doc('posts/post_counter_guard').update({
         content: 'Contenido editado por autor',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('allows reading missing post documents (not found path)', async () => {
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertSucceeds(db.doc('posts/post_missing').get());
+  });
+
+  it('allows empty comments query for any post', async () => {
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertSucceeds(db.collection('posts/post_empty/comments').limit(10).get());
+  });
+
+  it('denies creating likes when path uid does not match auth user', async () => {
+    await seedPost('post_like_guard');
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertFails(
+      db.doc('posts/post_like_guard/likes/user_b').set({
+        uid: 'user_b',
+        postId: 'post_like_guard',
+        createdAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('allows creating and deleting own like with valid payload', async () => {
+    await seedPost('post_like_owner');
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertSucceeds(
+      db.doc('posts/post_like_owner/likes/user_a').set({
+        uid: 'user_a',
+        postId: 'post_like_owner',
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    await assertSucceeds(db.doc('posts/post_like_owner/likes/user_a').delete());
+  });
+
+  it('denies writing saved posts for another user', async () => {
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertFails(
+      db.doc('users/user_b/savedPosts/post_x').set({
+        postId: 'post_x',
+        createdAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('allows writing saved posts for own user', async () => {
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertSucceeds(
+      db.doc('users/user_a/savedPosts/post_x').set({
+        postId: 'post_x',
+        createdAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('denies deleting comments from another author', async () => {
+    await seedPost('post_comment_owner');
+    await seedPostComment('post_comment_owner', 'comment_owner', 'user_a');
+    const env = await getRulesTestEnv();
+    const outsiderDb = env.authenticatedContext('user_b').firestore();
+
+    await assertFails(outsiderDb.doc('posts/post_comment_owner/comments/comment_owner').delete());
+  });
+
+  it('denies status update with media path not tied to postId', async () => {
+    await seedPost('post_media_guard');
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertFails(
+      db.doc('posts/post_media_guard').update({
+        status: 'ready',
+        media: [
+          {
+            type: 'image',
+            url: 'https://example.com/file.jpg',
+            path: 'posts/user_a/post_other/images/file.jpg',
+            contentType: 'image/jpeg',
+          },
+        ],
+        updatedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('allows owner to read own story', async () => {
+    await seedStory('story_owner', 'user_b');
+    const env = await getRulesTestEnv();
+    const ownerDb = env.authenticatedContext('user_b').firestore();
+
+    await assertSucceeds(ownerDb.doc('stories/story_owner').get());
+  });
+
+  it('allows friend to read story via friends index', async () => {
+    await seedStory('story_friend_visible', 'user_b');
+    await seedFriendIndex('user_a', 'user_b');
+    const env = await getRulesTestEnv();
+    const friendDb = env.authenticatedContext('user_a').firestore();
+
+    await assertSucceeds(
+      friendDb
+        .collection('stories')
+        .where('ownerId', 'in', ['user_b'])
+        .where('visibility', '==', 'friends')
+        .where('expiresAt', '>', new Date('2025-12-31T00:00:00Z'))
+        .orderBy('expiresAt', 'desc')
+        .get(),
+    );
+  });
+
+  it('denies story read for non-friend user', async () => {
+    await seedStory('story_not_friend', 'user_b');
+    const env = await getRulesTestEnv();
+    const outsiderDb = env.authenticatedContext('user_c').firestore();
+
+    await assertFails(outsiderDb.doc('stories/story_not_friend').get());
+  });
+
+  it('protects follow_requests listing and keeps missing-get scoped by requestId', async () => {
+    await seedFollowRequest('user_a_user_b', 'user_a', 'user_b', 'pending');
+    await seedFollowRequest('user_c_user_d', 'user_c', 'user_d', 'pending');
+    const env = await getRulesTestEnv();
+
+    const outsiderDb = env.authenticatedContext('user_x').firestore();
+    await assertFails(
+      outsiderDb.collection('follow_requests').where('toUid', '==', 'user_b').get(),
+    );
+
+    const userBdb = env.authenticatedContext('user_b').firestore();
+    await assertSucceeds(
+      userBdb.collection('follow_requests').where('toUid', '==', 'user_b').get(),
+    );
+    await assertFails(userBdb.collection('follow_requests').get());
+    await assertSucceeds(userBdb.doc('follow_requests/user_b_user_z').get());
+    await assertFails(userBdb.doc('follow_requests/user_x_user_y').get());
+  });
+
+  it('enforces strict friend request updates and allowed status transitions', async () => {
+    await seedFriendRequest('friend_pending', 'user_a', 'user_b', 'pending');
+    await seedFriendRequest('friend_rejected', 'user_a', 'user_b', 'rejected');
+    await seedFriendRequest('friend_accepted', 'user_a', 'user_b', 'accepted');
+    const env = await getRulesTestEnv();
+
+    const receiverDb = env.authenticatedContext('user_b').firestore();
+    await assertFails(
+      receiverDb.doc('friend_requests/friend_pending').update({
+        status: 'accepted',
+        updatedAt: serverTimestamp(),
+        injected: 'nope',
+      }),
+    );
+    await assertFails(
+      receiverDb.doc('friend_requests/friend_pending').update({
+        fromUid: 'user_z',
+        status: 'accepted',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      receiverDb.doc('friend_requests/friend_pending').update({
+        status: 'accepted',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    const senderDb = env.authenticatedContext('user_a').firestore();
+    await assertSucceeds(
+      senderDb.doc('friend_requests/friend_rejected').update({
+        status: 'pending',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      senderDb.doc('friend_requests/friend_accepted').update({
+        status: 'pending',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('enforces message schema, size caps, and deterministic ids', async () => {
+    await seedDirectConversation('dm_user_b_user_c');
+    const env = await getRulesTestEnv();
+    const memberDb = env.authenticatedContext('user_b').firestore();
+
+    await assertSucceeds(
+      memberDb.doc('conversations/dm_user_b_user_c/messages/msg_ok').set({
+        senderId: 'user_b',
+        senderName: 'User B',
+        senderPhotoURL: null,
+        text: 'hola',
+        createdAt: serverTimestamp(),
+        clientCreatedAt: 1760000000000,
+        clientId: 'msg_ok',
+        messageType: 'text',
+      }),
+    );
+
+    await assertFails(
+      memberDb.doc('conversations/dm_user_b_user_c/messages/msg_extra').set({
+        senderId: 'user_b',
+        senderName: 'User B',
+        senderPhotoURL: null,
+        text: 'hola',
+        createdAt: serverTimestamp(),
+        clientCreatedAt: 1760000000001,
+        clientId: 'msg_extra',
+        extraField: true,
+      }),
+    );
+
+    await assertFails(
+      memberDb.doc('conversations/dm_user_b_user_c/messages/msg_too_long').set({
+        senderId: 'user_b',
+        senderName: 'User B',
+        senderPhotoURL: null,
+        text: 'x'.repeat(4001),
+        createdAt: serverTimestamp(),
+        clientCreatedAt: 1760000000002,
+        clientId: 'msg_too_long',
+      }),
+    );
+
+    await assertFails(
+      memberDb.doc('conversations/dm_user_b_user_c/messages/msg_empty').set({
+        senderId: 'user_b',
+        senderName: 'User B',
+        senderPhotoURL: null,
+        text: '',
+        createdAt: serverTimestamp(),
+        clientCreatedAt: 1760000000003,
+        clientId: 'msg_empty',
+      }),
+    );
+
+    await assertFails(
+      memberDb.doc('conversations/dm_user_b_user_c/messages/msg_bad_id').set({
+        senderId: 'user_b',
+        senderName: 'User B',
+        senderPhotoURL: null,
+        text: 'ok',
+        createdAt: serverTimestamp(),
+        clientCreatedAt: 1760000000004,
+        clientId: 'another_id',
+      }),
+    );
+  });
+
+  it('enforces canonical direct conversation creation, relationship gate, and block checks', async () => {
+    await seedFollower('user_b', 'user_a');
+    await seedFollower('user_d', 'user_a');
+    await seedBlockedUser('user_d', 'user_a');
+    const env = await getRulesTestEnv();
+    const userAdb = env.authenticatedContext('user_a').firestore();
+
+    await assertSucceeds(
+      userAdb.doc('conversations/dm_user_a_user_b').set({
+        type: 'direct',
+        memberIds: ['user_a', 'user_b'],
+        lastMessage: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    await assertFails(
+      userAdb.doc('conversations/random_dm_doc').set({
+        type: 'direct',
+        memberIds: ['user_a', 'user_b'],
+        lastMessage: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    await assertFails(
+      userAdb.doc('conversations/dm_user_a_user_c').set({
+        type: 'direct',
+        memberIds: ['user_a', 'user_c'],
+        lastMessage: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    await assertFails(
+      userAdb.doc('conversations/dm_user_a_user_d').set({
+        type: 'direct',
+        memberIds: ['user_a', 'user_d'],
+        lastMessage: null,
+        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       }),
     );

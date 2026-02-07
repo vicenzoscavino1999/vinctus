@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, type FormEvent, type ChangeEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { X, User, MapPin, Briefcase, FileText, Loader2 } from 'lucide-react';
-import { useAuth } from '@/context';
+import { updateProfile as updateAuthProfile } from 'firebase/auth';
+import { useAuth } from '@/context/auth';
 import { getUserProfile, updateUserProfile } from '@/features/profile/api';
+import { auth } from '@/shared/lib/firebase';
 import { uploadProfilePhoto } from '@/shared/lib/storage';
 import { useToast } from '@/shared/ui/Toast';
 
@@ -71,6 +74,17 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
     };
   }, [photoPreview]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
+
   const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] || null;
     event.target.value = '';
@@ -114,6 +128,7 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
 
     setSaving(true);
     try {
+      const normalizedDisplayName = displayName.trim();
       let uploadedPhotoURL: string | null | undefined = undefined;
 
       if (photoRemoved) {
@@ -133,12 +148,27 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
       }
 
       await updateUserProfile(user.uid, {
-        displayName: displayName.trim() || undefined,
+        displayName: normalizedDisplayName || undefined,
         photoURL: uploadedPhotoURL,
         bio: bio.trim() || undefined,
         role: role.trim() || undefined,
         location: location.trim() || undefined,
       });
+
+      const currentUser = auth.currentUser;
+      if (currentUser && currentUser.uid === user.uid) {
+        const authUpdates: { displayName?: string | null; photoURL?: string | null } = {};
+        const currentDisplayName = currentUser.displayName?.trim() ?? '';
+        if (currentDisplayName !== normalizedDisplayName) {
+          authUpdates.displayName = normalizedDisplayName || null;
+        }
+        if (uploadedPhotoURL !== undefined) {
+          authUpdates.photoURL = uploadedPhotoURL;
+        }
+        if (Object.keys(authUpdates).length > 0) {
+          await updateAuthProfile(currentUser, authUpdates);
+        }
+      }
 
       showToast('Perfil actualizado correctamente', 'success');
       onSave?.();
@@ -153,14 +183,13 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
   };
 
   if (!isOpen) return null;
+  if (typeof document === 'undefined') return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
+  return createPortal(
+    <div className="fixed inset-0 z-[90] flex items-start sm:items-center justify-center overflow-y-auto px-4 py-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Modal */}
-      <div className="relative w-full max-w-lg mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
+      <div className="relative my-auto w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
           <h2 className="text-xl font-serif text-white">Editar Perfil</h2>
@@ -320,6 +349,7 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
           </form>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

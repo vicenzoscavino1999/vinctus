@@ -115,6 +115,7 @@ Usuarios seed (email / password):
 - `npm run guardrails` - lint + ciclos + validaciÃ³n de stubs
 - `npm run test` - Vitest en modo watch
 - `npm run test:run` - Vitest en modo CI
+- `npm run test:api` - tests del endpoint `api/chat`
 - `npm run test:e2e` - Playwright
 - `npm run typecheck` - TypeScript sin emitir
 - `npm run ci` - lint + build + tests

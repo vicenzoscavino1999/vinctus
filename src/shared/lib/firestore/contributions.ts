@@ -16,6 +16,7 @@ import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics
 import { db } from '@/shared/lib/firebase';
 
 export type ContributionType = 'project' | 'paper' | 'cv' | 'certificate' | 'other';
+const SMALL_LIST_LIMIT = 50;
 
 export interface ContributionRead {
   id: string;
@@ -92,7 +93,11 @@ const toDate = (value: unknown): Date | undefined => {
 };
 
 export async function getUserContributions(uid: string): Promise<ContributionRead[]> {
-  const q = query(collection(db, 'contributions'), where('userId', '==', uid));
+  const q = query(
+    collection(db, 'contributions'),
+    where('userId', '==', uid),
+    limit(SMALL_LIST_LIMIT),
+  );
   const snapshot = await getDocs(q);
   const items = snapshot.docs.map((docSnap) => {
     const data = docSnap.data();

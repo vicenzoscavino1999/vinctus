@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Search, UserPlus, UserCheck, Check, Clock, X, MessageCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/context';
+import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
 import {
   getOrCreateDirectConversation,

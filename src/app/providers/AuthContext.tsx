@@ -56,6 +56,35 @@ interface AuthContextType {
 
 // Create context
 const AuthContext = createContext<AuthContextType | null>(null);
+const REDIRECT_PENDING_KEY = 'vinctus_auth_redirect_pending';
+
+const setRedirectPendingFlag = (): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(REDIRECT_PENDING_KEY, '1');
+  } catch {
+    // Ignore storage failures in restricted modes
+  }
+};
+
+const consumeRedirectPendingFlag = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  try {
+    const isPending = window.sessionStorage.getItem(REDIRECT_PENDING_KEY) === '1';
+    if (isPending) {
+      window.sessionStorage.removeItem(REDIRECT_PENDING_KEY);
+    }
+    return isPending;
+  } catch {
+    return false;
+  }
+};
+
+const normalizeNullableString = (value: string | null | undefined): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
 
 // Helper to convert Firebase User to AuthUser
 const mapUser = (firebaseUser: User | null): AuthUser | null => {
@@ -76,9 +105,11 @@ const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
     trackFirestoreRead('auth.ensureUserProfile.getUser');
     const snapshot = await getDoc(userRef);
 
-    const displayName = firebaseUser.displayName ?? null;
+    const authDisplayName = normalizeNullableString(firebaseUser.displayName);
+    const authPhotoURL = normalizeNullableString(firebaseUser.photoURL);
+    const displayName = authDisplayName;
     const displayNameLowercase = displayName ? displayName.toLowerCase() : null;
-    const photoURL = firebaseUser.photoURL ?? null;
+    const photoURL = authPhotoURL;
     const email = firebaseUser.email ?? null;
     const phoneNumber = firebaseUser.phoneNumber ?? null;
     const defaultPrivacy = {
@@ -98,6 +129,9 @@ const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
     };
 
     let accountVisibility: 'public' | 'private' = 'public';
+    let resolvedDisplayName: string | null = displayName;
+    let resolvedDisplayNameLowercase: string | null = displayNameLowercase;
+    let resolvedPhotoURL: string | null = photoURL;
 
     const isNewUser = !snapshot.exists();
 
@@ -134,17 +168,25 @@ const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
         };
       };
       const updates: Record<string, unknown> = {};
+      const storedDisplayName = normalizeNullableString(data.displayName);
+      const storedPhotoURL = normalizeNullableString(data.photoURL);
 
-      if (data.displayName !== displayName) {
-        updates.displayName = displayName;
+      resolvedDisplayName = storedDisplayName ?? authDisplayName;
+      resolvedDisplayNameLowercase = resolvedDisplayName ? resolvedDisplayName.toLowerCase() : null;
+      resolvedPhotoURL = storedPhotoURL ?? authPhotoURL;
+
+      if (!storedDisplayName && authDisplayName) {
+        updates.displayName = authDisplayName;
+        updates.displayNameLowercase = authDisplayName.toLowerCase();
+      } else if (
+        storedDisplayName &&
+        data.displayNameLowercase !== storedDisplayName.toLowerCase()
+      ) {
+        updates.displayNameLowercase = storedDisplayName.toLowerCase();
       }
 
-      if (data.displayNameLowercase !== displayNameLowercase) {
-        updates.displayNameLowercase = displayNameLowercase;
-      }
-
-      if (data.photoURL !== photoURL) {
-        updates.photoURL = photoURL;
+      if (!storedPhotoURL && authPhotoURL) {
+        updates.photoURL = authPhotoURL;
       }
 
       if (data.email !== email) {
@@ -176,9 +218,9 @@ const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
 
     const publicPayload: Record<string, unknown> = {
       uid: firebaseUser.uid,
-      displayName,
-      displayNameLowercase,
-      photoURL,
+      displayName: resolvedDisplayName,
+      displayNameLowercase: resolvedDisplayNameLowercase,
+      photoURL: resolvedPhotoURL,
       accountVisibility,
       updatedAt: serverTimestamp(),
     };
@@ -249,6 +291,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Handle redirect result (for mobile/PWA Google sign-in)
   useEffect(() => {
     const handleRedirectResult = async () => {
+      if (!consumeRedirectPendingFlag()) {
+        return;
+      }
       try {
         const result = await getRedirectResult(auth);
         if (result?.user) {
@@ -297,6 +342,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       ) {
         try {
           trackAppCall('auth.signInWithGoogle.redirectFallback');
+          setRedirectPendingFlag();
           // Fallback to redirect
           await signInWithRedirect(auth, googleProvider);
           return; // Redirect will handle the rest
