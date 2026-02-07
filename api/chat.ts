@@ -441,7 +441,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const contents: GeminiMessage[] = [
-    ...validation.value.history,
+    ...(validation.value.history ?? []),
     { parts: [{ text: validation.value.message }], role: 'user' },
   ];
 
