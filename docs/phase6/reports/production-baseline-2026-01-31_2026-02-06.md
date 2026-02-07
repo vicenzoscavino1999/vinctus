@@ -77,9 +77,11 @@ Budget: Firebase Project `vinctus-daf32`
 
 - `docs/phase6/reports/production-baseline-2026-01-31_2026-02-06.md`
 - `docs/phase6/reports/production-baseline-billing-report.csv`
-- `docs/phase6/reports/production-baseline-firestore-usage.png` (recommended)
-- `docs/phase6/reports/production-baseline-storage-usage.png` (recommended)
-- `docs/phase6/reports/production-baseline-budgets.png` (recommended)
+- `docs/phase6/reports/production-baseline-billing-report.png`
+- `docs/phase6/reports/production-baseline-firestore-usage.png`
+- `docs/phase6/reports/production-baseline-storage-usage.png`
+- `docs/phase6/reports/production-baseline-functions-usage.png`
+- `docs/phase6/reports/production-baseline-budgets.png`
 
 ## Notes
 
