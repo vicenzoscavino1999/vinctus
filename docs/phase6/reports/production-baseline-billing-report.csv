@@ -1,2 +1,5 @@
-service,cost_pen,period_start,period_end,project_id,source,notes
-Cloud Run Functions,0.00,2026-01-31,2026-02-06,vinctus-daf32,Billing Reports,Normalized summary from manual production baseline capture
+Descripción del servicio,ID de servicio,Costo (S/.),Programas de ahorros (S/.),Otros ahorros (S/.),Subtotal sin redondear (S/.),Subtotal (S/.),Cambio porcentual en el subtotal en comparación con el período anterior
+Cloud Run Functions,29E7-DA93-CA13,0.00,0.00,-0.00,0.000000,0.00,0%
+,,,,Subtotal,0.000000,0.00
+,,,,Impuesto,0.000000,0.00
+,,,,Total,0.000000,0.00
