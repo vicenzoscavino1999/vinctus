@@ -6,24 +6,18 @@ import {
   fetchHackerNews,
   fetchBooks,
   fetchNatureObservations,
+  fetchMusicInfo,
 } from '@/shared/lib/api';
 import type { ToastContextType } from '../types';
 
 type ShowToastFn = ToastContextType['showToast'];
-type LastFmFallbackTrack = {
-  id: number;
-  title: string;
-  artist: string;
-  type: string;
-  link: string;
-};
 type ApiContentItem =
   | Awaited<ReturnType<typeof fetchArxivPapers>>[number]
   | Awaited<ReturnType<typeof fetchWikipediaArticles>>[number]
   | Awaited<ReturnType<typeof fetchHackerNews>>[number]
   | Awaited<ReturnType<typeof fetchBooks>>[number]
   | Awaited<ReturnType<typeof fetchNatureObservations>>[number]
-  | LastFmFallbackTrack;
+  | Awaited<ReturnType<typeof fetchMusicInfo>>[number];
 
 interface UseApiContentReturn {
   data: ApiContentItem[];
@@ -70,51 +64,7 @@ export function useApiContent(
             result = await fetchNatureObservations(query || 'plants', limit);
             break;
           case 'lastfm':
-            // Mock data for music - Last.fm requires API key
-            result = [
-              {
-                id: 1,
-                title: 'Clair de Lune',
-                artist: 'Claude Debussy',
-                type: 'Clasica',
-                link: 'https://www.last.fm/music/Claude+Debussy',
-              },
-              {
-                id: 2,
-                title: 'Take Five',
-                artist: 'Dave Brubeck',
-                type: 'Jazz',
-                link: 'https://www.last.fm/music/Dave+Brubeck',
-              },
-              {
-                id: 3,
-                title: 'Bohemian Rhapsody',
-                artist: 'Queen',
-                type: 'Rock',
-                link: 'https://www.last.fm/music/Queen',
-              },
-              {
-                id: 4,
-                title: 'So What',
-                artist: 'Miles Davis',
-                type: 'Jazz',
-                link: 'https://www.last.fm/music/Miles+Davis',
-              },
-              {
-                id: 5,
-                title: 'Fur Elise',
-                artist: 'Beethoven',
-                type: 'Clasica',
-                link: 'https://www.last.fm/music/Beethoven',
-              },
-              {
-                id: 6,
-                title: 'Stairway to Heaven',
-                artist: 'Led Zeppelin',
-                type: 'Rock',
-                link: 'https://www.last.fm/music/Led+Zeppelin',
-              },
-            ];
+            result = await fetchMusicInfo(query || 'top hits', limit);
             break;
           default:
             result = [];

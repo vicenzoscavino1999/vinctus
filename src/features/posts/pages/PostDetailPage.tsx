@@ -24,6 +24,7 @@ import {
   unlikePostWithSync,
   unsavePostWithSync,
 } from '@/features/posts/api';
+import { formatRelativeTime } from '@/shared/lib/formatUtils';
 
 type PostMediaItem = {
   type: 'image' | 'video' | 'file';
@@ -32,29 +33,6 @@ type PostMediaItem = {
   fileName?: string;
   contentType?: string;
   size?: number;
-};
-
-const toDate = (value: unknown): Date | null => {
-  if (!value) return null;
-  if (value instanceof Date) return value;
-  if (typeof value === 'object' && value && 'toDate' in value) {
-    return (value as { toDate: () => Date }).toDate();
-  }
-  return null;
-};
-
-const formatRelativeTime = (value: unknown): string => {
-  const date = toDate(value);
-  if (!date) return 'Ahora';
-  const diffMs = Date.now() - date.getTime();
-  if (!Number.isFinite(diffMs) || diffMs < 0) return 'Ahora';
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return 'Ahora';
-  if (minutes < 60) return `Hace ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Hace ${hours} h`;
-  const days = Math.floor(hours / 24);
-  return `Hace ${days} d`;
 };
 
 const getFileExtension = (name: string | undefined): string | null => {
@@ -155,7 +133,9 @@ const PostDetailPage = () => {
   const primaryVideo = media.find((item) => item.type === 'video') ?? null;
   const primaryImage = media.find((item) => item.type === 'image') ?? null;
   const fileAttachments = media.filter((item) => item.type === 'file');
-  const displayText = post?.content ?? '';
+  const displayText = post?.text ?? post?.content ?? '';
+  const authorName = post?.authorSnapshot?.displayName ?? post?.authorName ?? 'Usuario';
+  const authorPhoto = post?.authorSnapshot?.photoURL ?? post?.authorPhoto ?? null;
   const trimmedBody = displayText.trim();
   const fallbackTitle = trimmedBody ? (trimmedBody.split('\n')[0] ?? trimmedBody) : '';
   const titleText = post?.title?.trim() || fallbackTitle || 'Publicacion';
@@ -166,17 +146,17 @@ const PostDetailPage = () => {
     if (!post || !postId) return null;
     return {
       postId,
-      authorName: post.authorName ?? 'Usuario',
-      authorPhoto: post.authorPhoto ?? null,
+      authorName,
+      authorPhoto,
       title: post.title ?? null,
-      text: post.content ?? '',
+      text: post.text ?? post.content ?? '',
       imageUrl: primaryImage?.url ?? null,
       likeCount,
       commentCount,
       media,
       createdAt: post.createdAt,
     };
-  }, [post, postId, primaryImage, media, likeCount, commentCount]);
+  }, [post, postId, primaryImage, media, likeCount, commentCount, authorName, authorPhoto]);
 
   const handleLike = async () => {
     if (!postId) return;
@@ -271,18 +251,14 @@ const PostDetailPage = () => {
 
       <div className="flex items-center gap-3 mb-8">
         <div className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center overflow-hidden">
-          {post.authorPhoto ? (
-            <img
-              src={post.authorPhoto}
-              alt={post.authorName ?? 'Usuario'}
-              className="w-full h-full object-cover"
-            />
+          {authorPhoto ? (
+            <img src={authorPhoto} alt={authorName} className="w-full h-full object-cover" />
           ) : (
             <User size={20} className="text-neutral-500" />
           )}
         </div>
         <div>
-          <p className="text-white font-medium">{post.authorName ?? 'Usuario'}</p>
+          <p className="text-white font-medium">{authorName}</p>
           <p className="text-neutral-500 text-sm">
             Comunidad · {formatRelativeTime(post.createdAt)}
           </p>

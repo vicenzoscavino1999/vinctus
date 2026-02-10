@@ -40,6 +40,8 @@ vi.mock('@/features/posts/api', () => ({
 vi.mock('@/features/profile/api', () => ({
   saveCategoryWithSync: vi.fn(() => Promise.resolve()),
   unsaveCategoryWithSync: vi.fn(() => Promise.resolve()),
+  followCategoryWithSync: vi.fn(() => Promise.resolve()),
+  unfollowCategoryWithSync: vi.fn(() => Promise.resolve()),
 }));
 
 // Mock localStorage
@@ -78,6 +80,7 @@ describe('useAppState', () => {
     it('inicializa estado desde localStorage', () => {
       localStorageMock.setItem('vinctus_joined_groups', JSON.stringify(['1', '2']));
       localStorageMock.setItem('vinctus_saved_categories', JSON.stringify(['science']));
+      localStorageMock.setItem('vinctus_followed_categories', JSON.stringify(['technology']));
       localStorageMock.setItem('vinctus_liked_posts', JSON.stringify(['7']));
       localStorageMock.setItem('vinctus_saved_posts', JSON.stringify(['9']));
 
@@ -85,6 +88,7 @@ describe('useAppState', () => {
 
       expect(result.current.joinedGroups).toEqual(['1', '2']);
       expect(result.current.savedCategories).toEqual(['science']);
+      expect(result.current.followedCategories).toEqual(['technology']);
       expect(result.current.likedPosts).toEqual(['7']);
       expect(result.current.savedPosts).toEqual(['9']);
     });
@@ -167,6 +171,42 @@ describe('useAppState', () => {
       });
 
       expect(result.current.isCategorySaved('science')).toBe(false);
+    });
+  });
+
+  describe('Categorias seguidas', () => {
+    it('toggleFollowCategory sigue una categoria', () => {
+      const { result } = renderHook(() => useAppState(), { wrapper });
+
+      act(() => {
+        result.current.toggleFollowCategory('science');
+      });
+
+      expect(result.current.isCategoryFollowed('science')).toBe(true);
+    });
+
+    it('persiste categorias seguidas en localStorage', () => {
+      const { result } = renderHook(() => useAppState(), { wrapper });
+
+      act(() => {
+        result.current.toggleFollowCategory('science');
+      });
+
+      const stored = JSON.parse(localStorageMock.getItem('vinctus_followed_categories') || '[]');
+      expect(stored).toContain('science');
+    });
+
+    it('toggleFollowCategory deja de seguir categoria si ya estaba seguida', () => {
+      const { result } = renderHook(() => useAppState(), { wrapper });
+
+      act(() => {
+        result.current.toggleFollowCategory('science');
+      });
+      act(() => {
+        result.current.toggleFollowCategory('science');
+      });
+
+      expect(result.current.isCategoryFollowed('science')).toBe(false);
     });
   });
 

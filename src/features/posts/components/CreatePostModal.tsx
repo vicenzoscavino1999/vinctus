@@ -7,6 +7,7 @@ import { getNewPostId } from '@/features/posts/api';
 import { createPostUploading, updatePost } from '@/features/posts/api';
 import { compressToWebp, validateImage } from '@/shared/lib/compression';
 import { uploadPostMedia, deletePostAllMedia } from '@/shared/lib/storage';
+import { formatBytes } from '@/shared/lib/formatUtils';
 
 type SelectedAttachment = {
   id: string;
@@ -42,17 +43,7 @@ const allowedFileTypes = new Set([
 
 const allowedFileExtensions = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx']);
 
-const formatBytes = (value: number): string => {
-  if (!Number.isFinite(value) || value <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let size = value;
-  let unitIndex = 0;
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
-};
+// formatBytes imported from @/shared/lib/formatUtils
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof Error && error.message.trim().length > 0) {

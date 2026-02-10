@@ -7,6 +7,7 @@ let fetchWikipediaArticles: ReturnType<typeof vi.fn>;
 let fetchHackerNews: ReturnType<typeof vi.fn>;
 let fetchBooks: ReturnType<typeof vi.fn>;
 let fetchNatureObservations: ReturnType<typeof vi.fn>;
+let fetchMusicInfo: ReturnType<typeof vi.fn>;
 
 beforeAll(async () => {
   vi.doMock('@/shared/lib/api', () => ({
@@ -15,6 +16,7 @@ beforeAll(async () => {
     fetchHackerNews: vi.fn(),
     fetchBooks: vi.fn(),
     fetchNatureObservations: vi.fn(),
+    fetchMusicInfo: vi.fn(),
   }));
 
   const api = await import('@/shared/lib/api');
@@ -23,6 +25,7 @@ beforeAll(async () => {
   fetchHackerNews = api.fetchHackerNews as ReturnType<typeof vi.fn>;
   fetchBooks = api.fetchBooks as ReturnType<typeof vi.fn>;
   fetchNatureObservations = api.fetchNatureObservations as ReturnType<typeof vi.fn>;
+  fetchMusicInfo = api.fetchMusicInfo as ReturnType<typeof vi.fn>;
 
   const hookModule = await import('./useApiContent');
   useApiContent = hookModule.useApiContent;
@@ -199,17 +202,18 @@ describe('useApiContent Hook', () => {
   });
 
   describe('Casos especiales', () => {
-    it('retorna mock data para lastfm sin llamar API', async () => {
+    it('carga datos de musica via proveedor server-side', async () => {
+      const mockData = [{ artist: 'Dave Brubeck', id: 1, title: 'Take Five', type: 'Cancion' }];
+      fetchMusicInfo.mockResolvedValueOnce(mockData);
+
       const { result } = renderHook(() => useApiContent('lastfm', 'music', 5));
 
       await waitFor(() => {
         expect(result.current.loading).toBe(false);
       });
 
-      // lastfm usa datos mock fijos
-      expect(result.current.data.length).toBeGreaterThan(0);
-      const firstItem = result.current.data[0];
-      expect(firstItem && 'title' in firstItem ? firstItem.title : undefined).toBe('Clair de Lune');
+      expect(result.current.data).toEqual(mockData);
+      expect(fetchMusicInfo).toHaveBeenCalledWith('music', 5);
     });
 
     it('retorna array vacio para apiSource desconocido', async () => {

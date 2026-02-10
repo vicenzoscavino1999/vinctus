@@ -1,19 +1,8 @@
 import { ChevronRight, Users } from 'lucide-react';
 import type { ConversationRead } from '@/features/chat/api';
+import { formatRelativeTime } from '@/shared/lib/formatUtils';
 
-const formatRelativeTime = (date: Date): string => {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'ahora';
-  if (diffMins < 60) return `${diffMins} min`;
-  if (diffHours < 24) return `${diffHours}h`;
-  if (diffDays < 7) return `${diffDays}d`;
-  return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-};
+// formatRelativeTime imported from @/shared/lib/formatUtils
 
 type Props = {
   conversation: ConversationRead;

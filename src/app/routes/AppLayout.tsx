@@ -39,6 +39,8 @@ const GroupConversationDetailsPage = lazy(
   () => import('@/features/chat/pages/GroupConversationDetailsPage'),
 );
 const GroupEditPage = lazy(() => import('@/features/groups/pages/GroupEditPage'));
+const ArenaPage = lazy(() => import('@/features/arena/pages/ArenaPage'));
+const AIChatPage = lazy(() => import('@/features/ai/pages/AIChatPage'));
 
 // Settings page (lazy loaded)
 const SettingsPage = lazy(() => import('@/features/settings/pages/SettingsPage'));
@@ -269,12 +271,14 @@ const AppLayout = () => {
     if (pathname === '/search') return 'search';
     if (pathname === '/feed') return 'feed';
     if (pathname === '/projects') return 'projects';
+    if (pathname.startsWith('/arena')) return 'arena';
     if (pathname === '/library') return 'library';
     if (pathname === '/profile') return 'profile';
     if (pathname.startsWith('/settings')) return 'profile';
     if (pathname === '/help') return 'profile';
     if (pathname === '/notifications') return 'notifications';
     if (pathname.startsWith('/messages')) return 'messages';
+    if (pathname.startsWith('/ai/')) return 'ai';
     if (pathname.startsWith('/user/')) return 'search';
     if (pathname.startsWith('/group/')) return 'discover';
     if (pathname.startsWith('/post/')) return 'discover';
@@ -309,6 +313,9 @@ const AppLayout = () => {
                 <Route path="/category/:categoryId" element={<CategoryPage />} />
                 <Route path="/feed" element={<FeedPage />} />
                 <Route path="/projects" element={<ProjectsPage />} />
+                <Route path="/arena" element={<ArenaPage />} />
+                <Route path="/arena/:debateId" element={<ArenaPage />} />
+                <Route path="/ai/chat" element={<AIChatPage />} />
                 <Route path="/library" element={<LibraryPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/settings/notifications" element={<SettingsNotificationsPage />} />

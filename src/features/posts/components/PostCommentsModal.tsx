@@ -9,6 +9,7 @@ import {
   type PostCommentRead,
 } from '@/features/posts/api';
 import { useToast } from '@/shared/ui/Toast';
+import { formatRelativeTime, formatBytes } from '@/shared/lib/formatUtils';
 
 type PostSummary = {
   postId: string;
@@ -37,39 +38,7 @@ interface PostCommentsModalProps {
   onCommentAdded: (postId: string) => void;
 }
 
-const toDate = (value: unknown): Date | null => {
-  if (!value) return null;
-  if (value instanceof Date) return value;
-  if (typeof value === 'object' && value && 'toDate' in value) {
-    return (value as { toDate: () => Date }).toDate();
-  }
-  return null;
-};
-
-const formatRelativeTime = (date: Date | null): string => {
-  if (!date) return 'Ahora';
-  const diffMs = Date.now() - date.getTime();
-  if (!Number.isFinite(diffMs) || diffMs < 0) return 'Ahora';
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return 'Ahora';
-  if (minutes < 60) return `Hace ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Hace ${hours} h`;
-  const days = Math.floor(hours / 24);
-  return `Hace ${days} d`;
-};
-
-const formatBytes = (value: number | undefined): string => {
-  if (!value || !Number.isFinite(value)) return '';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let size = value;
-  let unitIndex = 0;
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
-};
+// toDate, formatRelativeTime, formatBytes imported from @/shared/lib/formatUtils
 
 const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommentsModalProps) => {
   const { user } = useAuth();
@@ -193,8 +162,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
 
   if (!isOpen || !post) return null;
 
-  const postCreatedAt = toDate(post.createdAt);
-  const postTimestamp = postCreatedAt ? formatRelativeTime(postCreatedAt) : null;
+  const postTimestamp = post.createdAt ? formatRelativeTime(post.createdAt) : null;
   const totalComments = commentTotal ?? comments.length;
   const totalLikes = likeTotal ?? 0;
   const postParagraphs = post.text

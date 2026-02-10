@@ -42,6 +42,8 @@ vi.mock('@/features/posts/api', () => ({
 vi.mock('@/features/profile/api', () => ({
   saveCategoryWithSync: vi.fn(() => Promise.resolve()),
   unsaveCategoryWithSync: vi.fn(() => Promise.resolve()),
+  followCategoryWithSync: vi.fn(() => Promise.resolve()),
+  unfollowCategoryWithSync: vi.fn(() => Promise.resolve()),
 }));
 
 // Wrapper con providers necesarios

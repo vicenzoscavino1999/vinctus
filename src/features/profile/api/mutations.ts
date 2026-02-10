@@ -3,10 +3,12 @@ import {
   cancelFollowRequest as cancelFollowRequestRaw,
   createContribution as createContributionRaw,
   declineFollowRequest as declineFollowRequestRaw,
+  followCategoryWithSync as followCategoryWithSyncRaw,
   followPublicUser as followPublicUserRaw,
   getOrCreateDirectConversation as getOrCreateDirectConversationRaw,
   saveCategoryWithSync as saveCategoryWithSyncRaw,
   sendFollowRequest as sendFollowRequestRaw,
+  unfollowCategoryWithSync as unfollowCategoryWithSyncRaw,
   unfollowUser as unfollowUserRaw,
   unsaveCategoryWithSync as unsaveCategoryWithSyncRaw,
   updateContributionFile as updateContributionFileRaw,
@@ -180,5 +182,21 @@ export const unsaveCategoryWithSync = async (categoryId: string, uid: string): P
   const safeUid = validate(uidSchema, uid, { field: 'uid' });
   return runWrite('profile.unsaveCategoryWithSync', () =>
     unsaveCategoryWithSyncRaw(safeCategoryId, safeUid),
+  );
+};
+
+export const followCategoryWithSync = async (categoryId: string, uid: string): Promise<void> => {
+  const safeCategoryId = validate(categoryIdSchema, categoryId, { field: 'categoryId' });
+  const safeUid = validate(uidSchema, uid, { field: 'uid' });
+  return runWrite('profile.followCategoryWithSync', () =>
+    followCategoryWithSyncRaw(safeCategoryId, safeUid),
+  );
+};
+
+export const unfollowCategoryWithSync = async (categoryId: string, uid: string): Promise<void> => {
+  const safeCategoryId = validate(categoryIdSchema, categoryId, { field: 'categoryId' });
+  const safeUid = validate(uidSchema, uid, { field: 'uid' });
+  return runWrite('profile.unfollowCategoryWithSync', () =>
+    unfollowCategoryWithSyncRaw(safeCategoryId, safeUid),
   );
 };

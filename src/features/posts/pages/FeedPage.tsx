@@ -16,6 +16,7 @@ import { db } from '@/shared/lib/firebase';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/auth';
 import { useAppState } from '@/context/app-state';
+import { formatRelativeTime } from '@/shared/lib/formatUtils';
 import { useToast } from '@/shared/ui/Toast';
 import PostCommentsModal from '@/features/posts/components/PostCommentsModal';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
@@ -85,31 +86,7 @@ type FeedInitialCacheEntry = {
 let feedInitialCache: FeedInitialCacheEntry | null = null;
 let feedInitialPromise: Promise<FeedInitialCacheEntry> | null = null;
 
-const toDate = (value: unknown): Date | null => {
-  if (!value) return null;
-  if (typeof value === 'object' && value !== null && 'toDate' in value) {
-    const toDateCandidate = (value as { toDate?: unknown }).toDate;
-    if (typeof toDateCandidate === 'function') {
-      return toDateCandidate.call(value) as Date;
-    }
-  }
-  if (value instanceof Date) return value;
-  return null;
-};
-
-const formatRelativeTime = (value: unknown): string => {
-  const date = toDate(value);
-  if (!date) return 'Ahora';
-  const diffMs = Date.now() - date.getTime();
-  if (!Number.isFinite(diffMs) || diffMs < 0) return 'Ahora';
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return 'Ahora';
-  if (minutes < 60) return `Hace ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Hace ${hours} h`;
-  const days = Math.floor(hours / 24);
-  return `Hace ${days} d`;
-};
+// toDate and formatRelativeTime imported from @/shared/lib/formatUtils
 
 const buildPostSummary = (post: Post): PostSummary => {
   const displayText = post.text ?? post.content ?? '';

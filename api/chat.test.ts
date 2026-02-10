@@ -77,15 +77,31 @@ function createSuccessfulUpstreamResponse(text = 'ok'): Response {
   } as unknown as Response;
 }
 
+function createNvidiaSuccessResponse(text = 'ok'): Response {
+  return {
+    json: vi.fn(async () => ({
+      choices: [{ message: { content: text } }],
+    })),
+    ok: true,
+    text: vi.fn(async () => ''),
+  } as unknown as Response;
+}
+
 describe('api/chat', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetRateLimitStore();
     process.env.GEMINI_API_KEY = 'test-key';
+    process.env.GEMINI_MODELS = '';
     process.env.CHAT_USER_MINUTE_LIMIT = '20';
     process.env.CHAT_USER_DAY_LIMIT = '300';
     process.env.CHAT_IP_MINUTE_LIMIT = '60';
     process.env.CHAT_IP_DAY_LIMIT = '2000';
+    process.env.NVIDIA_API_KEY = '';
+    process.env.NVIDIA_BASE_URL = '';
+    process.env.NVIDIA_MODEL = '';
+    process.env.FIREBASE_WEB_API_KEY = '';
+    process.env.VITE_FIREBASE_API_KEY = '';
     mockVerifyIdToken.mockResolvedValue({ uid: 'user_1' });
     mockCreateGroupAction.mockResolvedValue({
       groupId: 'group_1',
@@ -181,5 +197,73 @@ describe('api/chat', () => {
     expect(result.statusCode).toBe(504);
     expect(result.payload).toEqual({ error: 'AI provider timeout' });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back to NVIDIA when Gemini models are rate limited', async () => {
+    process.env.NVIDIA_API_KEY = 'nvidia-test-key';
+    process.env.NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
+    process.env.NVIDIA_MODEL = 'moonshotai/kimi-k2-instruct';
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: vi.fn(async () => 'RESOURCE_EXHAUSTED'),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: vi.fn(async () => 'rate limit'),
+      } as unknown as Response)
+      .mockResolvedValueOnce(createNvidiaSuccessResponse('respuesta desde nvidia'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({ authorization: 'Bearer token_1', body: { message: 'hola' } }),
+      createRes(result),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(result.payload).toEqual(
+      expect.objectContaining({
+        model: 'moonshotai/kimi-k2-instruct',
+        provider: 'nvidia',
+        response: 'respuesta desde nvidia',
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('uses Identity Toolkit lookup when verifyIdToken fails', async () => {
+    process.env.FIREBASE_WEB_API_KEY = 'public-web-key';
+    mockVerifyIdToken.mockRejectedValueOnce(new Error('invalid signature'));
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        json: vi.fn(async () => ({ users: [{ localId: 'user_lookup' }] })),
+        ok: true,
+        status: 200,
+        text: vi.fn(async () => ''),
+      } as unknown as Response)
+      .mockResolvedValueOnce(createSuccessfulUpstreamResponse('respuesta via lookup'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({ authorization: 'Bearer token_1', body: { message: 'hola' } }),
+      createRes(result),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(result.payload).toEqual(
+      expect.objectContaining({
+        response: 'respuesta via lookup',
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('accounts:lookup');
   });
 });

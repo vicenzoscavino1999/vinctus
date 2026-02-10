@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ChevronLeft,
   Hash,
@@ -8,9 +8,11 @@ import {
   FileText,
   Link as LinkIcon,
   Loader2,
+  UserPlus,
 } from 'lucide-react';
 import { SkeletonContentGrid, EmptyState, ErrorState } from '@/shared/ui/SkeletonLoader';
 import { useToast } from '@/shared/ui/Toast';
+import { useAppState } from '@/context/app-state';
 import ApiContentCard from '@/features/discover/components/ApiContentCard';
 import { useApiContent } from '@/shared/hooks';
 import { CATEGORIES } from '@/shared/constants';
@@ -25,6 +27,12 @@ import {
 type ContributionLibraryItem = ContributionRead & {
   authorName: string;
   authorPhoto: string | null;
+};
+
+type CategoryNavigationState = {
+  enteredAt?: number;
+  fromDiscover?: boolean;
+  source?: string;
 };
 
 const CONTRIBUTION_LABELS: Record<ContributionType, string> = {
@@ -44,9 +52,13 @@ const formatMembers = (value: number): string => {
 const CategoryPage = () => {
   const { categoryId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [viewMode, setViewMode] = useState('live');
   const [selectedSubgroupId, setSelectedSubgroupId] = useState<string | null>(null);
   const { showToast } = useToast();
+  const { toggleFollowCategory, isCategoryFollowed } = useAppState();
+  const navigationState = (location.state as CategoryNavigationState | null) ?? null;
+  const cameFromDiscover = navigationState?.fromDiscover === true;
 
   const category = CATEGORIES.find((c) => c.id === categoryId);
   const selectedSubgroup =
@@ -60,6 +72,19 @@ const CategoryPage = () => {
   const [libraryItems, setLibraryItems] = useState<ContributionLibraryItem[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryError, setLibraryError] = useState<string | null>(null);
+
+  const categoryIsFollowed = category ? isCategoryFollowed(category.id) : false;
+  const pageTransitionClass = cameFromDiscover
+    ? 'animate-in fade-in slide-in-from-right-3 duration-500'
+    : 'animate-in fade-in duration-300';
+
+  const handleBack = () => {
+    if (cameFromDiscover && window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/discover');
+  };
 
   // Get API query from selected subgroup or default to first one
   const apiQuery =
@@ -151,16 +176,16 @@ const CategoryPage = () => {
   }
 
   return (
-    <div className="page-category">
+    <div className={`page-category ${pageTransitionClass}`}>
       <button
-        onClick={() => navigate('/discover')}
+        onClick={handleBack}
         className="group flex items-center text-neutral-500 hover:text-neutral-300 mb-8 transition-colors text-xs tracking-widest uppercase"
       >
         <ChevronLeft size={14} className="mr-2 group-hover:-translate-x-1 transition-transform" />
         Regresar
       </button>
 
-      <header className="mb-12 border-b border-neutral-900 pb-12">
+      <header className="mb-12 border-b border-neutral-900 pb-12 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className={`inline-flex mb-6 opacity-80 ${category.color}`}>
           <category.icon size={40} strokeWidth={0.5} />
         </div>
@@ -169,6 +194,25 @@ const CategoryPage = () => {
           <h1 className="text-5xl md:text-7xl font-serif font-light text-white tracking-tight">
             {category.label}
           </h1>
+          <button
+            type="button"
+            onClick={() => {
+              const alreadyFollowed = isCategoryFollowed(category.id);
+              toggleFollowCategory(category.id);
+              showToast(
+                alreadyFollowed ? 'Categoria dejada de seguir' : 'Categoria seguida',
+                alreadyFollowed ? 'info' : 'success',
+              );
+            }}
+            className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs uppercase tracking-wider transition-colors ${
+              categoryIsFollowed
+                ? 'border-brand-gold/50 bg-brand-gold/15 text-brand-gold'
+                : 'border-neutral-700 text-neutral-300 hover:border-neutral-500 hover:text-white'
+            }`}
+          >
+            <UserPlus size={12} />
+            {categoryIsFollowed ? 'Siguiendo' : 'Seguir categoria'}
+          </button>
         </div>
 
         <p className="text-neutral-400 text-lg md:text-xl max-w-2xl font-light font-sans leading-relaxed mb-8">
@@ -200,7 +244,7 @@ const CategoryPage = () => {
 
       {/* Live content from API */}
       {viewMode === 'live' && (
-        <div className="animate-in fade-in duration-500">
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
           {/* Subgroup filter buttons */}
           <div className="flex flex-wrap gap-2 mb-8">
             {category.subgroups.map((group) => (
@@ -246,7 +290,7 @@ const CategoryPage = () => {
 
       {/* Subgroups view */}
       {viewMode === 'subgroups' && (
-        <div className="animate-in fade-in duration-500">
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
           {groupsLoading ? (
             <div className="py-16 text-center text-neutral-500">
               <Loader2 size={20} className="mx-auto mb-3 animate-spin" />
@@ -305,7 +349,7 @@ const CategoryPage = () => {
 
       {/* Library view */}
       {viewMode === 'library' && (
-        <div className="animate-in fade-in duration-500">
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
           {libraryLoading ? (
             <div className="py-16 text-center text-neutral-500">
               <Loader2 size={20} className="mx-auto mb-3 animate-spin" />

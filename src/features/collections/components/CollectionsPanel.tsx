@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { formatRelativeTime } from '@/shared/lib/formatUtils';
 import { ArrowRight, File, FileText, FolderPlus, Link2, Search } from 'lucide-react';
 
 import { useAuth } from '@/context/auth';
@@ -16,22 +17,6 @@ import CollectionDetailModal from './CollectionDetailModal';
 interface CollectionsPanelProps {
   showIntro?: boolean;
 }
-
-const formatRelativeTime = (date: Date): string => {
-  const diffMs = Date.now() - date.getTime();
-  if (!Number.isFinite(diffMs) || diffMs < 0) return 'Ahora';
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return 'Ahora';
-  if (minutes < 60) return `Hace ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Hace ${hours} h`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `Hace ${days} d`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `Hace ${months} mes`;
-  const years = Math.floor(months / 12);
-  return `Hace ${years} a`;
-};
 
 const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
   const { user } = useAuth();

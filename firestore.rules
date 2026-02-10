@@ -73,12 +73,36 @@ service cloud.firestore {
       return request.resource.data.keys().hasAll(['postId', 'createdAt'])
         && request.resource.data.postId == postId;  // Must match path
     }
+
+    // Validate arena like structure against path
+    function isValidUserArenaLikeCreate(debateId) {
+      return request.resource.data.keys().hasOnly(['debateId', 'createdAt'])
+        && request.resource.data.debateId == debateId
+        && request.resource.data.createdAt == request.time;
+    }
+
+    function isValidFollowedCategoryCreate(categoryId) {
+      return request.resource.data.keys().hasOnly(['categoryId', 'createdAt'])
+        && request.resource.data.categoryId == categoryId
+        && request.resource.data.categoryId is string
+        && request.resource.data.categoryId.size() > 0
+        && request.resource.data.categoryId.size() <= 120
+        && request.resource.data.createdAt == request.time;
+    }
     
     // Validate post like structure against path and auth
     function isValidPostLikeCreate(postId, uid) {
       return request.resource.data.keys().hasAll(['uid', 'postId', 'createdAt'])
         && request.resource.data.uid == uid  // Must match path
         && request.resource.data.postId == postId;  // Must match path
+    }
+
+    // Validate arena debate like structure against path and auth
+    function isValidArenaDebateLikeCreate(debateId, uid) {
+      return request.resource.data.keys().hasOnly(['uid', 'debateId', 'createdAt'])
+        && request.resource.data.uid == uid
+        && request.resource.data.debateId == debateId
+        && request.resource.data.createdAt == request.time;
     }
     
     // Validate group member structure against path and auth
@@ -558,6 +582,30 @@ service cloud.firestore {
       allow update: if isOwner(uid)
         && request.resource.data.postId == postId;  // Prevent spoofing
     }
+
+    // users/{uid}/likedArenaDebates/{debateId}
+    // User's liked Arena debates (private)
+    match /users/{uid}/likedArenaDebates/{debateId} {
+      // Only owner can read (private)
+      allow read: if isOwner(uid);
+
+      // Only owner can like/unlike for self
+      allow create: if isOwner(uid)
+        && isValidUserArenaLikeCreate(debateId)
+        && exists(/databases/$(database)/documents/arenaDebates/$(debateId))
+        && get(/databases/$(database)/documents/arenaDebates/$(debateId)).data.status == 'done'
+        && (
+          get(/databases/$(database)/documents/arenaDebates/$(debateId)).data.visibility == 'public'
+          || get(/databases/$(database)/documents/arenaDebates/$(debateId)).data.createdBy == request.auth.uid
+        );
+      allow delete: if isOwner(uid);
+
+      // Update only if immutable keys remain
+      allow update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['debateId', 'createdAt'])
+        && request.resource.data.debateId == debateId
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
     
     // users/{uid}/savedPosts/{postId}
     // User's saved posts (private)
@@ -587,6 +635,90 @@ service cloud.firestore {
       // Update only if categoryId doesn't change
       allow update: if isOwner(uid)
         && request.resource.data.categoryId == categoryId;
+    }
+
+    // users/{uid}/followedCategories/{categoryId}
+    // User's followed categories (private)
+    match /users/{uid}/followedCategories/{categoryId} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid) && isValidFollowedCategoryCreate(categoryId);
+      allow delete: if isOwner(uid);
+      allow update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['categoryId', 'createdAt'])
+        && request.resource.data.categoryId == categoryId
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    // users/{uid}/savedArenaDebates/{debateId}
+    // User's saved Arena debates (private)
+    match /users/{uid}/savedArenaDebates/{debateId} {
+      // Only the user can read their own saved debates
+      allow read: if isOwner(uid);
+
+      // Only the user can write to their own saved debates
+      allow create: if isOwner(uid)
+        && request.resource.data.keys().hasOnly([
+          'debateId',
+          'topic',
+          'personaA',
+          'personaB',
+          'summary',
+          'verdictWinner',
+          'createdAt'
+        ])
+        && request.resource.data.debateId == debateId
+        && request.resource.data.topic is string
+        && request.resource.data.topic.size() > 0
+        && request.resource.data.topic.size() <= 240
+        && request.resource.data.personaA is string
+        && request.resource.data.personaA.size() > 0
+        && request.resource.data.personaA.size() <= 80
+        && request.resource.data.personaB is string
+        && request.resource.data.personaB.size() > 0
+        && request.resource.data.personaB.size() <= 80
+        && (
+          request.resource.data.summary == null
+          || (request.resource.data.summary is string
+            && request.resource.data.summary.size() <= 3000)
+        )
+        && (
+          request.resource.data.verdictWinner == null
+          || request.resource.data.verdictWinner in ['A', 'B', 'draw']
+        )
+        && request.resource.data.createdAt == request.time;
+      allow delete: if isOwner(uid);
+
+      // Update only if debate identity remains immutable
+      allow update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly([
+          'debateId',
+          'topic',
+          'personaA',
+          'personaB',
+          'summary',
+          'verdictWinner',
+          'createdAt'
+        ])
+        && request.resource.data.debateId == debateId
+        && request.resource.data.topic is string
+        && request.resource.data.topic.size() > 0
+        && request.resource.data.topic.size() <= 240
+        && request.resource.data.personaA is string
+        && request.resource.data.personaA.size() > 0
+        && request.resource.data.personaA.size() <= 80
+        && request.resource.data.personaB is string
+        && request.resource.data.personaB.size() > 0
+        && request.resource.data.personaB.size() <= 80
+        && (
+          request.resource.data.summary == null
+          || (request.resource.data.summary is string
+            && request.resource.data.summary.size() <= 3000)
+        )
+        && (
+          request.resource.data.verdictWinner == null
+          || request.resource.data.verdictWinner in ['A', 'B', 'draw']
+        )
+        && request.resource.data.createdAt == resource.data.createdAt;
     }
 
     // users/{uid}/collections/{collectionId}
@@ -1275,6 +1407,90 @@ service cloud.firestore {
       allow update: if isAuthenticated() && resource.data.toUid == request.auth.uid
         && isValidCollaborationRequestUpdate();
       allow delete: if isAuthenticated() && resource.data.fromUid == request.auth.uid;
+    }
+
+    // ==================== Arena AI Collections ====================
+
+    function canReadArenaDebateData(debateData) {
+      return (
+        (debateData == null && isAuthenticated())
+        || (
+          debateData != null
+          && (
+            debateData.visibility == 'public'
+            || (isAuthenticated() && debateData.createdBy == request.auth.uid)
+          )
+        )
+      );
+    }
+
+    function canLikeArenaDebate(debateId, uid) {
+      let debate = get(/databases/$(database)/documents/arenaDebates/$(debateId));
+      return (
+        isAuthenticated()
+        && request.auth.uid == uid
+        && debate != null
+        && debate.data != null
+        && debate.data.status == 'done'
+        && (
+          debate.data.visibility == 'public'
+          || debate.data.createdBy == request.auth.uid
+        )
+      );
+    }
+
+    // arenaDebates/{debateId}
+    // Server-managed by Cloud Functions.
+    match /arenaDebates/{debateId} {
+      allow read: if (
+        (resource == null && isAuthenticated())
+        || (resource != null && canReadArenaDebateData(resource.data))
+      );
+      allow create, update, delete: if false;
+
+      // arenaDebates/{debateId}/likes/{uid}
+      match /likes/{uid} {
+        allow read: if (
+          (
+            !exists(/databases/$(database)/documents/arenaDebates/$(debateId))
+            && isAuthenticated()
+          )
+          || canReadArenaDebateData(
+            get(/databases/$(database)/documents/arenaDebates/$(debateId)).data
+          )
+        );
+        allow create: if isOwner(uid)
+          && request.resource.data.uid == request.auth.uid
+          && isValidArenaDebateLikeCreate(debateId, uid)
+          && canLikeArenaDebate(debateId, uid);
+        allow delete: if isOwner(uid);
+        allow update: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['uid', 'debateId', 'createdAt'])
+          && request.resource.data.uid == uid
+          && request.resource.data.debateId == debateId
+          && request.resource.data.createdAt == resource.data.createdAt;
+      }
+
+      // arenaDebates/{debateId}/turns/{turnId}
+      match /turns/{turnId} {
+        allow read: if (
+          (
+            !exists(/databases/$(database)/documents/arenaDebates/$(debateId))
+            && isAuthenticated()
+          )
+          || canReadArenaDebateData(
+            get(/databases/$(database)/documents/arenaDebates/$(debateId)).data
+          )
+        );
+        allow create, update, delete: if false;
+      }
+    }
+
+    // arenaUsage/{uid}/days/{dayId}
+    // Server-managed by Cloud Functions (readable by owner only).
+    match /arenaUsage/{uid}/days/{dayId} {
+      allow read: if isOwner(uid);
+      allow create, update, delete: if false;
     }
     
     // ==================== Messaging Collections ====================

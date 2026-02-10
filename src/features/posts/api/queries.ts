@@ -2,6 +2,7 @@ import type { DocumentSnapshot } from 'firebase/firestore';
 import {
   getBlockedUsers as getBlockedUsersRaw,
   getFriendIds as getFriendIdsRaw,
+  getGlobalFeed as getGlobalFeedRaw,
   getPost as getPostRaw,
   getPostCommentCount as getPostCommentCountRaw,
   getPostComments as getPostCommentsRaw,
@@ -95,6 +96,16 @@ export const getPostsByUser = async (
   return runRead('posts.getPostsByUser', () =>
     getPostsByUserRaw(safeUserId, safePageSize, lastDoc),
   );
+};
+
+export const getGlobalFeed = async (
+  pageSize: number = 30,
+  lastDoc?: DocumentSnapshot,
+): Promise<PaginatedResult<PostRead>> => {
+  const safePageSize = validate(paginationLimitSchema, safeLimit(pageSize, 30), {
+    field: 'pageSize',
+  });
+  return runRead('posts.getGlobalFeed', () => getGlobalFeedRaw(safePageSize, lastDoc));
 };
 
 export const getStoriesForOwners = async (ownerIds: string[]): Promise<StoryRead[]> => {

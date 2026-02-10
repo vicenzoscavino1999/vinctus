@@ -307,6 +307,43 @@ async function handlePostLikeChange(eventId: string, postId: string, delta: numb
   });
 }
 
+async function handleArenaDebateLikeChange(
+  eventId: string,
+  debateId: string,
+  delta: number,
+): Promise<void> {
+  const dedupRef = db.collection('_dedup_events').doc(eventId);
+  const debateRef = db.doc(`arenaDebates/${debateId}`);
+
+  await db.runTransaction(async (tx) => {
+    const dedupDoc = await tx.get(dedupRef);
+    if (dedupDoc.exists) {
+      functions.logger.info('Event already processed, skipping', { eventId });
+      return;
+    }
+
+    const debateSnap = await tx.get(debateRef);
+    if (!debateSnap.exists) {
+      functions.logger.warn('Arena debate not found, skipping like update', { debateId });
+      return;
+    }
+
+    const debateData = debateSnap.data() || {};
+    const currentLikes = typeof debateData.likesCount === 'number' ? debateData.likesCount : 0;
+    const nextLikes = Math.max(0, currentLikes + delta);
+
+    tx.create(dedupRef, {
+      createdAt: FieldValue.serverTimestamp(),
+      processedAt: new Date().toISOString(),
+    });
+
+    tx.update(debateRef, {
+      likesCount: nextLikes,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+}
+
 // ==========================================================
 // FOLLOW COUNTERS (With Deduplication)
 // ==========================================================
@@ -715,6 +752,58 @@ export const onPostLikeDeleted = functions.firestore
       functions.logger.error('Failed to process unlike', {
         postId,
         userId,
+        eventId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+/**
+ * Increment likesCount when a user likes an Arena debate
+ * Trigger: onCreate arenaDebates/{debateId}/likes/{uid}
+ */
+export const onArenaDebateLikeCreated = functions.firestore
+  .document('arenaDebates/{debateId}/likes/{uid}')
+  .onCreate(async (_snap, context) => {
+    const { debateId, uid } = context.params;
+    const eventId = context.eventId;
+
+    try {
+      functions.logger.info('Arena debate liked', { debateId, uid, eventId });
+
+      await handleArenaDebateLikeChange(eventId, debateId, 1);
+
+      functions.logger.info('Arena debate like processed', { debateId, eventId });
+    } catch (error) {
+      functions.logger.error('Failed to process arena debate like', {
+        debateId,
+        uid,
+        eventId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+/**
+ * Decrement likesCount when a user removes like from an Arena debate
+ * Trigger: onDelete arenaDebates/{debateId}/likes/{uid}
+ */
+export const onArenaDebateLikeDeleted = functions.firestore
+  .document('arenaDebates/{debateId}/likes/{uid}')
+  .onDelete(async (_snap, context) => {
+    const { debateId, uid } = context.params;
+    const eventId = context.eventId;
+
+    try {
+      functions.logger.info('Arena debate unliked', { debateId, uid, eventId });
+
+      await handleArenaDebateLikeChange(eventId, debateId, -1);
+
+      functions.logger.info('Arena debate unlike processed', { debateId, eventId });
+    } catch (error) {
+      functions.logger.error('Failed to process arena debate unlike', {
+        debateId,
+        uid,
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -1223,3 +1312,9 @@ export const revokeUserSessions = functions.https.onCall(async (_data, context) 
   await admin.auth().revokeRefreshTokens(uid);
   return { ok: true };
 });
+
+// ==========================================================
+// ARENA AI (Callable)
+// ==========================================================
+
+export { createDebate, getArenaUsage, getArenaPersonas } from './arena/createDebate';

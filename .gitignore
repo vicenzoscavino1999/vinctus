@@ -50,3 +50,7 @@ test-results/
 lighthouse-report.json
 *.lighthouse.json
 .lighthouseci/
+
+# Billing / financial reports
+Pago*.csv
+*.billing.csv

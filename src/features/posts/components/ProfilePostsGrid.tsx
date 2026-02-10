@@ -27,9 +27,9 @@ const PAGE_SIZE = 12;
 
 const getDisplayText = (post: ProfilePost): string => {
   const title = post.title ?? '';
-  const legacy = post.content ?? '';
   const current = post.text ?? '';
-  const body = legacy || current;
+  const legacy = post.content ?? '';
+  const body = current || legacy;
   return (title || body).trim();
 };
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import type { StoryRead } from '@/features/posts/api';
+import { formatRelativeTime } from '@/shared/lib/formatUtils';
 
 interface StoryViewerModalProps {
   isOpen: boolean;
@@ -12,17 +13,7 @@ interface StoryViewerModalProps {
   onClose: () => void;
 }
 
-const formatRelativeTime = (date: Date): string => {
-  const diffMs = Date.now() - date.getTime();
-  if (!Number.isFinite(diffMs) || diffMs < 0) return 'Ahora';
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return 'Ahora';
-  if (minutes < 60) return `Hace ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Hace ${hours} h`;
-  const days = Math.floor(hours / 24);
-  return `Hace ${days} d`;
-};
+// formatRelativeTime imported from @/shared/lib/formatUtils
 
 const StoryViewerModal = ({
   isOpen,
