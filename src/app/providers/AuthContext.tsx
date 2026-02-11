@@ -25,7 +25,7 @@ import {
   type ConfirmationResult,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, googleProvider, db } from '@/shared/lib/firebase';
+import { appleProvider, auth, googleProvider, db } from '@/shared/lib/firebase';
 import { trackAppCall, trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
 
 // Types
@@ -43,7 +43,9 @@ interface AuthContextType {
   loading: boolean;
   error: string | null;
   phoneCodeSent: boolean;
+  isAppleSignInEnabled: boolean;
   signInWithGoogle: () => Promise<void>;
+  signInWithApple: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string, displayName?: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -57,6 +59,7 @@ interface AuthContextType {
 // Create context
 const AuthContext = createContext<AuthContextType | null>(null);
 const REDIRECT_PENDING_KEY = 'vinctus_auth_redirect_pending';
+const APPLE_SIGN_IN_ENABLED = import.meta.env.VITE_ENABLE_APPLE_SIGN_IN === 'true';
 
 const setRedirectPendingFlag = (): void => {
   if (typeof window === 'undefined') return;
@@ -241,23 +244,40 @@ const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
 // Helper to translate Firebase error codes to Spanish
 const translateError = (code: string): string => {
   const errors: Record<string, string> = {
-    'auth/email-already-in-use': 'Este correo ya está registrado',
-    'auth/invalid-email': 'Correo electrónico inválido',
-    'auth/operation-not-allowed': 'Operación no permitida',
-    'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres',
+    'auth/email-already-in-use': 'Este correo ya esta registrado',
+    'auth/invalid-email': 'Correo electronico invalido',
+    'auth/operation-not-allowed': 'Operacion no permitida',
+    'auth/weak-password': 'La contrasena debe tener al menos 6 caracteres',
     'auth/user-disabled': 'Esta cuenta ha sido deshabilitada',
     'auth/user-not-found': 'No existe una cuenta con este correo',
-    'auth/wrong-password': 'Contraseña incorrecta',
-    'auth/invalid-credential': 'Credenciales inválidas',
-    'auth/too-many-requests': 'Demasiados intentos. Intenta más tarde',
+    'auth/wrong-password': 'Contrasena incorrecta',
+    'auth/invalid-credential': 'Credenciales invalidas',
+    'auth/too-many-requests': 'Demasiados intentos. Intenta mas tarde',
     'auth/popup-closed-by-user': 'Ventana cerrada antes de completar',
-    'auth/invalid-phone-number': 'Número de teléfono inválido',
-    'auth/missing-phone-number': 'Ingresa un número de teléfono',
-    'auth/quota-exceeded': 'Límite de SMS excedido. Intenta más tarde',
-    'auth/invalid-verification-code': 'Código de verificación incorrecto',
-    'auth/code-expired': 'El código ha expirado. Solicita uno nuevo',
+    'auth/invalid-phone-number': 'Numero de telefono invalido',
+    'auth/missing-phone-number': 'Ingresa un numero de telefono',
+    'auth/quota-exceeded': 'Limite de SMS excedido. Intenta mas tarde',
+    'auth/invalid-verification-code': 'Codigo de verificacion incorrecto',
+    'auth/code-expired': 'El codigo ha expirado. Solicita uno nuevo',
+    'auth/account-exists-with-different-credential':
+      'Este correo ya esta asociado a otro metodo de acceso',
+    'auth/credential-already-in-use': 'Esta credencial ya esta en uso',
   };
-  return errors[code] || 'Error de autenticación';
+  return errors[code] || 'Error de autenticacion';
+};
+
+const translateAppleError = (code: string): string => {
+  const appleErrors: Record<string, string> = {
+    'auth/operation-not-allowed': 'Apple Sign-In no esta habilitado en Firebase Authentication.',
+    'auth/unauthorized-domain':
+      'Dominio no autorizado. Agrega tu dominio en Firebase Auth > Settings > Authorized domains.',
+    'auth/invalid-credential':
+      'Credencial Apple invalida. Revisa Service ID, Team ID, Key ID y private key en Firebase.',
+    'auth/missing-or-invalid-nonce':
+      'Sesion Apple invalida. Intenta de nuevo y revisa configuracion del provider.',
+  };
+
+  return appleErrors[code] || translateError(code);
 };
 
 interface AuthProviderProps {
@@ -359,6 +379,43 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   }, []);
 
+  // Sign in with Apple
+  // Strategy: Try popup first, then redirect fallback for strict browsers.
+  const signInWithApple = useCallback(async () => {
+    if (!APPLE_SIGN_IN_ENABLED) {
+      setError('Apple Sign-In no esta habilitado en este entorno.');
+      return;
+    }
+
+    setError(null);
+    try {
+      trackAppCall('auth.signInWithApple');
+      await signInWithPopup(auth, appleProvider);
+    } catch (err) {
+      const error = err as { code?: string };
+
+      if (
+        error.code === 'auth/popup-blocked' ||
+        error.code === 'auth/popup-closed-by-user' ||
+        error.code === 'auth/cancelled-popup-request'
+      ) {
+        try {
+          trackAppCall('auth.signInWithApple.redirectFallback');
+          setRedirectPendingFlag();
+          await signInWithRedirect(auth, appleProvider);
+          return;
+        } catch (redirectErr) {
+          const redirectCode = (redirectErr as { code?: string }).code || '';
+          setError(translateAppleError(redirectCode));
+          throw redirectErr;
+        }
+      }
+
+      setError(translateAppleError(error.code || ''));
+      throw err;
+    }
+  }, []);
+
   // Sign in with email/password
   const signInWithEmail = useCallback(async (email: string, password: string) => {
     setError(null);
@@ -455,7 +512,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     async (code: string) => {
       setError(null);
       if (!confirmationResultRef.current) {
-        setError('Primero solicita un código de verificación');
+        setError('Primero solicita un codigo de verificacion');
         return;
       }
       try {
@@ -492,7 +549,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       loading,
       error,
       phoneCodeSent,
+      isAppleSignInEnabled: APPLE_SIGN_IN_ENABLED,
       signInWithGoogle,
+      signInWithApple,
       signInWithEmail,
       signUpWithEmail,
       resetPassword,
@@ -508,6 +567,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       error,
       phoneCodeSent,
       signInWithGoogle,
+      signInWithApple,
       signInWithEmail,
       signUpWithEmail,
       resetPassword,

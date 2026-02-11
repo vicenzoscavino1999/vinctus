@@ -15,6 +15,11 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
+    function isAppAdmin() {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/app_admins/$(request.auth.uid));
+    }
+
     function isFriend(viewerUid, ownerUid) {
       return exists(/databases/$(database)/documents/users/$(ownerUid)/followers/$(viewerUid))
         && exists(/databases/$(database)/documents/users/$(viewerUid)/followers/$(ownerUid));
@@ -45,15 +50,6 @@ service cloud.firestore {
 
     function isAccountPublic(uid) {
       return !isAccountPrivate(uid);
-    }
-
-    function canViewPrivateContent(viewerUid, ownerUid) {
-      return viewerUid == ownerUid
-        || isFriend(viewerUid, ownerUid);
-    }
-
-    function canViewUserContent(viewerUid, ownerUid) {
-      return isAccountPublic(ownerUid) || canViewPrivateContent(viewerUid, ownerUid);
     }
 
     function isValidFollowDoc(uid) {
@@ -113,19 +109,17 @@ service cloud.firestore {
         && request.resource.data.role in ['member', 'moderator', 'admin'];
     }
     
-    // Prevent role escalation on update
-    function cannotEscalateRole() {
-      return !request.resource.data.keys().hasAny(['role'])
-        || request.resource.data.role == resource.data.role;
-    }
-
     function getGroupDoc(groupId) {
       return get(/databases/$(database)/documents/groups/$(groupId));
     }
 
     function canCreateMembershipForUser(uid, groupId) {
       let group = getGroupDoc(groupId);
-      return group != null && group.data != null && group.data.ownerId == request.auth.uid;
+      return uid is string
+        && uid.size() > 0
+        && group != null
+        && group.data != null
+        && group.data.ownerId == request.auth.uid;
     }
 
     // Prevent clients from editing reputation/karma fields
@@ -390,6 +384,23 @@ service cloud.firestore {
         && data.createdAt == request.time;
     }
 
+    function isValidModerationQueueUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let data = request.resource.data;
+      return changed.hasOnly([
+          'status', 'reviewAction', 'reviewNote',
+          'reviewedBy', 'reviewedAt', 'updatedAt'
+        ])
+        && data.status in ['pending', 'in_review', 'resolved', 'dismissed']
+        && data.reviewAction is string
+        && data.reviewAction.size() > 0
+        && data.reviewAction.size() <= 80
+        && (data.reviewNote == null || (data.reviewNote is string && data.reviewNote.size() <= 2000))
+        && data.reviewedBy == request.auth.uid
+        && data.reviewedAt == request.time
+        && data.updatedAt == request.time;
+    }
+
     function isValidContributionCreate() {
       let data = request.resource.data;
       return data.keys().hasOnly([
@@ -483,9 +494,20 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidSupportTicketCreate();
     }
 
+    match /app_admins/{uid} {
+      allow get: if isOwner(uid);
+      allow list, create, update, delete: if false;
+    }
+
     match /reports/{reportId} {
       allow read, update, delete: if false;
       allow create: if isAuthenticated() && isValidUserReportCreate();
+    }
+
+    match /moderation_queue/{itemId} {
+      allow read: if isAppAdmin();
+      allow create, delete: if false;
+      allow update: if isAppAdmin() && isValidModerationQueueUpdate();
     }
 
     // contributions/{contributionId}
@@ -509,6 +531,7 @@ service cloud.firestore {
             resource.data.ownerId == request.auth.uid
             || isFriend(request.auth.uid, resource.data.ownerId)
             || isFriendByIndex(request.auth.uid, resource.data.ownerId)
+            || isFollower(request.auth.uid, resource.data.ownerId)
           );
 
       allow create: if isAuthenticated() && isValidStoryCreate();
@@ -750,7 +773,7 @@ service cloud.firestore {
         && data.updatedAt == request.time;
     }
 
-    function isValidCollectionItemCreate(uid, collectionId) {
+    function isValidCollectionItemCreate(collectionId) {
       let data = request.resource.data;
       let isLink = data.type == 'link';
       let isNote = data.type == 'note';
@@ -813,7 +836,7 @@ service cloud.firestore {
 
       match /items/{itemId} {
         allow read: if isOwner(uid);
-        allow create: if isOwner(uid) && isValidCollectionItemCreate(uid, collectionId);
+        allow create: if isOwner(uid) && isValidCollectionItemCreate(collectionId);
         allow delete: if isOwner(uid);
         allow update: if false;
       }
@@ -1575,8 +1598,8 @@ service cloud.firestore {
     function isValidDirectConversationCreate(conversationId) {
       let data = request.resource.data;
       let memberIds = data.memberIds;
-      let firstUid = (memberIds is list && memberIds.size() > 0) ? memberIds[0] : null;
-      let secondUid = (memberIds is list && memberIds.size() > 1) ? memberIds[1] : null;
+      let firstUid = (memberIds is list && memberIds.size() > 0) ? memberIds[0] : '';
+      let secondUid = (memberIds is list && memberIds.size() > 1) ? memberIds[1] : '';
       return data.keys().hasOnly(['type', 'memberIds', 'lastMessage', 'createdAt', 'updatedAt'])
         && conversationId.matches('^dm_.*$')
         && data.type == 'direct'

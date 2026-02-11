@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Bookmark,
   ChevronLeft,
@@ -13,7 +13,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
+import { triggerSelectionHaptic } from '@/shared/lib/native';
 import PostCommentsModal from '@/features/posts/components/PostCommentsModal';
+import { toPostSummary } from '@/features/posts/model/postSummary';
 import {
   getPost,
   isPostLiked,
@@ -25,6 +27,7 @@ import {
   unsavePostWithSync,
 } from '@/features/posts/api';
 import { formatRelativeTime } from '@/shared/lib/formatUtils';
+import { parseYouTubeUrl } from '@/shared/lib/youtube';
 
 type PostMediaItem = {
   type: 'image' | 'video' | 'file';
@@ -45,6 +48,7 @@ const getFileExtension = (name: string | undefined): string | null => {
 
 const PostDetailPage = () => {
   const { postId } = useParams<{ postId: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -57,6 +61,13 @@ const PostDetailPage = () => {
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
+
+  const shouldOpenCommentsFromNavigation = useMemo(() => {
+    const navigationState = (location.state as { openComments?: boolean } | null) ?? null;
+    if (navigationState?.openComments) return true;
+    const params = new URLSearchParams(location.search);
+    return params.get('comments') === '1';
+  }, [location.state, location.search]);
 
   useEffect(() => {
     let active = true;
@@ -129,8 +140,15 @@ const PostDetailPage = () => {
     };
   }, [postId, user]);
 
+  useEffect(() => {
+    if (!postId) return;
+    if (!shouldOpenCommentsFromNavigation) return;
+    setCommentsOpen(true);
+  }, [postId, shouldOpenCommentsFromNavigation]);
+
   const media = useMemo(() => (post?.media ?? []) as PostMediaItem[], [post]);
   const primaryVideo = media.find((item) => item.type === 'video') ?? null;
+  const primaryVideoYouTube = primaryVideo ? parseYouTubeUrl(primaryVideo.url) : null;
   const primaryImage = media.find((item) => item.type === 'image') ?? null;
   const fileAttachments = media.filter((item) => item.type === 'file');
   const displayText = post?.text ?? post?.content ?? '';
@@ -144,19 +162,8 @@ const PostDetailPage = () => {
 
   const commentsSummary = useMemo(() => {
     if (!post || !postId) return null;
-    return {
-      postId,
-      authorName,
-      authorPhoto,
-      title: post.title ?? null,
-      text: post.text ?? post.content ?? '',
-      imageUrl: primaryImage?.url ?? null,
-      likeCount,
-      commentCount,
-      media,
-      createdAt: post.createdAt,
-    };
-  }, [post, postId, primaryImage, media, likeCount, commentCount, authorName, authorPhoto]);
+    return toPostSummary(post, { likeCount, commentCount });
+  }, [commentCount, likeCount, post, postId]);
 
   const handleLike = async () => {
     if (!postId) return;
@@ -164,6 +171,8 @@ const PostDetailPage = () => {
       showToast('Inicia sesion para dar me gusta', 'info');
       return;
     }
+
+    void triggerSelectionHaptic();
 
     const nextLiked = !liked;
     setLiked(nextLiked);
@@ -272,7 +281,17 @@ const PostDetailPage = () => {
       {(primaryVideo || primaryImage) && (
         <div className="relative rounded-xl overflow-hidden mb-8 aspect-video bg-surface-overlay">
           {primaryVideo ? (
-            <video src={primaryVideo.url} controls className="w-full h-full object-cover" />
+            primaryVideoYouTube ? (
+              <iframe
+                src={primaryVideoYouTube.embedUrl}
+                title={titleText}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                className="w-full h-full"
+              />
+            ) : (
+              <video src={primaryVideo.url} controls className="w-full h-full object-cover" />
+            )
           ) : (
             <img src={primaryImage?.url} alt={titleText} className="w-full h-full object-cover" />
           )}

@@ -2,14 +2,21 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetRateLimitStore } from './lib/rateLimit.js';
 
-const { mockCreateGroupAction, mockVerifyIdToken } = vi.hoisted(() => ({
-  mockCreateGroupAction: vi.fn(),
-  mockVerifyIdToken: vi.fn(),
-}));
+const { mockCreateGroupAction, mockVerifyIdToken, mockGetUserDoc, mockGetUserDocGet } = vi.hoisted(
+  () => ({
+    mockCreateGroupAction: vi.fn(),
+    mockVerifyIdToken: vi.fn(),
+    mockGetUserDoc: vi.fn(),
+    mockGetUserDocGet: vi.fn(),
+  }),
+);
 
 vi.mock('./lib/firebaseAdmin.js', () => ({
   getAuth: () => ({
     verifyIdToken: mockVerifyIdToken,
+  }),
+  getDb: () => ({
+    doc: mockGetUserDoc,
   }),
 }));
 
@@ -103,6 +110,19 @@ describe('api/chat', () => {
     process.env.FIREBASE_WEB_API_KEY = '';
     process.env.VITE_FIREBASE_API_KEY = '';
     mockVerifyIdToken.mockResolvedValue({ uid: 'user_1' });
+    mockGetUserDocGet.mockResolvedValue({
+      data: () => ({
+        settings: {
+          ai: {
+            consentGranted: true,
+          },
+        },
+      }),
+      exists: true,
+    });
+    mockGetUserDoc.mockReturnValue({
+      get: mockGetUserDocGet,
+    });
     mockCreateGroupAction.mockResolvedValue({
       groupId: 'group_1',
       name: 'Grupo',
@@ -265,5 +285,76 @@ describe('api/chat', () => {
     );
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('accounts:lookup');
+  });
+
+  it('redacts PII from chat payload before upstream AI call', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(createSuccessfulUpstreamResponse('ok'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({
+        authorization: 'Bearer token_1',
+        body: {
+          message: 'Escribe a persona@correo.com y llama al +1 (415) 555-1212',
+          history: [{ role: 'user', parts: [{ text: 'Mi correo es contacto@empresa.com' }] }],
+        },
+      }),
+      createRes(result),
+    );
+
+    expect(result.statusCode).toBe(200);
+
+    const upstreamInit = fetchMock.mock.calls[0]?.[1] as { body?: string } | undefined;
+    const upstreamBody = String(upstreamInit?.body ?? '');
+
+    expect(upstreamBody).toContain('[email_redacted]');
+    expect(upstreamBody).toContain('[phone_redacted]');
+    expect(upstreamBody).not.toContain('persona@correo.com');
+    expect(upstreamBody).not.toContain('contacto@empresa.com');
+    expect(upstreamBody).not.toContain('415) 555-1212');
+  });
+
+  it('rejects requests when server-side AI consent is missing', async () => {
+    mockGetUserDocGet.mockResolvedValueOnce({
+      data: () => ({
+        settings: {
+          ai: {
+            consentGranted: false,
+          },
+        },
+      }),
+      exists: true,
+    });
+
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    const res = createRes(result);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await handler(createReq({ authorization: 'Bearer token_1' }), res);
+
+    expect(result.statusCode).toBe(403);
+    expect(result.payload).toEqual(
+      expect.objectContaining({
+        error: expect.stringContaining('consentimiento de IA'),
+      }),
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 503 when AI consent lookup fails', async () => {
+    mockGetUserDocGet.mockRejectedValueOnce(new Error('firestore unavailable'));
+
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    const res = createRes(result);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await handler(createReq({ authorization: 'Bearer token_1' }), res);
+
+    expect(result.statusCode).toBe(503);
+    expect(result.payload).toEqual({ error: 'Unable to verify AI consent' });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

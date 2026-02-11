@@ -1,53 +1,29 @@
-{
+﻿{
   "indexes": [
     {
-      "collectionGroup": "posts",
+      "collectionGroup": "collaboration_requests",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "groupId",
+          "fieldPath": "fromUid",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "posts",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "groupId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
+          "fieldPath": "collaborationId",
           "order": "ASCENDING"
         }
       ]
     },
     {
-      "collectionGroup": "posts",
+      "collectionGroup": "collaboration_requests",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "authorId",
+          "fieldPath": "toUid",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "posts",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "categoryId",
+          "fieldPath": "status",
           "order": "ASCENDING"
         },
         {
@@ -71,25 +47,35 @@
       ]
     },
     {
-      "collectionGroup": "friend_requests",
+      "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "toUid",
+          "fieldPath": "visibility",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "status",
+          "fieldPath": "startAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "visibility",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "createdAt",
+          "fieldPath": "startAt",
           "order": "DESCENDING"
         }
       ]
     },
     {
-      "collectionGroup": "friend_requests",
+      "collectionGroup": "follow_requests",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -125,7 +111,7 @@
       ]
     },
     {
-      "collectionGroup": "follow_requests",
+      "collectionGroup": "friend_requests",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -143,21 +129,7 @@
       ]
     },
     {
-      "collectionGroup": "notifications",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "toUid",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "group_requests",
+      "collectionGroup": "friend_requests",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -193,35 +165,7 @@
       ]
     },
     {
-      "collectionGroup": "events",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "visibility",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "startAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "events",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "visibility",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "startAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "collaboration_requests",
+      "collectionGroup": "group_requests",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -235,20 +179,6 @@
         {
           "fieldPath": "createdAt",
           "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "collaboration_requests",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "fromUid",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "collaborationId",
-          "order": "ASCENDING"
         }
       ]
     },
@@ -281,6 +211,76 @@
       ]
     },
     {
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "toUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "posts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "authorId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "posts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "categoryId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "posts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "groupId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "posts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "groupId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "stories",
       "queryScope": "COLLECTION",
       "fields": [
@@ -299,5 +299,44 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "_dedup_events",
+      "fieldPath": "processedAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "stories",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    }
+  ]
 }

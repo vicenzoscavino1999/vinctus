@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import {
   Search,
   BookOpen,
@@ -17,7 +17,7 @@ import SearchFilters from '@/features/discover/components/SearchFilters';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
 import { useAppState } from '@/context/app-state';
 import { useAuth } from '@/context/auth';
-import { CATEGORIES, FEED_POSTS, PUBLICATIONS } from '@/shared/constants';
+import { CATEGORIES, PUBLICATIONS } from '@/shared/constants';
 import type { Category } from '@/shared/types';
 import { useToast } from '@/shared/ui/Toast';
 import {
@@ -40,15 +40,20 @@ import { getPublicArenaDebates } from '@/features/arena/api/queries';
 import { getPersonaById, type Debate } from '@/features/arena/types';
 import { getGlobalFeed, type PostCursor, type PostRead } from '@/features/posts/api';
 import { toDate } from '@/shared/lib/formatUtils';
+import { getYouTubeThumbnailUrl } from '@/shared/lib/youtube';
+import { fetchYouTubeSearchVideos, type YouTubeSearchVideo } from '@/shared/lib/youtubeSearchApi';
 
 type SearchFiltersState = {
   category: string | null;
   sortBy: string;
 };
 
-type DiscoverCategoryNavigationSource = 'trend-card' | 'trend-preview' | 'category-grid';
-type PublicationCardVariant = 'featured' | 'secondary' | 'compact';
-type PublicationSource = 'community' | 'editorial';
+type DiscoverCategoryNavigationSource =
+  | 'trend-card'
+  | 'trend-preview'
+  | 'category-grid'
+  | 'publication-feed';
+type PublicationSource = 'community' | 'editorial' | 'youtube';
 type PublicationStreamItem = {
   streamKey: string;
   id: string;
@@ -62,16 +67,17 @@ type PublicationStreamItem = {
   likes: number;
   comments: number;
   source: PublicationSource;
+  youtubeChannelTitle?: string | null;
+  youtubePublishedAt?: string | null;
+  youtubeUrl?: string | null;
+  youtubeVideoId?: string | null;
 };
-type PublicationSection = {
-  id: string;
-  label: string;
-  items: PublicationStreamItem[];
-};
-
 const PUBLICATION_BATCH_SIZE = 6;
 const PUBLICATION_MAX_ITEMS = 72;
 const EDITORIAL_VARIANT_LIMIT = PUBLICATION_MAX_ITEMS * 3;
+const YOUTUBE_BATCH_SIZE = 6;
+const YOUTUBE_QUERY_DEBOUNCE_MS = 350;
+const YOUTUBE_FALLBACK_QUERY = 'ciencia tecnologia musica';
 
 const EDITORIAL_TITLE_PATTERNS = [
   'Nuevas pistas en {subgroup}',
@@ -109,23 +115,40 @@ const getDebateLikesCount = (debate: Debate): number =>
 const getDebateCurationScore = (debate: Debate): number =>
   getDebateSourceCount(debate) * 3 + getDebateLikesCount(debate) * 2;
 
-const getPublicationBody = (
-  publication: PublicationStreamItem,
-  categoryDescription: string,
-): string => {
-  const lead =
-    publication.body && publication.body.trim().length > 0 && publication.body !== publication.title
-      ? publication.body.trim()
-      : publication.title;
-  return `${lead} ${categoryDescription} Esta pieza editorial se muestra en Discover mientras crece la actividad organica de la comunidad. La idea es mantener una experiencia viva con temas relevantes, y reemplazar gradualmente este contenido por publicaciones reales de usuarios.`;
-};
-
 const getFallbackPublicationByCategory = (categoryId: string | null | undefined) => {
   if (categoryId) {
     const categoryMatch = PUBLICATIONS.find((item) => item.categoryId === categoryId);
     if (categoryMatch) return categoryMatch;
   }
   return PUBLICATIONS[0];
+};
+
+const CATEGORY_HINTS: Record<string, string[]> = {
+  history: ['historia', 'history', 'cultura', 'ancient', 'rome', 'medieval'],
+  literature: ['literatura', 'poesia', 'poetry', 'fiction', 'filosofia', 'book', 'novel'],
+  music: ['musica', 'music', 'jazz', 'salsa', 'classical', 'arte', 'artist', 'song'],
+  nature: ['naturaleza', 'nature', 'wildlife', 'forest', 'botanica', 'birds', 'insects'],
+  science: ['ciencia', 'science', 'quantum', 'fisica', 'physics', 'cosmology', 'astronomy'],
+  technology: ['tecnologia', 'technology', 'ai', 'codigo', 'programming', 'software', 'startup'],
+};
+
+const normalizeKeyword = (value: string): string =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+const inferCategoryIdFromText = (value: string): string => {
+  const normalized = normalizeKeyword(value);
+  for (const category of CATEGORIES) {
+    const customHints = CATEGORY_HINTS[category.id] ?? [];
+    const labelHints = [category.label, ...category.subgroups.map((subgroup) => subgroup.name)];
+    const hints = [...customHints, ...labelHints.map((hint) => normalizeKeyword(hint))];
+    if (hints.some((hint) => hint && normalized.includes(hint))) {
+      return category.id;
+    }
+  }
+  return 'technology';
 };
 
 const buildEditorialPublication = (index: number): PublicationStreamItem => {
@@ -179,9 +202,12 @@ const buildCommunityPublication = (post: PostRead, index: number): PublicationSt
   const previewText = (post.text || post.content || '').trim();
   const authorDisplay = post.authorSnapshot?.displayName || post.authorName || 'Comunidad Vinctus';
   const titleCandidate = post.title?.trim() || previewText.split('\n')[0]?.trim() || fallback.title;
+  const videoUrl = post.media.find((media) => media.type === 'video')?.url ?? null;
+  const youtubeThumbnail = videoUrl ? getYouTubeThumbnailUrl(videoUrl) : null;
   const imageFromMedia =
     post.media.find((media) => media.type === 'image')?.url ??
-    post.media.find((media) => media.type === 'video')?.url ??
+    youtubeThumbnail ??
+    videoUrl ??
     fallback.image;
   return {
     streamKey: `community-${post.id}-${index}`,
@@ -199,6 +225,41 @@ const buildCommunityPublication = (post: PostRead, index: number): PublicationSt
   };
 };
 
+const buildYouTubePublication = (
+  video: YouTubeSearchVideo,
+  index: number,
+  query: string,
+): PublicationStreamItem => {
+  const categoryId = inferCategoryIdFromText(
+    `${video.title} ${video.description ?? ''} ${video.channelTitle ?? ''} ${query}`,
+  );
+  const fallback = getFallbackPublicationByCategory(categoryId);
+  const category = CATEGORIES.find((item) => item.id === categoryId);
+  const title = video.title.trim() || 'Video en YouTube';
+  const body =
+    video.description?.trim() ||
+    `Video recomendado para ${category?.label ?? fallback.category} en Discover.`;
+
+  return {
+    streamKey: `youtube-${video.videoId}-${index}`,
+    id: `youtube-${video.videoId}`,
+    postId: null,
+    title,
+    body,
+    group: video.channelTitle ?? 'YouTube',
+    category: category?.label ?? fallback.category,
+    categoryId,
+    image: video.thumbnailUrl ?? fallback.image,
+    likes: 0,
+    comments: 0,
+    source: 'youtube',
+    youtubeChannelTitle: video.channelTitle,
+    youtubePublishedAt: video.publishedAt,
+    youtubeUrl: video.watchUrl,
+    youtubeVideoId: video.videoId,
+  };
+};
+
 type TrendPreviewItem = {
   id: string;
   title: string;
@@ -212,15 +273,6 @@ type TrendPreviewState = {
   error: string | null;
   items: TrendPreviewItem[];
   liveCount: number;
-};
-
-type PublicationContextItem = {
-  id: string;
-  title: string;
-  subtitle: string;
-  meta: string;
-  href: string | null;
-  source: 'live' | 'editorial';
 };
 
 const getCategoryPrimaryQuery = (category: Category): string => {
@@ -396,14 +448,21 @@ const DiscoverPage = () => {
   const previewRequestedRef = useRef<Set<string>>(new Set());
   const publicationLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const publicationObserverLockedRef = useRef(false);
-  const publicationModalRef = useRef<HTMLDivElement | null>(null);
   const [visiblePublicationCount, setVisiblePublicationCount] = useState(PUBLICATION_BATCH_SIZE);
   const [communityPublications, setCommunityPublications] = useState<PublicationStreamItem[]>([]);
   const [communityCursor, setCommunityCursor] = useState<PostCursor>(null);
   const [communityHasMore, setCommunityHasMore] = useState(true);
   const [communityLoading, setCommunityLoading] = useState(false);
   const [communityReady, setCommunityReady] = useState(false);
-  const [activePublication, setActivePublication] = useState<PublicationStreamItem | null>(null);
+  const [youtubeQueryInput, setYoutubeQueryInput] = useState(YOUTUBE_FALLBACK_QUERY);
+  const [youtubeQuery, setYoutubeQuery] = useState(YOUTUBE_FALLBACK_QUERY);
+  const [youtubePublications, setYoutubePublications] = useState<PublicationStreamItem[]>([]);
+  const [youtubeNextPageToken, setYoutubeNextPageToken] = useState<string | null>(null);
+  const [youtubeHasMore, setYoutubeHasMore] = useState(false);
+  const [youtubeLoading, setYoutubeLoading] = useState(false);
+  const [youtubeReady, setYoutubeReady] = useState(false);
+  const [activeYouTubePublication, setActiveYouTubePublication] =
+    useState<PublicationStreamItem | null>(null);
 
   const filteredCategories = useMemo(() => {
     let result = [...CATEGORIES];
@@ -467,21 +526,49 @@ const DiscoverPage = () => {
 
   const publicationStream = useMemo<PublicationStreamItem[]>(() => {
     const targetCount = Math.max(PUBLICATION_BATCH_SIZE, visiblePublicationCount);
-    const communitySlice = communityPublications.slice(0, targetCount);
-    const missingCount = Math.max(0, targetCount - communitySlice.length);
-    const editorialStartIndex = Math.max(0, targetCount - missingCount);
+    const isYouTubeSearchActive =
+      youtubeQuery.trim().toLowerCase() !== YOUTUBE_FALLBACK_QUERY.toLowerCase();
+
+    let communitySlice: PublicationStreamItem[] = [];
+    let youtubeSlice: PublicationStreamItem[] = [];
+
+    if (isYouTubeSearchActive) {
+      // During explicit YouTube search, prioritize YouTube results first.
+      youtubeSlice = youtubePublications.slice(0, targetCount);
+      const remainingSlots = Math.max(0, targetCount - youtubeSlice.length);
+      communitySlice = communityPublications.slice(0, remainingSlots);
+    } else {
+      // In mixed feed mode, reserve slots for YouTube so it never disappears behind community posts.
+      const reservedYoutubeSlots = Math.min(
+        Math.ceil(targetCount * 0.35),
+        youtubePublications.length,
+      );
+      const communitySlots = Math.max(0, targetCount - reservedYoutubeSlots);
+      communitySlice = communityPublications.slice(0, communitySlots);
+      const remainingSlots = Math.max(0, targetCount - communitySlice.length);
+      youtubeSlice = youtubePublications.slice(0, remainingSlots);
+    }
+
+    const missingCount = Math.max(0, targetCount - communitySlice.length - youtubeSlice.length);
+    const editorialStartIndex = Math.max(0, communitySlice.length + youtubeSlice.length);
     const editorialItems = Array.from(
       { length: missingCount + PUBLICATION_BATCH_SIZE },
       (_, index) => buildEditorialPublication(editorialStartIndex + index),
     );
-    const merged = [...communitySlice, ...editorialItems];
+    const merged = isYouTubeSearchActive
+      ? [...youtubeSlice, ...communitySlice, ...editorialItems]
+      : [...communitySlice, ...youtubeSlice, ...editorialItems];
     const uniqueItems: PublicationStreamItem[] = [];
     const seen = new Set<string>();
 
     for (const item of merged) {
       const normalizedTitle = item.title.toLowerCase().trim();
       const dedupeKey =
-        item.source === 'community' ? `community:${item.id}` : `editorial:${normalizedTitle}`;
+        item.source === 'community'
+          ? `community:${item.id}`
+          : item.source === 'youtube'
+            ? `youtube:${item.youtubeVideoId ?? item.id}`
+            : `editorial:${normalizedTitle}`;
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
       uniqueItems.push(item);
@@ -502,38 +589,10 @@ const DiscoverPage = () => {
     }
 
     return uniqueItems;
-  }, [communityPublications, visiblePublicationCount]);
-
-  const publicationSections = useMemo<PublicationSection[]>(() => {
-    const sections: PublicationSection[] = [];
-    for (let index = 0; index < publicationStream.length; index += PUBLICATION_BATCH_SIZE) {
-      const sectionItems = publicationStream.slice(index, index + PUBLICATION_BATCH_SIZE);
-      if (sectionItems.length === 0) continue;
-      const sectionNumber = Math.floor(index / PUBLICATION_BATCH_SIZE) + 1;
-      const hasCommunityPosts = sectionItems.some((item) => item.source === 'community');
-      sections.push({
-        id: `publication-section-${sectionNumber}`,
-        label: hasCommunityPosts
-          ? `Comunidad activa · bloque ${sectionNumber}`
-          : `Editorial recomendada · bloque ${sectionNumber}`,
-        items: sectionItems,
-      });
-    }
-    return sections;
-  }, [publicationStream]);
+  }, [communityPublications, youtubePublications, visiblePublicationCount, youtubeQuery]);
 
   const hasMoreEditorial = visiblePublicationCount < PUBLICATION_MAX_ITEMS;
-  const hasMorePublications = communityHasMore || hasMoreEditorial;
-
-  useEffect(() => {
-    if (!activePublication) return;
-    const stillVisible = publicationStream.some(
-      (item) => item.streamKey === activePublication.streamKey,
-    );
-    if (!stillVisible) {
-      setActivePublication(null);
-    }
-  }, [publicationStream, activePublication]);
+  const hasMorePublications = communityHasMore || youtubeHasMore || hasMoreEditorial;
 
   useEffect(() => {
     let active = true;
@@ -566,6 +625,73 @@ const DiscoverPage = () => {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      const normalized = youtubeQueryInput.trim().replace(/\s+/g, ' ');
+      const nextQuery = normalized.length >= 2 ? normalized : YOUTUBE_FALLBACK_QUERY;
+      setYoutubeQuery((prev) => (prev === nextQuery ? prev : nextQuery));
+    }, YOUTUBE_QUERY_DEBOUNCE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [youtubeQueryInput]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadInitialYouTubePublications = async () => {
+      setYoutubeLoading(true);
+      setYoutubeReady(false);
+      try {
+        const result = await fetchYouTubeSearchVideos({
+          query: youtubeQuery,
+          limit: YOUTUBE_BATCH_SIZE,
+        });
+        if (!active) return;
+
+        const mapped = result.items.map((item, index) =>
+          buildYouTubePublication(item, index, youtubeQuery),
+        );
+        const unique = Array.from(new Map(mapped.map((item) => [item.id, item])).values());
+        setYoutubePublications(unique);
+        setYoutubeNextPageToken(result.nextPageToken ?? null);
+        setYoutubeHasMore(Boolean(result.nextPageToken));
+      } catch (error) {
+        console.error('Error loading YouTube publications for Discover:', error);
+        if (!active) return;
+        setYoutubePublications([]);
+        setYoutubeNextPageToken(null);
+        setYoutubeHasMore(false);
+      } finally {
+        if (active) {
+          setYoutubeLoading(false);
+          setYoutubeReady(true);
+        }
+      }
+    };
+
+    void loadInitialYouTubePublications();
+    return () => {
+      active = false;
+    };
+  }, [youtubeQuery]);
+
+  useEffect(() => {
+    if (!activeYouTubePublication) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActiveYouTubePublication(null);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [activeYouTubePublication]);
 
   const groupCountByCategory = useMemo(() => {
     return allGroups.reduce<Record<string, number>>((acc, group) => {
@@ -770,71 +896,6 @@ const DiscoverPage = () => {
         liveCount: 0,
       })
     : null;
-  const activePublicationCategory = useMemo(() => {
-    if (!activePublication) return null;
-    return CATEGORIES.find((item) => item.id === activePublication.categoryId) ?? null;
-  }, [activePublication]);
-  const activePublicationPreview = activePublicationCategory
-    ? (trendPreviewState[activePublicationCategory.id] ?? {
-        loading: false,
-        error: null,
-        items: [],
-        liveCount: 0,
-      })
-    : null;
-  const activePublicationContextItems = useMemo<PublicationContextItem[]>(() => {
-    if (!activePublicationCategory || !activePublication) return [];
-
-    const liveItems = (trendPreviewState[activePublicationCategory.id]?.items ?? [])
-      .slice(0, 2)
-      .map((item) => ({
-        ...item,
-        source: 'live' as const,
-      }));
-    if (liveItems.length > 0) {
-      return liveItems;
-    }
-
-    if (activePublication.source === 'community') {
-      return [];
-    }
-
-    const editorialItems = FEED_POSTS.filter(
-      (post) => post.categoryId === activePublicationCategory.id,
-    )
-      .slice(0, 2)
-      .map((post) => ({
-        id: `editorial-${post.id}`,
-        title: post.title,
-        subtitle: post.content,
-        meta: `${post.author} - ${post.time}`,
-        href: null,
-        source: 'editorial' as const,
-      }));
-    if (editorialItems.length > 0) {
-      return editorialItems;
-    }
-
-    return activePublicationCategory.subgroups.slice(0, 2).map((subgroup, index) => ({
-      id: `fallback-${activePublicationCategory.id}-${subgroup.id}-${index}`,
-      title: subgroup.name,
-      subtitle:
-        'Tema curado en Discover para mantener la experiencia activa mientras llegan publicaciones reales.',
-      meta: `${subgroup.members} miembros`,
-      href: null,
-      source: 'editorial' as const,
-    }));
-  }, [activePublicationCategory, activePublication, trendPreviewState]);
-
-  const liveContextCount = useMemo(
-    () => activePublicationContextItems.filter((item) => item.source === 'live').length,
-    [activePublicationContextItems],
-  );
-
-  const showRelatedContextPanel =
-    !!activePublication &&
-    (!!activePublicationPreview?.loading || activePublicationContextItems.length > 0);
-
   const getTrendSignals = useCallback(
     (categoryId: string): { liveLabel: string; groupsLabel: string; weeklyLabel: string } => {
       const liveCount = trendPreviewState[categoryId]?.liveCount ?? 0;
@@ -874,6 +935,33 @@ const DiscoverPage = () => {
       setCommunityLoading(false);
     }
   }, [communityLoading, communityHasMore, communityCursor, showToast]);
+
+  const loadMoreYouTubePublications = useCallback(async () => {
+    if (youtubeLoading || !youtubeHasMore || !youtubeNextPageToken) return;
+    setYoutubeLoading(true);
+    try {
+      const result = await fetchYouTubeSearchVideos({
+        query: youtubeQuery,
+        limit: YOUTUBE_BATCH_SIZE,
+        pageToken: youtubeNextPageToken,
+      });
+      setYoutubePublications((prev) => {
+        const offset = prev.length;
+        const mapped = result.items.map((item, index) =>
+          buildYouTubePublication(item, offset + index, youtubeQuery),
+        );
+        return Array.from(new Map([...prev, ...mapped].map((item) => [item.id, item])).values());
+      });
+      setYoutubeNextPageToken(result.nextPageToken ?? null);
+      setYoutubeHasMore(Boolean(result.nextPageToken));
+    } catch (error) {
+      console.error('Error loading more YouTube publications for Discover:', error);
+      setYoutubeHasMore(false);
+      showToast('No se pudieron cargar mas videos de YouTube.', 'error');
+    } finally {
+      setYoutubeLoading(false);
+    }
+  }, [youtubeHasMore, youtubeLoading, youtubeNextPageToken, youtubeQuery, showToast]);
 
   const loadTrendPreview = useCallback(async (category: Category) => {
     const categoryId = category.id;
@@ -941,39 +1029,6 @@ const DiscoverPage = () => {
   }, [filteredCategories, loadTrendPreview]);
 
   useEffect(() => {
-    if (!activePublicationCategory) return;
-    void loadTrendPreview(activePublicationCategory);
-  }, [activePublicationCategory, loadTrendPreview]);
-
-  useEffect(() => {
-    if (!activePublication) return;
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setActivePublication(null);
-      }
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [activePublication]);
-
-  useEffect(() => {
-    if (!activePublication) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [activePublication]);
-
-  useEffect(() => {
-    if (!activePublication) return;
-    window.requestAnimationFrame(() => {
-      publicationModalRef.current?.scrollTo({ top: 0, behavior: 'auto' });
-    });
-  }, [activePublication]);
-
-  useEffect(() => {
-    if (activePublication) return;
     if (!hasMorePublications) return;
     const sentinel = publicationLoadMoreRef.current;
     if (!sentinel) return;
@@ -989,6 +1044,9 @@ const DiscoverPage = () => {
         if (communityHasMore) {
           void loadMoreCommunityPublications();
         }
+        if (youtubeHasMore) {
+          void loadMoreYouTubePublications();
+        }
         window.setTimeout(() => {
           publicationObserverLockedRef.current = false;
         }, 220);
@@ -1002,7 +1060,13 @@ const DiscoverPage = () => {
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [activePublication, hasMorePublications, communityHasMore, loadMoreCommunityPublications]);
+  }, [
+    hasMorePublications,
+    communityHasMore,
+    youtubeHasMore,
+    loadMoreCommunityPublications,
+    loadMoreYouTubePublications,
+  ]);
 
   useEffect(() => {
     let isActive = true;
@@ -1193,11 +1257,21 @@ const DiscoverPage = () => {
   };
 
   const openPublicationFromDiscover = (publication: PublicationStreamItem) => {
-    setActivePublication(publication);
-    const category = CATEGORIES.find((item) => item.id === publication.categoryId);
-    if (category) {
-      void loadTrendPreview(category);
+    if (publication.source === 'youtube') {
+      setActiveYouTubePublication(publication);
+      return;
     }
+    if (publication.postId) {
+      navigate(`/post/${publication.postId}`, {
+        state: {
+          fromDiscover: true,
+          source: 'publication-feed',
+          enteredAt: Date.now(),
+        },
+      });
+      return;
+    }
+    openCategoryFromDiscover(publication.categoryId, 'publication-feed');
   };
 
   const loadNextPublicationBatch = () => {
@@ -1207,157 +1281,164 @@ const DiscoverPage = () => {
     if (communityHasMore) {
       void loadMoreCommunityPublications();
     }
+    if (youtubeHasMore) {
+      void loadMoreYouTubePublications();
+    }
   };
 
-  const renderPublicationCard = (
-    publication: PublicationStreamItem,
-    variant: PublicationCardVariant,
-    index: number,
-  ) => {
-    const isFeatured = variant === 'featured';
-    const isCompact = variant === 'compact';
+  const renderPublicationFeedItem = (publication: PublicationStreamItem, index: number) => {
     const category = CATEGORIES.find((item) => item.id === publication.categoryId);
-    const liked = isPostLiked(publication.id);
-    const saved = isPostSaved(publication.id);
+    const supportsCommunityActions =
+      publication.source === 'community' && Boolean(publication.postId);
+    const liked = supportsCommunityActions ? isPostLiked(publication.id) : false;
+    const saved = supportsCommunityActions ? isPostSaved(publication.id) : false;
     const displayLikes = publication.likes + (liked ? 1 : 0);
-    const isActive = activePublication?.streamKey === publication.streamKey;
+    const bodyText = (publication.body || category?.description || '').replace(/\s+/g, ' ').trim();
+    const youtubeDateLabel = publication.youtubePublishedAt
+      ? toDate(publication.youtubePublishedAt)?.toLocaleDateString('es-ES', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        })
+      : null;
+
     return (
       <article
-        role="button"
-        tabIndex={0}
-        onClick={() => openPublicationFromDiscover(publication)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            openPublicationFromDiscover(publication);
-          }
-        }}
-        style={{ animationDelay: `${Math.min(index, 6) * 80}ms` }}
-        className={`group relative overflow-hidden rounded-card border bg-neutral-950/80 cursor-pointer card-premium animate-in fade-in slide-in-from-bottom-2 duration-500 ${
-          isFeatured
-            ? 'min-h-[340px] lg:min-h-[390px]'
-            : isCompact
-              ? 'min-h-[220px]'
-              : 'min-h-[260px]'
-        } ${
-          isActive
-            ? 'border-brand-gold/55 shadow-[0_0_0_1px_rgba(212,175,55,0.24),0_16px_36px_-20px_rgba(212,175,55,0.52)]'
-            : 'border-neutral-800/70 hover:border-neutral-600'
-        }`}
+        key={publication.streamKey}
+        style={{ animationDelay: `${Math.min(index, 8) * 70}ms` }}
+        className="overflow-hidden rounded-card border border-neutral-800/70 bg-surface-overlay/85 card-premium animate-in fade-in slide-in-from-bottom-2 duration-500"
       >
-        <img
-          src={publication.image}
-          alt={publication.title}
-          className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/45 to-black/20" />
-        <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-brand-gold/12 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-
-        <div className="relative z-10 flex h-full flex-col p-5 md:p-6">
-          <div className="flex items-start gap-3">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full border border-brand-gold/35 bg-brand-gold/15">
-                {category ? (
-                  <category.icon size={15} className={category.color} strokeWidth={1.6} />
-                ) : (
-                  <BookOpen size={15} className="text-brand-gold" strokeWidth={1.6} />
-                )}
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-white">{publication.group}</p>
-                <p className="truncate text-[11px] uppercase tracking-wider text-neutral-400">
-                  {publication.category}
-                </p>
-                <p className="truncate text-[10px] uppercase tracking-[0.22em] text-neutral-500 mt-0.5">
-                  {publication.source === 'community' ? 'Comunidad' : 'Editorial'}
-                </p>
-              </div>
+        <header className="flex items-center justify-between gap-3 px-4 pt-4 pb-3 md:px-5">
+          <div className="min-w-0 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-gold/35 bg-brand-gold/12">
+              {category ? (
+                <category.icon size={16} className={category.color} strokeWidth={1.6} />
+              ) : (
+                <BookOpen size={16} className="text-brand-gold" strokeWidth={1.6} />
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-white">{publication.group}</p>
+              <p className="truncate text-[11px] uppercase tracking-wider text-neutral-400">
+                {publication.category}
+              </p>
             </div>
           </div>
 
-          <div className="mt-auto">
-            <h3
-              className={`font-display leading-tight text-white ${
-                isFeatured
-                  ? 'text-[2rem] md:text-[2.25rem] line-clamp-2'
-                  : isCompact
-                    ? 'text-[1.55rem] line-clamp-2'
-                    : 'text-[1.75rem] line-clamp-2'
-              }`}
-            >
+          <button
+            type="button"
+            onClick={() => openPublicationFromDiscover(publication)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-900/75 px-3 py-1.5 text-[10px] uppercase tracking-wider text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white"
+          >
+            {publication.source === 'youtube'
+              ? 'Ver video'
+              : publication.postId
+                ? 'Ver publicacion'
+                : 'Ver categoria'}
+            <ArrowRight size={12} />
+          </button>
+        </header>
+
+        <button
+          type="button"
+          onClick={() => openPublicationFromDiscover(publication)}
+          className="group relative block w-full text-left"
+        >
+          <img
+            src={publication.image}
+            alt={publication.title}
+            className="h-[280px] w-full object-cover md:h-[360px] transition-transform duration-700 group-hover:scale-[1.02]"
+          />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 p-4 md:p-5">
+            <h3 className="text-heading-md font-display text-white leading-tight line-clamp-2">
               {publication.title}
             </h3>
-            <p className="mt-2 text-sm text-neutral-300 line-clamp-2">
-              {(
-                publication.body ||
-                category?.description ||
-                'Conversacion destacada de la comunidad.'
-              )
-                .replace(/\s+/g, ' ')
-                .trim()}
-            </p>
-
-            <div className="mt-4 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    toggleLikePost(publication.id);
-                  }}
-                  aria-label={`Me gusta: ${displayLikes}`}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                    liked
-                      ? 'border-red-400/60 bg-red-500/15 text-red-300'
-                      : 'border-neutral-700 bg-black/35 text-neutral-200 hover:border-neutral-500'
-                  }`}
-                >
-                  <Heart size={13} fill={liked ? 'currentColor' : 'none'} />
-                  {displayLikes}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    showToast('Los comentarios estaran disponibles pronto', 'info');
-                  }}
-                  aria-label={`Comentarios: ${publication.comments}`}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-neutral-700 bg-black/35 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500"
-                >
-                  <MessageCircle size={13} />
-                  {publication.comments}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    toggleSavePost(publication.id);
-                  }}
-                  aria-label="Guardar publicacion"
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                    saved
-                      ? 'border-brand-gold/50 bg-brand-gold/15 text-brand-gold'
-                      : 'border-neutral-700 bg-black/35 text-neutral-200 hover:border-neutral-500'
-                  }`}
-                >
-                  <Bookmark size={13} fill={saved ? 'currentColor' : 'none'} />
-                  {saved ? 'Guardado' : 'Guardar'}
-                </button>
+            {bodyText && <p className="mt-1 text-sm text-neutral-300 line-clamp-2">{bodyText}</p>}
+            {publication.source === 'youtube' && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wider text-neutral-300">
+                <span>{publication.youtubeChannelTitle || publication.group}</span>
+                {youtubeDateLabel && <span>{youtubeDateLabel}</span>}
               </div>
+            )}
+          </div>
+        </button>
 
-              <span className="inline-flex items-center gap-1.5 text-xs uppercase tracking-wider text-neutral-100">
-                Ver detalle
-                <ArrowRight size={12} />
-              </span>
-            </div>
+        <div className="px-4 pb-4 pt-3 md:px-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (!supportsCommunityActions) return;
+                toggleLikePost(publication.id);
+              }}
+              disabled={!supportsCommunityActions}
+              aria-label={`Me gusta: ${displayLikes}`}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                !supportsCommunityActions
+                  ? 'cursor-not-allowed border-neutral-800 bg-neutral-900/40 text-neutral-500'
+                  : liked
+                    ? 'border-red-400/60 bg-red-500/15 text-red-300'
+                    : 'border-neutral-700 bg-neutral-900/70 text-neutral-200 hover:border-neutral-500'
+              }`}
+            >
+              <Heart size={13} fill={liked ? 'currentColor' : 'none'} />
+              {displayLikes}
+            </button>
+
+            {publication.postId && (
+              <button
+                type="button"
+                onClick={() => {
+                  navigate(`/post/${publication.postId}`, {
+                    state: {
+                      fromDiscover: true,
+                      source: 'publication-feed',
+                      enteredAt: Date.now(),
+                      openComments: true,
+                    },
+                  });
+                }}
+                aria-label={`Comentarios: ${publication.comments}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-900/70 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500"
+              >
+                <MessageCircle size={13} />
+                {publication.comments}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                if (!supportsCommunityActions) return;
+                toggleSavePost(publication.id);
+              }}
+              disabled={!supportsCommunityActions}
+              aria-label="Guardar publicacion"
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                !supportsCommunityActions
+                  ? 'cursor-not-allowed border-neutral-800 bg-neutral-900/40 text-neutral-500'
+                  : saved
+                    ? 'border-brand-gold/50 bg-brand-gold/15 text-brand-gold'
+                    : 'border-neutral-700 bg-neutral-900/70 text-neutral-200 hover:border-neutral-500'
+              }`}
+            >
+              <Bookmark size={13} fill={saved ? 'currentColor' : 'none'} />
+              {saved ? 'Guardado' : 'Guardar'}
+            </button>
+
+            <span className="ml-auto text-[10px] uppercase tracking-[0.2em] text-neutral-500">
+              {publication.source === 'community'
+                ? 'Comunidad'
+                : publication.source === 'youtube'
+                  ? 'YouTube'
+                  : 'Editorial'}
+            </span>
           </div>
         </div>
       </article>
     );
   };
-
   const renderTrendCard = (
     category: Category,
     variant: 'featured' | 'compact',
@@ -1596,176 +1677,8 @@ const DiscoverPage = () => {
     );
   };
 
-  const publicationDetailModal =
-    activePublication && typeof document !== 'undefined'
-      ? createPortal(
-          <div
-            className="fixed inset-0 z-[180] overflow-hidden bg-black/82 px-4 py-6 backdrop-blur-sm md:px-10 md:py-10"
-            onClick={() => setActivePublication(null)}
-          >
-            <div
-              key={activePublication.streamKey}
-              ref={publicationModalRef}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Detalle de publicacion"
-              className="mx-auto h-full w-full max-w-6xl overflow-y-auto rounded-card border border-neutral-800/70 bg-surface-overlay/95 p-5 md:p-7 chat-scroll"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="mb-5 flex items-center justify-between gap-3">
-                <p className="text-[11px] uppercase tracking-[0.28em] text-neutral-500">
-                  {activePublication.source === 'community'
-                    ? 'Publicacion de comunidad'
-                    : 'Lectura editorial'}
-                </p>
-                <div className="flex items-center gap-2">
-                  {activePublication.postId && (
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/post/${activePublication.postId}`)}
-                      className="rounded-full border border-neutral-700 bg-neutral-900/60 px-3 py-1.5 text-[11px] uppercase tracking-wider text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white"
-                    >
-                      Abrir publicacion
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setActivePublication(null)}
-                    className="rounded-full border border-neutral-700 bg-neutral-900/60 p-2 text-neutral-300 transition-colors hover:border-neutral-500 hover:text-white"
-                    aria-label="Cerrar detalle"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-              </div>
-
-              <div
-                className={
-                  showRelatedContextPanel
-                    ? 'grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'
-                    : 'grid grid-cols-1'
-                }
-              >
-                <div>
-                  <h3 className="mt-1 text-heading-lg font-display font-normal text-white leading-tight">
-                    {activePublication.title}
-                  </h3>
-                  <p className="mt-2 text-sm text-neutral-400">
-                    {activePublication.group} - {activePublication.category}
-                  </p>
-
-                  <p className="mt-5 text-sm text-neutral-300 leading-relaxed whitespace-pre-line">
-                    {activePublication.source === 'community'
-                      ? activePublication.body
-                      : getPublicationBody(
-                          activePublication,
-                          activePublicationCategory?.description ??
-                            'Conversacion destacada de la comunidad en Vinctus.',
-                        )}
-                  </p>
-                  {activePublication.source === 'editorial' && (
-                    <p className="mt-3 text-sm text-neutral-400 leading-relaxed">
-                      Este contenido editorial mantiene el espacio activo mientras llegan mas
-                      publicaciones reales de la comunidad.
-                    </p>
-                  )}
-
-                  {activePublicationCategory && (
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      {activePublicationCategory.subgroups.slice(0, 3).map((subgroup) => (
-                        <span
-                          key={`${activePublication.streamKey}-${subgroup.id}`}
-                          className="rounded-md bg-neutral-900/70 px-3 py-1 text-[11px] uppercase tracking-wider text-neutral-300"
-                        >
-                          {subgroup.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {showRelatedContextPanel && (
-                  <aside className="rounded-2xl border border-neutral-800/70 bg-neutral-950/40 p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h4 className="text-xs uppercase tracking-[0.28em] text-neutral-500">
-                        Contexto relacionado
-                      </h4>
-                      {liveContextCount > 0 ? (
-                        <span className="rounded-full border border-brand-gold/35 bg-brand-gold/10 px-2.5 py-1 text-[10px] uppercase tracking-wider text-brand-gold">
-                          {liveContextCount} en vivo
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {activePublicationPreview?.loading ? (
-                      <div className="mt-4 text-sm text-neutral-500">Cargando referencias...</div>
-                    ) : (
-                      <div className="mt-4 space-y-3">
-                        {activePublicationContextItems.map((item) => {
-                          const cardClassName =
-                            'block rounded-xl border border-neutral-800/80 bg-neutral-950/60 p-3 transition-colors hover:border-neutral-600';
-                          const sourceLabel =
-                            item.source === 'live' ? 'fuente en vivo' : 'relleno editorial';
-
-                          if (item.href) {
-                            return (
-                              <a
-                                key={`${activePublication.streamKey}-${item.id}`}
-                                href={item.href}
-                                target="_blank"
-                                rel="noreferrer"
-                                className={cardClassName}
-                              >
-                                <p className="text-[10px] uppercase tracking-wider text-brand-gold/90 mb-1">
-                                  {sourceLabel}
-                                </p>
-                                <h5 className="text-sm text-white font-medium line-clamp-2">
-                                  {item.title}
-                                </h5>
-                                <p className="text-xs text-neutral-400 mt-1 line-clamp-2">
-                                  {item.subtitle}
-                                </p>
-                                <p className="text-[10px] uppercase tracking-wider text-neutral-500 mt-2">
-                                  {item.meta}
-                                </p>
-                              </a>
-                            );
-                          }
-
-                          return (
-                            <div
-                              key={`${activePublication.streamKey}-${item.id}`}
-                              className={cardClassName}
-                            >
-                              <p className="text-[10px] uppercase tracking-wider text-brand-gold/90 mb-1">
-                                {sourceLabel}
-                              </p>
-                              <h5 className="text-sm text-white font-medium line-clamp-2">
-                                {item.title}
-                              </h5>
-                              <p className="text-xs text-neutral-400 mt-1 line-clamp-2">
-                                {item.subtitle}
-                              </p>
-                              <p className="text-[10px] uppercase tracking-wider text-neutral-500 mt-2">
-                                {item.meta}
-                              </p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </aside>
-                )}
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )
-      : null;
-
   return (
     <div className="page-discover pb-32">
-      {/* Header */}
       <header className="mb-12 pt-6 md:pt-10 flex flex-col items-center text-center">
         <div className="w-full max-w-4xl mb-8">
           <StoriesWidget />
@@ -1774,10 +1687,9 @@ const DiscoverPage = () => {
           DESCUBRIR
         </span>
         <h1 className="text-display-sm md:text-display-md font-display font-normal text-white mb-8 tracking-tight">
-          Curadur{'\u00ED'}a de <span className="text-brand-gold italic">Intereses</span>
+          Curaduria de <span className="text-brand-gold italic">Intereses</span>
         </h1>
 
-        {/* Barra de búsqueda */}
         <div className="w-full max-w-lg mt-4">
           <div className="relative bg-neutral-900/50 border border-neutral-800 rounded-full px-6 py-3 flex items-center gap-3">
             <button
@@ -1801,7 +1713,6 @@ const DiscoverPage = () => {
         </div>
       </header>
 
-      {/* Search Filters Overlay */}
       <SearchFilters
         isOpen={showFilters}
         onClose={() => setShowFilters(false)}
@@ -1809,7 +1720,6 @@ const DiscoverPage = () => {
         onApply={setFilters}
       />
 
-      {/* Tendencias esta semana */}
       <section className="mb-12">
         <h2 className="text-heading-lg font-display font-normal text-white mb-6">
           <span className="text-brand-gold">Tendencias</span> esta semana
@@ -1848,7 +1758,6 @@ const DiscoverPage = () => {
         )}
       </section>
 
-      {/* Debates IA curados por fuentes */}
       <section className="mb-12">
         <h2 className="text-heading-lg font-display font-normal text-white mb-6">
           <span className="text-brand-gold">Debates IA</span> destacados
@@ -1904,11 +1813,11 @@ const DiscoverPage = () => {
                         {debate.topic}
                       </h3>
                       <p className="text-xs text-neutral-500 mt-1">
-                        {personaAName} vs {personaBName} · {dateLabel}
+                        {personaAName} vs {personaBName} - {dateLabel}
                       </p>
                     </div>
                     <div className="px-2.5 py-1 rounded bg-brand-gold/15 text-brand-gold text-xs uppercase tracking-wider whitespace-nowrap">
-                      {sourceCount} fuentes · {likesCount} likes
+                      {sourceCount} fuentes - {likesCount} likes
                     </div>
                   </div>
 
@@ -1956,7 +1865,6 @@ const DiscoverPage = () => {
         )}
       </section>
 
-      {/* Grupos recomendados */}
       <section className="mb-12">
         <h2 className="text-lg font-light text-white mb-6">
           <span className="text-neutral-400">Grupos</span> recomendados
@@ -2048,42 +1956,59 @@ const DiscoverPage = () => {
         )}
       </section>
 
-      {/* Publicaciones */}
       <section>
         <h2 className="text-heading-lg font-display font-normal text-white mb-3">Publicaciones</h2>
         <p className="text-neutral-400 text-sm mb-6 max-w-2xl">
-          Publicaciones recientes de la comunidad. Desliza y sigue explorando.
+          Feed continuo de comunidad + YouTube para mantener Discover activo sin verse vacio.
         </p>
+
+        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <label className="relative w-full md:max-w-md">
+            <Search
+              size={14}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500"
+            />
+            <input
+              type="text"
+              value={youtubeQueryInput}
+              onChange={(event) => setYoutubeQueryInput(event.target.value)}
+              placeholder="Buscar videos en YouTube dentro de Vinctus..."
+              className="w-full rounded-full border border-neutral-700 bg-neutral-900/70 py-2 pl-9 pr-4 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none"
+            />
+          </label>
+          <span className="text-[10px] uppercase tracking-[0.22em] text-neutral-500">
+            {youtubeLoading
+              ? 'Buscando videos en vivo...'
+              : `YouTube en vivo · ${youtubePublications.length.toLocaleString('es-ES')} items`}
+          </span>
+        </div>
 
         {communityReady && communityPublications.length === 0 && (
           <div className="mb-5 rounded-xl border border-neutral-800/70 bg-neutral-950/40 p-4 text-sm text-neutral-400">
-            Aun no hay publicaciones recientes de usuarios. Mostramos contenido editorial para
-            mantener Discover activo.
+            Aun no hay publicaciones recientes de usuarios. Mostramos una mezcla de YouTube y
+            contenido editorial para mantener Discover activo.
           </div>
         )}
 
-        <div className="space-y-7">
-          {publicationSections.map((section, sectionIndex) => (
-            <div key={section.id} className={sectionIndex > 0 ? 'pt-1' : ''}>
-              <div className="mb-4 flex items-center gap-3">
-                <span className="text-[10px] uppercase tracking-[0.26em] text-neutral-500">
-                  {section.label}
-                </span>
-                <div className="h-px flex-1 bg-neutral-800/60" />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {section.items.map((publication, index) => (
-                  <div key={publication.streamKey}>
-                    {renderPublicationCard(
-                      publication,
-                      'secondary',
-                      sectionIndex * PUBLICATION_BATCH_SIZE + index,
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
+        <div className="rounded-card border border-neutral-800/60 bg-neutral-950/20 p-3 md:p-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <span className="text-[10px] uppercase tracking-[0.26em] text-neutral-500">
+              Feed social en Discover
+            </span>
+            <span className="text-[10px] uppercase tracking-[0.2em] text-neutral-600">
+              {communityPublications.length > 0
+                ? 'Mixto: comunidad + YouTube + editorial'
+                : youtubeReady && youtubePublications.length > 0
+                  ? 'Seed YouTube + editorial'
+                  : 'Editorial seed'}
+            </span>
+          </div>
+
+          <div className="space-y-4 md:space-y-5">
+            {publicationStream.map((publication, index) =>
+              renderPublicationFeedItem(publication, index),
+            )}
+          </div>
         </div>
 
         {hasMorePublications && (
@@ -2099,13 +2024,78 @@ const DiscoverPage = () => {
               ref={publicationLoadMoreRef}
               className="flex items-center justify-center py-2 text-[11px] uppercase tracking-wider text-neutral-500"
             >
-              {communityLoading ? 'Cargando publicaciones...' : 'Desliza para continuar'}
+              {communityLoading || youtubeLoading
+                ? 'Cargando publicaciones...'
+                : 'Desliza para ver mas'}
             </div>
           </div>
         )}
       </section>
 
-      {publicationDetailModal}
+      {activeYouTubePublication?.youtubeVideoId &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[320] overflow-y-auto safe-area-inset bg-black/80 backdrop-blur-sm p-4 md:p-8"
+            onClick={() => setActiveYouTubePublication(null)}
+          >
+            <div
+              className="mx-auto my-2 w-full max-w-5xl rounded-card border border-neutral-800 bg-neutral-950/95 shadow-2xl md:my-6"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-3 border-b border-neutral-800 px-4 py-3 md:px-5">
+                <p className="text-xs uppercase tracking-[0.2em] text-neutral-400">
+                  YouTube en Vinctus
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveYouTubePublication(null)}
+                  className="inline-flex items-center gap-1 rounded-full border border-neutral-700 px-3 py-1 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white"
+                >
+                  Cerrar
+                  <X size={12} />
+                </button>
+              </div>
+
+              <div className="p-4 pb-6 md:p-5 md:pb-8">
+                <div className="aspect-video overflow-hidden rounded-xl border border-neutral-800 bg-black">
+                  <iframe
+                    src={`https://www.youtube-nocookie.com/embed/${activeYouTubePublication.youtubeVideoId}?rel=0`}
+                    title={activeYouTubePublication.title}
+                    className="h-full w-full"
+                    loading="lazy"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <h3 className="text-white text-lg font-display leading-tight">
+                      {activeYouTubePublication.title}
+                    </h3>
+                    <p className="mt-1 text-sm text-neutral-400">
+                      {activeYouTubePublication.youtubeChannelTitle ||
+                        activeYouTubePublication.group}
+                    </p>
+                  </div>
+                  {activeYouTubePublication.youtubeUrl && (
+                    <a
+                      href={activeYouTubePublication.youtubeUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-900/70 px-4 py-2 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white"
+                    >
+                      Abrir en YouTube
+                      <ArrowRight size={12} />
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 };

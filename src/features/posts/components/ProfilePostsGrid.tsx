@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Film, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { getPostsByUser, type PaginatedResult, type PostRead } from '@/features/posts/api';
+import { getYouTubeThumbnailUrl } from '@/shared/lib/youtube';
 
 type MediaItem = {
   type: 'image' | 'video' | 'file';
@@ -153,6 +154,7 @@ const ProfilePostsGrid = ({ userId, canView = true }: ProfilePostsGridProps) => 
               const media = (post.media ?? []) as MediaItem[];
               const image = media.find((item) => item.type === 'image');
               const video = media.find((item) => item.type === 'video');
+              const videoThumbnail = video ? getYouTubeThumbnailUrl(video.url) : null;
               const file = media.find((item) => item.type === 'file');
               const mediaCount = media.length;
               const displayText = getDisplayText(post);
@@ -170,6 +172,12 @@ const ProfilePostsGrid = ({ userId, canView = true }: ProfilePostsGridProps) => 
                     <img
                       src={image.url}
                       alt={displayText || 'Publicacion'}
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                  ) : videoThumbnail ? (
+                    <img
+                      src={videoThumbnail}
+                      alt={displayText || 'Video'}
                       className="absolute inset-0 w-full h-full object-cover"
                     />
                   ) : (

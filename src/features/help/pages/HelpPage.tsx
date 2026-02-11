@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ArrowLeft, ChevronDown, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SupportModal from '@/features/help/components/SupportModal';
+import { LEGAL_COPY, LEGAL_LINKS } from '@/shared/constants';
 
 type FaqItem = {
   id: string;
@@ -35,7 +36,13 @@ const FAQ_ITEMS: FaqItem[] = [
     id: 'report',
     question: 'Como reporto un usuario o contenido?',
     answer:
-      "Si ves el boton '...', usa Reportar. Si no aparece, envianos un ticket desde Ayuda y comentarios.",
+      "Si ves el boton '...', usa Reportar. Evaluamos reportes segun Community Guidelines y podemos retirar contenido o limitar cuentas.",
+  },
+  {
+    id: 'report-followup',
+    question: 'Que pasa despues de enviar un reporte?',
+    answer:
+      'Aplicamos revision por prioridad. Casos de seguridad: <= 24h. Casos generales: <= 72h. Si falta contexto, soporte te contacta.',
   },
   {
     id: 'delete',
@@ -50,7 +57,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     id: 'delete-account',
     question: 'Como elimino mi cuenta?',
-    answer: 'Si aun no existe esa opcion, solicita eliminacion desde Ayuda y comentarios.',
+    answer: 'Configuracion > Cuenta > Eliminar cuenta.',
   },
 ];
 
@@ -144,6 +151,60 @@ const HelpPage = () => {
             >
               Contactar soporte
             </button>
+          </section>
+
+          <section className="bg-[#141414] border border-neutral-800 rounded-2xl p-6 space-y-3">
+            <h2 className="text-lg font-semibold">Legal y seguridad</h2>
+            <p className="text-xs text-neutral-500">
+              Para privacidad, terminos, normas de comunidad y seguridad usa estos enlaces
+              oficiales.
+            </p>
+            <div className="flex flex-wrap gap-3 text-xs">
+              <a
+                href={LEGAL_LINKS.privacyPolicyPublicUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-2 rounded-full border border-neutral-700 hover:border-neutral-500 transition-colors"
+              >
+                Politica de privacidad
+              </a>
+              <a
+                href={LEGAL_LINKS.termsOfServicePublicUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-2 rounded-full border border-neutral-700 hover:border-neutral-500 transition-colors"
+              >
+                Terminos de servicio
+              </a>
+              <button
+                type="button"
+                onClick={() => navigate('/legal/community-guidelines')}
+                className="px-3 py-2 rounded-full border border-neutral-700 hover:border-neutral-500 transition-colors"
+              >
+                Community Guidelines
+              </button>
+              <a
+                href={`mailto:${LEGAL_LINKS.supportEmail}`}
+                className="px-3 py-2 rounded-full border border-neutral-700 hover:border-neutral-500 transition-colors"
+              >
+                Contacto: {LEGAL_LINKS.supportEmail}
+              </a>
+              <a
+                href={LEGAL_LINKS.supportPublicUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-2 rounded-full border border-neutral-700 hover:border-neutral-500 transition-colors"
+              >
+                Centro de soporte
+              </a>
+              <a
+                href={`mailto:${LEGAL_LINKS.securityEmail}`}
+                className="px-3 py-2 rounded-full border border-red-500/40 text-red-200 hover:border-red-400 transition-colors"
+              >
+                Seguridad: {LEGAL_LINKS.securityEmail}
+              </a>
+            </div>
+            <div className="text-xs text-neutral-500">{LEGAL_COPY.moderationSla}</div>
           </section>
         </div>
       </div>

@@ -6,6 +6,8 @@
  */
 export * from './firestore/sharedTypes';
 export * from './firestore/reports';
+export * from './firestore/moderationQueue';
+export * from './firestore/aiConsent';
 export * from './firestore/blockedUsers';
 export * from './firestore/users';
 export * from './firestore/userSearch';

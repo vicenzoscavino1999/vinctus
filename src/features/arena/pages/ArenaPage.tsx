@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import { collection, doc, getDoc } from 'firebase/firestore';
 import {
@@ -23,6 +23,9 @@ import type { Debate, Persona, Turn, UsageStats } from '@/features/arena/types';
 import { getPersonaById } from '@/features/arena/types';
 import { AIModeTabs } from '@/features/ai/components/AIModeTabs';
 import { useAuth } from '@/context/auth';
+import { getServerAIConsent, updateServerAIConsent } from '@/features/settings/api/aiConsent';
+import { LEGAL_COPY } from '@/shared/constants';
+import { getAIConsent, setAIConsent } from '@/shared/lib/aiConsent';
 import { db } from '@/shared/lib/firebase';
 import { useToast } from '@/shared/ui/Toast';
 
@@ -38,6 +41,8 @@ export default function ArenaPage() {
   const [personaB, setPersonaB] = useState<Persona | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasAiConsent, setHasAiConsent] = useState(() => getAIConsent().granted);
+  const [isConsentSyncing, setIsConsentSyncing] = useState(false);
 
   const [debate, setDebate] = useState<Debate | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -113,13 +118,52 @@ export default function ArenaPage() {
     };
   }, [debateId, userId]);
 
+  useEffect(() => {
+    let active = true;
+    const localConsent = getAIConsent();
+    setHasAiConsent(localConsent.granted);
+
+    const syncConsent = async () => {
+      if (!userId) return;
+
+      setIsConsentSyncing(true);
+      try {
+        const serverConsent = await getServerAIConsent(userId);
+        if (!active) return;
+
+        if (serverConsent.recorded) {
+          setAIConsent(serverConsent.granted);
+          setHasAiConsent(serverConsent.granted);
+          return;
+        }
+
+        if (localConsent.granted) {
+          await updateServerAIConsent(userId, true, 'migration');
+        }
+      } catch (syncError) {
+        console.error('Error syncing AI consent on Arena:', syncError);
+      } finally {
+        if (active) {
+          setIsConsentSyncing(false);
+        }
+      }
+    };
+
+    void syncConsent();
+
+    return () => {
+      active = false;
+    };
+  }, [userId]);
+
   const formValid =
     topic.trim().length >= 5 &&
     personaA !== null &&
     personaB !== null &&
     personaA.id !== personaB.id;
 
-  const disableCreate = !formValid || isCreating || usage?.remaining === 0;
+  const disableCreate =
+    !formValid || isCreating || usage?.remaining === 0 || !hasAiConsent || isConsentSyncing;
 
   const usageLabel = useMemo(() => {
     if (!usage) return '...';
@@ -127,6 +171,11 @@ export default function ArenaPage() {
   }, [usage]);
 
   const handleCreate = async () => {
+    if (!hasAiConsent) {
+      setError('Debes aceptar el consentimiento de IA antes de crear debates.');
+      return;
+    }
+
     if (!userId) {
       setError('Debes iniciar sesion para usar Arena.');
       return;
@@ -272,6 +321,27 @@ export default function ArenaPage() {
     }
   };
 
+  const handleAcceptAiConsent = async () => {
+    setIsConsentSyncing(true);
+    setAIConsent(true);
+    setHasAiConsent(true);
+    setError(null);
+
+    try {
+      if (!userId) {
+        throw new Error('Debes iniciar sesion para guardar el consentimiento.');
+      }
+      await updateServerAIConsent(userId, true, 'arena');
+    } catch (consentError) {
+      console.error('Error accepting AI consent on Arena:', consentError);
+      setAIConsent(false);
+      setHasAiConsent(false);
+      setError('No se pudo guardar tu consentimiento de IA. Intenta nuevamente.');
+    } finally {
+      setIsConsentSyncing(false);
+    }
+  };
+
   return (
     <div className="page-transition pb-24">
       <header className="mb-8 flex flex-col gap-4 pt-6 md:pt-10">
@@ -295,6 +365,37 @@ export default function ArenaPage() {
         </div>
 
         <AIModeTabs active="arena" />
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-xs text-neutral-400">
+          <p>{LEGAL_COPY.aiDisclosure}</p>
+          <Link
+            to="/legal/privacy"
+            className="mt-2 inline-block text-amber-300 hover:text-amber-200 transition-colors"
+          >
+            Ver politica de privacidad
+          </Link>
+        </div>
+
+        {!hasAiConsent && (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-200">
+            <p>{LEGAL_COPY.aiConsent}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleAcceptAiConsent}
+                disabled={isConsentSyncing}
+                className="rounded-full bg-red-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-red-400 transition-colors disabled:opacity-60"
+              >
+                {isConsentSyncing ? 'Guardando...' : 'Aceptar y continuar'}
+              </button>
+              <Link
+                to="/settings"
+                className="rounded-full border border-red-400/60 px-4 py-1.5 text-xs text-red-100 hover:border-red-300"
+              >
+                Gestionar en Settings
+              </Link>
+            </div>
+          </div>
+        )}
       </header>
 
       {isViewing ? (

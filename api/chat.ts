@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createGroupAction, type CreateGroupArgs } from './lib/aiActions.js';
-import { getAuth } from './lib/firebaseAdmin.js';
+import { getAuth, getDb } from './lib/firebaseAdmin.js';
 import { checkRateLimit } from './lib/rateLimit.js';
 
 const DEFAULT_GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-flash-latest'] as const;
@@ -13,6 +13,8 @@ const MAX_MESSAGE_CHARS = 2000;
 const MAX_PART_TEXT_CHARS = 2000;
 const MAX_PARTS_PER_MESSAGE = 2;
 const MAX_TOTAL_HISTORY_CHARS = 12_000;
+const EMAIL_PII_REGEX = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const PHONE_PII_REGEX = /(?:\+?\d[\d().\s-]{7,}\d)/g;
 
 interface GeminiMessage {
   role: 'user' | 'model';
@@ -58,6 +60,16 @@ interface FirebaseAccountsLookupResponse {
   users?: Array<{
     localId?: string;
   }>;
+}
+
+interface UserDocAISettings {
+  consentGranted?: unknown;
+}
+
+interface UserDocShape {
+  settings?: {
+    ai?: UserDocAISettings;
+  };
 }
 
 type AIProvider = 'gemini' | 'nvidia';
@@ -261,6 +273,46 @@ async function verifyAuthUid(token: string): Promise<string | null> {
     console.warn(`[chat-api] auth token verification failed: ${truncateForLog(message, 220)}`);
     return null;
   }
+}
+
+async function hasServerAIConsent(uid: string): Promise<boolean> {
+  const snap = await getDb().doc(`users/${uid}`).get();
+  if (!snap.exists) {
+    return false;
+  }
+
+  const data = snap.data() as UserDocShape | undefined;
+  return data?.settings?.ai?.consentGranted === true;
+}
+
+function isLikelyPhoneCandidate(input: string): boolean {
+  const digits = input.replace(/\D/g, '');
+  if (digits.length < 8 || digits.length > 15) {
+    return false;
+  }
+  return !/^(\d)\1+$/.test(digits);
+}
+
+function redactPIIText(input: string): string {
+  let redacted = input.replace(EMAIL_PII_REGEX, '[email_redacted]');
+  redacted = redacted.replace(PHONE_PII_REGEX, (match) =>
+    isLikelyPhoneCandidate(match) ? '[phone_redacted]' : match,
+  );
+  return redacted;
+}
+
+function sanitizePIIFromChatRequest(input: ChatRequest): ChatRequest {
+  const safeHistory = (input.history ?? []).map((entry) => ({
+    ...entry,
+    parts: entry.parts.map((part) => ({
+      text: redactPIIText(part.text),
+    })),
+  }));
+
+  return {
+    history: safeHistory,
+    message: redactPIIText(input.message),
+  };
 }
 
 async function readRawBody(req: VercelRequest, maxBytes: number): Promise<string> {
@@ -685,6 +737,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Invalid authentication token' });
   }
 
+  let aiConsentGranted = false;
+  try {
+    aiConsentGranted = await hasServerAIConsent(authUid);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[chat-api] consent lookup failed: ${truncateForLog(message, 220)}`);
+    return res.status(503).json({ error: 'Unable to verify AI consent' });
+  }
+
+  if (!aiConsentGranted) {
+    return res.status(403).json({
+      error: 'Debes aceptar el consentimiento de IA en Configuracion antes de usar AI Chat.',
+    });
+  }
+
   const rateLimits = getRateLimitConfig();
   const userLimit = checkRateLimit(authUid, {
     dayLimit: rateLimits.user.day,
@@ -720,9 +787,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(validation.status).json({ error: validation.error });
   }
 
+  const sanitizedRequest = sanitizePIIFromChatRequest(validation.value);
+
   const contents: GeminiMessage[] = [
-    ...(validation.value.history ?? []),
-    { parts: [{ text: validation.value.message }], role: 'user' },
+    ...(sanitizedRequest.history ?? []),
+    { parts: [{ text: sanitizedRequest.message }], role: 'user' },
   ];
 
   const geminiModels = parseModelList(process.env.GEMINI_MODELS, DEFAULT_GEMINI_MODELS);

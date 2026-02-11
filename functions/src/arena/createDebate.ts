@@ -15,6 +15,8 @@ import { checkTopic, sanitizeTopic } from './guardrails';
 const REGION = 'us-central1';
 const ARENA_DEBATES_COLLECTION = 'arenaDebates';
 const MAX_TOPIC_CHARS = parseInt(process.env.AI_MAX_TOPIC_CHARS || '240', 10);
+const EMAIL_PII_REGEX = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const PHONE_PII_REGEX = /(?:\+?\d[\d().\s-]{7,}\d)/g;
 const CLIENT_DEBATE_ID_REGEX = /^[A-Za-z0-9_-]{8,120}$/;
 const URL_IN_TEXT_REGEX = /https?:\/\/[^\s<>"'`)\]}]+/gi;
 const MAX_SOURCE_LINKS = 12;
@@ -43,6 +45,14 @@ const DEFAULT_NVIDIA_MODEL_CANDIDATES = ['moonshotai/kimi-k2-instruct'] as const
 const DEFAULT_NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 const DEFAULT_PROVIDER_ORDER = ['gemini', 'nvidia'] as const;
 type AIProvider = (typeof DEFAULT_PROVIDER_ORDER)[number];
+
+interface UserDocShape {
+  settings?: {
+    ai?: {
+      consentGranted?: unknown;
+    };
+  };
+}
 
 const summaryVerdictResponseSchema: ResponseSchema = {
   type: SchemaType.OBJECT,
@@ -488,6 +498,29 @@ const generateWithFallback = async (params: {
   throw new Error('No AI models configured for Arena.');
 };
 
+const hasServerAIConsent = async (uid: string): Promise<boolean> => {
+  const snap = await admin.firestore().doc(`users/${uid}`).get();
+  if (!snap.exists) return false;
+  const data = snap.data() as UserDocShape | undefined;
+  return data?.settings?.ai?.consentGranted === true;
+};
+
+const isLikelyPhoneCandidate = (input: string): boolean => {
+  const digits = input.replace(/\D/g, '');
+  if (digits.length < 8 || digits.length > 15) {
+    return false;
+  }
+  return !/^(\d)\1+$/.test(digits);
+};
+
+const redactPIIText = (input: string): string => {
+  let redacted = input.replace(EMAIL_PII_REGEX, '[email_redacted]');
+  redacted = redacted.replace(PHONE_PII_REGEX, (match) =>
+    isLikelyPhoneCandidate(match) ? '[phone_redacted]' : match,
+  );
+  return redacted;
+};
+
 export const createDebate = functions
   .region(REGION)
   .runWith({ timeoutSeconds: 300, memory: '512MB' })
@@ -522,7 +555,7 @@ export const createDebate = functions
       );
     }
 
-    const topic = sanitizeTopic(rawTopic);
+    const topic = redactPIIText(sanitizeTopic(rawTopic));
     if (topic.length > MAX_TOPIC_CHARS) {
       throw new functions.https.HttpsError(
         'invalid-argument',
@@ -558,6 +591,14 @@ export const createDebate = functions
     }
 
     const uid = context.auth.uid;
+    const aiConsentGranted = await hasServerAIConsent(uid);
+    if (!aiConsentGranted) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Debes aceptar el consentimiento de IA antes de crear debates.',
+      );
+    }
+
     const rateLimit = await checkRateLimit(uid);
     if (!rateLimit.allowed) {
       throw new functions.https.HttpsError(

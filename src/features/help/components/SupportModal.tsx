@@ -3,6 +3,7 @@ import { AlertTriangle, Lightbulb, HelpCircle, Mail, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
+import { LEGAL_LINKS } from '@/shared/constants';
 import {
   createSupportTicket,
   type SupportTicketContext,
@@ -16,7 +17,6 @@ interface SupportModalProps {
   initialType?: SupportTicketType;
 }
 
-const SUPPORT_EMAIL = 'support@vinctus.app';
 const APP_VERSION = 'v0.0.2-alpha';
 
 const buildContext = (): SupportTicketContext | null => {
@@ -123,7 +123,7 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
+    <div className="fixed inset-0 z-50 flex items-end justify-center safe-area-inset">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div
         className="relative w-full max-w-2xl bg-[#121212] border border-neutral-800 rounded-t-3xl px-6 pt-4 pb-8 max-h-[85vh] overflow-y-auto animate-fade-up"
@@ -194,7 +194,7 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
             </button>
 
             <button
-              onClick={() => window.open(`mailto:${SUPPORT_EMAIL}`, '_blank')}
+              onClick={() => window.open(`mailto:${LEGAL_LINKS.supportEmail}`, '_blank')}
               className="w-full flex items-center justify-between p-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 hover:bg-white/5 transition-colors"
             >
               <div className="flex items-center gap-3 text-left">
@@ -203,10 +203,26 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
                 </div>
                 <div>
                   <div className="font-medium">Escribir por correo</div>
-                  <div className="text-xs text-neutral-500">support@vinctus.app</div>
+                  <div className="text-xs text-neutral-500">{LEGAL_LINKS.supportEmail}</div>
                 </div>
               </div>
               <span className="text-xs text-neutral-500">&gt;</span>
+            </button>
+
+            <button
+              onClick={() => window.open(`mailto:${LEGAL_LINKS.securityEmail}`, '_blank')}
+              className="w-full flex items-center justify-between p-4 rounded-2xl border border-red-500/30 bg-red-500/5 hover:bg-red-500/10 transition-colors"
+            >
+              <div className="flex items-center gap-3 text-left">
+                <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-300">
+                  <AlertTriangle size={18} />
+                </div>
+                <div>
+                  <div className="font-medium text-red-100">Reporte de seguridad / abuso</div>
+                  <div className="text-xs text-red-300">{LEGAL_LINKS.securityEmail}</div>
+                </div>
+              </div>
+              <span className="text-xs text-red-200">&gt;</span>
             </button>
           </div>
         ) : (

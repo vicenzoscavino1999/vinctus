@@ -283,7 +283,7 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
       />
 
       {selectedRecent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset px-4">
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={() => setSelectedRecent(null)}

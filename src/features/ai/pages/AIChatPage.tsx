@@ -7,10 +7,15 @@ import {
   type TouchEvent,
   type MouseEvent,
 } from 'react';
+import { Link } from 'react-router-dom';
 import { Send, Sparkles, Loader2, Mic, Volume2, Square } from 'lucide-react';
 import { sendChatMessage, type GeminiMessage } from '@/shared/lib/aiChat';
+import { getAIConsent, setAIConsent } from '@/shared/lib/aiConsent';
 import { useVoice } from '@/shared/lib/voice';
 import { AIModeTabs } from '@/features/ai/components/AIModeTabs';
+import { useAuth } from '@/context/auth';
+import { getServerAIConsent, updateServerAIConsent } from '@/features/settings/api/aiConsent';
+import { LEGAL_COPY } from '@/shared/constants';
 
 interface Message {
   id: string;
@@ -31,11 +36,15 @@ export default function AIChatPage() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [history, setHistory] = useState<GeminiMessage[]>([]);
+  const [hasAiConsent, setHasAiConsent] = useState(() => getAIConsent().granted);
+  const [isConsentSyncing, setIsConsentSyncing] = useState(false);
+  const [consentSyncError, setConsentSyncError] = useState<string | null>(null);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isHoldingRef = useRef(false);
+  const { user } = useAuth();
 
   const {
     isListening,
@@ -72,6 +81,47 @@ export default function AIChatPage() {
       stopListening();
     };
   }, [stopSpeaking, stopListening]);
+
+  useEffect(() => {
+    let active = true;
+    const localConsent = getAIConsent();
+    setHasAiConsent(localConsent.granted);
+    setConsentSyncError(null);
+
+    const syncConsent = async () => {
+      if (!user?.uid) return;
+
+      setIsConsentSyncing(true);
+      try {
+        const serverConsent = await getServerAIConsent(user.uid);
+        if (!active) return;
+
+        if (serverConsent.recorded) {
+          setAIConsent(serverConsent.granted);
+          setHasAiConsent(serverConsent.granted);
+          return;
+        }
+
+        if (localConsent.granted) {
+          await updateServerAIConsent(user.uid, true, 'migration');
+        }
+      } catch (error) {
+        console.error('Error syncing AI consent on AI Chat:', error);
+        if (!active) return;
+        setConsentSyncError('No se pudo verificar tu consentimiento de IA. Intenta de nuevo.');
+      } finally {
+        if (active) {
+          setIsConsentSyncing(false);
+        }
+      }
+    };
+
+    void syncConsent();
+
+    return () => {
+      active = false;
+    };
+  }, [user?.uid]);
 
   const handleMicDown = useCallback(
     (e: TouchEvent | MouseEvent) => {
@@ -115,6 +165,8 @@ export default function AIChatPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!hasAiConsent) return;
+
     const text = input.trim();
     if (!text || isLoading) return;
 
@@ -158,6 +210,27 @@ export default function AIChatPage() {
     }
   };
 
+  const handleAcceptAiConsent = async () => {
+    setConsentSyncError(null);
+    setIsConsentSyncing(true);
+    setAIConsent(true);
+    setHasAiConsent(true);
+
+    try {
+      if (!user?.uid) {
+        throw new Error('Debes iniciar sesion para guardar el consentimiento.');
+      }
+      await updateServerAIConsent(user.uid, true, 'ai_chat');
+    } catch (error) {
+      console.error('Error accepting AI consent on AI Chat:', error);
+      setAIConsent(false);
+      setHasAiConsent(false);
+      setConsentSyncError('No se pudo guardar tu consentimiento de IA.');
+    } finally {
+      setIsConsentSyncing(false);
+    }
+  };
+
   return (
     <div className="page-transition pb-24">
       <header className="mb-6 flex flex-col gap-4 pt-6 md:pt-10">
@@ -174,13 +247,49 @@ export default function AIChatPage() {
         </div>
 
         <AIModeTabs active="chat" />
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-xs text-neutral-400">
+          <p>{LEGAL_COPY.aiDisclosure}</p>
+          <Link
+            to="/legal/privacy"
+            className="mt-2 inline-block text-amber-300 hover:text-amber-200 transition-colors"
+          >
+            Ver politica de privacidad
+          </Link>
+        </div>
+
+        {!hasAiConsent && (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-200">
+            <p>{LEGAL_COPY.aiConsent}</p>
+            {consentSyncError && <p className="mt-2 text-red-100">{consentSyncError}</p>}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleAcceptAiConsent}
+                disabled={isConsentSyncing}
+                className="rounded-full bg-red-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-red-400 transition-colors disabled:opacity-60"
+              >
+                {isConsentSyncing ? 'Guardando...' : 'Aceptar y continuar'}
+              </button>
+              <Link
+                to="/settings"
+                className="rounded-full border border-red-400/60 px-4 py-1.5 text-xs text-red-100 hover:border-red-300"
+              >
+                Gestionar en Settings
+              </Link>
+            </div>
+          </div>
+        )}
       </header>
 
       <section className="card card-premium flex min-h-[65vh] flex-col p-0 md:min-h-[72vh]">
         <div className="border-b border-neutral-800 bg-gradient-to-r from-brand-gold/10 to-transparent px-4 py-3 md:px-5">
           <p className="text-sm font-medium text-white">Asistente Vinctus</p>
           <p className="text-xs text-neutral-500">
-            {isListening ? 'Escuchando...' : 'Impulsado por IA'}
+            {!hasAiConsent
+              ? 'Consentimiento pendiente'
+              : isListening
+                ? 'Escuchando...'
+                : 'Impulsado por IA'}
           </p>
         </div>
 
@@ -261,7 +370,7 @@ export default function AIChatPage() {
                 onMouseLeave={handleMicUp}
                 onTouchStart={handleMicDown}
                 onTouchEnd={handleMicUp}
-                disabled={isLoading}
+                disabled={isLoading || !hasAiConsent}
                 className={`select-none rounded-full p-3 transition-all ${
                   isListening
                     ? 'animate-pulse bg-red-500 text-white'
@@ -279,7 +388,7 @@ export default function AIChatPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={isListening ? 'Hablando...' : 'Escribe un mensaje...'}
-              disabled={isLoading}
+              disabled={isLoading || !hasAiConsent || isConsentSyncing}
               autoComplete="off"
               autoCorrect="off"
               className="flex-1 rounded-full border border-neutral-700 bg-neutral-800 px-4 py-3 text-base text-white placeholder-neutral-500 transition-colors focus:border-brand-gold/50 focus:outline-none disabled:opacity-50"
@@ -287,7 +396,7 @@ export default function AIChatPage() {
 
             <button
               type="submit"
-              disabled={!input.trim() || isLoading}
+              disabled={!input.trim() || isLoading || !hasAiConsent || isConsentSyncing}
               className="flex-shrink-0 rounded-full bg-brand-gold px-4 py-3 text-black transition-all hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Enviar"
             >
@@ -295,7 +404,7 @@ export default function AIChatPage() {
             </button>
           </div>
 
-          {voiceSupported && !isListening && (
+          {voiceSupported && !isListening && hasAiConsent && (
             <p className="mt-2 text-center text-[10px] text-neutral-600">
               Mantener presionado para hablar
             </p>

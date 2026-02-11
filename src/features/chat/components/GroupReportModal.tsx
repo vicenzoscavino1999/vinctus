@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import type { UserReportReason } from '@/features/chat/api';
+import { LEGAL_COPY, LEGAL_LINKS } from '@/shared/constants';
 
 const REPORT_REASON_OPTIONS: Array<{ value: UserReportReason; label: string }> = [
   { value: 'spam', label: 'Spam o publicidad' },
@@ -35,7 +36,7 @@ const GroupReportModal = ({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-md mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
@@ -49,6 +50,26 @@ const GroupReportModal = ({
           </button>
         </div>
         <div className="p-4 space-y-4">
+          <div className="rounded-lg border border-neutral-700/80 bg-neutral-900/60 p-3 text-xs text-neutral-400 space-y-2">
+            <p>{LEGAL_COPY.moderationNotice}</p>
+            <div className="flex flex-wrap gap-3">
+              <a
+                href={LEGAL_LINKS.communityGuidelinesPublicUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-amber-300 hover:text-amber-200 underline"
+              >
+                Ver Community Guidelines
+              </a>
+              <a
+                href={`mailto:${LEGAL_LINKS.securityEmail}`}
+                className="text-red-300 hover:text-red-200 underline"
+              >
+                Reporte urgente: {LEGAL_LINKS.securityEmail}
+              </a>
+            </div>
+          </div>
+
           <div>
             <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
               Motivo

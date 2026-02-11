@@ -51,6 +51,12 @@ const SettingsPrivacySecurityPage = lazy(
   () => import('@/features/settings/pages/SettingsPrivacySecurityPage'),
 );
 const HelpPage = lazy(() => import('@/features/help/pages/HelpPage'));
+const PrivacyPolicyPage = lazy(() => import('@/features/legal/pages/PrivacyPolicyPage'));
+const TermsOfServicePage = lazy(() => import('@/features/legal/pages/TermsOfServicePage'));
+const CommunityGuidelinesPage = lazy(
+  () => import('@/features/legal/pages/CommunityGuidelinesPage'),
+);
+const ModerationQueuePage = lazy(() => import('@/features/moderation/pages/ModerationQueuePage'));
 
 type NavProps = {
   activeTab: string;
@@ -235,6 +241,26 @@ const AppLayout = () => {
   const location = useLocation();
   const pathname = location.pathname;
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(
+    typeof window === 'undefined' ? true : window.navigator.onLine,
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
     if (pathname.startsWith('/messages')) {
@@ -275,6 +301,8 @@ const AppLayout = () => {
     if (pathname === '/library') return 'library';
     if (pathname === '/profile') return 'profile';
     if (pathname.startsWith('/settings')) return 'profile';
+    if (pathname.startsWith('/legal')) return 'profile';
+    if (pathname.startsWith('/moderation')) return 'profile';
     if (pathname === '/help') return 'profile';
     if (pathname === '/notifications') return 'notifications';
     if (pathname.startsWith('/messages')) return 'messages';
@@ -297,6 +325,17 @@ const AppLayout = () => {
           backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
         }}
       />
+      {!isOnline && (
+        <div className="fixed inset-x-0 top-0 z-[120] pointer-events-none px-4 pt-[max(0.5rem,env(safe-area-inset-top))] md:px-16">
+          <div
+            role="status"
+            aria-live="polite"
+            className="mx-auto max-w-5xl rounded-xl border border-amber-500/40 bg-amber-500/15 px-4 py-2 text-sm text-amber-100 backdrop-blur"
+          >
+            Sin conexion: mostrando contenido en cache. Algunas acciones requieren internet.
+          </div>
+        </div>
+      )}
 
       <div className="flex h-screen relative z-10">
         <Sidebar activeTab={getActiveTab()} onNavigate={navigate} />
@@ -320,7 +359,11 @@ const AppLayout = () => {
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/settings/notifications" element={<SettingsNotificationsPage />} />
                 <Route path="/settings/privacy" element={<SettingsPrivacySecurityPage />} />
+                <Route path="/legal/privacy" element={<PrivacyPolicyPage />} />
+                <Route path="/legal/terms" element={<TermsOfServicePage />} />
+                <Route path="/legal/community-guidelines" element={<CommunityGuidelinesPage />} />
                 <Route path="/help" element={<HelpPage />} />
+                <Route path="/moderation" element={<ModerationQueuePage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/user/:userId" element={<UserProfilePage />} />
                 <Route path="/user/:userId/connections" element={<FollowListPage />} />

@@ -54,3 +54,7 @@ lighthouse-report.json
 # Billing / financial reports
 Pago*.csv
 *.billing.csv
+
+# App Review generated artifacts (may include credentials)
+docs/app-review-notes.generated.md
+docs/app-review-package.generated.md

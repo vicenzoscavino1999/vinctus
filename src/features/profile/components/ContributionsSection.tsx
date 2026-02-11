@@ -226,7 +226,7 @@ export default function ContributionsSection({
       )}
 
       {isModalOpen && canEdit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
           <div
             className="absolute inset-0 bg-black/80 backdrop-blur-sm"
             onClick={() => {

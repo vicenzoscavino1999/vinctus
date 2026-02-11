@@ -134,6 +134,18 @@
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 focus-visible:ring-offset-2 focus-visible:ring-offset-black;
   }
 
+  .safe-area-inset {
+    padding-top: max(1rem, env(safe-area-inset-top));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    padding-left: max(1rem, env(safe-area-inset-left));
+  }
+
+  .safe-area-y {
+    padding-top: max(0.5rem, env(safe-area-inset-top));
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+
   /* Grid 12 Columns System */
   .container-grid {
     @apply grid grid-cols-4 md:grid-cols-8 lg:grid-cols-12 gap-4 md:gap-6;

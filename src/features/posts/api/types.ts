@@ -20,8 +20,12 @@ export type {
 export type PostCursor = DocumentSnapshot | undefined | null;
 
 export const postIdSchema = idSchema;
+export const storyIdSchema = idSchema;
 export const userIdSchema = idSchema;
 export const paginationLimitSchema = limitSchema;
+export const reportReasonSchema = z.enum(['spam', 'harassment', 'abuse', 'fake', 'other']);
+export type UserReportReason = z.infer<typeof reportReasonSchema>;
+export const reportDetailsSchema = z.string().trim().max(2000).nullable().optional();
 
 export const authorSnapshotSchema = z.object({
   displayName: z.string().trim().min(1).max(120),
@@ -30,7 +34,8 @@ export const authorSnapshotSchema = z.object({
 
 export const commentTextSchema = z.string().trim().min(1).max(2000);
 
-export const ownerIdsSchema = z.array(idSchema).min(1).max(200);
+export const OWNER_IDS_READ_CHUNK_SIZE = 200;
+export const ownerIdsSchema = z.array(idSchema).min(1).max(OWNER_IDS_READ_CHUNK_SIZE);
 
 export const createStoryInputSchema = z.object({
   storyId: idSchema.optional(),
@@ -58,3 +63,20 @@ export const createPostUploadingInputSchema = z.object({
 export const updatePostPatchSchema = z
   .record(z.string(), z.unknown())
   .refine((patch) => Object.keys(patch).length > 0, { message: 'Patch cannot be empty' });
+
+export const createPostReportInputSchema = z.object({
+  reporterUid: userIdSchema,
+  postId: postIdSchema,
+  postAuthorId: userIdSchema.nullable().optional(),
+  reason: reportReasonSchema,
+  details: reportDetailsSchema,
+});
+
+export const createPostCommentReportInputSchema = z.object({
+  reporterUid: userIdSchema,
+  postId: postIdSchema,
+  commentId: idSchema,
+  commentAuthorId: userIdSchema.nullable().optional(),
+  reason: reportReasonSchema,
+  details: reportDetailsSchema,
+});
