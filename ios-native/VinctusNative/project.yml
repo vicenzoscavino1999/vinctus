@@ -33,7 +33,9 @@ targets:
       - path: Resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.vinctus.native
+        # Keep bundle id aligned with the existing Capacitor app so this can
+        # eventually ship as an update under the same App Store listing.
+        PRODUCT_BUNDLE_IDENTIFIER: app.vinctus.social
         INFOPLIST_FILE: Resources/Info.plist
       configs:
         DebugDev:

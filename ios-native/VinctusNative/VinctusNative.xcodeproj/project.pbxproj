@@ -227,7 +227,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.vinctus.native;
+				PRODUCT_BUNDLE_IDENTIFIER = app.vinctus.social;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VINCTUS_ENV = staging;
@@ -383,7 +383,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.vinctus.native;
+				PRODUCT_BUNDLE_IDENTIFIER = app.vinctus.social;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VINCTUS_ENV = prod;
@@ -446,7 +446,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.vinctus.native;
+				PRODUCT_BUNDLE_IDENTIFIER = app.vinctus.social;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VINCTUS_ENV = dev;
@@ -529,7 +529,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.vinctus.native;
+				PRODUCT_BUNDLE_IDENTIFIER = app.vinctus.social;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VINCTUS_ENV = prod;
