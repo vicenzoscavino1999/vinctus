@@ -1,0 +1,677 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		02F41F5F99438C72D3C5C678 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA9C1E82EF5046931A4836E1 /* AuthViewModel.swift */; };
+		1FD745B241CC985DA29E71E4 /* VinctusNativeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32FBE102A72FA92BC6E78DE8 /* VinctusNativeTests.swift */; };
+		36C48C27188F959CE78BEBD1 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D8A1159261082593EAD650 /* RootView.swift */; };
+		56E2496AAB7FFC497E3F56C9 /* VinctusNativeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F530F8AF276B069F15B8D136 /* VinctusNativeApp.swift */; };
+		75912EA3A40807C55950D224 /* FeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FB7C98DFC400FC410886829 /* FeedViewModel.swift */; };
+		762D0E675177D06AAED7085C /* AuthRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87E1E1F20B56DDF4BBA975CC /* AuthRepo.swift */; };
+		784110CF5F85F66F636C1955 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 64134F618816ABD24D123A39 /* FirebaseFirestore */; };
+		912F15F4581F1B37A3B1EDFB /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9704ADBE4A84D079E0A04D1C /* FeedView.swift */; };
+		9AA68A3394E43CD6F1560C3C /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 969B5D6EE835BE96B822EF6E /* AppEnvironment.swift */; };
+		AAA82ED739E25ABB8C4BB215 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 1DFC0389A2A3A8827925595D /* FirebaseAuth */; };
+		CED347EFDC5DA085E7D07226 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 044E1F95CB1FA517D5923FCC /* FirebaseFunctions */; };
+		CEE76351CF20E4D879BB5F0F /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 215BFDEA7DFD70B3F014FF94 /* FirebaseStorage */; };
+		DD869C7A3714791D3731F73F /* FirebaseBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E21170D470DA7A3A12EDEF1 /* FirebaseBootstrap.swift */; };
+		FF33F35D2B8DCCFF45DA458C /* FeedRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = B97C2ED97BA8671BCE68D4D2 /* FeedRepo.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		156FF5CA9BE3B17FD94A110A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C69454A017B116083EB8D97D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A7F1811097CE929423E42689;
+			remoteInfo = VinctusNative;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0B22A4DAC5EE2AAB608DB50D /* VinctusNativeTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VinctusNativeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		19D8A1159261082593EAD650 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		32FBE102A72FA92BC6E78DE8 /* VinctusNativeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VinctusNativeTests.swift; sourceTree = "<group>"; };
+		5FB7C98DFC400FC410886829 /* FeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
+		7E21170D470DA7A3A12EDEF1 /* FirebaseBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseBootstrap.swift; sourceTree = "<group>"; };
+		87E1E1F20B56DDF4BBA975CC /* AuthRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRepo.swift; sourceTree = "<group>"; };
+		95C5F3F30FF9C59DE0399CB7 /* VinctusNative.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VinctusNative.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		969B5D6EE835BE96B822EF6E /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		9704ADBE4A84D079E0A04D1C /* FeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
+		AA9C1E82EF5046931A4836E1 /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
+		B97C2ED97BA8671BCE68D4D2 /* FeedRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedRepo.swift; sourceTree = "<group>"; };
+		F530F8AF276B069F15B8D136 /* VinctusNativeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VinctusNativeApp.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		34D941AF8820AE5CFB1D01D3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAA82ED739E25ABB8C4BB215 /* FirebaseAuth in Frameworks */,
+				784110CF5F85F66F636C1955 /* FirebaseFirestore in Frameworks */,
+				CED347EFDC5DA085E7D07226 /* FirebaseFunctions in Frameworks */,
+				CEE76351CF20E4D879BB5F0F /* FirebaseStorage in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0B0A07BF9FADF5E9621A1154 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				32FBE102A72FA92BC6E78DE8 /* VinctusNativeTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		542660F7CF2B2D3CE73C677E = {
+			isa = PBXGroup;
+			children = (
+				7E35AC2003C6EC59284F4C89 /* Sources */,
+				0B0A07BF9FADF5E9621A1154 /* Tests */,
+				F8A20CA52596A1539B16E3C8 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		7E35AC2003C6EC59284F4C89 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				969B5D6EE835BE96B822EF6E /* AppEnvironment.swift */,
+				87E1E1F20B56DDF4BBA975CC /* AuthRepo.swift */,
+				AA9C1E82EF5046931A4836E1 /* AuthViewModel.swift */,
+				B97C2ED97BA8671BCE68D4D2 /* FeedRepo.swift */,
+				9704ADBE4A84D079E0A04D1C /* FeedView.swift */,
+				5FB7C98DFC400FC410886829 /* FeedViewModel.swift */,
+				7E21170D470DA7A3A12EDEF1 /* FirebaseBootstrap.swift */,
+				19D8A1159261082593EAD650 /* RootView.swift */,
+				F530F8AF276B069F15B8D136 /* VinctusNativeApp.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		F8A20CA52596A1539B16E3C8 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				95C5F3F30FF9C59DE0399CB7 /* VinctusNative.app */,
+				0B22A4DAC5EE2AAB608DB50D /* VinctusNativeTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A7F1811097CE929423E42689 /* VinctusNative */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FB9C8A56AD53FC42DB8412CF /* Build configuration list for PBXNativeTarget "VinctusNative" */;
+			buildPhases = (
+				AEBC7287CC21701C90B3EA52 /* Sources */,
+				34D941AF8820AE5CFB1D01D3 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VinctusNative;
+			packageProductDependencies = (
+				1DFC0389A2A3A8827925595D /* FirebaseAuth */,
+				64134F618816ABD24D123A39 /* FirebaseFirestore */,
+				044E1F95CB1FA517D5923FCC /* FirebaseFunctions */,
+				215BFDEA7DFD70B3F014FF94 /* FirebaseStorage */,
+			);
+			productName = VinctusNative;
+			productReference = 95C5F3F30FF9C59DE0399CB7 /* VinctusNative.app */;
+			productType = "com.apple.product-type.application";
+		};
+		BDF718743C4D295766AE4918 /* VinctusNativeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 09D1BAAE3D9D4A0F995F5AA9 /* Build configuration list for PBXNativeTarget "VinctusNativeTests" */;
+			buildPhases = (
+				9DD42B1999B45636FC0E467F /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				9C440DDB195F20022449D13D /* PBXTargetDependency */,
+			);
+			name = VinctusNativeTests;
+			packageProductDependencies = (
+			);
+			productName = VinctusNativeTests;
+			productReference = 0B22A4DAC5EE2AAB608DB50D /* VinctusNativeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		C69454A017B116083EB8D97D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+			};
+			buildConfigurationList = 1588BA2ACA136E9415FE1B71 /* Build configuration list for PBXProject "VinctusNative" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 542660F7CF2B2D3CE73C677E;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A75E6CC52208AE511D979338 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A7F1811097CE929423E42689 /* VinctusNative */,
+				BDF718743C4D295766AE4918 /* VinctusNativeTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		9DD42B1999B45636FC0E467F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1FD745B241CC985DA29E71E4 /* VinctusNativeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AEBC7287CC21701C90B3EA52 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9AA68A3394E43CD6F1560C3C /* AppEnvironment.swift in Sources */,
+				762D0E675177D06AAED7085C /* AuthRepo.swift in Sources */,
+				02F41F5F99438C72D3C5C678 /* AuthViewModel.swift in Sources */,
+				FF33F35D2B8DCCFF45DA458C /* FeedRepo.swift in Sources */,
+				912F15F4581F1B37A3B1EDFB /* FeedView.swift in Sources */,
+				75912EA3A40807C55950D224 /* FeedViewModel.swift in Sources */,
+				DD869C7A3714791D3731F73F /* FirebaseBootstrap.swift in Sources */,
+				36C48C27188F959CE78BEBD1 /* RootView.swift in Sources */,
+				56E2496AAB7FFC497E3F56C9 /* VinctusNativeApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		9C440DDB195F20022449D13D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A7F1811097CE929423E42689 /* VinctusNative */;
+			targetProxy = 156FF5CA9BE3B17FD94A110A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		060EC0993BFA69948424948D /* DebugStaging */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.vinctus.social;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VINCTUS_ENV = staging;
+			};
+			name = DebugStaging;
+		};
+		09C1BA5B65F95764878C10C6 /* ReleaseProd */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = ReleaseProd;
+		};
+		10D5258ADFD1AEDF2575C9B2 /* DebugStaging */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VinctusNative.app/VinctusNative";
+			};
+			name = DebugStaging;
+		};
+		2EE2713D8D25E8E6460134E5 /* DebugDev */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = DebugDev;
+		};
+		6113BF7C0B6203DEBCD0EB62 /* ReleaseProd */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.vinctus.social;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VINCTUS_ENV = prod;
+			};
+			name = ReleaseProd;
+		};
+		654D449FFDFD2E9B70C1704B /* ReleaseProd */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VinctusNative.app/VinctusNative";
+			};
+			name = ReleaseProd;
+		};
+		999A992BF58E617C9AF35306 /* DebugDev */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VinctusNative.app/VinctusNative";
+			};
+			name = DebugDev;
+		};
+		B14E61B5EF6BC2828D4B45A9 /* DebugProd */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VinctusNative.app/VinctusNative";
+			};
+			name = DebugProd;
+		};
+		B41F800B5221FBEE2F0A2A10 /* DebugDev */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.vinctus.social;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VINCTUS_ENV = dev;
+			};
+			name = DebugDev;
+		};
+		BACC66141851E04B4E2DE9CC /* DebugProd */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = DebugProd;
+		};
+		D5709947F74FEDEFDD80DE3F /* DebugProd */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.vinctus.social;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VINCTUS_ENV = prod;
+			};
+			name = DebugProd;
+		};
+		EABC0E48E2D4D4C384072ACE /* DebugStaging */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = DebugStaging;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		09D1BAAE3D9D4A0F995F5AA9 /* Build configuration list for PBXNativeTarget "VinctusNativeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				999A992BF58E617C9AF35306 /* DebugDev */,
+				B14E61B5EF6BC2828D4B45A9 /* DebugProd */,
+				10D5258ADFD1AEDF2575C9B2 /* DebugStaging */,
+				654D449FFDFD2E9B70C1704B /* ReleaseProd */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = DebugDev;
+		};
+		1588BA2ACA136E9415FE1B71 /* Build configuration list for PBXProject "VinctusNative" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2EE2713D8D25E8E6460134E5 /* DebugDev */,
+				BACC66141851E04B4E2DE9CC /* DebugProd */,
+				EABC0E48E2D4D4C384072ACE /* DebugStaging */,
+				09C1BA5B65F95764878C10C6 /* ReleaseProd */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = DebugDev;
+		};
+		FB9C8A56AD53FC42DB8412CF /* Build configuration list for PBXNativeTarget "VinctusNative" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B41F800B5221FBEE2F0A2A10 /* DebugDev */,
+				D5709947F74FEDEFDD80DE3F /* DebugProd */,
+				060EC0993BFA69948424948D /* DebugStaging */,
+				6113BF7C0B6203DEBCD0EB62 /* ReleaseProd */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = DebugDev;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A75E6CC52208AE511D979338 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		044E1F95CB1FA517D5923FCC /* FirebaseFunctions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A75E6CC52208AE511D979338 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFunctions;
+		};
+		1DFC0389A2A3A8827925595D /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A75E6CC52208AE511D979338 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		215BFDEA7DFD70B3F014FF94 /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A75E6CC52208AE511D979338 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+		64134F618816ABD24D123A39 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A75E6CC52208AE511D979338 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = C69454A017B116083EB8D97D /* Project object */;
+}
