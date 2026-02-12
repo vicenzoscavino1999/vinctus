@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { formatRelativeTime } from '@/shared/lib/formatUtils';
 import { MapPin, User, ArrowRight, Plus } from 'lucide-react';
 import { getCollaborations, type CollaborationRead } from '@/features/collaborations/api';
 import {
@@ -12,22 +13,6 @@ import CreateCollaborationModal from '@/features/collaborations/components/Creat
 import CollaborationDetailModal from '@/features/collaborations/components/CollaborationDetailModal';
 import CreateEventModal from '@/features/events/components/CreateEventModal';
 import EventDetailModal from '@/features/events/components/EventDetailModal';
-
-const formatRelativeTime = (date: Date): string => {
-  const diffMs = Date.now() - date.getTime();
-  if (!Number.isFinite(diffMs) || diffMs < 0) return 'Ahora';
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return 'Ahora';
-  if (minutes < 60) return `Hace ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Hace ${hours} h`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `Hace ${days} d`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `Hace ${months} mes${months === 1 ? '' : 'es'}`;
-  const years = Math.floor(months / 12);
-  return `Hace ${years} a`;
-};
 
 const buildCollaborationTags = (item: CollaborationRead): string[] => {
   const trimmed = (item.tags || [])

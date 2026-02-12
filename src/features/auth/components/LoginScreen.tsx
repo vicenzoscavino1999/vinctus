@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '@/context/auth';
+import { LEGAL_LINKS } from '@/shared/constants';
 import { setMetricsFlow } from '@/shared/lib/devMetrics';
 
 type AuthMode = 'login' | 'register' | 'phone' | 'forgot_password';
@@ -7,6 +8,8 @@ type AuthMode = 'login' | 'register' | 'phone' | 'forgot_password';
 const LoginScreen = () => {
   const {
     signInWithGoogle,
+    signInWithApple,
+    isAppleSignInEnabled,
     signInWithEmail,
     signUpWithEmail,
     resetPassword,
@@ -38,6 +41,19 @@ const LoginScreen = () => {
     setSuccessMessage(null);
     try {
       await signInWithGoogle();
+    } catch {
+      // Error handled in AuthContext
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    setIsLoading(true);
+    clearError();
+    setSuccessMessage(null);
+    try {
+      await signInWithApple();
     } catch {
       // Error handled in AuthContext
     } finally {
@@ -434,6 +450,19 @@ const LoginScreen = () => {
               <span className="text-sm">Continuar con Google</span>
             </button>
 
+            {isAppleSignInEnabled && (
+              <button
+                onClick={handleAppleSignIn}
+                disabled={isLoading}
+                className="mt-3 w-full flex items-center justify-center gap-3 bg-black text-white py-3 px-6 border border-neutral-700 hover:bg-neutral-900 active:bg-neutral-800 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M16.7 12.6c0-2.2 1.8-3.3 1.9-3.3-1-1.6-2.7-1.8-3.2-1.8-1.4-.1-2.7.8-3.4.8-.7 0-1.8-.8-3-.7-1.5 0-2.9.9-3.7 2.3-1.6 2.8-.4 6.9 1.1 9 .8 1 1.7 2 2.9 2 .8 0 1.1-.3 2.2-.3s1.4.3 2.3.3c1.2 0 2-.9 2.8-1.9.9-1.1 1.3-2.2 1.3-2.2-.1 0-2.2-.9-2.2-4.2zM14.7 6.2c.6-.7 1-1.7.9-2.7-.9 0-2 .6-2.7 1.3-.6.7-1.1 1.7-.9 2.7 1 0 2-.5 2.7-1.3z" />
+                </svg>
+                <span className="text-sm">Continuar con Apple</span>
+              </button>
+            )}
+
             {/* Subtle phone option link */}
             <button
               onClick={showPhoneOption}
@@ -446,8 +475,48 @@ const LoginScreen = () => {
 
         {/* Footer note */}
         <p className="text-center pt-6 text-neutral-700 text-[10px] font-light uppercase tracking-wider">
-          Conecta con comunidades de tu interés
+          Conecta con comunidades de tu interes
         </p>
+        <div className="mt-4 flex flex-wrap justify-center gap-3 text-[10px] text-neutral-500">
+          <a
+            href={LEGAL_LINKS.privacyPolicyPublicUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-neutral-300 transition-colors underline"
+          >
+            Privacidad
+          </a>
+          <a
+            href={LEGAL_LINKS.termsOfServicePublicUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-neutral-300 transition-colors underline"
+          >
+            Terminos
+          </a>
+          <a
+            href={LEGAL_LINKS.communityGuidelinesPublicUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-neutral-300 transition-colors underline"
+          >
+            Community Guidelines
+          </a>
+          <a
+            href={LEGAL_LINKS.supportPublicUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-neutral-300 transition-colors underline"
+          >
+            Centro de soporte
+          </a>
+          <a
+            href={`mailto:${LEGAL_LINKS.supportEmail}`}
+            className="hover:text-neutral-300 transition-colors underline"
+          >
+            Soporte por correo
+          </a>
+        </div>
       </div>
 
       {/* CSS para animaciones */}

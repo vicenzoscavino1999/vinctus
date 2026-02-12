@@ -26,6 +26,7 @@ import {
   type UserReportReason,
 } from '@/features/chat/api';
 import CreateGroupModal from '@/features/groups/components/CreateGroupModal';
+import { LEGAL_COPY, LEGAL_LINKS } from '@/shared/constants';
 
 // Helper to parse otherUserId from conversation ID
 const parseOtherUserId = (conversationId: string, currentUid: string): string | null => {
@@ -418,7 +419,7 @@ export default function ConversationDetailsPage() {
           </div>
           <div className="flex-1">
             <p className="text-white font-medium">Reportar</p>
-            <p className="text-xs text-neutral-500">Reportar este usuario</p>
+            <p className="text-xs text-neutral-500">Incumplimiento de Community Guidelines</p>
           </div>
         </button>
       </div>
@@ -436,7 +437,7 @@ export default function ConversationDetailsPage() {
 
       {/* Report Modal */}
       {showReportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
           <div
             className="absolute inset-0 bg-black/80 backdrop-blur-sm"
             onClick={() => {
@@ -459,6 +460,26 @@ export default function ConversationDetailsPage() {
               </button>
             </div>
             <div className="p-4 space-y-4">
+              <div className="rounded-lg border border-neutral-700/80 bg-neutral-900/60 p-3 text-xs text-neutral-400 space-y-2">
+                <p>{LEGAL_COPY.moderationNotice}</p>
+                <div className="flex flex-wrap gap-3">
+                  <a
+                    href={LEGAL_LINKS.communityGuidelinesPublicUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-amber-300 hover:text-amber-200 underline"
+                  >
+                    Ver Community Guidelines
+                  </a>
+                  <a
+                    href={`mailto:${LEGAL_LINKS.securityEmail}`}
+                    className="text-red-300 hover:text-red-200 underline"
+                  >
+                    Reporte urgente: {LEGAL_LINKS.securityEmail}
+                  </a>
+                </div>
+              </div>
+
               <div>
                 <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
                   Motivo
@@ -526,7 +547,7 @@ export default function ConversationDetailsPage() {
 
       {/* Block Modal */}
       {showBlockModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
           <div
             className="absolute inset-0 bg-black/80 backdrop-blur-sm"
             onClick={() => setShowBlockModal(false)}
@@ -578,7 +599,7 @@ export default function ConversationDetailsPage() {
 
       {/* Mute Options Modal */}
       {showMuteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
           <div
             className="absolute inset-0 bg-black/80 backdrop-blur-sm"
             onClick={() => setShowMuteModal(false)}
@@ -589,6 +610,7 @@ export default function ConversationDetailsPage() {
               <button
                 onClick={() => setShowMuteModal(false)}
                 className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
+                aria-label="Cerrar"
               >
                 <X size={18} />
               </button>

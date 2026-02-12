@@ -4,31 +4,18 @@ import { ChevronLeft, Heart, Loader2, MessageCircle, User, FileText } from 'luci
 import { useAuth } from '@/context/auth';
 import {
   addPostComment,
+  createPostCommentReport,
+  createPostReport,
   getPostComments,
   type PaginatedResult,
   type PostCommentRead,
+  type UserReportReason,
 } from '@/features/posts/api';
+import ContentReportModal from '@/features/posts/components/ContentReportModal';
+import type { PostSummary } from '@/features/posts/model/postSummary';
 import { useToast } from '@/shared/ui/Toast';
-
-type PostSummary = {
-  postId: string;
-  authorName: string;
-  authorPhoto: string | null;
-  title?: string | null;
-  text: string;
-  imageUrl: string | null;
-  likeCount?: number;
-  commentCount?: number;
-  media?: {
-    type: 'image' | 'video' | 'file';
-    url: string;
-    path: string;
-    fileName?: string;
-    contentType?: string;
-    size?: number;
-  }[];
-  createdAt?: unknown;
-};
+import { formatRelativeTime, formatBytes } from '@/shared/lib/formatUtils';
+import { parseYouTubeUrl } from '@/shared/lib/youtube';
 
 interface PostCommentsModalProps {
   isOpen: boolean;
@@ -37,39 +24,20 @@ interface PostCommentsModalProps {
   onCommentAdded: (postId: string) => void;
 }
 
-const toDate = (value: unknown): Date | null => {
-  if (!value) return null;
-  if (value instanceof Date) return value;
-  if (typeof value === 'object' && value && 'toDate' in value) {
-    return (value as { toDate: () => Date }).toDate();
-  }
-  return null;
-};
+type ReportTarget =
+  | {
+      type: 'post';
+      postId: string;
+      postAuthorId: string | null;
+    }
+  | {
+      type: 'comment';
+      postId: string;
+      commentId: string;
+      commentAuthorId: string | null;
+    };
 
-const formatRelativeTime = (date: Date | null): string => {
-  if (!date) return 'Ahora';
-  const diffMs = Date.now() - date.getTime();
-  if (!Number.isFinite(diffMs) || diffMs < 0) return 'Ahora';
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return 'Ahora';
-  if (minutes < 60) return `Hace ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Hace ${hours} h`;
-  const days = Math.floor(hours / 24);
-  return `Hace ${days} d`;
-};
-
-const formatBytes = (value: number | undefined): string => {
-  if (!value || !Number.isFinite(value)) return '';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let size = value;
-  let unitIndex = 0;
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
-};
+// toDate, formatRelativeTime, formatBytes imported from @/shared/lib/formatUtils
 
 const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommentsModalProps) => {
   const { user } = useAuth();
@@ -86,6 +54,11 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
   const [commentTotal, setCommentTotal] = useState<number | null>(null);
   const [likeTotal, setLikeTotal] = useState<number | null>(null);
   const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  const [reportReason, setReportReason] = useState<UserReportReason>('spam');
+  const [reportDetails, setReportDetails] = useState('');
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [submittingReport, setSubmittingReport] = useState(false);
 
   const COMMENTS_PAGE_SIZE = 12;
 
@@ -148,6 +121,10 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
     setIsComposerOpen(false);
     loadComments();
     setMessage('');
+    setReportTarget(null);
+    setReportReason('spam');
+    setReportDetails('');
+    setReportError(null);
   }, [isOpen, post, loadComments]);
 
   const handleSubmit = async (event: FormEvent) => {
@@ -191,10 +168,79 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
     }
   };
 
+  const openPostReport = () => {
+    if (!post) return;
+    if (!user) {
+      showToast('Inicia sesion para reportar', 'info');
+      return;
+    }
+    setReportTarget({
+      type: 'post',
+      postId: post.postId,
+      postAuthorId: post.authorId || null,
+    });
+    setReportReason('spam');
+    setReportDetails('');
+    setReportError(null);
+  };
+
+  const openCommentReport = (comment: PostCommentRead) => {
+    if (!post) return;
+    if (!user) {
+      showToast('Inicia sesion para reportar', 'info');
+      return;
+    }
+    setReportTarget({
+      type: 'comment',
+      postId: post.postId,
+      commentId: comment.id,
+      commentAuthorId: comment.authorId || null,
+    });
+    setReportReason('spam');
+    setReportDetails('');
+    setReportError(null);
+  };
+
+  const handleSubmitReport = async () => {
+    if (!post || !user || !reportTarget) return;
+    setSubmittingReport(true);
+    setReportError(null);
+    try {
+      const details = reportDetails.trim() ? reportDetails.trim() : null;
+      if (reportTarget.type === 'post') {
+        await createPostReport({
+          reporterUid: user.uid,
+          postId: reportTarget.postId,
+          postAuthorId: reportTarget.postAuthorId,
+          reason: reportReason,
+          details,
+        });
+      } else {
+        await createPostCommentReport({
+          reporterUid: user.uid,
+          postId: reportTarget.postId,
+          commentId: reportTarget.commentId,
+          commentAuthorId: reportTarget.commentAuthorId,
+          reason: reportReason,
+          details,
+        });
+      }
+      showToast('Reporte enviado', 'success');
+      setReportTarget(null);
+      setReportReason('spam');
+      setReportDetails('');
+      setReportError(null);
+    } catch (submitError) {
+      console.error('Error creating content report:', submitError);
+      setReportError('No se pudo enviar el reporte.');
+    } finally {
+      setSubmittingReport(false);
+    }
+  };
+
   if (!isOpen || !post) return null;
 
-  const postCreatedAt = toDate(post.createdAt);
-  const postTimestamp = postCreatedAt ? formatRelativeTime(postCreatedAt) : null;
+  const postTimestamp = post.createdAt ? formatRelativeTime(post.createdAt) : null;
   const totalComments = commentTotal ?? comments.length;
   const totalLikes = likeTotal ?? 0;
   const postParagraphs = post.text
@@ -209,7 +255,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
   const hasMedia = !!post.media?.length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-5xl mx-4 bg-bg border border-neutral-900 rounded-2xl overflow-hidden max-h-[90vh] flex flex-col">
         <div className="flex-1 overflow-y-auto">
@@ -251,15 +297,35 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
                   <div className="space-y-3">
                     {post.media
                       .filter((item) => item.type === 'video')
-                      .map((item, index) => (
-                        <video
-                          key={`${item.path}-${index}`}
-                          src={item.url}
-                          controls
-                          preload="metadata"
-                          className="w-full max-h-[360px] rounded-xl border border-neutral-800 bg-black"
-                        />
-                      ))}
+                      .map((item, index) => {
+                        const youtubeMeta = parseYouTubeUrl(item.url);
+                        if (youtubeMeta) {
+                          return (
+                            <div
+                              key={`${item.path}-${index}`}
+                              className="w-full max-h-[360px] rounded-xl border border-neutral-800 bg-black overflow-hidden aspect-video"
+                            >
+                              <iframe
+                                src={youtubeMeta.embedUrl}
+                                title={item.fileName || `video-${index + 1}`}
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                allowFullScreen
+                                className="w-full h-full"
+                              />
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <video
+                            key={`${item.path}-${index}`}
+                            src={item.url}
+                            controls
+                            preload="metadata"
+                            className="w-full max-h-[360px] rounded-xl border border-neutral-800 bg-black"
+                          />
+                        );
+                      })}
                   </div>
                 )}
 
@@ -336,6 +402,13 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
                   <span className="text-sm">{totalComments}</span>
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={openPostReport}
+                className="text-xs uppercase tracking-widest text-red-300 hover:text-red-200 transition-colors"
+              >
+                Reportar publicacion
+              </button>
             </div>
 
             <section className="mt-8">
@@ -372,13 +445,22 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
                           </div>
                         )}
                         <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-white">
-                              {comment.authorSnapshot.displayName}
-                            </span>
-                            <span className="text-xs text-neutral-500">
-                              {formatRelativeTime(comment.createdAt)}
-                            </span>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-white">
+                                {comment.authorSnapshot.displayName}
+                              </span>
+                              <span className="text-xs text-neutral-500">
+                                {formatRelativeTime(comment.createdAt)}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openCommentReport(comment)}
+                              className="text-[11px] uppercase tracking-[0.18em] text-red-300/80 hover:text-red-200 transition-colors"
+                            >
+                              Reportar
+                            </button>
                           </div>
                           <p className="text-sm text-neutral-300 mt-1">{comment.text}</p>
                         </div>
@@ -462,6 +544,26 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
           )}
         </div>
       </div>
+      <ContentReportModal
+        open={!!reportTarget}
+        targetLabel={reportTarget?.type === 'comment' ? 'comentario' : 'publicacion'}
+        reason={reportReason}
+        details={reportDetails}
+        error={reportError}
+        isSubmitting={submittingReport}
+        onClose={() => {
+          if (submittingReport) return;
+          setReportTarget(null);
+          setReportError(null);
+          setReportDetails('');
+          setReportReason('spam');
+        }}
+        onReasonChange={setReportReason}
+        onDetailsChange={setReportDetails}
+        onSubmit={() => {
+          void handleSubmitReport();
+        }}
+      />
     </div>
   );
 };

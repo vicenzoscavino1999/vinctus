@@ -2,12 +2,10 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Film, Image as ImageIcon, Upload, X } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
-import { collection, doc } from 'firebase/firestore';
 import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
-import { createStory, type StoryMediaType } from '@/features/posts/api';
+import { createStory, getNewStoryId, type StoryMediaType } from '@/features/posts/api';
 import { uploadStoryImage, uploadStoryVideo } from '@/shared/lib/storage';
-import { db } from '@/shared/lib/firebase';
 import { loadHeic2Any } from '@/shared/lib/heic2any-loader';
 
 type StoryDraft = {
@@ -193,7 +191,7 @@ const StoryComposerModal = ({ isOpen, onClose, onCreated }: StoryComposerModalPr
     setProgress(0);
 
     try {
-      const storyId = doc(collection(db, 'stories')).id;
+      const storyId = getNewStoryId();
 
       if (draft.type === 'image') {
         const result = await uploadStoryImage(
@@ -257,7 +255,7 @@ const StoryComposerModal = ({ isOpen, onClose, onCreated }: StoryComposerModalPr
   };
 
   const content = (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
+    <div className="fixed inset-0 z-50 flex items-end justify-center safe-area-inset">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div
         className="relative w-full max-w-2xl bg-[#121212] border border-neutral-800 rounded-t-3xl px-6 pt-4 pb-8 max-h-[85vh] overflow-y-auto animate-fade-up"

@@ -103,7 +103,7 @@ const SearchFilters = ({ isOpen, onClose, filters, onApply }: SearchFiltersProps
         aria-modal="true"
         aria-labelledby="search-filters-title"
         onKeyDown={handleTabKey}
-        className="fixed bottom-0 left-0 right-0 bg-surface-base border-t border-neutral-800 rounded-t-3xl p-6 z-50 animate-slide-up max-h-[80vh] overflow-y-auto"
+        className="fixed bottom-0 left-0 right-0 bg-surface-base border-t border-neutral-800 rounded-t-3xl px-6 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] z-50 animate-slide-up max-h-[80vh] overflow-y-auto"
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-6">

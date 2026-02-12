@@ -1,0 +1,2 @@
+export const STORY_DURATION_HOURS = 24;
+export const STORY_DURATION_MS = STORY_DURATION_HOURS * 60 * 60 * 1000;

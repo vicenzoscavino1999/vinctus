@@ -2,6 +2,8 @@ import type { DocumentSnapshot } from 'firebase/firestore';
 import {
   getBlockedUsers as getBlockedUsersRaw,
   getFriendIds as getFriendIdsRaw,
+  getFollowingIds as getFollowingIdsRaw,
+  getGlobalFeed as getGlobalFeedRaw,
   getPost as getPostRaw,
   getPostCommentCount as getPostCommentCountRaw,
   getPostComments as getPostCommentsRaw,
@@ -15,6 +17,7 @@ import { toAppError } from '@/shared/lib/errors';
 import { withRetry, withTimeout } from '@/shared/lib/firebase-helpers';
 import { safeLimit, validate } from '@/shared/lib/validators';
 import {
+  OWNER_IDS_READ_CHUNK_SIZE,
   ownerIdsSchema,
   paginationLimitSchema,
   postIdSchema,
@@ -54,6 +57,11 @@ export const getBlockedUsers = async (uid: string): Promise<string[]> => {
 export const getFriendIds = async (uid: string): Promise<string[]> => {
   const safeUid = validate(userIdSchema, uid, { field: 'uid' });
   return runRead('posts.getFriendIds', () => getFriendIdsRaw(safeUid));
+};
+
+export const getFollowingIds = async (uid: string): Promise<string[]> => {
+  const safeUid = validate(userIdSchema, uid, { field: 'uid' });
+  return runRead('posts.getFollowingIds', () => getFollowingIdsRaw(safeUid));
 };
 
 export const getPost = async (postId: string): Promise<PostRead | null> => {
@@ -97,11 +105,62 @@ export const getPostsByUser = async (
   );
 };
 
+export const getGlobalFeed = async (
+  pageSize: number = 30,
+  lastDoc?: DocumentSnapshot,
+): Promise<PaginatedResult<PostRead>> => {
+  const safePageSize = validate(paginationLimitSchema, safeLimit(pageSize, 30), {
+    field: 'pageSize',
+  });
+  return runRead('posts.getGlobalFeed', () => getGlobalFeedRaw(safePageSize, lastDoc));
+};
+
 export const getStoriesForOwners = async (ownerIds: string[]): Promise<StoryRead[]> => {
-  const safeOwnerIds = Array.from(
-    new Set(validate(ownerIdsSchema, ownerIds, { field: 'ownerIds' })),
+  const uniqueOwnerIds = Array.from(new Set(ownerIds.filter(Boolean)));
+
+  if (uniqueOwnerIds.length === 0) {
+    validate(ownerIdsSchema, uniqueOwnerIds, { field: 'ownerIds' });
+  }
+
+  if (uniqueOwnerIds.length <= OWNER_IDS_READ_CHUNK_SIZE) {
+    const safeOwnerIds = validate(ownerIdsSchema, uniqueOwnerIds, { field: 'ownerIds' });
+    return runRead('posts.getStoriesForOwners', () => getStoriesForOwnersRaw(safeOwnerIds));
+  }
+
+  const chunks: string[][] = [];
+  for (let index = 0; index < uniqueOwnerIds.length; index += OWNER_IDS_READ_CHUNK_SIZE) {
+    chunks.push(uniqueOwnerIds.slice(index, index + OWNER_IDS_READ_CHUNK_SIZE));
+  }
+
+  const chunkResults = await Promise.allSettled(
+    chunks.map((chunk, index) => {
+      const safeChunk = validate(ownerIdsSchema, chunk, { field: `ownerIds[chunk:${index}]` });
+      return runRead(`posts.getStoriesForOwners.chunk:${index}`, () =>
+        getStoriesForOwnersRaw(safeChunk),
+      );
+    }),
   );
-  return runRead('posts.getStoriesForOwners', () => getStoriesForOwnersRaw(safeOwnerIds));
+
+  const merged = new Map<string, StoryRead>();
+  let firstError: unknown = null;
+
+  for (const result of chunkResults) {
+    if (result.status === 'fulfilled') {
+      result.value.forEach((story) => merged.set(story.id, story));
+      continue;
+    }
+    if (!firstError) firstError = result.reason;
+  }
+
+  if (merged.size === 0 && firstError) {
+    throw firstError;
+  }
+
+  return Array.from(merged.values()).sort((a, b) => {
+    const aTime = a.createdAt?.getTime?.() ?? 0;
+    const bTime = b.createdAt?.getTime?.() ?? 0;
+    return bTime - aTime;
+  });
 };
 
 export const isPostLiked = async (postId: string, uid: string): Promise<boolean> => {

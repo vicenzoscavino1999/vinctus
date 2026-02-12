@@ -3,9 +3,11 @@ import { AppError } from '@/shared/lib/errors';
 import {
   acceptFollowRequest,
   createContribution,
+  followCategoryWithSync,
   getOrCreateDirectConversation,
   saveCategoryWithSync,
   sendFollowRequest,
+  unfollowCategoryWithSync,
   updateContributionFile,
   updateUserProfile,
 } from '@/features/profile/api/mutations';
@@ -15,10 +17,12 @@ vi.mock('@/shared/lib/firestore', () => ({
   cancelFollowRequest: vi.fn(),
   createContribution: vi.fn(),
   declineFollowRequest: vi.fn(),
+  followCategoryWithSync: vi.fn(),
   followPublicUser: vi.fn(),
   getOrCreateDirectConversation: vi.fn(),
   saveCategoryWithSync: vi.fn(),
   sendFollowRequest: vi.fn(),
+  unfollowCategoryWithSync: vi.fn(),
   unfollowUser: vi.fn(),
   unsaveCategoryWithSync: vi.fn(),
   updateContributionFile: vi.fn(),
@@ -106,9 +110,13 @@ describe('profile api mutations', () => {
     const saveTask = saveCategoryWithSync('', 'user_1');
     const acceptTask = acceptFollowRequest('', 'user_1');
     const conversationTask = getOrCreateDirectConversation('user_1', '');
+    const followTask = followCategoryWithSync('', 'user_1');
+    const unfollowTask = unfollowCategoryWithSync('', 'user_1');
 
     await expect(saveTask).rejects.toBeInstanceOf(AppError);
     await expect(acceptTask).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
     await expect(conversationTask).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(followTask).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(unfollowTask).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
   });
 });

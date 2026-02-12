@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { formatBytes, formatRelativeTime } from '@/shared/lib/formatUtils';
 import { File, FileText, Link2, Trash2, X } from 'lucide-react';
 
 import { useAuth } from '@/context/auth';
@@ -21,34 +22,6 @@ interface CollectionDetailModalProps {
   onItemCreated?: () => void;
   onItemDeleted?: () => void;
 }
-
-const formatRelativeTime = (date: Date): string => {
-  const diffMs = Date.now() - date.getTime();
-  if (!Number.isFinite(diffMs) || diffMs < 0) return 'Ahora';
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return 'Ahora';
-  if (minutes < 60) return `Hace ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Hace ${hours} h`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `Hace ${days} d`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `Hace ${months} mes`;
-  const years = Math.floor(months / 12);
-  return `Hace ${years} a`;
-};
-
-const formatFileSize = (bytes: number): string => {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let size = bytes;
-  let unitIndex = 0;
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-};
 
 const MAX_COLLECTION_FILE_SIZE = 25 * 1024 * 1024;
 const COLLECTION_FILE_TYPES = [
@@ -280,7 +253,7 @@ const CollectionDetailModal = ({
   const iconOption = getCollectionIcon(collection.icon);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-6">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto safe-area-inset py-6">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-3xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 flex-shrink-0">
@@ -377,7 +350,7 @@ const CollectionDetailModal = ({
                 />
                 {file && (
                   <p className="text-xs text-neutral-500 mt-2">
-                    {file.name} · {formatFileSize(file.size)}
+                    {file.name} · {formatBytes(file.size)}
                   </p>
                 )}
                 {uploadProgress !== null && (
@@ -435,7 +408,7 @@ const CollectionDetailModal = ({
                       </p>
                       {isFile && item.fileSize ? (
                         <p className="text-neutral-600 text-xs mt-1">
-                          {formatFileSize(item.fileSize)}
+                          {formatBytes(item.fileSize)}
                         </p>
                       ) : null}
                     </div>

@@ -260,7 +260,15 @@ export const seedGroups = async (
 };
 
 export const clearUserData = async (uid: string): Promise<void> => {
-  const collections = ['memberships', 'likes', 'savedPosts', 'savedCategories'];
+  const collections = [
+    'memberships',
+    'likes',
+    'likedArenaDebates',
+    'savedPosts',
+    'savedCategories',
+    'followedCategories',
+    'savedArenaDebates',
+  ];
   const allRefs: DocumentReference[] = [];
 
   for (const collName of collections) {

@@ -47,6 +47,28 @@ async function seedPost(postId = 'post_alpha') {
   });
 }
 
+async function seedArenaDebate(
+  debateId = 'debate_alpha',
+  opts?: { createdBy?: string; visibility?: 'public' | 'private'; status?: 'running' | 'done' },
+) {
+  const env = await getRulesTestEnv();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await db.doc(`arenaDebates/${debateId}`).set({
+      createdBy: opts?.createdBy ?? 'user_a',
+      topic: 'Tema de prueba',
+      mode: 'debate',
+      personaA: 'scientist',
+      personaB: 'philosopher',
+      status: opts?.status ?? 'done',
+      visibility: opts?.visibility ?? 'public',
+      language: 'es',
+      likesCount: 0,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    });
+  });
+}
+
 async function seedPostComment(
   postId = 'post_alpha',
   commentId = 'comment_alpha',
@@ -364,6 +386,120 @@ describe('Firestore Rules - critical access controls', () => {
         createdAt: serverTimestamp(),
       }),
     );
+  });
+
+  it('denies writing followed categories for another user', async () => {
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertFails(
+      db.doc('users/user_b/followedCategories/science').set({
+        categoryId: 'science',
+        createdAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('allows writing followed categories for own user', async () => {
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertSucceeds(
+      db.doc('users/user_a/followedCategories/science').set({
+        categoryId: 'science',
+        createdAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('denies writing saved arena debates for another user', async () => {
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertFails(
+      db.doc('users/user_b/savedArenaDebates/debate_x').set({
+        debateId: 'debate_x',
+        topic: 'Tema de prueba',
+        personaA: 'scientist',
+        personaB: 'philosopher',
+        summary: null,
+        verdictWinner: 'draw',
+        createdAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('allows writing saved arena debates for own user', async () => {
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertSucceeds(
+      db.doc('users/user_a/savedArenaDebates/debate_x').set({
+        debateId: 'debate_x',
+        topic: 'Tema de prueba',
+        personaA: 'scientist',
+        personaB: 'philosopher',
+        summary: null,
+        verdictWinner: 'draw',
+        createdAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('denies writing liked arena debates index for another user', async () => {
+    await seedArenaDebate('debate_like_index_guard');
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertFails(
+      db.doc('users/user_b/likedArenaDebates/debate_like_index_guard').set({
+        debateId: 'debate_like_index_guard',
+        createdAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('allows writing liked arena debates index for own user', async () => {
+    await seedArenaDebate('debate_like_index_ok');
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertSucceeds(
+      db.doc('users/user_a/likedArenaDebates/debate_like_index_ok').set({
+        debateId: 'debate_like_index_ok',
+        createdAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('denies creating arena likes when path uid does not match auth user', async () => {
+    await seedArenaDebate('debate_like_guard');
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertFails(
+      db.doc('arenaDebates/debate_like_guard/likes/user_b').set({
+        uid: 'user_b',
+        debateId: 'debate_like_guard',
+        createdAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('allows creating and deleting own arena like with valid payload', async () => {
+    await seedArenaDebate('debate_like_owner');
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertSucceeds(
+      db.doc('arenaDebates/debate_like_owner/likes/user_a').set({
+        uid: 'user_a',
+        debateId: 'debate_like_owner',
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    await assertSucceeds(db.doc('arenaDebates/debate_like_owner/likes/user_a').delete());
   });
 
   it('denies deleting comments from another author', async () => {

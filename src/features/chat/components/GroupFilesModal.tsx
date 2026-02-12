@@ -1,17 +1,6 @@
 import { FileText, Image as ImageIcon, X } from 'lucide-react';
 import type { MessageAttachmentRead } from '@/features/chat/api';
-
-const formatBytes = (value: number): string => {
-  if (!Number.isFinite(value) || value <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let size = value;
-  let unitIndex = 0;
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
-};
+import { formatBytes } from '@/shared/lib/formatUtils';
 
 export type GroupFileItem = {
   messageId: string;
@@ -28,7 +17,7 @@ const GroupFilesModal = ({ open, items, onClose }: Props) => {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
@@ -36,6 +25,7 @@ const GroupFilesModal = ({ open, items, onClose }: Props) => {
           <button
             onClick={onClose}
             className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
+            aria-label="Cerrar"
           >
             <X size={18} />
           </button>

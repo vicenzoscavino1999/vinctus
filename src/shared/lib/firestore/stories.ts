@@ -15,14 +15,9 @@ import {
   where as whereLite,
 } from 'firebase/firestore/lite';
 import { db, dbLite } from '@/shared/lib/firebase';
-
-const STORY_DURATION_MS = 24 * 60 * 60 * 1000;
-
-const toDate = (value: unknown): Date | undefined => {
-  if (value instanceof Timestamp) return value.toDate();
-  if (value instanceof Date) return value;
-  return undefined;
-};
+import { toDate as toDateValue } from '@/shared/lib/formatUtils';
+import { STORY_DURATION_MS } from '@/shared/lib/storyConstants';
+const storiesCollection = collection(db, 'stories');
 
 export type StoryVisibility = 'friends';
 
@@ -88,15 +83,13 @@ const buildStoryRead = (id: string, data: Record<string, unknown>): StoryRead =>
     thumbUrl: (data.thumbUrl as string) ?? null,
     thumbPath: (data.thumbPath as string) ?? null,
     visibility: (data.visibility as StoryVisibility) ?? 'friends',
-    createdAt: toDate(data.createdAt) || new Date(0),
-    expiresAt: toDate(data.expiresAt) || new Date(0),
+    createdAt: toDateValue(data.createdAt) || new Date(0),
+    expiresAt: toDateValue(data.expiresAt) || new Date(0),
   };
 };
 
 export async function createStory(input: CreateStoryInput): Promise<string> {
-  const storyRef = input.storyId
-    ? doc(db, 'stories', input.storyId)
-    : doc(collection(db, 'stories'));
+  const storyRef = input.storyId ? doc(storiesCollection, input.storyId) : doc(storiesCollection);
   const expiresAt = Timestamp.fromMillis(Date.now() + STORY_DURATION_MS);
   await setDoc(
     storyRef,
@@ -120,6 +113,10 @@ export async function createStory(input: CreateStoryInput): Promise<string> {
   return storyRef.id;
 }
 
+export function getNewStoryId(): string {
+  return doc(storiesCollection).id;
+}
+
 export async function getUserStories(uid: string): Promise<StoryRead[]> {
   const now = TimestampLite.now();
   const q = queryLite(
@@ -131,7 +128,6 @@ export async function getUserStories(uid: string): Promise<StoryRead[]> {
   );
 
   const snapshot = await getDocsLite(q);
-  console.log(`[getUserStories] loaded ${snapshot.docs.length} stories for uid ${uid}`);
 
   return snapshot.docs.map((docSnap) => buildStoryRead(docSnap.id, docSnap.data()));
 }
@@ -157,10 +153,6 @@ export async function getStoriesForOwners(ownerIds: string[]): Promise<StoryRead
         orderByLite('expiresAt', 'desc'),
       );
       const snapshot = await getDocsLite(q);
-      console.log(
-        `[getStoriesForOwners] chunk query returned ${snapshot.docs.length} stories for owners:`,
-        chunk,
-      );
       return snapshot.docs.map((docSnap) => buildStoryRead(docSnap.id, docSnap.data()));
     }),
   );

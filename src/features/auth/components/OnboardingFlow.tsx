@@ -60,7 +60,7 @@ const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-surface-base z-50 flex flex-col">
+    <div className="fixed inset-0 bg-surface-base z-50 flex flex-col safe-area-inset">
       {/* Progress dots */}
       <div className="flex justify-center gap-2 pt-8 pb-4">
         {[0, 1, 2].map((i) => (

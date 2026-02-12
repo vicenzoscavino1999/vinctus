@@ -20,6 +20,8 @@ import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics
 import { db } from '@/shared/lib/firebase';
 
 const DEFAULT_LIMIT = 30;
+const DEFAULT_AUTHOR_NAME = 'Usuario';
+const POST_STATUS_VALUES = ['ready', 'uploading', 'failed'] as const;
 
 interface PaginatedResult<T> {
   items: T[];
@@ -41,17 +43,32 @@ export interface PostMedia {
   size?: number;
 }
 
+export interface PostAuthorSnapshot {
+  displayName: string;
+  photoURL: string | null;
+}
+
 /**
  * Post read type (from Firestore)
+ *
+ * Dual schema support:
+ * - New schema fields: authorSnapshot, text, status
+ * - Legacy schema fields: authorName, authorUsername, authorPhoto, content
+ *
+ * Normalization ensures canonical fallbacks are always present for legacy consumers.
  */
 export interface PostRead {
   id: string;
+  postId: string;
   authorId: string;
+  authorSnapshot: PostAuthorSnapshot;
   authorName: string;
   authorUsername: string;
   authorPhoto: string | null;
   title?: string | null;
+  text: string;
   content: string;
+  status?: (typeof POST_STATUS_VALUES)[number];
   media: PostMedia[];
   groupId: string | null;
   categoryId: string | null;
@@ -63,11 +80,14 @@ export interface PostRead {
 
 interface PostWrite {
   authorId: string;
+  authorSnapshot: PostAuthorSnapshot;
   authorName: string;
   authorUsername: string;
   authorPhoto: string | null;
   title?: string | null;
+  text: string;
   content: string;
+  status: 'ready';
   media: PostMedia[];
   groupId: string | null;
   categoryId: string | null;
@@ -124,6 +144,119 @@ const deleteDoc = ((...args: unknown[]) => {
 
 const postsCollection = collection(db, 'posts');
 
+const toNullableString = (value: unknown): string | null =>
+  typeof value === 'string' ? value : null;
+
+const toStringWithFallback = (value: unknown, fallback = ''): string =>
+  typeof value === 'string' ? value : fallback;
+
+const toNullableTimestamp = (value: unknown): Timestamp | null => {
+  if (value instanceof Timestamp) return value;
+  if (value instanceof Date) return Timestamp.fromDate(value);
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'toDate' in value &&
+    typeof (value as { toDate?: unknown }).toDate === 'function'
+  ) {
+    const dateValue = (value as { toDate: () => unknown }).toDate();
+    if (dateValue instanceof Date) return Timestamp.fromDate(dateValue);
+  }
+  return null;
+};
+
+const toCounter = (primary: unknown, fallback: unknown): number => {
+  if (typeof primary === 'number' && Number.isFinite(primary) && primary >= 0) {
+    return Math.floor(primary);
+  }
+  if (typeof fallback === 'number' && Number.isFinite(fallback) && fallback >= 0) {
+    return Math.floor(fallback);
+  }
+  return 0;
+};
+
+const toStatus = (value: unknown): PostRead['status'] => {
+  if (typeof value !== 'string') return undefined;
+  return (POST_STATUS_VALUES as readonly string[]).includes(value)
+    ? (value as PostRead['status'])
+    : undefined;
+};
+
+const toPostMediaArray = (value: unknown): PostMedia[] => {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (typeof item !== 'object' || item === null) return [];
+    const record = item as Record<string, unknown>;
+    const url = toNullableString(record.url);
+    const path = toNullableString(record.path) ?? url;
+    const type = toNullableString(record.type);
+    if (!url || !path || !type || !['image', 'video', 'file'].includes(type)) return [];
+    const width =
+      typeof record.width === 'number' && Number.isFinite(record.width) ? record.width : undefined;
+    const height =
+      typeof record.height === 'number' && Number.isFinite(record.height)
+        ? record.height
+        : undefined;
+    const size =
+      typeof record.size === 'number' && Number.isFinite(record.size) ? record.size : undefined;
+
+    return [
+      {
+        url,
+        path,
+        type: type as PostMedia['type'],
+        contentType: toStringWithFallback(record.contentType),
+        width,
+        height,
+        fileName: toNullableString(record.fileName) ?? undefined,
+        size,
+      } satisfies PostMedia,
+    ];
+  });
+};
+
+const normalizePostRead = (id: string, data: Record<string, unknown>): PostRead => {
+  const rawAuthorSnapshot =
+    typeof data.authorSnapshot === 'object' && data.authorSnapshot !== null
+      ? (data.authorSnapshot as Record<string, unknown>)
+      : null;
+  const snapshotDisplayName = toNullableString(rawAuthorSnapshot?.displayName);
+  const snapshotPhotoURL = toNullableString(rawAuthorSnapshot?.photoURL);
+
+  const authorName =
+    snapshotDisplayName ?? toStringWithFallback(data.authorName, DEFAULT_AUTHOR_NAME);
+  const authorPhoto = snapshotPhotoURL ?? toNullableString(data.authorPhoto) ?? null;
+  const authorUsername =
+    toStringWithFallback(data.authorUsername) || toStringWithFallback(data.authorId);
+
+  const text = toNullableString(data.text) ?? toStringWithFallback(data.content);
+  const content = toNullableString(data.content) ?? text;
+
+  return {
+    id,
+    postId: id,
+    authorId: toStringWithFallback(data.authorId),
+    authorSnapshot: {
+      displayName: authorName,
+      photoURL: authorPhoto,
+    },
+    authorName,
+    authorUsername,
+    authorPhoto,
+    title: toNullableString(data.title),
+    text,
+    content,
+    status: toStatus(data.status),
+    media: toPostMediaArray(data.media),
+    groupId: toNullableString(data.groupId),
+    categoryId: toNullableString(data.categoryId),
+    likeCount: toCounter(data.likeCount, (data as { likesCount?: unknown }).likesCount),
+    commentCount: toCounter(data.commentCount, (data as { commentsCount?: unknown }).commentsCount),
+    createdAt: toNullableTimestamp(data.createdAt) ?? Timestamp.now(),
+    updatedAt: toNullableTimestamp(data.updatedAt),
+  };
+};
+
 /**
  * Generate a new post ID BEFORE uploading media.
  *
@@ -154,11 +287,17 @@ export async function createPost(
 ): Promise<void> {
   const postData: PostWrite = {
     authorId,
+    authorSnapshot: {
+      displayName: authorName,
+      photoURL: authorPhoto,
+    },
     authorName,
     authorUsername,
     authorPhoto,
     title,
+    text: content,
     content,
+    status: 'ready',
     media,
     groupId,
     categoryId,
@@ -178,23 +317,8 @@ export async function getPost(postId: string): Promise<PostRead | null> {
   const docSnap = await getDoc(doc(postsCollection, postId));
   if (!docSnap.exists()) return null;
 
-  const data = docSnap.data();
-  return {
-    id: docSnap.id,
-    authorId: data.authorId,
-    authorName: data.authorName,
-    authorUsername: data.authorUsername,
-    authorPhoto: data.authorPhoto,
-    title: typeof data.title === 'string' ? data.title : null,
-    content: data.content,
-    media: data.media || [],
-    groupId: data.groupId,
-    categoryId: data.categoryId,
-    likeCount: data.likeCount || 0,
-    commentCount: data.commentCount || 0,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
-  };
+  const data = docSnap.data() as Record<string, unknown>;
+  return normalizePostRead(docSnap.id, data);
 }
 
 /**
@@ -220,13 +344,7 @@ export async function getPostsByGroup(
   const hasMore = snapshot.docs.length > pageSize;
   const docs = hasMore ? snapshot.docs.slice(0, pageSize) : snapshot.docs;
 
-  const items = docs.map(
-    (d) =>
-      ({
-        id: d.id,
-        ...d.data(),
-      }) as PostRead,
-  );
+  const items = docs.map((d) => normalizePostRead(d.id, d.data() as Record<string, unknown>));
 
   return {
     items,
@@ -258,13 +376,7 @@ export async function getPostsByUser(
   const hasMore = snapshot.docs.length > pageSize;
   const docs = hasMore ? snapshot.docs.slice(0, pageSize) : snapshot.docs;
 
-  const items = docs.map(
-    (d) =>
-      ({
-        id: d.id,
-        ...d.data(),
-      }) as PostRead,
-  );
+  const items = docs.map((d) => normalizePostRead(d.id, d.data() as Record<string, unknown>));
 
   return {
     items,
@@ -296,13 +408,7 @@ export async function getPostsByCategory(
   const hasMore = snapshot.docs.length > pageSize;
   const docs = hasMore ? snapshot.docs.slice(0, pageSize) : snapshot.docs;
 
-  const items = docs.map(
-    (d) =>
-      ({
-        id: d.id,
-        ...d.data(),
-      }) as PostRead,
-  );
+  const items = docs.map((d) => normalizePostRead(d.id, d.data() as Record<string, unknown>));
 
   return {
     items,
@@ -328,13 +434,7 @@ export async function getGlobalFeed(
   const hasMore = snapshot.docs.length > pageSize;
   const docs = hasMore ? snapshot.docs.slice(0, pageSize) : snapshot.docs;
 
-  const items = docs.map(
-    (d) =>
-      ({
-        id: d.id,
-        ...d.data(),
-      }) as PostRead,
-  );
+  const items = docs.map((d) => normalizePostRead(d.id, d.data() as Record<string, unknown>));
 
   return {
     items,
@@ -352,6 +452,7 @@ export async function updatePost(
   media: PostMedia[],
 ): Promise<void> {
   await updateDoc(doc(postsCollection, postId), {
+    text: content,
     content,
     media,
     updatedAt: serverTimestamp(),

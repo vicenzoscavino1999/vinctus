@@ -5,80 +5,64 @@ import {
   fetchHackerNews,
   fetchBooks,
   fetchNatureObservations,
+  fetchMusicInfo,
 } from './api';
 
-// Mock global fetch
 const mockFetch = vi.fn();
-const buildArxivUrl = (category: string, maxResults: number) => {
-  const categoryMap: Record<string, string> = {
-    physics: 'physics.gen-ph',
-    quantum: 'quant-ph',
-    cosmology: 'astro-ph.CO',
-    math: 'math.GM',
-    cs: 'cs.AI',
-    'quant-ph': 'quant-ph',
-    'astro-ph.CO': 'astro-ph.CO',
-  };
 
-  const query = categoryMap[category] || category;
-  const arxivUrl = `https://export.arxiv.org/api/query?search_query=cat:${query}&start=0&max_results=${maxResults}&sortBy=submittedDate&sortOrder=descending`;
-  return arxivUrl;
-};
+const createProxyResponse = (data: unknown[]): Response =>
+  ({
+    json: vi.fn(async () => ({ data })),
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+  }) as unknown as Response;
 
-const buildWikipediaUrl = (topic: string) =>
-  `https://en.wikipedia.org/api/rest_v1/page/related/${encodeURIComponent(topic)}`;
+const createJsonResponse = (data: unknown): Response =>
+  ({
+    json: vi.fn(async () => data),
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+  }) as unknown as Response;
 
-const buildHackerNewsListUrl = (type: string) => {
-  const typeMap: Record<string, string> = {
-    top: 'topstories',
-    new: 'newstories',
-    best: 'beststories',
-  };
-
-  const storyType = typeMap[type] || 'topstories';
-  return `https://hacker-news.firebaseio.com/v0/${storyType}.json`;
-};
-
-const buildHackerNewsItemUrl = (id: number) =>
-  `https://hacker-news.firebaseio.com/v0/item/${id}.json`;
-
-const buildBooksUrl = (subject: string, limit: number) =>
-  `https://openlibrary.org/subjects/${subject}.json?limit=${limit}`;
-
-const buildNatureUrl = (taxon: string, limit: number) => {
-  const taxonMap: Record<string, string> = {
-    plants: '47126',
-    birds: '3',
-    mammals: '40151',
-    insects: '47158',
-    reptiles: '26036',
-  };
-
-  const taxonId = taxonMap[taxon] || taxon;
-  return `https://api.inaturalist.org/v1/observations?taxon_id=${taxonId}&quality_grade=research&per_page=${limit}&order=desc&order_by=created_at`;
-};
+const createTextResponse = (text: string): Response =>
+  ({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    text: vi.fn(async () => text),
+  }) as unknown as Response;
 
 describe('API Services', () => {
   beforeEach(() => {
     mockFetch.mockReset();
     vi.stubGlobal('fetch', mockFetch);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
-  describe('fetchArxivPapers', () => {
-    it('lanza error cuando fetch falla', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+  it('usa /api/discover para arxiv cuando proxy responde', async () => {
+    mockFetch.mockResolvedValueOnce(
+      createProxyResponse([{ id: 'p1', title: 'Paper 1', type: 'Paper' }]),
+    );
 
-      await expect(fetchArxivPapers('physics', 5)).rejects.toThrow('Network error');
+    const result = await fetchArxivPapers('physics', 5);
 
-      expect(mockFetch).toHaveBeenCalledWith(buildArxivUrl('physics', 5));
-    });
+    expect(result).toEqual([{ id: 'p1', title: 'Paper 1', type: 'Paper' }]);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(String(mockFetch.mock.calls[0]?.[0])).toContain('/api/discover?');
+    expect(String(mockFetch.mock.calls[0]?.[0])).toContain('source=arxiv');
+  });
 
-    it('parsea correctamente respuesta XML de arXiv', async () => {
-      const mockXml = `
+  it('hace fallback a arXiv directo si falla proxy', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('proxy down'));
+    mockFetch.mockResolvedValueOnce(
+      createTextResponse(`
         <feed xmlns="http://www.w3.org/2005/Atom">
           <entry>
             <id>http://arxiv.org/abs/1234.5678</id>
@@ -88,190 +72,108 @@ describe('API Services', () => {
             <published>2024-01-15T00:00:00Z</published>
           </entry>
         </feed>
-      `;
+      `),
+    );
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        text: () => Promise.resolve(mockXml),
-      });
+    const result = await fetchArxivPapers('physics', 1);
 
-      const result = await fetchArxivPapers('physics', 1);
-
-      expect(mockFetch).toHaveBeenCalledWith(buildArxivUrl('physics', 1));
-      expect(result).toHaveLength(1);
-      expect(result[0].title).toBe('Test Paper Title');
-      expect(result[0].type).toBe('Paper');
-    });
+    expect(result).toHaveLength(1);
+    expect(result[0]?.title).toBe('Test Paper Title');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(String(mockFetch.mock.calls[1]?.[0])).toContain('export.arxiv.org/api/query');
   });
 
-  describe('fetchWikipediaArticles', () => {
-    it('lanza error cuando fetch falla', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'));
-
-      await expect(fetchWikipediaArticles('Ancient_history', 5)).rejects.toThrow('Network error');
-
-      expect(mockFetch).toHaveBeenCalledWith(buildWikipediaUrl('Ancient_history'));
-    });
-
-    it('parsea correctamente respuesta JSON de Wikipedia', async () => {
-      const mockResponse = {
-        pages: [
-          {
-            pageid: 123,
-            title: 'Ancient Rome',
-            titles: { normalized: 'Ancient Rome' },
-            extract: 'Rome was a civilization...',
-            thumbnail: { source: 'https://example.com/image.jpg' },
+  it('hace fallback a Wikipedia search directo si falla proxy', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('proxy down'));
+    mockFetch.mockRejectedValueOnce(new Error('rest failed'));
+    mockFetch.mockResolvedValueOnce(
+      createJsonResponse({
+        query: {
+          pages: {
+            '521555': {
+              extract: 'Articulo sobre Roma.',
+              pageid: 521555,
+              title: 'Ancient Rome',
+            },
           },
-        ],
-      };
+        },
+      }),
+    );
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+    const result = await fetchWikipediaArticles('Ancient_Rome', 1);
 
-      const result = await fetchWikipediaArticles('Ancient_Rome', 1);
-
-      expect(mockFetch).toHaveBeenCalledWith(buildWikipediaUrl('Ancient_Rome'));
-      expect(result).toHaveLength(1);
-      expect(result[0].title).toBe('Ancient Rome');
-      expect(result[0].type).toBe('Articulo');
-    });
+    expect(result).toHaveLength(1);
+    expect(result[0]?.title).toBe('Ancient Rome');
+    expect(result[0]?.summary).not.toContain('<span');
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(String(mockFetch.mock.calls[1]?.[0])).toContain('/w/rest.php/v1/search/page');
+    expect(String(mockFetch.mock.calls[2]?.[0])).toContain('/w/api.php?action=query');
   });
 
-  describe('fetchHackerNews', () => {
-    it('lanza error cuando fetch falla', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+  it('usa proxy para wikipedia, hackernews, openlibrary e inaturalist', async () => {
+    mockFetch
+      .mockResolvedValueOnce(createProxyResponse([{ id: 1, title: 'Wiki', type: 'Articulo' }]))
+      .mockResolvedValueOnce(createProxyResponse([{ id: 2, title: 'HN', type: 'Noticia' }]))
+      .mockResolvedValueOnce(
+        createProxyResponse([{ id: '/works/1', title: 'Book', type: 'Libro' }]),
+      )
+      .mockResolvedValueOnce(createProxyResponse([{ id: 4, species: 'Oak', type: 'Observacion' }]));
 
-      await expect(fetchHackerNews('top', 5)).rejects.toThrow('Network error');
+    const wikipedia = await fetchWikipediaArticles('Ancient_history', 3);
+    const hackerNews = await fetchHackerNews('top', 2);
+    const books = await fetchBooks('fiction', 1);
+    const nature = await fetchNatureObservations('plants', 1);
 
-      expect(mockFetch).toHaveBeenCalledWith(buildHackerNewsListUrl('top'));
-    });
-
-    it('obtiene stories correctamente', async () => {
-      // Mock para IDs
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve([1, 2]),
-      });
-
-      // Mock para cada story
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            id: 1,
-            title: 'Test Story',
-            url: 'https://example.com',
-            by: 'testuser',
-            score: 100,
-            descendants: 50,
-            time: 1704067200,
-            type: 'story',
-          }),
-      });
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            id: 2,
-            title: 'Another Story',
-            url: 'https://example2.com',
-            by: 'testuser2',
-            score: 200,
-            descendants: 100,
-            time: 1704067200,
-            type: 'story',
-          }),
-      });
-
-      const result = await fetchHackerNews('top', 2);
-
-      expect(mockFetch).toHaveBeenNthCalledWith(1, buildHackerNewsListUrl('top'));
-      expect(mockFetch).toHaveBeenNthCalledWith(2, buildHackerNewsItemUrl(1));
-      expect(mockFetch).toHaveBeenNthCalledWith(3, buildHackerNewsItemUrl(2));
-      expect(result).toHaveLength(2);
-      expect(result[0].title).toBe('Test Story');
-      expect(result[0].type).toBe('Noticia');
-    });
+    expect(wikipedia[0]?.title).toBe('Wiki');
+    expect(hackerNews[0]?.title).toBe('HN');
+    expect(books[0]?.title).toBe('Book');
+    expect(nature[0]?.species).toBe('Oak');
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+    expect(String(mockFetch.mock.calls[0]?.[0])).toContain('source=wikipedia');
+    expect(String(mockFetch.mock.calls[1]?.[0])).toContain('source=hackernews');
+    expect(String(mockFetch.mock.calls[2]?.[0])).toContain('source=openlibrary');
+    expect(String(mockFetch.mock.calls[3]?.[0])).toContain('source=inaturalist');
   });
 
-  describe('fetchBooks', () => {
-    it('lanza error cuando fetch falla', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+  it('usa proveedor de musica via proxy', async () => {
+    mockFetch.mockResolvedValueOnce(
+      createProxyResponse([{ artist: 'Miles Davis', id: 1, title: 'So What', type: 'Cancion' }]),
+    );
 
-      await expect(fetchBooks('fiction', 5)).rejects.toThrow('Network error');
+    const result = await fetchMusicInfo('jazz', 5);
 
-      expect(mockFetch).toHaveBeenCalledWith(buildBooksUrl('fiction', 5));
-    });
-
-    it('parsea correctamente respuesta de Open Library', async () => {
-      const mockResponse = {
-        works: [
-          {
-            key: '/works/OL123',
-            title: 'Test Book',
-            authors: [{ name: 'Test Author' }],
-            cover_id: 12345,
-            first_publish_year: 1999,
-          },
-        ],
-      };
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
-
-      const result = await fetchBooks('fiction', 1);
-
-      expect(mockFetch).toHaveBeenCalledWith(buildBooksUrl('fiction', 1));
-      expect(result).toHaveLength(1);
-      expect(result[0].title).toBe('Test Book');
-      expect(result[0].authors).toBe('Test Author');
-      expect(result[0].type).toBe('Libro');
-    });
+    expect(result[0]?.title).toBe('So What');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(String(mockFetch.mock.calls[0]?.[0])).toContain('source=lastfm');
   });
 
-  describe('fetchNatureObservations', () => {
-    it('lanza error cuando fetch falla', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'));
-
-      await expect(fetchNatureObservations('plants', 5)).rejects.toThrow('Network error');
-
-      expect(mockFetch).toHaveBeenCalledWith(buildNatureUrl('plants', 5));
-    });
-
-    it('parsea correctamente respuesta de iNaturalist', async () => {
-      const mockResponse = {
+  it('hace fallback a iTunes directo si falla proxy de musica', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('proxy down'));
+    mockFetch.mockResolvedValueOnce(
+      createJsonResponse({
         results: [
           {
-            id: 123,
-            taxon: {
-              preferred_common_name: 'Oak Tree',
-              name: 'Quercus',
-            },
-            place_guess: 'California',
-            photos: [{ url: 'https://example.com/photo_square.jpg' }],
-            user: { login: 'naturalist1' },
-            observed_on: '2024-01-15',
+            artistName: 'Dave Brubeck',
+            trackId: 1,
+            trackName: 'Take Five',
+            trackViewUrl: 'https://music.apple.com/us/album/take-five/id1',
           },
         ],
-      };
+      }),
+    );
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+    const result = await fetchMusicInfo('jazz', 1);
 
-      const result = await fetchNatureObservations('plants', 1);
-
-      expect(mockFetch).toHaveBeenCalledWith(buildNatureUrl('plants', 1));
-      expect(result).toHaveLength(1);
-      expect(result[0].species).toBe('Oak Tree');
-      expect(result[0].type).toBe('Observacion');
-    });
+    expect(result).toEqual([
+      {
+        artist: 'Dave Brubeck',
+        id: 1,
+        link: 'https://music.apple.com/us/album/take-five/id1',
+        title: 'Take Five',
+        type: 'Cancion',
+      },
+    ]);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(String(mockFetch.mock.calls[1]?.[0])).toContain('itunes.apple.com/search');
   });
 });

@@ -2,7 +2,8 @@
 // Credentials loaded from environment variables (.env.local)
 
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, connectAuthEmulator } from 'firebase/auth';
+import { initializeAppCheck, ReCaptchaV3Provider, type AppCheck } from 'firebase/app-check';
+import { getAuth, GoogleAuthProvider, OAuthProvider, connectAuthEmulator } from 'firebase/auth';
 import {
   connectFirestoreEmulator,
   initializeFirestore,
@@ -26,11 +27,52 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
+const APP_CHECK_ENABLED = import.meta.env.VITE_ENABLE_FIREBASE_APP_CHECK === 'true';
+const APP_CHECK_SITE_KEY = (import.meta.env.VITE_FIREBASE_APP_CHECK_SITE_KEY ?? '').trim();
+const APP_CHECK_DEBUG_TOKEN = (import.meta.env.VITE_FIREBASE_APP_CHECK_DEBUG_TOKEN ?? '').trim();
+const APP_CHECK_AUTO_REFRESH =
+  import.meta.env.VITE_FIREBASE_APP_CHECK_TOKEN_AUTO_REFRESH !== 'false';
+
+const setupAppCheck = (): AppCheck | null => {
+  if (typeof window === 'undefined' || !APP_CHECK_ENABLED) {
+    return null;
+  }
+
+  if (!APP_CHECK_SITE_KEY) {
+    console.warn('[firebase] App Check enabled but VITE_FIREBASE_APP_CHECK_SITE_KEY is missing');
+    return null;
+  }
+
+  if (APP_CHECK_DEBUG_TOKEN) {
+    const globalState = globalThis as Record<string, unknown>;
+    globalState.FIREBASE_APPCHECK_DEBUG_TOKEN =
+      APP_CHECK_DEBUG_TOKEN === 'true' ? true : APP_CHECK_DEBUG_TOKEN;
+  }
+
+  try {
+    return initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
+      isTokenAutoRefreshEnabled: APP_CHECK_AUTO_REFRESH,
+    });
+  } catch (error) {
+    console.warn('[firebase] App Check initialization failed', error);
+    return null;
+  }
+};
+
+// App Check is optional and controlled by environment flags.
+export const appCheck = setupAppCheck();
+
 // Auth instance
 export const auth = getAuth(app);
 
 // Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();
+
+// Apple Auth Provider (required on iOS when offering social sign-in)
+export const appleProvider = new OAuthProvider('apple.com');
+appleProvider.addScope('email');
+appleProvider.addScope('name');
 
 const createFirestore = () => {
   const baseConfig = {

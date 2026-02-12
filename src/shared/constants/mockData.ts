@@ -36,9 +36,9 @@ export const CATEGORIES: Category[] = [
     apiSource: 'lastfm',
     features: ['audio', 'events'],
     subgroups: [
-      { id: 'salsa', name: 'Ritmos Afro-Caribe\u00F1os', members: '42k' },
-      { id: 'jazz', name: 'Jazz Modal', members: '15k' },
-      { id: 'classical', name: 'Composici\u00F3n Barroca', members: '22k' },
+      { id: 'salsa', name: 'Ritmos Afro-Caribe\u00F1os', members: '42k', apiQuery: 'salsa' },
+      { id: 'jazz', name: 'Jazz Modal', members: '15k', apiQuery: 'jazz' },
+      { id: 'classical', name: 'Composici\u00F3n Barroca', members: '22k', apiQuery: 'classical' },
     ],
     library: [
       {

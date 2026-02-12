@@ -20,8 +20,8 @@ const PostCard = ({ post }: PostCardProps) => {
 
   const handleAuthorClick = (e: MouseEvent<HTMLDivElement> | KeyboardEvent<HTMLDivElement>) => {
     e.stopPropagation();
-    const slug = authorToSlug(post.author);
-    navigate(`/user/${slug}`);
+    const identifier = post.authorId ?? authorToSlug(post.author);
+    navigate(`/user/${identifier}`);
   };
 
   const handleLike = (e: MouseEvent<HTMLButtonElement>) => {
