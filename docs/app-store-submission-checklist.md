@@ -3,6 +3,20 @@
 Fecha base: 2026-02-11  
 Scope: pasos finales para enviar Vinctus a App Store sin perder nada entre tareas tecnicas y manuales.
 
+## Estado consolidado (2026-02-12)
+
+- [x] `npm run validate` en verde.
+- [x] `npm run preflight:appstore` en verde.
+- [x] `npm run gate:appstore:submit` en verde.
+- [x] `npm run test:rules` en verde.
+- [x] `npm run test:delete-account:harness` en verde.
+- [x] Membresia Apple Developer activa.
+- [x] Sign in with Apple configurado en Apple + Firebase (baseline web/compliance).
+- [ ] Setup Mac/Xcode + firma/provisioning.
+- [ ] Pruebas reales en iPhone (SIWA nativo, push, camara, haptics).
+- [ ] Cierre manual en App Store Connect (labels, age rating, screenshots, review notes finales).
+- [ ] Rollout App Check en staging antes de enforcement.
+
 ## 1) Preflight local (sin Apple Developer activo)
 
 Ejecutar:

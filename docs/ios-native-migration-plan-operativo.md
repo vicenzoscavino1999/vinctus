@@ -4,6 +4,23 @@ Fecha base: 2026-02-11
 Horizonte: 26 semanas  
 Objetivo: migrar Vinctus a iOS nativo sin romper produccion, reutilizando backend/compliance ya implementados.
 
+## Estado real actual (2026-02-12)
+
+1. Semanas 0-3: completadas en baseline (gobernanza, hardening backend, compliance y gates).
+2. Apple Developer: activo y configurado para SIWA baseline (web/compliance).
+3. Gates actuales:
+   - `npm run validate` -> PASS.
+   - `npm run preflight:appstore` -> PASS.
+   - `npm run gate:appstore:submit` -> PASS.
+   - `npm run test:rules` -> PASS.
+   - `npm run test:delete-account:harness` -> PASS.
+4. Punto actual: entrada a Semana 4 (base iOS nativa en Mac/Xcode).
+5. Bloqueos vigentes para avanzar:
+   - Entorno Mac + Xcode + firma/provisioning.
+   - Pruebas en iPhone real.
+   - Cierre manual de App Store Connect.
+   - Rollout gradual de App Check.
+
 ## Decision de alcance (bloqueada)
 
 1. Track de release mobile iOS: solo app nativa SwiftUI.

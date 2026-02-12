@@ -28,6 +28,8 @@ const DeleteAccountModal = ({ isOpen, onClose }: DeleteAccountModalProps) => {
     lastError: null,
   });
   const [statusError, setStatusError] = useState<string | null>(null);
+  const normalizedConfirmText = confirmText.trim().toUpperCase();
+  const isDeleteConfirmationValid = normalizedConfirmText === 'ELIMINAR';
 
   const isQueuedOrProcessing = statusInfo.status === 'queued' || statusInfo.status === 'processing';
   const canSubmitRequest = !isQueuedOrProcessing && statusInfo.status !== 'completed';
@@ -105,7 +107,7 @@ const DeleteAccountModal = ({ isOpen, onClose }: DeleteAccountModalProps) => {
 
   const handleDelete = async () => {
     if (!canSubmitRequest) return;
-    if (confirmText !== 'ELIMINAR') return;
+    if (!isDeleteConfirmationValid) return;
 
     setLoading(true);
     setStatusError(null);
@@ -245,7 +247,7 @@ const DeleteAccountModal = ({ isOpen, onClose }: DeleteAccountModalProps) => {
           )}
           <button
             onClick={handleDelete}
-            disabled={confirmText !== 'ELIMINAR' || loading || !canSubmitRequest}
+            disabled={!isDeleteConfirmationValid || loading || !canSubmitRequest}
             className="flex-1 py-3 px-4 rounded-xl font-bold bg-red-600 text-white hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
           >
             {loading ? (

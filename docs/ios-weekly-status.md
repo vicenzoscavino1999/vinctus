@@ -123,3 +123,27 @@ Inicio: 2026-02-11
    - App Check se despliega por fases, nunca en big-bang de produccion.
 9. Proximo paso:
    - Ejecutar Fase 0/1 de `docs/ios-app-check-rollout-plan.md` en staging.
+
+## Actualizacion consolidada (2026-02-12)
+
+1. Objetivo:
+   - Reconciliar estado real vs estado documentado para evitar confusion en siguientes conversaciones.
+2. Verificaciones ejecutadas:
+   - `npm run validate` -> PASS.
+   - `npm run preflight:appstore` -> PASS (44 PASS / 0 WARN / 0 FAIL).
+   - `npm run gate:appstore:submit` -> PASS (17 PASS / 0 WARN / 0 FAIL).
+   - `npm run test:rules` -> PASS (36 tests).
+   - `npm run test:delete-account:harness` -> PASS.
+3. Cambio de estado clave:
+   - Membresia Apple Developer: activa.
+   - Configuracion SIWA (Apple + Firebase): completada en baseline web/compliance.
+4. Punto actual del plan:
+   - Semanas 0-3: completadas en baseline.
+   - Siguiente fase activa: Semana 4 (base iOS nativa en Mac/Xcode).
+5. Bloqueos reales vigentes:
+   - Entorno Mac + Xcode + signing/provisioning.
+   - Pruebas en iPhone real (SIWA nativo, push, camara, haptics).
+   - Cierre manual App Store Connect (labels/age rating/screenshots/review notes finales).
+   - App Check rollout en staging (sigue desactivado por defecto).
+6. Proximo paso operativo:
+   - Iniciar setup en Mac y ejecutar checklist de entrada a Semana 4.

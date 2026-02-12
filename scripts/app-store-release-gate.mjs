@@ -270,7 +270,7 @@ const main = async () => {
   }
 
   const placeholderRegex =
-    /\[REPLACE_(?:REVIEW_EMAIL|REVIEW_PASSWORD)_BEFORE_SUBMIT\]|\[REPLACE_BEFORE_SUBMIT\]|<to be provided before submission>|placeholder/i;
+    /\[REPLACE_(?:REVIEW_EMAIL|REVIEW_PASSWORD)_BEFORE_SUBMIT\]|\[REPLACE_BEFORE_SUBMIT\]|<to be provided before submission>/i;
   const draftReviewNotesHasPlaceholders = Boolean(reviewNotesContent?.match(placeholderRegex));
   const generatedReviewNotesHasPlaceholders = Boolean(
     generatedReviewNotesContent?.match(placeholderRegex),

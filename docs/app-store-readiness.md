@@ -1,31 +1,50 @@
 # App Store Readiness Tracker - Vinctus
 
-Fecha base: 2026-02-11
-Objetivo: concentrar checklist por guideline de Apple y evidencia tecnica.
+Fecha base: 2026-02-11  
+Ultima actualizacion: 2026-02-12  
+Objetivo: concentrar checklist por guideline de Apple y evidencia tecnica real.
 
-## Estado global
+## Punto actual del plan maestro (hoy)
 
-- Fase 1 (legal/transparencia): avanzado
-- Fase 2 (Apple Sign-In): parcial (codigo listo, falta config Apple/Firebase)
-- Fase 3 (delete account v2): avanzado baseline (job + harness + UI con estado y polling)
-- Fase 4 (UGC moderation): avanzado baseline (filtro cliente/server + SLA + reportes user/group/post/comment + cola + panel admin minimo)
-- Fase 5 (AI compliance): avanzado baseline (disclosure + consentimiento local/server + enforcement backend)
-- Fase 6+ (iOS nativa/ASC): parcial baseline (track iOS nativa activo; track Capacitor congelado para release, falta firma/APNs/TestFlight)
+- Semanas 0-3 de migracion (gobernanza + hardening backend + compliance base): completadas.
+- Fases App Store 1-5 (legal/auth/delete account/moderacion/IA): completadas en baseline funcional.
+- Estado actual de ejecucion: listo para iniciar Semana 4 (base iOS nativa en Mac/Xcode).
+- Bloqueadores vigentes para cierre App Store:
+  1. Entorno Mac + Xcode + firma real.
+  2. Pruebas en iPhone real (SIWA nativo, push/camara/haptics, safe areas).
+  3. Carga final en App Store Connect (privacy labels, age rating, screenshots, review notes finales).
+  4. Rollout App Check en staging/produccion (pendiente por estrategia gradual).
 
-## Gate submit (estado actual automatizado)
+## Estado global por fase
 
-- Ultima referencia: `npm run gate:appstore:submit`
-- Resultado: FAIL controlado con 2 bloqueos reales restantes (sin warnings)
+- Fase 1 (legal/transparencia): completo baseline.
+- Fase 2 (Sign in with Apple): completo baseline (Apple Developer + Firebase + flag/app visibles).
+- Fase 3 (delete account v2): completo baseline (job async + status + idempotencia/harness).
+- Fase 4 (UGC moderation): completo baseline (filtro + reportes + cola + panel admin).
+- Fase 5 (AI compliance): completo baseline (disclosure + consentimiento + enforcement backend).
+- Fase 6+ (iOS nativa/App Store Connect): parcial (en progreso, depende de Mac/Xcode/TestFlight).
 
-1. `Submit mode requires Apple Sign-In enabled` (`VITE_ENABLE_APPLE_SIGN_IN=true` solo cuando SIWA este operativo en Apple/Firebase).
-2. `Generated review artifacts contain placeholders` (definir `REVIEW_PROD_EMAIL` + `REVIEW_PROD_PASSWORD` y regenerar `npm run review:package`).
+## Gate submit (estado automatizado actual)
+
+Ultima corrida: 2026-02-12
+
+1. `npm run validate` -> PASS.
+2. `npm run preflight:appstore` -> PASS (`44 PASS / 0 WARN / 0 FAIL`).
+3. `npm run gate:appstore:submit` -> PASS (`17 PASS / 0 WARN / 0 FAIL`).
+4. `npm run test:rules` -> PASS (36 tests).
+5. `npm run test:delete-account:harness` -> PASS.
+
+Nota operativa:
+
+- `docs/app-review-notes.generated.md` ya inyecta credenciales de review desde `.env.local`.
+- Antes del submit final en App Store Connect, confirmar que las credenciales de review productivas sigan activas.
 
 ## Checklist por guideline
 
 ## 1.2 - User Generated Content
 
 1. Filtro preventivo automatizado
-   - Estado: parcial-alto
+   - Estado: completo baseline
    - Evidencia: `src/shared/lib/contentModeration.ts`, `functions/src/moderation.ts`, `functions/src/index.ts`
 2. Reporte de abuso
    - Estado: completo baseline
@@ -38,21 +57,22 @@ Objetivo: concentrar checklist por guideline de Apple y evidencia tecnica.
    - Evidencia: `src/features/moderation/pages/ModerationQueuePage.tsx`, `src/features/moderation/api/queries.ts`, `src/features/moderation/api/mutations.ts`, `firestore.rules`
    - Operacion: crear `app_admins/{uid}` en Firestore para habilitar acceso al panel `/moderation`
 5. Bloqueo de usuarios
-   - Estado: completo
+   - Estado: completo baseline
    - Evidencia: `src/features/chat/api/mutations.ts`
 6. Contacto visible para soporte/seguridad
-   - Estado: completo
+   - Estado: completo baseline
    - Evidencia: `src/features/help/pages/HelpPage.tsx`, `src/shared/constants/legal.ts`
+   - Nota: hoy se usa correo temporal personal; recomendado migrar luego a correo dedicado.
 
 ## 4.8 - Sign in with Apple
 
-1. Apple login visible en iOS cuando hay social login
-   - Estado: parcial
-   - Evidencia: `src/app/providers/AuthContext.tsx`, `src/features/auth/components/LoginScreen.tsx`
+1. Apple login visible cuando hay social login
+   - Estado: completo baseline
+   - Evidencia: `src/app/providers/AuthContext.tsx`, `src/features/auth/components/LoginScreen.tsx`, `.env.local` (`VITE_ENABLE_APPLE_SIGN_IN=true`)
 2. Config Apple Developer + Firebase provider
-   - Estado: pendiente
-   - Bloqueo: membresia Apple Developer activa
-   - Guia: `docs/apple-sign-in-setup.md`
+   - Estado: completo baseline
+   - Evidencia: `docs/apple-sign-in-setup.md`
+   - Pendiente de cierre iOS nativo: validar flujo final en build firmada de iPhone real.
 
 ## Delete account requirement (App Review policy)
 
@@ -60,13 +80,11 @@ Objetivo: concentrar checklist por guideline de Apple y evidencia tecnica.
    - Estado: completo baseline
    - Evidencia: `src/features/settings/components/DeleteAccountModal.tsx`, `src/features/settings/api/deleteAccount.ts`
 2. Borrado efectivo de datos del usuario
-   - Estado: parcial-alto
+   - Estado: completo baseline
    - Evidencia: `functions/src/deleteAccount.ts`
-   - Avance: borrado recursivo de recursos propios (`posts`, `events`, `stories`) + limpieza de referencias de terceros (`users/*/savedPosts`, `users/*/likes`) y subcolecciones huérfanas
 3. Idempotencia y prueba en emuladores
    - Estado: completo baseline
    - Evidencia: `scripts/delete-account-v2-harness.mjs`
-   - Cobertura: incluye comentarios/likes de terceros sobre posts del usuario y subcolecciones de eventos/conversaciones
 4. Estado de borrado visible en UI
    - Estado: completo baseline
    - Evidencia: `src/features/settings/components/DeleteAccountModal.tsx` (polling `getAccountDeletionStatus`)
@@ -74,13 +92,12 @@ Objetivo: concentrar checklist por guideline de Apple y evidencia tecnica.
 ## Legal and transparency
 
 1. Privacy Policy / Terms visibles in-app
-   - Estado: completo
+   - Estado: completo baseline
    - Evidencia: `src/features/legal/pages/PrivacyPolicyPage.tsx`, `src/features/legal/pages/TermsOfServicePage.tsx`
-   - Avance: login incluye links publicos a privacy/terms/community/support para transparencia pre-auth (`src/features/auth/components/LoginScreen.tsx`)
 2. URLs publicas productivas
-   - Estado: parcial-alto
+   - Estado: completo baseline
    - Evidencia: `public/privacy.html`, `public/terms.html`, `public/community-guidelines.html`, `public/support.html`, `vercel.json`
-3. Community Guidelines
+3. Community Guidelines visibles
    - Estado: completo baseline
    - Evidencia: `src/features/legal/pages/CommunityGuidelinesPage.tsx`, `src/features/settings/pages/SettingsPage.tsx`, `src/features/help/pages/HelpPage.tsx`, `public/community-guidelines.html`
 
@@ -97,11 +114,11 @@ Objetivo: concentrar checklist por guideline de Apple y evidencia tecnica.
    - Evidencia: `src/features/settings/api/aiConsent.ts`, `api/chat.ts`, `functions/src/arena/createDebate.ts`
 4. Sanitizacion PII antes de enviar texto a proveedores IA
    - Estado: completo baseline
-   - Evidencia: `api/chat.ts` (redaccion email/telefono en message + history), `functions/src/arena/createDebate.ts` (redaccion topic)
+   - Evidencia: `api/chat.ts`, `functions/src/arena/createDebate.ts`
 
 ## 4.2 - Minimum functionality / app-like iOS
 
-1. Capacitor + iOS project
+1. Capacitor + iOS project base
    - Estado: completo baseline
    - Evidencia: `capacitor.config.ts`, `ios/`, `docs/capacitor-ios-setup.md`
 2. Plugins nativos (push/camera/haptics)
@@ -110,37 +127,35 @@ Objetivo: concentrar checklist por guideline de Apple y evidencia tecnica.
 3. Permisos iOS declarados en Info.plist
    - Estado: completo baseline
    - Evidencia: `ios/App/App/Info.plist` (`NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, `NSPhotoLibraryAddUsageDescription`, `NSMicrophoneUsageDescription`)
-4. Evidencia de UX nativa estable
+4. Evidencia UX nativa estable
    - Estado: parcial
    - Bloqueo: pruebas en iPhone real y firma Xcode
-   - Avance: safe-area hardening ampliado en overlays/modales principales de auth/chat/collab/collections/events/groups/posts/profile/discover, incluido panel de filtros (`src/features/discover/components/SearchFilters.tsx`)
-   - Avance: accesibilidad baseline en botones icon-only de cierre/eliminacion con `aria-label` en modales principales y back actions clave (`src/features/settings/pages/SettingsPage.tsx`)
 5. UX offline basica
    - Estado: completo baseline
-   - Evidencia: `src/app/routes/AppLayout.tsx` (banner global "Sin conexion" con `online/offline events` y `aria-live`)
+   - Evidencia: `src/app/routes/AppLayout.tsx` (banner global "Sin conexion")
 
 ## App Store Connect package
 
 1. Metadata draft
    - Estado: completo baseline
    - Evidencia: `docs/app-store-metadata-draft.md`
-2. Review notes draft
+2. Review notes draft + generated
    - Estado: completo baseline
-   - Evidencia: `docs/app-review-notes-draft.md` (template), `docs/app-review-notes.generated.md` (render local con `REVIEW_PROD_*`)
+   - Evidencia: `docs/app-review-notes-draft.md`, `docs/app-review-notes.generated.md`
 3. Demo account
    - Estado: parcial-alto
-   - Evidencia: `scripts/seed-app-review.mjs`, `package.json` (`seed:app-review`, `seed:app-review:emulators`), `docs/app-review-demo-account.md`
-   - Pendiente: crear credenciales reales de review en entorno productivo antes de submit
+   - Evidencia: `scripts/seed-app-review.mjs`, `docs/app-review-demo-account.md`
+   - Pendiente: crear/confirmar credenciales finales de review en entorno productivo al cierre.
 4. Privacy labels + age rating
    - Estado: parcial-alto
    - Evidencia: `docs/app-store-privacy-age-rating-draft.md`
-   - Pendiente: cargar respuestas finales directamente en App Store Connect con build real
+   - Pendiente: carga final en App Store Connect con build real.
 5. Submission checklist operativo
    - Estado: completo baseline
-   - Evidencia: `docs/app-store-submission-checklist.md`, `scripts/app-store-preflight.mjs`, `package.json` (`preflight:appstore`)
+   - Evidencia: `docs/app-store-submission-checklist.md`, `scripts/app-store-preflight.mjs`
 6. Review package compilado
    - Estado: completo baseline
-   - Evidencia: `scripts/build-app-review-package.mjs`, `package.json` (`review:package`), `docs/app-review-package.generated.md`, `docs/app-review-notes.generated.md`
+   - Evidencia: `scripts/build-app-review-package.mjs`, `docs/app-review-package.generated.md`
 7. Gate automatizado de release
    - Estado: completo baseline
    - Evidencia: `scripts/app-store-release-gate.mjs`, `package.json` (`gate:appstore`, `gate:appstore:submit`)
