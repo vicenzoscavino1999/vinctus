@@ -32,20 +32,17 @@ import {
   type FirestoreGroup,
   type GroupJoinStatus,
 } from '@/features/groups/api';
+import { formatRelativeTime } from '@/shared/lib/formatUtils';
 
-const formatRelativeTime = (date: Date): string => {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
+// formatRelativeTime imported from @/shared/lib/formatUtils
 
-  if (diffMins < 1) return 'ahora';
-  if (diffMins < 60) return `${diffMins} min`;
-  if (diffHours < 24) return `${diffHours}h`;
-  if (diffDays < 7) return `${diffDays}d`;
-  return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-};
+const getPostBodyText = (post: { text?: string; content?: string }): string =>
+  post.text || post.content || '';
+
+const getPostAuthorName = (post: {
+  authorSnapshot?: { displayName?: string | null };
+  authorName?: string;
+}): string => post.authorSnapshot?.displayName || post.authorName || 'Usuario';
 
 const formatRole = (role: string): string => {
   if (role === 'admin') return 'Admin';
@@ -138,8 +135,8 @@ export const GroupDetailContainer = () => {
 
         const recent = postsResult.items.map((post) => ({
           id: post.id,
-          title: getPostTitle(post.title ?? null, post.content || ''),
-          author: post.authorName || 'Usuario',
+          title: getPostTitle(post.title ?? null, getPostBodyText(post)),
+          author: getPostAuthorName(post),
           time: formatRelativeTime(post.createdAt.toDate()),
         })) as RecentPost[];
 
@@ -289,8 +286,8 @@ export const GroupDetailContainer = () => {
 
       const recent = postsResult.items.map((post) => ({
         id: post.id,
-        title: getPostTitle(post.title ?? null, post.content || ''),
-        author: post.authorName || 'Usuario',
+        title: getPostTitle(post.title ?? null, getPostBodyText(post)),
+        author: getPostAuthorName(post),
         time: formatRelativeTime(post.createdAt.toDate()),
       })) as RecentPost[];
 

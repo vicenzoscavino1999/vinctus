@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { formatBytes } from '@/shared/lib/formatUtils';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -31,6 +32,7 @@ import {
   type MessageRead,
   type UserReportReason,
 } from '@/features/chat/api';
+import { LEGAL_COPY, LEGAL_LINKS } from '@/shared/constants';
 
 const CLEARED_STORAGE_KEY = 'vinctus:clearedConversations';
 
@@ -41,18 +43,6 @@ const REPORT_REASON_OPTIONS: Array<{ value: UserReportReason; label: string }> =
   { value: 'fake', label: 'Suplantacion' },
   { value: 'other', label: 'Otro' },
 ];
-
-const formatBytes = (value: number): string => {
-  if (!Number.isFinite(value) || value <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let size = value;
-  let unitIndex = 0;
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
-};
 
 const loadClearedConversations = (): Record<string, number> => {
   if (typeof window === 'undefined') return {};
@@ -450,7 +440,7 @@ export default function GroupConversationDetailsPage() {
           </div>
           <div className="flex-1">
             <p className="text-red-200 font-medium">Reportar grupo</p>
-            <p className="text-xs text-red-300">Denunciar comportamiento</p>
+            <p className="text-xs text-red-300">Incumplimiento de Community Guidelines</p>
           </div>
         </button>
 
@@ -517,7 +507,7 @@ export default function GroupConversationDetailsPage() {
 
       {/* Search Modal */}
       {showSearchModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
           <div
             className="absolute inset-0 bg-black/80 backdrop-blur-sm"
             onClick={() => setShowSearchModal(false)}
@@ -528,6 +518,7 @@ export default function GroupConversationDetailsPage() {
               <button
                 onClick={() => setShowSearchModal(false)}
                 className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
+                aria-label="Cerrar"
               >
                 <X size={18} />
               </button>
@@ -575,7 +566,7 @@ export default function GroupConversationDetailsPage() {
 
       {/* Group Report Modal */}
       {showGroupReportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
           <div
             className="absolute inset-0 bg-black/80 backdrop-blur-sm"
             onClick={() => {
@@ -598,6 +589,26 @@ export default function GroupConversationDetailsPage() {
               </button>
             </div>
             <div className="p-4 space-y-4">
+              <div className="rounded-lg border border-neutral-700/80 bg-neutral-900/60 p-3 text-xs text-neutral-400 space-y-2">
+                <p>{LEGAL_COPY.moderationNotice}</p>
+                <div className="flex flex-wrap gap-3">
+                  <a
+                    href={LEGAL_LINKS.communityGuidelinesPublicUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-amber-300 hover:text-amber-200 underline"
+                  >
+                    Ver Community Guidelines
+                  </a>
+                  <a
+                    href={`mailto:${LEGAL_LINKS.securityEmail}`}
+                    className="text-red-300 hover:text-red-200 underline"
+                  >
+                    Reporte urgente: {LEGAL_LINKS.securityEmail}
+                  </a>
+                </div>
+              </div>
+
               <div>
                 <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
                   Motivo
@@ -665,7 +676,7 @@ export default function GroupConversationDetailsPage() {
 
       {/* Group Mute Options */}
       {showMuteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
           <div
             className="absolute inset-0 bg-black/80 backdrop-blur-sm"
             onClick={() => setShowMuteModal(false)}
@@ -676,6 +687,7 @@ export default function GroupConversationDetailsPage() {
               <button
                 onClick={() => setShowMuteModal(false)}
                 className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
+                aria-label="Cerrar"
               >
                 <X size={18} />
               </button>
@@ -716,7 +728,7 @@ export default function GroupConversationDetailsPage() {
 
       {/* Group Files */}
       {showGroupFiles && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
           <div
             className="absolute inset-0 bg-black/80 backdrop-blur-sm"
             onClick={() => setShowGroupFiles(false)}
@@ -727,6 +739,7 @@ export default function GroupConversationDetailsPage() {
               <button
                 onClick={() => setShowGroupFiles(false)}
                 className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
+                aria-label="Cerrar"
               >
                 <X size={18} />
               </button>

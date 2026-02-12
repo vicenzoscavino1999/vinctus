@@ -23,7 +23,12 @@ import {
   unlikePostWithSync,
   unsavePostWithSync,
 } from '@/features/posts/api';
-import { saveCategoryWithSync, unsaveCategoryWithSync } from '@/features/profile/api';
+import {
+  saveCategoryWithSync,
+  unsaveCategoryWithSync,
+  followCategoryWithSync as followCategoryWithSyncProfile,
+  unfollowCategoryWithSync as unfollowCategoryWithSyncProfile,
+} from '@/features/profile/api';
 
 // Create the context with proper typing
 const AppStateContext = createContext<AppStateContextType | null>(null);
@@ -32,6 +37,7 @@ const AppStateContext = createContext<AppStateContextType | null>(null);
 const STORAGE_KEYS = {
   JOINED_GROUPS: 'vinctus_joined_groups',
   SAVED_CATEGORIES: 'vinctus_saved_categories',
+  FOLLOWED_CATEGORIES: 'vinctus_followed_categories',
   LIKED_POSTS: 'vinctus_liked_posts',
   SAVED_POSTS: 'vinctus_saved_posts',
 } as const;
@@ -75,6 +81,9 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
   const [savedCategories, setSavedCategories] = useState<string[]>(() =>
     uniqueValues(getStoredValue<string[]>(STORAGE_KEYS.SAVED_CATEGORIES, [])),
   );
+  const [followedCategories, setFollowedCategories] = useState<string[]>(() =>
+    uniqueValues(getStoredValue<string[]>(STORAGE_KEYS.FOLLOWED_CATEGORIES, [])),
+  );
   const [likedPosts, setLikedPosts] = useState<string[]>(() =>
     uniqueValues(getStoredValue<string[]>(STORAGE_KEYS.LIKED_POSTS, [])),
   );
@@ -94,21 +103,33 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
 
     const loadRemoteState = async () => {
       try {
-        const [membershipsSnap, categoriesSnap, likesSnap, savedSnap] = await Promise.all([
-          getDocs(
-            query(collection(db, 'users', uid, 'memberships'), limit(APP_STATE_REMOTE_LIMIT)),
-          ),
-          getDocs(
-            query(collection(db, 'users', uid, 'savedCategories'), limit(APP_STATE_REMOTE_LIMIT)),
-          ),
-          getDocs(query(collection(db, 'users', uid, 'likes'), limit(APP_STATE_REMOTE_LIMIT))),
-          getDocs(query(collection(db, 'users', uid, 'savedPosts'), limit(APP_STATE_REMOTE_LIMIT))),
-        ]);
+        const [membershipsSnap, categoriesSnap, followedCategoriesSnap, likesSnap, savedSnap] =
+          await Promise.all([
+            getDocs(
+              query(collection(db, 'users', uid, 'memberships'), limit(APP_STATE_REMOTE_LIMIT)),
+            ),
+            getDocs(
+              query(collection(db, 'users', uid, 'savedCategories'), limit(APP_STATE_REMOTE_LIMIT)),
+            ),
+            getDocs(
+              query(
+                collection(db, 'users', uid, 'followedCategories'),
+                limit(APP_STATE_REMOTE_LIMIT),
+              ),
+            ),
+            getDocs(query(collection(db, 'users', uid, 'likes'), limit(APP_STATE_REMOTE_LIMIT))),
+            getDocs(
+              query(collection(db, 'users', uid, 'savedPosts'), limit(APP_STATE_REMOTE_LIMIT)),
+            ),
+          ]);
 
         if (!isActive) return;
 
         setJoinedGroups(uniqueValues(membershipsSnap.docs.map((docSnap) => docSnap.id)));
         setSavedCategories(uniqueValues(categoriesSnap.docs.map((docSnap) => docSnap.id)));
+        setFollowedCategories(
+          uniqueValues(followedCategoriesSnap.docs.map((docSnap) => docSnap.id)),
+        );
         setLikedPosts(uniqueValues(likesSnap.docs.map((docSnap) => docSnap.id)));
         setSavedPosts(uniqueValues(savedSnap.docs.map((docSnap) => docSnap.id)));
       } catch (error) {
@@ -225,6 +246,38 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
     [savedCategories],
   );
 
+  // ==================== Follow Category Actions ====================
+
+  const toggleFollowCategory = useCallback(
+    (categoryId: string) => {
+      const isFollowed = followedCategories.includes(categoryId);
+      const optimistic = isFollowed
+        ? followedCategories.filter((id) => id !== categoryId)
+        : [...followedCategories, categoryId];
+
+      executeOptimistic(
+        setFollowedCategories,
+        uniqueValues(optimistic),
+        followedCategories,
+        () =>
+          uid
+            ? isFollowed
+              ? unfollowCategoryWithSyncProfile(categoryId, uid)
+              : followCategoryWithSyncProfile(categoryId, uid)
+            : Promise.resolve(),
+        STORAGE_KEYS.FOLLOWED_CATEGORIES,
+      );
+    },
+    [followedCategories, uid, executeOptimistic],
+  );
+
+  const isCategoryFollowed = useCallback(
+    (categoryId: string): boolean => {
+      return followedCategories.includes(categoryId);
+    },
+    [followedCategories],
+  );
+
   // ==================== Like Actions ====================
 
   const toggleLikePost = useCallback(
@@ -302,6 +355,9 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
       savedCategories,
       toggleSaveCategory,
       isCategorySaved,
+      followedCategories,
+      toggleFollowCategory,
+      isCategoryFollowed,
 
       // Liked posts
       likedPosts,
@@ -320,6 +376,9 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
       savedCategories,
       toggleSaveCategory,
       isCategorySaved,
+      followedCategories,
+      toggleFollowCategory,
+      isCategoryFollowed,
       likedPosts,
       toggleLikePost,
       isPostLiked,

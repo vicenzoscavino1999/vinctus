@@ -37,9 +37,16 @@ export interface Category {
 // Post Types
 // ============================================
 
+/**
+ * FeedPost — editorial / static content type used exclusively for
+ * hard-coded mock data rendered in the Discover page.
+ * This is NOT the Firestore PostRead schema used in FeedPage or PostDetailPage.
+ */
 export interface FeedPost {
   id: string;
   author: string;
+  /** Firebase UID of the author, used for profile navigation. */
+  authorId?: string;
   role: string;
   isExpert: boolean;
   group: string;
@@ -208,14 +215,17 @@ export interface GlobalLibraryHighlight {
 export interface AppStateContextType {
   joinedGroups: string[];
   savedCategories: string[];
+  followedCategories: string[];
   likedPosts: string[];
   savedPosts: string[];
   toggleJoinGroup: (groupId: string) => void;
   toggleSaveCategory: (categoryId: string) => void;
+  toggleFollowCategory: (categoryId: string) => void;
   toggleLikePost: (postId: string) => void;
   toggleSavePost: (postId: string) => void;
   isGroupJoined: (groupId: string) => boolean;
   isCategorySaved: (categoryId: string) => boolean;
+  isCategoryFollowed: (categoryId: string) => boolean;
   isPostLiked: (postId: string) => boolean;
   isPostSaved: (postId: string) => boolean;
 }

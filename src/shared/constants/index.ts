@@ -7,3 +7,4 @@ export {
   EVENTS,
 } from './mockData';
 export { PUBLICATIONS, RECOMMENDED_GROUPS } from './discoverData';
+export { LEGAL_COPY, LEGAL_LINKS } from './legal';

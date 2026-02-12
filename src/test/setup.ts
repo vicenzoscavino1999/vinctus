@@ -6,6 +6,7 @@ vi.mock('@/shared/lib/firebase', () => ({
   auth: {},
   db: {},
   googleProvider: {},
+  appleProvider: {},
   default: {},
 }));
 
@@ -13,6 +14,8 @@ vi.mock('@/shared/lib/firebase', () => ({
 vi.mock('firebase/auth', () => ({
   getAuth: vi.fn(() => ({})),
   signInWithPopup: vi.fn(),
+  signInWithRedirect: vi.fn(),
+  getRedirectResult: vi.fn(() => Promise.resolve(null)),
   signOut: vi.fn(),
   onAuthStateChanged: vi.fn((_auth, callback) => {
     // Immediately call with null user for tests
@@ -20,6 +23,7 @@ vi.mock('firebase/auth', () => ({
     return () => {}; // unsubscribe function
   }),
   GoogleAuthProvider: vi.fn(),
+  OAuthProvider: vi.fn(),
 }));
 
 // Mock Firestore

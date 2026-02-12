@@ -2,6 +2,20 @@
 
 Use this for every block/PR. Keep results short and explicit.
 
+## iOS native migration control docs
+
+- `docs/ios-native-migration-plan-operativo.md`
+- `docs/ios-contracts-v1.md`
+- `docs/ios-parity-matrix.md`
+- `docs/ios-risk-register.md`
+- `docs/ios-weekly-status.md`
+- `docs/ios-rollback-playbook.md`
+- `docs/ios-contract-rfc-template.md`
+- `docs/ios-contract-test-matrix.md`
+- `docs/ios-week2-hardening-checklist.md`
+- `docs/ios-payload-versioning-plan.md`
+- `docs/ios-app-check-rollout-plan.md`
+
 ## Full baseline checklist (Phase 0)
 
 Auth and onboarding

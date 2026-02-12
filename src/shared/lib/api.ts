@@ -1,48 +1,21 @@
 // API Services for Vinctus
-// All APIs used here are 100% free and don't require API keys
+// First tries server-side proxy (/api/discover) with cache.
+// Falls back to direct public APIs when proxy is unavailable in local/dev.
 
-// Optional CORS proxy for APIs that don't allow direct browser requests.
 const DEFAULT_CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 const CORS_PROXY = import.meta.env.VITE_CORS_PROXY ?? DEFAULT_CORS_PROXY;
 const HAS_CORS_PROXY = Boolean(CORS_PROXY);
+const DISCOVER_PROXY_ENDPOINT = '/api/discover';
+const DEFAULT_MUSIC_COUNTRY = 'US';
 
-const buildHttpError = (label: string, response: Response): Error => {
-  const statusText = response.statusText || 'Unknown';
-  return new Error(`${label} request failed (${response.status} ${statusText})`);
-};
+type DiscoverSource =
+  | 'arxiv'
+  | 'wikipedia'
+  | 'hackernews'
+  | 'openlibrary'
+  | 'inaturalist'
+  | 'lastfm';
 
-const fetchJsonOrThrow = async <T>(url: string, label: string): Promise<T> => {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw buildHttpError(label, response);
-  }
-  return response.json() as Promise<T>;
-};
-
-const fetchTextOrThrow = async (url: string, label: string): Promise<string> => {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw buildHttpError(label, response);
-  }
-  return response.text();
-};
-
-const shouldFallbackToProxy = (error: unknown): boolean =>
-  HAS_CORS_PROXY && error instanceof TypeError;
-
-const fetchTextWithProxyFallback = async (url: string, label: string): Promise<string> => {
-  try {
-    return await fetchTextOrThrow(url, label);
-  } catch (error) {
-    if (!shouldFallbackToProxy(error)) {
-      throw error;
-    }
-    const proxiedUrl = `${CORS_PROXY}${encodeURIComponent(url)}`;
-    return await fetchTextOrThrow(proxiedUrl, `${label} (proxy)`);
-  }
-};
-
-// ===== Type Definitions =====
 interface ArxivPaper {
   id: string;
   title: string;
@@ -105,16 +78,28 @@ interface MusicTrack {
   type: string;
 }
 
+interface DiscoverProxyPayload<T> {
+  data?: T[];
+}
+
 interface WikipediaPage {
-  pageid: number;
-  title?: string;
-  titles?: {
-    normalized?: string;
+  description?: string;
+  excerpt?: string;
+  id?: number;
+  key?: string;
+  thumbnail?: {
+    url?: string;
   };
+  title?: string;
+}
+
+interface WikipediaGeneratorPage {
   extract?: string;
+  pageid?: number;
   thumbnail?: {
     source?: string;
   };
+  title?: string;
 }
 
 interface HackerNewsItem {
@@ -150,19 +135,100 @@ interface INaturalistObservation {
   observed_on?: string;
 }
 
-interface LastFmTrack {
-  mbid?: string;
-  name?: string;
-  artist?: {
-    name?: string;
-  };
-  playcount?: string;
-  listeners?: string;
-  url?: string;
+interface ITunesTrack {
+  artistName?: string;
+  collectionId?: number;
+  collectionName?: string;
+  collectionViewUrl?: string;
+  trackId?: number;
+  trackName?: string;
+  trackViewUrl?: string;
 }
 
-// ===== arXiv API (Science) =====
-export async function fetchArxivPapers(
+const buildHttpError = (label: string, response: Response): Error => {
+  const statusText = response.statusText || 'Unknown';
+  return new Error(`${label} request failed (${response.status} ${statusText})`);
+};
+
+const fetchJsonOrThrow = async <T>(url: string, label: string): Promise<T> => {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw buildHttpError(label, response);
+  }
+  return response.json() as Promise<T>;
+};
+
+const fetchTextOrThrow = async (url: string, label: string): Promise<string> => {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw buildHttpError(label, response);
+  }
+  return response.text();
+};
+
+const shouldFallbackToProxy = (error: unknown): boolean =>
+  HAS_CORS_PROXY && error instanceof TypeError;
+
+const fetchTextWithProxyFallback = async (url: string, label: string): Promise<string> => {
+  try {
+    return await fetchTextOrThrow(url, label);
+  } catch (error) {
+    if (!shouldFallbackToProxy(error)) {
+      throw error;
+    }
+    const proxiedUrl = `${CORS_PROXY}${encodeURIComponent(url)}`;
+    return fetchTextOrThrow(proxiedUrl, `${label} (proxy)`);
+  }
+};
+
+const stripHtmlTags = (value: string): string => value.replace(/<[^>]+>/g, '');
+
+const normalizeWikipediaThumbnail = (url: string | undefined): string | null => {
+  if (!url) return null;
+  if (url.startsWith('//')) return `https:${url}`;
+  return url;
+};
+
+const fetchDiscoverProxy = async <T>(
+  source: DiscoverSource,
+  query: string,
+  limit: number,
+): Promise<T[]> => {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    query,
+    source,
+  });
+  const response = await fetch(`${DISCOVER_PROXY_ENDPOINT}?${params.toString()}`, {
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+  if (!response.ok) {
+    throw buildHttpError('Discover proxy', response);
+  }
+  const payload = (await response.json().catch(() => null)) as DiscoverProxyPayload<T> | null;
+  if (!payload || !Array.isArray(payload.data)) {
+    throw new Error('Discover proxy returned invalid payload');
+  }
+  return payload.data;
+};
+
+const withDiscoverProxy = async <T>(
+  source: DiscoverSource,
+  query: string,
+  limit: number,
+  fallback: () => Promise<T[]>,
+): Promise<T[]> => {
+  try {
+    return await fetchDiscoverProxy<T>(source, query, limit);
+  } catch (error) {
+    console.warn(`[discover] proxy failed for ${source}, using direct fallback`, error);
+    return fallback();
+  }
+};
+
+async function fetchArxivPapersDirect(
   category: string = 'physics',
   maxResults: number = 10,
 ): Promise<ArxivPaper[]> {
@@ -178,76 +244,99 @@ export async function fetchArxivPapers(
 
   const query = categoryMap[category] || category;
   const arxivUrl = `https://export.arxiv.org/api/query?search_query=cat:${query}&start=0&max_results=${maxResults}&sortBy=submittedDate&sortOrder=descending`;
+  const text = await fetchTextWithProxyFallback(arxivUrl, 'arXiv');
 
-  try {
-    const text = await fetchTextWithProxyFallback(arxivUrl, 'arXiv');
-    const parser = new DOMParser();
-    const xml = parser.parseFromString(text, 'text/xml');
-    const entries = Array.from(xml.getElementsByTagName('entry'));
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(text, 'text/xml');
+  const entries = Array.from(xml.getElementsByTagName('entry'));
 
-    const getText = (parent: Element, tag: string): string => {
-      const element = parent.getElementsByTagName(tag)[0];
-      return element?.textContent?.trim() || '';
+  const getText = (parent: Element, tag: string): string => {
+    const element = parent.getElementsByTagName(tag)[0];
+    return element?.textContent?.trim() || '';
+  };
+
+  const getAuthors = (parent: Element): string => {
+    const authors = Array.from(parent.getElementsByTagName('author'))
+      .map((author) => author.getElementsByTagName('name')[0]?.textContent?.trim() || '')
+      .filter(Boolean);
+    return authors.slice(0, 3).join(', ') || 'Anonimo';
+  };
+
+  return entries.map((entry) => {
+    const summary = getText(entry, 'summary');
+    const idText = getText(entry, 'id');
+    const titleText = getText(entry, 'title');
+    const publishedText = getText(entry, 'published');
+
+    return {
+      id: idText.split('/abs/')[1] || '',
+      title: titleText ? titleText.replace(/\s+/g, ' ') : 'Sin titulo',
+      summary: summary ? summary.substring(0, 200) + '...' : 'Sin resumen disponible',
+      authors: getAuthors(entry),
+      published: publishedText.split('T')[0] || '',
+      link: idText || '',
+      type: 'Paper',
     };
-
-    const getAuthors = (parent: Element): string => {
-      const authors = Array.from(parent.getElementsByTagName('author'))
-        .map((author) => author.getElementsByTagName('name')[0]?.textContent?.trim() || '')
-        .filter(Boolean);
-      return authors.slice(0, 3).join(', ') || 'Anonimo';
-    };
-
-    return entries.map((entry) => {
-      const summary = getText(entry, 'summary');
-      const idText = getText(entry, 'id');
-      const titleText = getText(entry, 'title');
-      const publishedText = getText(entry, 'published');
-
-      return {
-        id: idText.split('/abs/')[1] || '',
-        title: titleText ? titleText.replace(/\s+/g, ' ') : 'Sin titulo',
-        summary: summary ? summary.substring(0, 200) + '...' : 'Sin resumen disponible',
-        authors: getAuthors(entry),
-        published: publishedText.split('T')[0] || '',
-        link: idText || '',
-        type: 'Paper',
-      };
-    });
-  } catch (error) {
-    console.error('arXiv API error:', error);
-    throw error;
-  }
+  });
 }
 
-// ===== Wikipedia API (History) =====
-export async function fetchWikipediaArticles(
+async function fetchWikipediaArticlesDirect(
   topic: string = 'Ancient_history',
   limit: number = 10,
 ): Promise<WikipediaArticle[]> {
-  const url = `https://en.wikipedia.org/api/rest_v1/page/related/${encodeURIComponent(topic)}`;
+  const mapFromRestSearch = (pages: WikipediaPage[]): WikipediaArticle[] =>
+    pages.slice(0, limit).map((page, index) => {
+      const title = page.title?.trim() || 'Sin titulo';
+      const summaryRaw = page.excerpt || page.description || 'Sin resumen disponible';
+      const summary = stripHtmlTags(summaryRaw);
+      const key = page.key?.trim() || title.replace(/\s+/g, '_');
 
-  try {
-    const data = await fetchJsonOrThrow<{ pages?: WikipediaPage[] }>(url, 'Wikipedia');
-
-    return (data.pages || []).slice(0, limit).map((page) => {
-      const extract = page.extract;
       return {
-        id: page.pageid,
-        title: page.titles?.normalized || page.title || 'Sin titulo',
-        summary: extract ? extract.substring(0, 200) + '...' : 'Sin resumen disponible',
-        thumbnail: page.thumbnail?.source || null,
-        link: `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title || '')}`,
+        id: Number.isFinite(Number(page.id)) ? Number(page.id) : index,
+        title,
+        summary: summary ? summary.substring(0, 200) + '...' : 'Sin resumen disponible',
+        thumbnail: normalizeWikipediaThumbnail(page.thumbnail?.url),
+        link: `https://en.wikipedia.org/wiki/${encodeURIComponent(key)}`,
         type: 'Articulo',
       };
     });
+
+  const mapFromActionApi = (pagesMap: Record<string, WikipediaGeneratorPage>): WikipediaArticle[] =>
+    Object.values(pagesMap)
+      .slice(0, limit)
+      .map((page, index) => {
+        const title = page.title?.trim() || 'Sin titulo';
+        const summary = stripHtmlTags(page.extract || 'Sin resumen disponible');
+        const key = title.replace(/\s+/g, '_');
+        return {
+          id: Number.isFinite(Number(page.pageid)) ? Number(page.pageid) : index,
+          title,
+          summary: summary ? summary.substring(0, 200) + '...' : 'Sin resumen disponible',
+          thumbnail: normalizeWikipediaThumbnail(page.thumbnail?.source),
+          link: `https://en.wikipedia.org/wiki/${encodeURIComponent(key)}`,
+          type: 'Articulo',
+        };
+      });
+
+  try {
+    const url = `https://en.wikipedia.org/w/rest.php/v1/search/page?q=${encodeURIComponent(topic)}&limit=${limit}`;
+    const data = await fetchJsonOrThrow<{ pages?: WikipediaPage[] }>(url, 'Wikipedia');
+    const pages = data.pages || [];
+    if (pages.length > 0) {
+      return mapFromRestSearch(pages);
+    }
   } catch (error) {
-    console.error('Wikipedia API error:', error);
-    throw error;
+    console.warn('[discover] wikipedia rest search failed, using action api fallback', error);
   }
+
+  const fallbackUrl = `https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrsearch=${encodeURIComponent(topic)}&gsrlimit=${limit}&prop=extracts|pageimages&exintro=1&explaintext=1&exchars=260&piprop=thumbnail&pithumbsize=320`;
+  const fallbackData = await fetchJsonOrThrow<{
+    query?: { pages?: Record<string, WikipediaGeneratorPage> };
+  }>(fallbackUrl, 'Wikipedia Action API');
+  return mapFromActionApi(fallbackData.query?.pages || {});
 }
 
-// ===== Hacker News API (Technology) =====
-export async function fetchHackerNews(
+async function fetchHackerNewsDirect(
   type: string = 'top',
   limit: number = 10,
 ): Promise<HackerNewsStory[]> {
@@ -258,68 +347,56 @@ export async function fetchHackerNews(
   };
 
   const storyType = typeMap[type] || 'topstories';
+  const ids = await fetchJsonOrThrow<number[]>(
+    `https://hacker-news.firebaseio.com/v0/${storyType}.json`,
+    'Hacker News list',
+  );
 
-  try {
-    const ids = await fetchJsonOrThrow<number[]>(
-      `https://hacker-news.firebaseio.com/v0/${storyType}.json`,
-      'Hacker News list',
-    );
-
-    const stories = await Promise.all(
-      ids.slice(0, limit).map(async (id) => {
-        return fetchJsonOrThrow<HackerNewsItem>(
+  const stories = await Promise.all(
+    ids
+      .slice(0, limit)
+      .map((id) =>
+        fetchJsonOrThrow<HackerNewsItem>(
           `https://hacker-news.firebaseio.com/v0/item/${id}.json`,
           `Hacker News item ${id}`,
-        );
-      }),
-    );
+        ),
+      ),
+  );
 
-    return stories
-      .filter((story): story is HackerNewsItem => Boolean(story?.title))
-      .map((story) => ({
-        id: story.id,
-        title: story.title || 'Sin titulo',
-        url: story.url || `https://news.ycombinator.com/item?id=${story.id}`,
-        author: story.by || 'Anonimo',
-        score: story.score || 0,
-        comments: story.descendants || 0,
-        time: new Date((story.time || 0) * 1000).toLocaleDateString('es-ES'),
-        type: story.type === 'job' ? 'Empleo' : 'Noticia',
-      }));
-  } catch (error) {
-    console.error('Hacker News API error:', error);
-    throw error;
-  }
-}
-
-// ===== Open Library API (Literature) =====
-export async function fetchBooks(subject: string = 'fiction', limit: number = 10): Promise<Book[]> {
-  const url = `https://openlibrary.org/subjects/${subject}.json?limit=${limit}`;
-
-  try {
-    const data = await fetchJsonOrThrow<{ works?: OpenLibraryWork[] }>(url, 'Open Library');
-
-    return (data.works || []).map((work) => ({
-      id: work.key,
-      title: work.title || 'Sin titulo',
-      authors:
-        work.authors
-          ?.map((author) => author.name)
-          .filter(Boolean)
-          .join(', ') || 'Anonimo',
-      cover: work.cover_id ? `https://covers.openlibrary.org/b/id/${work.cover_id}-M.jpg` : null,
-      firstPublished: work.first_publish_year || 'Desconocido',
-      link: `https://openlibrary.org${work.key}`,
-      type: 'Libro',
+  return stories
+    .filter((story): story is HackerNewsItem => Boolean(story?.title))
+    .map((story) => ({
+      id: story.id,
+      title: story.title || 'Sin titulo',
+      url: story.url || `https://news.ycombinator.com/item?id=${story.id}`,
+      author: story.by || 'Anonimo',
+      score: story.score || 0,
+      comments: story.descendants || 0,
+      time: new Date((story.time || 0) * 1000).toLocaleDateString('es-ES'),
+      type: story.type === 'job' ? 'Empleo' : 'Noticia',
     }));
-  } catch (error) {
-    console.error('Open Library API error:', error);
-    throw error;
-  }
 }
 
-// ===== iNaturalist API (Nature) =====
-export async function fetchNatureObservations(
+async function fetchBooksDirect(subject: string = 'fiction', limit: number = 10): Promise<Book[]> {
+  const url = `https://openlibrary.org/subjects/${subject}.json?limit=${limit}`;
+  const data = await fetchJsonOrThrow<{ works?: OpenLibraryWork[] }>(url, 'Open Library');
+
+  return (data.works || []).map((work) => ({
+    id: work.key,
+    title: work.title || 'Sin titulo',
+    authors:
+      work.authors
+        ?.map((author) => author.name)
+        .filter(Boolean)
+        .join(', ') || 'Anonimo',
+    cover: work.cover_id ? `https://covers.openlibrary.org/b/id/${work.cover_id}-M.jpg` : null,
+    firstPublished: work.first_publish_year || 'Desconocido',
+    link: `https://openlibrary.org${work.key}`,
+    type: 'Libro',
+  }));
+}
+
+async function fetchNatureObservationsDirect(
   taxon: string = 'plants',
   limit: number = 10,
 ): Promise<NatureObservation[]> {
@@ -333,56 +410,86 @@ export async function fetchNatureObservations(
 
   const taxonId = taxonMap[taxon] || taxon;
   const url = `https://api.inaturalist.org/v1/observations?taxon_id=${taxonId}&quality_grade=research&per_page=${limit}&order=desc&order_by=created_at`;
+  const data = await fetchJsonOrThrow<{ results?: INaturalistObservation[] }>(url, 'iNaturalist');
 
-  try {
-    const data = await fetchJsonOrThrow<{ results?: INaturalistObservation[] }>(url, 'iNaturalist');
-
-    return (data.results || []).map((obs) => ({
-      id: obs.id,
-      species: obs.taxon?.preferred_common_name || obs.taxon?.name || 'Especie desconocida',
-      scientificName: obs.taxon?.name || '',
-      location: obs.place_guess || 'Ubicacion desconocida',
-      photo: obs.photos?.[0]?.url?.replace('square', 'medium') || null,
-      observer: obs.user?.login || 'Anonimo',
-      date: obs.observed_on || '',
-      link: `https://www.inaturalist.org/observations/${obs.id}`,
-      type: 'Observacion',
-    }));
-  } catch (error) {
-    console.error('iNaturalist API error:', error);
-    throw error;
-  }
+  return (data.results || []).map((obs) => ({
+    id: obs.id,
+    species: obs.taxon?.preferred_common_name || obs.taxon?.name || 'Especie desconocida',
+    scientificName: obs.taxon?.name || '',
+    location: obs.place_guess || 'Ubicacion desconocida',
+    photo: obs.photos?.[0]?.url?.replace('square', 'medium') || null,
+    observer: obs.user?.login || 'Anonimo',
+    date: obs.observed_on || '',
+    link: `https://www.inaturalist.org/observations/${obs.id}`,
+    type: 'Observacion',
+  }));
 }
 
-// ===== Last.fm API (Music) - Free tier =====
-// Note: Requires API key from last.fm (free)
-const LASTFM_API_KEY = import.meta.env.VITE_LASTFM_API_KEY || '';
+async function fetchMusicInfoDirect(
+  artist: string = '',
+  limit: number = 10,
+): Promise<MusicTrack[]> {
+  const query = artist.trim() || 'top hits';
+  const country = (import.meta.env.VITE_MUSIC_COUNTRY || DEFAULT_MUSIC_COUNTRY).trim();
+  const url = `https://itunes.apple.com/search?media=music&entity=song&term=${encodeURIComponent(query)}&limit=${limit}&country=${encodeURIComponent(country || DEFAULT_MUSIC_COUNTRY)}`;
+  const data = await fetchJsonOrThrow<{ results?: ITunesTrack[] }>(url, 'iTunes Search');
+
+  return (data.results || []).map((track, index) => ({
+    id: track.trackId || track.collectionId || `track-${index}`,
+    title: track.trackName || track.collectionName || 'Sin titulo',
+    artist: track.artistName || 'Desconocido',
+    link: track.trackViewUrl || track.collectionViewUrl || undefined,
+    type: 'Cancion',
+  }));
+}
+
+export async function fetchArxivPapers(
+  category: string = 'physics',
+  maxResults: number = 10,
+): Promise<ArxivPaper[]> {
+  return withDiscoverProxy('arxiv', category || 'physics', maxResults, () =>
+    fetchArxivPapersDirect(category, maxResults),
+  );
+}
+
+export async function fetchWikipediaArticles(
+  topic: string = 'Ancient_history',
+  limit: number = 10,
+): Promise<WikipediaArticle[]> {
+  return withDiscoverProxy('wikipedia', topic || 'Ancient_history', limit, () =>
+    fetchWikipediaArticlesDirect(topic, limit),
+  );
+}
+
+export async function fetchHackerNews(
+  type: string = 'top',
+  limit: number = 10,
+): Promise<HackerNewsStory[]> {
+  return withDiscoverProxy('hackernews', type || 'top', limit, () =>
+    fetchHackerNewsDirect(type, limit),
+  );
+}
+
+export async function fetchBooks(subject: string = 'fiction', limit: number = 10): Promise<Book[]> {
+  return withDiscoverProxy('openlibrary', subject || 'fiction', limit, () =>
+    fetchBooksDirect(subject, limit),
+  );
+}
+
+export async function fetchNatureObservations(
+  taxon: string = 'plants',
+  limit: number = 10,
+): Promise<NatureObservation[]> {
+  return withDiscoverProxy('inaturalist', taxon || 'plants', limit, () =>
+    fetchNatureObservationsDirect(taxon, limit),
+  );
+}
 
 export async function fetchMusicInfo(
   artist: string = '',
   limit: number = 10,
 ): Promise<MusicTrack[]> {
-  void artist;
-  if (!LASTFM_API_KEY) {
-    return [{ id: 1, title: 'Configurar Last.fm API', artist: 'Sistema', type: 'Info' }];
-  }
-
-  const url = `https://ws.audioscrobbler.com/2.0/?method=chart.gettoptracks&api_key=${LASTFM_API_KEY}&format=json&limit=${limit}`;
-
-  try {
-    const data = await fetchJsonOrThrow<{ tracks?: { track?: LastFmTrack[] } }>(url, 'Last.fm');
-
-    return (data.tracks?.track || []).map((track, index) => ({
-      id: track.mbid || track.name || `track-${index}`,
-      title: track.name || 'Sin titulo',
-      artist: track.artist?.name || 'Desconocido',
-      playcount: track.playcount,
-      listeners: track.listeners,
-      link: track.url,
-      type: 'Cancion',
-    }));
-  } catch (error) {
-    console.error('Last.fm API error:', error);
-    throw error;
-  }
+  return withDiscoverProxy('lastfm', artist || 'top hits', limit, () =>
+    fetchMusicInfoDirect(artist, limit),
+  );
 }

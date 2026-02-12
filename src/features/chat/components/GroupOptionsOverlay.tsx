@@ -58,7 +58,7 @@ const GroupOptionsOverlay = ({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm overflow-y-auto safe-area-inset">
       <div className="page-feed pt-6 max-w-3xl mx-auto pb-10">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
@@ -180,7 +180,7 @@ const GroupOptionsOverlay = ({
             </div>
             <div className="flex-1">
               <p className="text-red-200 font-medium">Reportar grupo</p>
-              <p className="text-xs text-red-300">Denunciar comportamiento</p>
+              <p className="text-xs text-red-300">Incumplimiento de Community Guidelines</p>
             </div>
           </button>
 

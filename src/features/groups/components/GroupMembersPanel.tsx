@@ -66,7 +66,7 @@ const GroupMembersPanel = ({
     : members;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-end">
+    <div className="fixed inset-0 z-50 flex items-center justify-end safe-area-inset">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       <div className="relative h-full w-full max-w-md bg-neutral-900 border-l border-neutral-800 shadow-xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">

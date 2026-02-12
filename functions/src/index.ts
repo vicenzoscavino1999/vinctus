@@ -14,6 +14,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { moderateUserText } from './moderation';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -65,6 +66,155 @@ async function commitInBatches<T>(
   }
 
   return batchCount;
+}
+
+async function claimModerationEvent(eventId: string): Promise<boolean> {
+  const dedupRef = db.collection('_dedup_events').doc(`moderation_${eventId}`);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(dedupRef);
+    if (snap.exists) {
+      return false;
+    }
+    tx.create(dedupRef, {
+      createdAt: FieldValue.serverTimestamp(),
+      processedAt: new Date().toISOString(),
+      type: 'moderation',
+    });
+    return true;
+  });
+}
+
+async function upsertAutoModerationReport(input: {
+  source: 'post' | 'comment';
+  sourceId: string;
+  postId: string;
+  authorId: string;
+  matchedTerms: string[];
+}): Promise<void> {
+  const reportId = `auto_${input.source}_${input.sourceId}`;
+  const details = `Auto moderation flagged blocked terms: ${input.matchedTerms.join(', ')}`;
+
+  await db.doc(`reports/${reportId}`).set(
+    {
+      reporterUid: 'system_moderation',
+      reportedUid: input.authorId || 'unknown_user',
+      reason: 'other',
+      details,
+      conversationId: null,
+      status: 'open',
+      source: input.source,
+      sourceId: input.sourceId,
+      postId: input.postId,
+      matchedTerms: input.matchedTerms,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+}
+
+async function moderatePostContent(
+  postId: string,
+  postData: Record<string, unknown>,
+  eventId: string,
+): Promise<void> {
+  const claimed = await claimModerationEvent(eventId);
+  if (!claimed) {
+    functions.logger.info('Moderation event already processed, skipping post moderation', {
+      postId,
+      eventId,
+    });
+    return;
+  }
+
+  const title = typeof postData.title === 'string' ? postData.title : null;
+  const text = typeof postData.text === 'string' ? postData.text : null;
+  const content = typeof postData.content === 'string' ? postData.content : null;
+  const authorId = typeof postData.authorId === 'string' ? postData.authorId : 'unknown_user';
+  const moderation = moderateUserText([title, text, content]);
+
+  if (!moderation.blocked) {
+    return;
+  }
+
+  await upsertAutoModerationReport({
+    source: 'post',
+    sourceId: postId,
+    postId,
+    authorId,
+    matchedTerms: moderation.matchedTerms,
+  });
+
+  await db.doc(`posts/${postId}`).delete();
+  functions.logger.warn('Post removed by auto moderation', {
+    postId,
+    authorId,
+    matchedTerms: moderation.matchedTerms,
+  });
+}
+
+async function moderateCommentContent(input: {
+  postId: string;
+  commentId: string;
+  eventId: string;
+  commentData: Record<string, unknown>;
+}): Promise<void> {
+  const { postId, commentId, eventId, commentData } = input;
+  const claimed = await claimModerationEvent(eventId);
+  if (!claimed) {
+    functions.logger.info('Moderation event already processed, skipping comment moderation', {
+      postId,
+      commentId,
+      eventId,
+    });
+    return;
+  }
+
+  const text = typeof commentData.text === 'string' ? commentData.text : null;
+  const authorId = typeof commentData.authorId === 'string' ? commentData.authorId : 'unknown_user';
+  const moderation = moderateUserText([text]);
+  if (!moderation.blocked) {
+    return;
+  }
+
+  await upsertAutoModerationReport({
+    source: 'comment',
+    sourceId: `${postId}_${commentId}`,
+    postId,
+    authorId,
+    matchedTerms: moderation.matchedTerms,
+  });
+
+  const commentRef = db.doc(`posts/${postId}/comments/${commentId}`);
+  await commentRef.delete();
+
+  const postRef = db.doc(`posts/${postId}`);
+  await db.runTransaction(async (tx) => {
+    const postSnap = await tx.get(postRef);
+    if (!postSnap.exists) return;
+
+    const post = postSnap.data() || {};
+    const currentCommentCount =
+      typeof post.commentCount === 'number'
+        ? post.commentCount
+        : typeof post.commentsCount === 'number'
+          ? post.commentsCount
+          : 0;
+    const nextCommentCount = Math.max(0, currentCommentCount - 1);
+
+    tx.update(postRef, {
+      commentCount: nextCommentCount,
+      commentsCount: nextCommentCount,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  functions.logger.warn('Comment removed by auto moderation', {
+    postId,
+    commentId,
+    authorId,
+    matchedTerms: moderation.matchedTerms,
+  });
 }
 
 // ==========================================================
@@ -304,6 +454,43 @@ async function handlePostLikeChange(eventId: string, postId: string, delta: numb
 
     tx.set(userRef, karmaUpdates, { merge: true });
     tx.set(userPublicRef, karmaUpdates, { merge: true });
+  });
+}
+
+async function handleArenaDebateLikeChange(
+  eventId: string,
+  debateId: string,
+  delta: number,
+): Promise<void> {
+  const dedupRef = db.collection('_dedup_events').doc(eventId);
+  const debateRef = db.doc(`arenaDebates/${debateId}`);
+
+  await db.runTransaction(async (tx) => {
+    const dedupDoc = await tx.get(dedupRef);
+    if (dedupDoc.exists) {
+      functions.logger.info('Event already processed, skipping', { eventId });
+      return;
+    }
+
+    const debateSnap = await tx.get(debateRef);
+    if (!debateSnap.exists) {
+      functions.logger.warn('Arena debate not found, skipping like update', { debateId });
+      return;
+    }
+
+    const debateData = debateSnap.data() || {};
+    const currentLikes = typeof debateData.likesCount === 'number' ? debateData.likesCount : 0;
+    const nextLikes = Math.max(0, currentLikes + delta);
+
+    tx.create(dedupRef, {
+      createdAt: FieldValue.serverTimestamp(),
+      processedAt: new Date().toISOString(),
+    });
+
+    tx.update(debateRef, {
+      likesCount: nextLikes,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
   });
 }
 
@@ -721,6 +908,58 @@ export const onPostLikeDeleted = functions.firestore
     }
   });
 
+/**
+ * Increment likesCount when a user likes an Arena debate
+ * Trigger: onCreate arenaDebates/{debateId}/likes/{uid}
+ */
+export const onArenaDebateLikeCreated = functions.firestore
+  .document('arenaDebates/{debateId}/likes/{uid}')
+  .onCreate(async (_snap, context) => {
+    const { debateId, uid } = context.params;
+    const eventId = context.eventId;
+
+    try {
+      functions.logger.info('Arena debate liked', { debateId, uid, eventId });
+
+      await handleArenaDebateLikeChange(eventId, debateId, 1);
+
+      functions.logger.info('Arena debate like processed', { debateId, eventId });
+    } catch (error) {
+      functions.logger.error('Failed to process arena debate like', {
+        debateId,
+        uid,
+        eventId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+/**
+ * Decrement likesCount when a user removes like from an Arena debate
+ * Trigger: onDelete arenaDebates/{debateId}/likes/{uid}
+ */
+export const onArenaDebateLikeDeleted = functions.firestore
+  .document('arenaDebates/{debateId}/likes/{uid}')
+  .onDelete(async (_snap, context) => {
+    const { debateId, uid } = context.params;
+    const eventId = context.eventId;
+
+    try {
+      functions.logger.info('Arena debate unliked', { debateId, uid, eventId });
+
+      await handleArenaDebateLikeChange(eventId, debateId, -1);
+
+      functions.logger.info('Arena debate unlike processed', { debateId, eventId });
+    } catch (error) {
+      functions.logger.error('Failed to process arena debate unlike', {
+        debateId,
+        uid,
+        eventId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
 // ==========================================================
 // 🧹 CASCADE CLEANUP (Safe - Won't Trigger Decrements)
 // ==========================================================
@@ -824,6 +1063,48 @@ export const onPostCreated = functions.firestore
         error: error instanceof Error ? error.message : String(error),
       });
     }
+
+    try {
+      await moderatePostContent(postId, data as Record<string, unknown>, eventId);
+    } catch (error) {
+      functions.logger.error('Failed to moderate post content', {
+        postId,
+        authorId,
+        eventId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+/**
+ * Moderate post edits to prevent bypassing create-time moderation.
+ * Trigger: onUpdate posts/{postId}
+ */
+export const onPostUpdatedModeration = functions.firestore
+  .document('posts/{postId}')
+  .onUpdate(async (change, context) => {
+    const { postId } = context.params;
+    const eventId = context.eventId;
+    const before = change.before.data() || {};
+    const after = change.after.data() || {};
+
+    const textChanged =
+      before.text !== after.text ||
+      before.content !== after.content ||
+      before.title !== after.title;
+    if (!textChanged) {
+      return;
+    }
+
+    try {
+      await moderatePostContent(postId, after as Record<string, unknown>, eventId);
+    } catch (error) {
+      functions.logger.error('Failed to moderate updated post content', {
+        postId,
+        eventId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   });
 
 /**
@@ -858,10 +1139,27 @@ export const onPostDeleted = functions.firestore
       functions.logger.info('Post deleted, cleaning up', { postId });
 
       // 1. Delete media files from Storage
-      const media = (data?.media || []) as Array<{ path: string }>;
+      const media = (data?.media || []) as Array<{
+        path: string;
+        url?: string;
+        contentType?: string;
+      }>;
       if (media.length > 0) {
         const bucket = admin.storage().bucket();
         const deletePromises = media.map(async (item) => {
+          const mediaUrl = typeof item.url === 'string' ? item.url : '';
+          const looksLikeExternalYouTube =
+            item.path.includes('/videos/youtube-') ||
+            mediaUrl.includes('youtube.com/') ||
+            mediaUrl.includes('youtu.be/') ||
+            mediaUrl.includes('youtube-nocookie.com/');
+          if (looksLikeExternalYouTube) {
+            functions.logger.info('Skipping external YouTube media cleanup', {
+              path: item.path,
+            });
+            return;
+          }
+
           try {
             await bucket.file(item.path).delete();
             functions.logger.info('Deleted media file', { path: item.path });
@@ -906,6 +1204,114 @@ export const onPostDeleted = functions.firestore
     } catch (error) {
       functions.logger.error('Failed to clean up post', {
         postId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+/**
+ * Moderate comments right after creation.
+ * Trigger: onCreate posts/{postId}/comments/{commentId}
+ */
+export const onPostCommentCreatedModeration = functions.firestore
+  .document('posts/{postId}/comments/{commentId}')
+  .onCreate(async (snap, context) => {
+    const { postId, commentId } = context.params;
+    const eventId = context.eventId;
+    const commentData = snap.data() || {};
+
+    try {
+      await moderateCommentContent({
+        postId,
+        commentId,
+        eventId,
+        commentData: commentData as Record<string, unknown>,
+      });
+    } catch (error) {
+      functions.logger.error('Failed to moderate comment content', {
+        postId,
+        commentId,
+        eventId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+// ==========================================================
+// TRUST & SAFETY - REPORT QUEUE
+// ==========================================================
+
+type ReportQueuePriority = 'low' | 'medium' | 'high';
+type ReportQueueTargetType = 'user' | 'group' | 'post' | 'comment' | 'unknown';
+
+function inferQueuePriority(reason: unknown): ReportQueuePriority {
+  if (reason === 'abuse' || reason === 'harassment') return 'high';
+  if (reason === 'spam' || reason === 'fake') return 'medium';
+  return 'low';
+}
+
+function inferReportTargetType(conversationId: unknown): ReportQueueTargetType {
+  if (typeof conversationId !== 'string' || conversationId.length === 0) {
+    return 'unknown';
+  }
+  if (conversationId.startsWith('post_') && conversationId.includes('_comment_')) {
+    return 'comment';
+  }
+  if (conversationId.startsWith('post_')) {
+    return 'post';
+  }
+  if (conversationId.startsWith('grp_')) {
+    return 'group';
+  }
+  if (conversationId.startsWith('dm_')) {
+    return 'user';
+  }
+  return 'unknown';
+}
+
+export const onReportCreatedQueue = functions.firestore
+  .document('reports/{reportId}')
+  .onCreate(async (snap, context) => {
+    const { reportId } = context.params;
+    const data = snap.data() || {};
+
+    const reporterUid = typeof data.reporterUid === 'string' ? data.reporterUid : null;
+    const reportedUid = typeof data.reportedUid === 'string' ? data.reportedUid : null;
+    const reason = typeof data.reason === 'string' ? data.reason : 'other';
+    const details = typeof data.details === 'string' ? data.details : null;
+    const conversationId = typeof data.conversationId === 'string' ? data.conversationId : null;
+    const status = typeof data.status === 'string' ? data.status : 'open';
+    const targetType = inferReportTargetType(conversationId);
+    const priority = inferQueuePriority(reason);
+
+    try {
+      await db.doc(`moderation_queue/${reportId}`).set(
+        {
+          reportId,
+          reportPath: `reports/${reportId}`,
+          reporterUid,
+          reportedUid,
+          reason,
+          details,
+          conversationId,
+          status: status === 'open' ? 'pending' : status,
+          source: 'user_report',
+          targetType,
+          priority,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      functions.logger.info('Report queued for moderation', {
+        reportId,
+        targetType,
+        priority,
+      });
+    } catch (error) {
+      functions.logger.error('Failed to queue report for moderation', {
+        reportId,
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -1223,3 +1629,21 @@ export const revokeUserSessions = functions.https.onCall(async (_data, context) 
   await admin.auth().revokeRefreshTokens(uid);
   return { ok: true };
 });
+
+// ==========================================================
+// ARENA AI (Callable)
+// ==========================================================
+
+export { createDebate, getArenaUsage, getArenaPersonas } from './arena/createDebate';
+
+// ==========================================================
+// 🗑️ ACCOUNT DELETION
+// ==========================================================
+
+export {
+  deleteUserAccount,
+  getAccountDeletionStatus,
+  onDeletionJobCreated,
+  onDeletionJobUpdated,
+  requestAccountDeletion,
+} from './deleteAccount';

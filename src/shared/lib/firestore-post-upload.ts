@@ -20,13 +20,11 @@ export type CreatePostUploadingInput = {
 
 /**
  * Create post with "uploading" status (Phase 1 of 3)
- * DUAL-WRITE: Writes both new schema (text/authorSnapshot/status) AND legacy schema (content/authorName/etc)
  */
 export async function createPostUploading(input: CreatePostUploadingInput): Promise<void> {
   const ref = doc(db, 'posts', input.postId);
 
   await setDoc(ref, {
-    // ===== NEW SCHEMA =====
     postId: input.postId,
     authorId: input.authorId,
     authorSnapshot: input.authorSnapshot,
@@ -34,13 +32,6 @@ export async function createPostUploading(input: CreatePostUploadingInput): Prom
     text: input.text,
     status: 'uploading' as PostStatus,
 
-    // ===== LEGACY SCHEMA (compatibility) =====
-    content: input.text, // Duplicate text as content
-    authorName: input.authorSnapshot.displayName,
-    authorUsername: input.authorId, // Fallback to userId if no username
-    authorPhoto: input.authorSnapshot.photoURL,
-
-    // ===== COMMON FIELDS =====
     media: [],
     likeCount: 0,
     commentCount: 0,

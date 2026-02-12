@@ -6,6 +6,8 @@
  */
 export * from './firestore/sharedTypes';
 export * from './firestore/reports';
+export * from './firestore/moderationQueue';
+export * from './firestore/aiConsent';
 export * from './firestore/blockedUsers';
 export * from './firestore/users';
 export * from './firestore/userSearch';
@@ -22,6 +24,7 @@ export * from './firestore/supportTickets';
 export * from './firestore/stories';
 export * from './firestore/posts';
 export * from './firestore/postEngagement';
+export * from './firestore/arenaEngagement';
 export * from './firestore/contributions';
 export * from './firestore/userSubcollections';
 export * from './firestore/profile';

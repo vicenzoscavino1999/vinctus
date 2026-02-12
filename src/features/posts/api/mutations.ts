@@ -1,6 +1,9 @@
 import {
   addPostComment as addPostCommentRaw,
+  createPostCommentReport as createPostCommentReportRaw,
+  createPostReport as createPostReportRaw,
   createStory as createStoryRaw,
+  getNewStoryId as getNewStoryIdRaw,
   getNewPostId as getNewPostIdRaw,
   likePostWithSync as likePostWithSyncRaw,
   savePostWithSync as savePostWithSyncRaw,
@@ -12,18 +15,23 @@ import {
   updatePost as updatePostRaw,
   type CreatePostUploadingInput,
 } from '@/shared/lib/firestore-post-upload';
-import { toAppError } from '@/shared/lib/errors';
+import { moderateUserText } from '@/shared/lib/contentModeration';
+import { AppError, toAppError } from '@/shared/lib/errors';
 import { withRetry, withTimeout } from '@/shared/lib/firebase-helpers';
 import { validate } from '@/shared/lib/validators';
 import {
   authorSnapshotSchema,
   commentTextSchema,
+  createPostCommentReportInputSchema,
+  createPostReportInputSchema,
   createPostUploadingInputSchema,
   createStoryInputSchema,
   postIdSchema,
+  storyIdSchema,
   updatePostPatchSchema,
   userIdSchema,
   type CreateStoryInput,
+  type UserReportReason,
 } from '@/features/posts/api/types';
 
 const WRITE_TIMEOUT_MS = 7000;
@@ -56,6 +64,33 @@ export const getNewPostId = (): string => {
   }
 };
 
+export const getNewStoryId = (): string => {
+  try {
+    return validate(storyIdSchema, getNewStoryIdRaw(), { field: 'storyId' });
+  } catch (error) {
+    throw toAppError(error, { operation: 'posts.getNewStoryId' });
+  }
+};
+
+const ensureModeratedContent = (
+  operation: string,
+  inputs: Array<string | null | undefined>,
+): void => {
+  const moderation = moderateUserText(inputs);
+  if (!moderation.blocked) {
+    return;
+  }
+
+  throw new AppError(
+    'Tu contenido incluye terminos no permitidos por la comunidad.',
+    'VALIDATION_FAILED',
+    {
+      operation,
+      matchedTerms: moderation.matchedTerms,
+    },
+  );
+};
+
 export const addPostComment = async (
   postId: string,
   authorId: string,
@@ -68,10 +103,34 @@ export const addPostComment = async (
     field: 'authorSnapshot',
   });
   const safeText = validate(commentTextSchema, text, { field: 'text' });
+  ensureModeratedContent('posts.addPostComment', [safeText]);
 
   return runWrite('posts.addPostComment', () =>
     addPostCommentRaw(safePostId, safeAuthorId, safeAuthorSnapshot, safeText),
   );
+};
+
+export const createPostReport = async (input: {
+  reporterUid: string;
+  postId: string;
+  postAuthorId?: string | null;
+  reason: UserReportReason;
+  details?: string | null;
+}): Promise<string> => {
+  const safeInput = validate(createPostReportInputSchema, input, { field: 'input' });
+  return runWrite('posts.createPostReport', () => createPostReportRaw(safeInput));
+};
+
+export const createPostCommentReport = async (input: {
+  reporterUid: string;
+  postId: string;
+  commentId: string;
+  commentAuthorId?: string | null;
+  reason: UserReportReason;
+  details?: string | null;
+}): Promise<string> => {
+  const safeInput = validate(createPostCommentReportInputSchema, input, { field: 'input' });
+  return runWrite('posts.createPostCommentReport', () => createPostCommentReportRaw(safeInput));
 };
 
 export const createStory = async (input: CreateStoryInput): Promise<string> => {
@@ -81,12 +140,17 @@ export const createStory = async (input: CreateStoryInput): Promise<string> => {
 
 export const createPostUploading = async (input: CreatePostUploadingInput): Promise<void> => {
   const safeInput = validate(createPostUploadingInputSchema, input, { field: 'input' });
+  ensureModeratedContent('posts.createPostUploading', [safeInput.title ?? null, safeInput.text]);
   return runWrite('posts.createPostUploading', () => createPostUploadingRaw(safeInput));
 };
 
 export const updatePost = async (postId: string, patch: Record<string, unknown>): Promise<void> => {
   const safePostId = validate(postIdSchema, postId, { field: 'postId' });
   const safePatch = validate(updatePostPatchSchema, patch, { field: 'patch' });
+  const text = typeof safePatch.text === 'string' ? safePatch.text : null;
+  const content = typeof safePatch.content === 'string' ? safePatch.content : null;
+  const title = typeof safePatch.title === 'string' ? safePatch.title : null;
+  ensureModeratedContent('posts.updatePost', [title, text, content]);
   return runWrite('posts.updatePost', () => updatePostRaw(safePostId, safePatch));
 };
 

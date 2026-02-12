@@ -76,7 +76,7 @@ const CollaborationRequestModal = ({
   if (!isOpen || !collaboration) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">

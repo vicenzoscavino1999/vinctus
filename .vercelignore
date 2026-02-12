@@ -1,0 +1,13 @@
+# Do not upload test files as serverless functions.
+api/**/*.test.ts
+api/**/*.spec.ts
+
+# Local/test artifacts
+coverage
+playwright-report
+test-results
+e2e
+docs
+scripts
+functions
+dist

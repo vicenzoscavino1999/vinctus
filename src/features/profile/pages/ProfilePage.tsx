@@ -1,9 +1,13 @@
-import { useState, useEffect } from 'react';
-import { Settings, MapPin, Mail, Edit3, Loader2, BookOpen } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Settings, MapPin, Mail, Edit3, Loader2, BookOpen, Bookmark, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/shared/ui/Toast';
 import { useAuth } from '@/context/auth';
+import { useAppState } from '@/context/app-state';
 import { subscribeToUserProfile, type UserProfileRead } from '@/features/profile/api';
+import { getSavedArenaDebates } from '@/features/arena/api/queries';
+import { unsaveArenaDebateWithSync } from '@/features/arena/api/mutations';
+import { getPersonaById, type SavedArenaDebate } from '@/features/arena/types';
 import EditProfileModal from '@/features/profile/components/EditProfileModal';
 import CollectionsPanel from '@/features/collections/components/CollectionsPanel';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
@@ -15,10 +19,16 @@ const ProfilePage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { showToast } = useToast();
+  const { followedCategories, toggleFollowCategory } = useAppState();
+  const userId = user?.uid ?? null;
   const [activeSection, setActiveSection] = useState<'profile' | 'collections'>('profile');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [profile, setProfile] = useState<UserProfileRead | null>(null);
   const [profileLoadedUid, setProfileLoadedUid] = useState<string | null>(null);
+  const [savedDebates, setSavedDebates] = useState<SavedArenaDebate[]>([]);
+  const [loadingSavedDebates, setLoadingSavedDebates] = useState(false);
+  const [savedDebatesError, setSavedDebatesError] = useState<string | null>(null);
+  const [removingDebateId, setRemovingDebateId] = useState<string | null>(null);
 
   // Subscribe to user profile
   useEffect(() => {
@@ -40,7 +50,7 @@ const ProfilePage = () => {
   }, [user]);
 
   const activeProfile = profile && user && profile.uid === user.uid ? profile : null;
-  const loadingProfile = !!user && profileLoadedUid !== user.uid;
+  const loadingProfile = !!userId && profileLoadedUid !== userId;
 
   // Display values (from profile or fallback to auth user)
   const displayName = activeProfile?.displayName || user?.displayName || 'Usuario';
@@ -62,13 +72,37 @@ const ProfilePage = () => {
   };
 
   const handleFollowListClick = (tab: 'followers' | 'following') => {
-    if (!user) return;
-    navigate(`/user/${user.uid}/connections?tab=${tab}`);
+    if (!userId) return;
+    navigate(`/user/${userId}/connections?tab=${tab}`);
   };
 
   const handleProfileSaved = () => {
     showToast('Perfil actualizado', 'success');
   };
+
+  const loadSavedDebates = useCallback(async () => {
+    if (!userId) return;
+    try {
+      setSavedDebatesError(null);
+      setLoadingSavedDebates(true);
+      const data = await getSavedArenaDebates(userId, 20);
+      setSavedDebates(data);
+    } catch (savedError) {
+      console.error('Error loading saved debates:', savedError);
+      setSavedDebatesError('No se pudieron cargar tus debates guardados.');
+    } finally {
+      setLoadingSavedDebates(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) {
+      setSavedDebates([]);
+      setSavedDebatesError(null);
+      return;
+    }
+    void loadSavedDebates();
+  }, [userId, loadSavedDebates]);
 
   const interestEntries = karmaByInterest
     ? Object.entries(karmaByInterest)
@@ -80,6 +114,36 @@ const ProfilePage = () => {
   const getInterestLabel = (interestId: string) => {
     const category = CATEGORIES.find((item) => item.id === interestId);
     return category?.label ?? interestId;
+  };
+  const followedCategoryItems = followedCategories
+    .map((categoryId) => CATEGORIES.find((category) => category.id === categoryId))
+    .filter((category): category is (typeof CATEGORIES)[number] => Boolean(category));
+
+  const formatSavedDate = (value: unknown): string => {
+    if (!value) return 'Reciente';
+    if (value instanceof Date) {
+      return value.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+    if (typeof value === 'object' && value && 'toDate' in value) {
+      const date = (value as { toDate: () => Date }).toDate();
+      return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+    return 'Reciente';
+  };
+
+  const handleRemoveSavedDebate = async (debateId: string) => {
+    if (!userId) return;
+    try {
+      setRemovingDebateId(debateId);
+      await unsaveArenaDebateWithSync(debateId, userId);
+      setSavedDebates((prev) => prev.filter((item) => item.debateId !== debateId));
+      showToast('Debate eliminado de guardados', 'success');
+    } catch (removeError) {
+      console.error('Error removing saved debate:', removeError);
+      showToast('No se pudo eliminar el debate guardado', 'error');
+    } finally {
+      setRemovingDebateId(null);
+    }
   };
 
   if (loadingProfile) {
@@ -254,6 +318,45 @@ const ProfilePage = () => {
               )}
             </section>
 
+            <section>
+              <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">
+                Categorias Seguidas
+              </h2>
+              {followedCategoryItems.length === 0 ? (
+                <p className="text-neutral-500 text-sm">
+                  Aun no sigues categorias. Desde Discover puedes seguir las que te interesen.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {followedCategoryItems.map((category) => (
+                    <div
+                      key={category.id}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-neutral-800/80 bg-neutral-900/40 px-3 py-2"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/category/${category.id}`)}
+                        className="flex items-center gap-2 text-neutral-200 hover:text-white transition-colors min-w-0"
+                      >
+                        <category.icon size={14} className={category.color} />
+                        <span className="text-sm truncate">{category.label}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          toggleFollowCategory(category.id);
+                          showToast('Categoria dejada de seguir', 'info');
+                        }}
+                        className="text-[10px] uppercase tracking-wider text-neutral-400 hover:text-brand-gold transition-colors"
+                      >
+                        Dejar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
             {/* Contact info */}
             <section>
               <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">Contacto</h2>
@@ -266,6 +369,80 @@ const ProfilePage = () => {
 
           {/* Right column - Posts + Portfolio */}
           <div className="md:col-span-2 space-y-10">
+            <section className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-5">
+              <div className="mb-4 flex items-center gap-2">
+                <Bookmark size={16} className="text-brand-gold" />
+                <h2 className="text-xs tracking-[0.2em] text-neutral-500 uppercase">
+                  Debates Guardados
+                </h2>
+              </div>
+
+              {loadingSavedDebates ? (
+                <div className="flex items-center gap-2 text-sm text-neutral-500">
+                  <Loader2 size={14} className="animate-spin" />
+                  Cargando debates guardados...
+                </div>
+              ) : savedDebatesError ? (
+                <p className="text-sm text-red-400">{savedDebatesError}</p>
+              ) : savedDebates.length === 0 ? (
+                <p className="text-sm text-neutral-500">
+                  Aun no tienes debates guardados. Desde Arena IA puedes guardarlos con un clic.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {savedDebates.map((savedDebate) => {
+                    const personaAName = getPersonaById(savedDebate.personaA)?.name || 'Persona A';
+                    const personaBName = getPersonaById(savedDebate.personaB)?.name || 'Persona B';
+                    const summaryPreview =
+                      typeof savedDebate.summary === 'string' && savedDebate.summary.length > 180
+                        ? `${savedDebate.summary.slice(0, 180)}...`
+                        : savedDebate.summary;
+
+                    return (
+                      <article
+                        key={savedDebate.debateId}
+                        className="rounded-xl border border-neutral-800/80 bg-neutral-950/40 p-4"
+                      >
+                        <h3 className="text-white font-medium">{savedDebate.topic}</h3>
+                        <p className="mt-1 text-xs text-neutral-500">
+                          {personaAName} vs {personaBName} ·{' '}
+                          {formatSavedDate(savedDebate.createdAt)}
+                        </p>
+                        {summaryPreview && (
+                          <p className="mt-2 text-sm text-neutral-400 leading-relaxed">
+                            {summaryPreview}
+                          </p>
+                        )}
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/arena/${savedDebate.debateId}`)}
+                            className="rounded-lg border border-neutral-700 px-3 py-2 text-xs uppercase tracking-wider text-neutral-200 transition hover:border-neutral-500 hover:text-white"
+                          >
+                            Ver debate
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSavedDebate(savedDebate.debateId)}
+                            disabled={removingDebateId === savedDebate.debateId}
+                            className="inline-flex items-center gap-2 rounded-lg border border-neutral-700 px-3 py-2 text-xs uppercase tracking-wider text-neutral-400 transition hover:border-red-500/40 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {removingDebateId === savedDebate.debateId ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={12} />
+                            )}
+                            Quitar
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
             <ProfilePostsGrid userId={user?.uid} canView={!!user} />
 
             <ContributionsSection userId={user?.uid} canEdit />
