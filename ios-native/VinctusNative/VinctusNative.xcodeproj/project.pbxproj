@@ -8,18 +8,45 @@
 
 /* Begin PBXBuildFile section */
 		02F41F5F99438C72D3C5C678 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA9C1E82EF5046931A4836E1 /* AuthViewModel.swift */; };
+		09FB5615596633DBD5D66CB5 /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91A189A9A27D16EDFC528BAB /* ProfileViewModel.swift */; };
+		0CE0763B58615D781C926DFC /* AIConsentRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D9DF1499FD92B5FAB4F8DDC /* AIConsentRepo.swift */; };
+		0D34F6877EFB0CAB0EA18CA4 /* DeleteAccountRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = B772B059C02A23108B14BB2F /* DeleteAccountRepo.swift */; };
+		172E6F17AFA31216AF8F4B1A /* PostCommentsRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2673DC1E8F61273FA967957 /* PostCommentsRepo.swift */; };
 		1FD745B241CC985DA29E71E4 /* VinctusNativeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32FBE102A72FA92BC6E78DE8 /* VinctusNativeTests.swift */; };
+		21CF725A4E12453C0FEE51E2 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F9EE591DFED4E4354C5765A /* ProfileView.swift */; };
+		2872AB670EE624BE1113A7EF /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96CAF38CE6383118EC248A7B /* MainTabView.swift */; };
+		34FE30974A6A8E892C066E9C /* CreatePostRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8637752390EF81683C107A1B /* CreatePostRepo.swift */; };
 		36C48C27188F959CE78BEBD1 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D8A1159261082593EAD650 /* RootView.swift */; };
+		3EECBC0FCA2D06D8DC9C8116 /* CreatePostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 738173928D7C851A8787675F /* CreatePostView.swift */; };
+		3FAC60234AB6902F6C4CB3B0 /* GroupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84356F9AFB0962D3BB8E5495 /* GroupView.swift */; };
+		5112777F595730C6B24455F9 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 94BC5A68B5818E1E2DCBF558 /* GoogleSignIn */; };
 		56E2496AAB7FFC497E3F56C9 /* VinctusNativeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F530F8AF276B069F15B8D136 /* VinctusNativeApp.swift */; };
+		5EDA88267DF019E77DDB98CA /* PostDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87AC161541773301749278DA /* PostDetailView.swift */; };
+		62B6218761B67FDE49D8DFF2 /* ProfileRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0027CD1B5879117991A482E1 /* ProfileRepo.swift */; };
+		6F6925F798056280F6CA6598 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C57F2C6BDB2BCBD884624112 /* SettingsView.swift */; };
+		702960F28BCE439F6C9EA39C /* DiscoverViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57528B806455FBABF83D1F54 /* DiscoverViewModel.swift */; };
 		75912EA3A40807C55950D224 /* FeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FB7C98DFC400FC410886829 /* FeedViewModel.swift */; };
 		762D0E675177D06AAED7085C /* AuthRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87E1E1F20B56DDF4BBA975CC /* AuthRepo.swift */; };
 		784110CF5F85F66F636C1955 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 64134F618816ABD24D123A39 /* FirebaseFirestore */; };
+		7F9876E0165D8BE65F2DC3EF /* PostDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A86FFB513B46EC14B6D6E5E /* PostDetailViewModel.swift */; };
 		912F15F4581F1B37A3B1EDFB /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9704ADBE4A84D079E0A04D1C /* FeedView.swift */; };
+		92BE777934F5439B14239842 /* LegalConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C10FCE85A81B518DE14724 /* LegalConfig.swift */; };
 		9AA68A3394E43CD6F1560C3C /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 969B5D6EE835BE96B822EF6E /* AppEnvironment.swift */; };
+		9B753025E1F8A6BD3B86D3D2 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54F6683AF4E7CA5DBFEF9034 /* SettingsViewModel.swift */; };
+		A672645BF02654F4B697F75F /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DCD1A9CBE839EEC2FBB8C2 /* DesignSystem.swift */; };
 		AAA82ED739E25ABB8C4BB215 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 1DFC0389A2A3A8827925595D /* FirebaseAuth */; };
+		B8EF3A748A80DC812138B894 /* GroupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26FE52B28F2FC44604BA6243 /* GroupViewModel.swift */; };
+		CDC9D7CBCC3AF1F3D9FC8224 /* GroupsRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43987B024B88B7BCC5D0DB15 /* GroupsRepo.swift */; };
 		CED347EFDC5DA085E7D07226 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 044E1F95CB1FA517D5923FCC /* FirebaseFunctions */; };
 		CEE76351CF20E4D879BB5F0F /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 215BFDEA7DFD70B3F014FF94 /* FirebaseStorage */; };
+		DC21EDB06F435E6ECE9D8984 /* AppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEA6D982A8EF52916A959CEE /* AppLog.swift */; };
+		DC9D3D7FCAFD3227F0940FFA /* AuthGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3490CF87CA7E820D155A69B /* AuthGateView.swift */; };
 		DD869C7A3714791D3731F73F /* FirebaseBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E21170D470DA7A3A12EDEF1 /* FirebaseBootstrap.swift */; };
+		E45BB586FE2F7F4E2ACCA029 /* CreatePostViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B01A4BA80AFADDC5F9FC6C0 /* CreatePostViewModel.swift */; };
+		E5A6C52BEA78FB216E2C1F65 /* DiscoverRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87150562DCD542A9C566CFE9 /* DiscoverRepo.swift */; };
+		E6AF61E51BD52E4B36A534D7 /* Firebase in Resources */ = {isa = PBXBuildFile; fileRef = BE62D674D9DAFE9F84660E60 /* Firebase */; };
+		EE0EE25FE375FF48E832A502 /* ConnectivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DD360D19A75E29E48BE665 /* ConnectivityMonitor.swift */; };
+		F82863C928F8BDECC89E28E0 /* DiscoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BF88070E3E7255C4689EAEE /* DiscoverView.swift */; };
 		FF33F35D2B8DCCFF45DA458C /* FeedRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = B97C2ED97BA8671BCE68D4D2 /* FeedRepo.swift */; };
 /* End PBXBuildFile section */
 
@@ -34,17 +61,43 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0027CD1B5879117991A482E1 /* ProfileRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileRepo.swift; sourceTree = "<group>"; };
 		0B22A4DAC5EE2AAB608DB50D /* VinctusNativeTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VinctusNativeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		19D8A1159261082593EAD650 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		22C10FCE85A81B518DE14724 /* LegalConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalConfig.swift; sourceTree = "<group>"; };
+		26FE52B28F2FC44604BA6243 /* GroupViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupViewModel.swift; sourceTree = "<group>"; };
+		2BF88070E3E7255C4689EAEE /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
 		32FBE102A72FA92BC6E78DE8 /* VinctusNativeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VinctusNativeTests.swift; sourceTree = "<group>"; };
+		3B01A4BA80AFADDC5F9FC6C0 /* CreatePostViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostViewModel.swift; sourceTree = "<group>"; };
+		43987B024B88B7BCC5D0DB15 /* GroupsRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupsRepo.swift; sourceTree = "<group>"; };
+		4F9EE591DFED4E4354C5765A /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		54F6683AF4E7CA5DBFEF9034 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
+		57528B806455FBABF83D1F54 /* DiscoverViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverViewModel.swift; sourceTree = "<group>"; };
+		5A86FFB513B46EC14B6D6E5E /* PostDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailViewModel.swift; sourceTree = "<group>"; };
 		5FB7C98DFC400FC410886829 /* FeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
+		6D9DF1499FD92B5FAB4F8DDC /* AIConsentRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConsentRepo.swift; sourceTree = "<group>"; };
+		738173928D7C851A8787675F /* CreatePostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostView.swift; sourceTree = "<group>"; };
+		77DD360D19A75E29E48BE665 /* ConnectivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityMonitor.swift; sourceTree = "<group>"; };
 		7E21170D470DA7A3A12EDEF1 /* FirebaseBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseBootstrap.swift; sourceTree = "<group>"; };
+		84356F9AFB0962D3BB8E5495 /* GroupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupView.swift; sourceTree = "<group>"; };
+		8637752390EF81683C107A1B /* CreatePostRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostRepo.swift; sourceTree = "<group>"; };
+		87150562DCD542A9C566CFE9 /* DiscoverRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverRepo.swift; sourceTree = "<group>"; };
+		87AC161541773301749278DA /* PostDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailView.swift; sourceTree = "<group>"; };
 		87E1E1F20B56DDF4BBA975CC /* AuthRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRepo.swift; sourceTree = "<group>"; };
+		91A189A9A27D16EDFC528BAB /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
 		95C5F3F30FF9C59DE0399CB7 /* VinctusNative.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VinctusNative.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		969B5D6EE835BE96B822EF6E /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		96CAF38CE6383118EC248A7B /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		9704ADBE4A84D079E0A04D1C /* FeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
+		A0DCD1A9CBE839EEC2FBB8C2 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		AA9C1E82EF5046931A4836E1 /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
+		B772B059C02A23108B14BB2F /* DeleteAccountRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteAccountRepo.swift; sourceTree = "<group>"; };
 		B97C2ED97BA8671BCE68D4D2 /* FeedRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedRepo.swift; sourceTree = "<group>"; };
+		BE62D674D9DAFE9F84660E60 /* Firebase */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Firebase; path = Resources/Firebase; sourceTree = SOURCE_ROOT; };
+		BEA6D982A8EF52916A959CEE /* AppLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLog.swift; sourceTree = "<group>"; };
+		C2673DC1E8F61273FA967957 /* PostCommentsRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostCommentsRepo.swift; sourceTree = "<group>"; };
+		C57F2C6BDB2BCBD884624112 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		D3490CF87CA7E820D155A69B /* AuthGateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthGateView.swift; sourceTree = "<group>"; };
 		F530F8AF276B069F15B8D136 /* VinctusNativeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VinctusNativeApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -57,6 +110,7 @@
 				784110CF5F85F66F636C1955 /* FirebaseFirestore in Frameworks */,
 				CED347EFDC5DA085E7D07226 /* FirebaseFunctions in Frameworks */,
 				CEE76351CF20E4D879BB5F0F /* FirebaseStorage in Frameworks */,
+				5112777F595730C6B24455F9 /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -71,9 +125,18 @@
 			path = Tests;
 			sourceTree = "<group>";
 		};
+		3F86EB447F09E79F619D968A /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				BE62D674D9DAFE9F84660E60 /* Firebase */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		542660F7CF2B2D3CE73C677E = {
 			isa = PBXGroup;
 			children = (
+				3F86EB447F09E79F619D968A /* Resources */,
 				7E35AC2003C6EC59284F4C89 /* Sources */,
 				0B0A07BF9FADF5E9621A1154 /* Tests */,
 				F8A20CA52596A1539B16E3C8 /* Products */,
@@ -83,14 +146,39 @@
 		7E35AC2003C6EC59284F4C89 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				6D9DF1499FD92B5FAB4F8DDC /* AIConsentRepo.swift */,
 				969B5D6EE835BE96B822EF6E /* AppEnvironment.swift */,
+				BEA6D982A8EF52916A959CEE /* AppLog.swift */,
+				D3490CF87CA7E820D155A69B /* AuthGateView.swift */,
 				87E1E1F20B56DDF4BBA975CC /* AuthRepo.swift */,
 				AA9C1E82EF5046931A4836E1 /* AuthViewModel.swift */,
+				77DD360D19A75E29E48BE665 /* ConnectivityMonitor.swift */,
+				8637752390EF81683C107A1B /* CreatePostRepo.swift */,
+				738173928D7C851A8787675F /* CreatePostView.swift */,
+				3B01A4BA80AFADDC5F9FC6C0 /* CreatePostViewModel.swift */,
+				B772B059C02A23108B14BB2F /* DeleteAccountRepo.swift */,
+				A0DCD1A9CBE839EEC2FBB8C2 /* DesignSystem.swift */,
+				87150562DCD542A9C566CFE9 /* DiscoverRepo.swift */,
+				2BF88070E3E7255C4689EAEE /* DiscoverView.swift */,
+				57528B806455FBABF83D1F54 /* DiscoverViewModel.swift */,
 				B97C2ED97BA8671BCE68D4D2 /* FeedRepo.swift */,
 				9704ADBE4A84D079E0A04D1C /* FeedView.swift */,
 				5FB7C98DFC400FC410886829 /* FeedViewModel.swift */,
 				7E21170D470DA7A3A12EDEF1 /* FirebaseBootstrap.swift */,
+				43987B024B88B7BCC5D0DB15 /* GroupsRepo.swift */,
+				84356F9AFB0962D3BB8E5495 /* GroupView.swift */,
+				26FE52B28F2FC44604BA6243 /* GroupViewModel.swift */,
+				22C10FCE85A81B518DE14724 /* LegalConfig.swift */,
+				96CAF38CE6383118EC248A7B /* MainTabView.swift */,
+				C2673DC1E8F61273FA967957 /* PostCommentsRepo.swift */,
+				87AC161541773301749278DA /* PostDetailView.swift */,
+				5A86FFB513B46EC14B6D6E5E /* PostDetailViewModel.swift */,
+				0027CD1B5879117991A482E1 /* ProfileRepo.swift */,
+				4F9EE591DFED4E4354C5765A /* ProfileView.swift */,
+				91A189A9A27D16EDFC528BAB /* ProfileViewModel.swift */,
 				19D8A1159261082593EAD650 /* RootView.swift */,
+				C57F2C6BDB2BCBD884624112 /* SettingsView.swift */,
+				54F6683AF4E7CA5DBFEF9034 /* SettingsViewModel.swift */,
 				F530F8AF276B069F15B8D136 /* VinctusNativeApp.swift */,
 			);
 			path = Sources;
@@ -113,6 +201,7 @@
 			buildConfigurationList = FB9C8A56AD53FC42DB8412CF /* Build configuration list for PBXNativeTarget "VinctusNative" */;
 			buildPhases = (
 				AEBC7287CC21701C90B3EA52 /* Sources */,
+				9B1BCF68DD0A7C8D37B0B6DF /* Resources */,
 				34D941AF8820AE5CFB1D01D3 /* Frameworks */,
 			);
 			buildRules = (
@@ -125,6 +214,7 @@
 				64134F618816ABD24D123A39 /* FirebaseFirestore */,
 				044E1F95CB1FA517D5923FCC /* FirebaseFunctions */,
 				215BFDEA7DFD70B3F014FF94 /* FirebaseStorage */,
+				94BC5A68B5818E1E2DCBF558 /* GoogleSignIn */,
 			);
 			productName = VinctusNative;
 			productReference = 95C5F3F30FF9C59DE0399CB7 /* VinctusNative.app */;
@@ -169,6 +259,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A75E6CC52208AE511D979338 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				8FE22ECD341DE620C1578912 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
@@ -179,6 +270,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		9B1BCF68DD0A7C8D37B0B6DF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E6AF61E51BD52E4B36A534D7 /* Firebase in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		9DD42B1999B45636FC0E467F /* Sources */ = {
@@ -193,14 +295,39 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0CE0763B58615D781C926DFC /* AIConsentRepo.swift in Sources */,
 				9AA68A3394E43CD6F1560C3C /* AppEnvironment.swift in Sources */,
+				DC21EDB06F435E6ECE9D8984 /* AppLog.swift in Sources */,
+				DC9D3D7FCAFD3227F0940FFA /* AuthGateView.swift in Sources */,
 				762D0E675177D06AAED7085C /* AuthRepo.swift in Sources */,
 				02F41F5F99438C72D3C5C678 /* AuthViewModel.swift in Sources */,
+				EE0EE25FE375FF48E832A502 /* ConnectivityMonitor.swift in Sources */,
+				34FE30974A6A8E892C066E9C /* CreatePostRepo.swift in Sources */,
+				3EECBC0FCA2D06D8DC9C8116 /* CreatePostView.swift in Sources */,
+				E45BB586FE2F7F4E2ACCA029 /* CreatePostViewModel.swift in Sources */,
+				0D34F6877EFB0CAB0EA18CA4 /* DeleteAccountRepo.swift in Sources */,
+				A672645BF02654F4B697F75F /* DesignSystem.swift in Sources */,
+				E5A6C52BEA78FB216E2C1F65 /* DiscoverRepo.swift in Sources */,
+				F82863C928F8BDECC89E28E0 /* DiscoverView.swift in Sources */,
+				702960F28BCE439F6C9EA39C /* DiscoverViewModel.swift in Sources */,
 				FF33F35D2B8DCCFF45DA458C /* FeedRepo.swift in Sources */,
 				912F15F4581F1B37A3B1EDFB /* FeedView.swift in Sources */,
 				75912EA3A40807C55950D224 /* FeedViewModel.swift in Sources */,
 				DD869C7A3714791D3731F73F /* FirebaseBootstrap.swift in Sources */,
+				3FAC60234AB6902F6C4CB3B0 /* GroupView.swift in Sources */,
+				B8EF3A748A80DC812138B894 /* GroupViewModel.swift in Sources */,
+				CDC9D7CBCC3AF1F3D9FC8224 /* GroupsRepo.swift in Sources */,
+				92BE777934F5439B14239842 /* LegalConfig.swift in Sources */,
+				2872AB670EE624BE1113A7EF /* MainTabView.swift in Sources */,
+				172E6F17AFA31216AF8F4B1A /* PostCommentsRepo.swift in Sources */,
+				5EDA88267DF019E77DDB98CA /* PostDetailView.swift in Sources */,
+				7F9876E0165D8BE65F2DC3EF /* PostDetailViewModel.swift in Sources */,
+				62B6218761B67FDE49D8DFF2 /* ProfileRepo.swift in Sources */,
+				21CF725A4E12453C0FEE51E2 /* ProfileView.swift in Sources */,
+				09FB5615596633DBD5D66CB5 /* ProfileViewModel.swift in Sources */,
 				36C48C27188F959CE78BEBD1 /* RootView.swift in Sources */,
+				6F6925F798056280F6CA6598 /* SettingsView.swift in Sources */,
+				9B753025E1F8A6BD3B86D3D2 /* SettingsViewModel.swift in Sources */,
 				56E2496AAB7FFC497E3F56C9 /* VinctusNativeApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -220,7 +347,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Resources/VinctusNative.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GOOGLE_REVERSED_CLIENT_ID = "";
 				INFOPLIST_FILE = Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -376,7 +505,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Resources/VinctusNative.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GOOGLE_REVERSED_CLIENT_ID = "";
 				INFOPLIST_FILE = Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -439,7 +570,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Resources/VinctusNative.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GOOGLE_REVERSED_CLIENT_ID = "";
 				INFOPLIST_FILE = Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -522,7 +655,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Resources/VinctusNative.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GOOGLE_REVERSED_CLIENT_ID = "";
 				INFOPLIST_FILE = Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -640,6 +775,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		8FE22ECD341DE620C1578912 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.0.0;
+			};
+		};
 		A75E6CC52208AE511D979338 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
@@ -670,6 +813,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A75E6CC52208AE511D979338 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFirestore;
+		};
+		94BC5A68B5818E1E2DCBF558 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8FE22ECD341DE620C1578912 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

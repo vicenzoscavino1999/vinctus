@@ -117,8 +117,8 @@ export const functions = getFunctions(app);
 // Storage instance
 export const storage = getStorage(app);
 
-// Emulator wiring (local dev only, never in production builds)
-const useEmulators = import.meta.env.DEV && import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true';
+// Emulator wiring: enabled explicitly by env flag (also used by CI/LHCI workflows).
+const useEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true';
 const emulatorHost = import.meta.env.VITE_FIREBASE_EMULATOR_HOST || '127.0.0.1';
 const emulatorPorts = {
   auth: 9099,

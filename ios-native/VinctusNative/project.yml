@@ -21,6 +21,9 @@ packages:
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk.git
     from: 11.0.0
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: 9.0.0
 
 targets:
   VinctusNative:
@@ -29,14 +32,24 @@ targets:
     deploymentTarget: '17.0'
     sources:
       - path: Sources
-    resources:
       - path: Resources
+        excludes:
+          - Info.plist
+          - Firebase
+          - VinctusNative.entitlements
+        buildPhase: resources
+      - path: Resources/Firebase
+        type: folder
+        buildPhase: resources
     settings:
       base:
         # Keep bundle id aligned with the existing Capacitor app so this can
         # eventually ship as an update under the same App Store listing.
         PRODUCT_BUNDLE_IDENTIFIER: app.vinctus.social
+        CODE_SIGN_ENTITLEMENTS: Resources/VinctusNative.entitlements
         INFOPLIST_FILE: Resources/Info.plist
+        # Set locally from REVERSED_CLIENT_ID in GoogleService-Info plist.
+        GOOGLE_REVERSED_CLIENT_ID: ''
       configs:
         DebugDev:
           VINCTUS_ENV: dev
@@ -55,6 +68,8 @@ targets:
         product: FirebaseFunctions
       - package: Firebase
         product: FirebaseStorage
+      - package: GoogleSignIn
+        product: GoogleSignIn
 
   VinctusNativeTests:
     type: bundle.unit-test

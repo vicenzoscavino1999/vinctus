@@ -1,4 +1,5 @@
 import SwiftUI
+import GoogleSignIn
 
 @main
 struct VinctusNativeApp: App {
@@ -9,7 +10,9 @@ struct VinctusNativeApp: App {
   var body: some Scene {
     WindowGroup {
       RootView()
+        .onOpenURL { url in
+          _ = GIDSignIn.sharedInstance.handle(url)
+        }
     }
   }
 }
-

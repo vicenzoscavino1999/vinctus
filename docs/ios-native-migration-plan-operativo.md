@@ -4,7 +4,7 @@ Fecha base: 2026-02-11
 Horizonte: 26 semanas  
 Objetivo: migrar Vinctus a iOS nativo sin romper produccion, reutilizando backend/compliance ya implementados.
 
-## Estado real actual (2026-02-12)
+## Estado real actual (2026-02-13)
 
 1. Semanas 0-3: completadas en baseline (gobernanza, hardening backend, compliance y gates).
 2. Apple Developer: activo y configurado para SIWA baseline (web/compliance).
@@ -14,12 +14,26 @@ Objetivo: migrar Vinctus a iOS nativo sin romper produccion, reutilizando backen
    - `npm run gate:appstore:submit` -> PASS.
    - `npm run test:rules` -> PASS.
    - `npm run test:delete-account:harness` -> PASS.
-4. Punto actual: entrada a Semana 4 (base iOS nativa en Mac/Xcode).
-5. Bloqueos vigentes para avanzar:
-   - Entorno Mac + Xcode + firma/provisioning.
-   - Pruebas en iPhone real.
+4. Punto actual: Semana 14 en progreso (create path II: media/comment), con Semanas 12 y 13 completadas.
+5. Semana 4 (evidencia):
+   - Proyecto iOS nativo compilando y corriendo en simulador: `ios-native/VinctusNative/VinctusNative.xcodeproj`.
+   - Firebase configurado (dev) via `ios-native/VinctusNative/Resources/Firebase/GoogleService-Info-Dev.plist` (ignorado en git).
+   - Login tecnico (Anonymous) habilitado en Firebase Auth y funcionando.
+   - Lectura Feed desde Firestore (`posts`) funcionando.
+6. Semana 5 (evidencia):
+   - Shell con `TabView + NavigationStack` (Feed/Crear/Ajustes).
+   - UI kit base SwiftUI (tokens + components: cards/buttons/loader).
+   - Logging base sin PII (`OSLog`).
+7. Bloqueos vigentes para avanzar:
+   - Firma/provisioning y pruebas en iPhone real (SIWA nativo, camara, push).
    - Cierre manual de App Store Connect.
    - Rollout gradual de App Check.
+8. Semana 6 (evidencia de cierre):
+   - Email/password: sign in + create account funcionando en simulador.
+   - Password reset UI implementado.
+   - Google Sign-In nativo: validado end-to-end en simulador (permiso sistema + seleccion de cuenta + retorno a app).
+   - Persistencia de sesion validada tras reinicio (`Stop -> Run`).
+   - Apple Sign-In: validado en simulador (inicio, retorno y sesion activa).
 
 ## Decision de alcance (bloqueada)
 
@@ -181,6 +195,8 @@ Gate Go/No-Go:
 
 Objetivo: crear app iOS nativa base.
 
+Estado (2026-02-12): COMPLETADA
+
 Tareas:
 
 1. Crear proyecto Xcode (`VinctusNative`).
@@ -192,11 +208,14 @@ Entregables:
 
 1. Proyecto iOS compilando en simulador.
 2. `AuthRepo`, `FeedRepo` esqueletos.
+3. Firebase configurado (dev) y login tecnico (Anonymous) funcionando.
+4. Feed leyendo Firestore (`posts`) y renderizando items basicos.
 
 Validacion:
 
 1. Build local iOS sin errores.
-2. Login tecnico contra entorno dev.
+2. Login tecnico (Anonymous) contra entorno dev -> PASS.
+3. Read path (Feed `posts`) -> PASS.
 
 Gate Go/No-Go:
 
@@ -205,6 +224,8 @@ Gate Go/No-Go:
 ## Semana 5 - Base iOS nativa II
 
 Objetivo: shell navegable y base de componentes.
+
+Estado (2026-02-12): COMPLETADA
 
 Tareas:
 
@@ -216,6 +237,7 @@ Entregables:
 
 1. Shell navegable con placeholders reales de pantalla.
 2. UI kit base SwiftUI.
+3. Settings base con logout.
 
 Validacion:
 
@@ -230,6 +252,8 @@ Gate Go/No-Go:
 
 Objetivo: login base productivo con cuenta Apple ya activa.
 
+Estado (2026-02-13): COMPLETADA
+
 Tareas:
 
 1. Email/password.
@@ -241,6 +265,10 @@ Entregables:
 
 1. LoginView completa.
 2. Manejo de errores de auth.
+3. Evidencia parcial:
+   - `ios-native/VinctusNative/Sources/AuthGateView.swift`
+   - `ios-native/VinctusNative/Sources/AuthViewModel.swift`
+   - `ios-native/VinctusNative/Sources/AuthRepo.swift`
 
 Validacion:
 
@@ -254,6 +282,8 @@ Gate Go/No-Go:
 ## Semana 7 - Auth iOS II (Apple path)
 
 Objetivo: cerrar Apple Sign-In productivo en nativo.
+
+Estado (2026-02-13): COMPLETADA
 
 Tareas:
 
@@ -277,6 +307,8 @@ Gate Go/No-Go:
 ## Semana 8 - Compliance iOS I
 
 Objetivo: legal y settings base en nativo.
+
+Estado (2026-02-13): COMPLETADA
 
 Tareas:
 
@@ -302,6 +334,8 @@ Gate Go/No-Go:
 
 Objetivo: delete account end-to-end desde iOS.
 
+Estado (2026-02-13): COMPLETADA
+
 Tareas:
 
 1. Integrar request/status delete account.
@@ -312,10 +346,15 @@ Entregables:
 
 1. Danger zone iOS completa.
 2. Evidencia de borrado por casos de prueba.
+3. Evidencia parcial:
+   - `ios-native/VinctusNative/Sources/DeleteAccountRepo.swift`
+   - `ios-native/VinctusNative/Sources/SettingsViewModel.swift`
+   - `ios-native/VinctusNative/Sources/SettingsView.swift`
 
 Validacion:
 
 1. Harness delete account y validacion manual en staging.
+2. Validacion funcional manual iOS completada (solicitud + estado + retorno de sesion).
 
 Gate Go/No-Go:
 
@@ -324,6 +363,8 @@ Gate Go/No-Go:
 ## Semana 10 - Read path I (Feed)
 
 Objetivo: feed lectura eficiente.
+
+Estado (2026-02-13): COMPLETADA
 
 Tareas:
 
@@ -335,6 +376,10 @@ Entregables:
 
 1. Feed navegable y usable.
 2. Metricas de p95 feed.
+3. Evidencia:
+   - `ios-native/VinctusNative/Sources/FeedRepo.swift`
+   - `ios-native/VinctusNative/Sources/FeedViewModel.swift`
+   - `ios-native/VinctusNative/Sources/FeedView.swift`
 
 Validacion:
 
@@ -349,6 +394,8 @@ Gate Go/No-Go:
 
 Objetivo: lectura de perfil y descubrir con paridad.
 
+Estado (2026-02-13): COMPLETADA
+
 Tareas:
 
 1. Perfil propio/ajeno.
@@ -358,10 +405,18 @@ Tareas:
 Entregables:
 
 1. ProfileView y DiscoverView funcionales.
+2. Evidencia:
+   - `ios-native/VinctusNative/Sources/ProfileRepo.swift`
+   - `ios-native/VinctusNative/Sources/ProfileViewModel.swift`
+   - `ios-native/VinctusNative/Sources/ProfileView.swift`
+   - `ios-native/VinctusNative/Sources/DiscoverRepo.swift`
+   - `ios-native/VinctusNative/Sources/DiscoverViewModel.swift`
+   - `ios-native/VinctusNative/Sources/DiscoverView.swift`
 
 Validacion:
 
 1. Navegacion perfil->discover->detalle sin fallas.
+2. Validacion manual en simulador: PASS.
 
 Gate Go/No-Go:
 
@@ -371,6 +426,8 @@ Gate Go/No-Go:
 
 Objetivo: lectura de grupos y base offline.
 
+Estado (2026-02-13): COMPLETADA
+
 Tareas:
 
 1. Group detail lectura.
@@ -379,12 +436,21 @@ Tareas:
 
 Entregables:
 
-1. GroupView lectura.
-2. Politica offline documentada.
+1. Groups read path funcional (lista + detalle).
+2. Politica offline base implementada (server-first + cache fallback).
+3. Evidencia tecnica:
+   - `ios-native/VinctusNative/Sources/GroupsRepo.swift`
+   - `ios-native/VinctusNative/Sources/GroupViewModel.swift`
+   - `ios-native/VinctusNative/Sources/GroupView.swift`
+   - `ios-native/VinctusNative/Sources/ConnectivityMonitor.swift`
+   - `ios-native/VinctusNative/Sources/DiscoverView.swift`
+   - `ios-native/VinctusNative/Sources/MainTabView.swift`
 
 Validacion:
 
-1. Prueba modo avion (read cache).
+1. Prueba modo avion (read cache) y retorno online con refresco.
+2. `./scripts/run-ios-dev.sh` -> PASS (build/install/launch).
+3. Validacion manual iOS: PASS.
 
 Gate Go/No-Go:
 
@@ -394,6 +460,8 @@ Gate Go/No-Go:
 
 Objetivo: crear contenido basico.
 
+Estado (2026-02-13): COMPLETADA
+
 Tareas:
 
 1. Crear post texto.
@@ -402,11 +470,20 @@ Tareas:
 
 Entregables:
 
-1. CreatePostView base.
+1. CreatePostView base (texto).
+2. Validaciones cliente (vacio + maximo 5000 chars).
+3. Guardas anti-duplicado por reintento (reuse de `postId` + bloqueo de taps repetidos).
+4. Evidencia tecnica:
+   - `ios-native/VinctusNative/Sources/CreatePostRepo.swift`
+   - `ios-native/VinctusNative/Sources/CreatePostViewModel.swift`
+   - `ios-native/VinctusNative/Sources/CreatePostView.swift`
+   - `ios-native/VinctusNative/Sources/MainTabView.swift`
 
 Validacion:
 
 1. Crear post sin duplicados en reintentos.
+2. `./scripts/run-ios-dev.sh` -> PASS (build/install/launch).
+3. Validacion manual iOS: PASS.
 
 Gate Go/No-Go:
 
@@ -416,11 +493,27 @@ Gate Go/No-Go:
 
 Objetivo: media upload robusto + comentarios.
 
+Estado (2026-02-13): EN PROGRESO
+
 Tareas:
 
 1. Camara/galeria nativa.
 2. Compresion razonable.
 3. Comentarios y acciones sociales.
+
+Entregables:
+
+1. Comentarios nativos (lectura + crear) con detalle de post.
+2. Evidencia tecnica:
+   - `ios-native/VinctusNative/Sources/PostCommentsRepo.swift`
+   - `ios-native/VinctusNative/Sources/PostDetailViewModel.swift`
+   - `ios-native/VinctusNative/Sources/PostDetailView.swift`
+   - `ios-native/VinctusNative/Sources/FeedView.swift`
+
+Validacion:
+
+1. `./scripts/run-ios-dev.sh` -> PASS (build/install/launch).
+2. QA manual pendiente: comentar en post real y verificar contador/refresco.
 
 Entregables:
 
