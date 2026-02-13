@@ -188,27 +188,6 @@ async function moderateCommentContent(input: {
   const commentRef = db.doc(`posts/${postId}/comments/${commentId}`);
   await commentRef.delete();
 
-  const postRef = db.doc(`posts/${postId}`);
-  await db.runTransaction(async (tx) => {
-    const postSnap = await tx.get(postRef);
-    if (!postSnap.exists) return;
-
-    const post = postSnap.data() || {};
-    const currentCommentCount =
-      typeof post.commentCount === 'number'
-        ? post.commentCount
-        : typeof post.commentsCount === 'number'
-          ? post.commentsCount
-          : 0;
-    const nextCommentCount = Math.max(0, currentCommentCount - 1);
-
-    tx.update(postRef, {
-      commentCount: nextCommentCount,
-      commentsCount: nextCommentCount,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-  });
-
   functions.logger.warn('Comment removed by auto moderation', {
     postId,
     commentId,
@@ -454,6 +433,49 @@ async function handlePostLikeChange(eventId: string, postId: string, delta: numb
 
     tx.set(userRef, karmaUpdates, { merge: true });
     tx.set(userPublicRef, karmaUpdates, { merge: true });
+  });
+}
+
+async function handlePostCommentChange(
+  eventId: string,
+  postId: string,
+  delta: number,
+): Promise<void> {
+  const dedupRef = db.collection('_dedup_events').doc(`post_comment_${eventId}`);
+  const postRef = db.doc(`posts/${postId}`);
+
+  await db.runTransaction(async (tx) => {
+    const dedupDoc = await tx.get(dedupRef);
+    if (dedupDoc.exists) {
+      functions.logger.info('Event already processed, skipping', { eventId, postId, delta });
+      return;
+    }
+
+    const postSnap = await tx.get(postRef);
+    if (!postSnap.exists) {
+      functions.logger.warn('Post not found, skipping comment counter update', { postId });
+      return;
+    }
+
+    const postData = postSnap.data() || {};
+    const currentComments =
+      typeof postData.commentCount === 'number'
+        ? postData.commentCount
+        : typeof postData.commentsCount === 'number'
+          ? postData.commentsCount
+          : 0;
+    const nextComments = Math.max(0, currentComments + delta);
+
+    tx.create(dedupRef, {
+      createdAt: FieldValue.serverTimestamp(),
+      processedAt: new Date().toISOString(),
+    });
+
+    tx.update(postRef, {
+      commentCount: nextComments,
+      commentsCount: nextComments,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
   });
 }
 
@@ -902,6 +924,54 @@ export const onPostLikeDeleted = functions.firestore
       functions.logger.error('Failed to process unlike', {
         postId,
         userId,
+        eventId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+/**
+ * Increment commentCount/commentsCount when a comment is created.
+ * Trigger: onCreate posts/{postId}/comments/{commentId}
+ */
+export const onPostCommentCreated = functions.firestore
+  .document('posts/{postId}/comments/{commentId}')
+  .onCreate(async (_snap, context) => {
+    const { postId, commentId } = context.params;
+    const eventId = context.eventId;
+
+    try {
+      functions.logger.info('Post comment created', { postId, commentId, eventId });
+      await handlePostCommentChange(eventId, postId, 1);
+      functions.logger.info('Post comment counter incremented', { postId, eventId });
+    } catch (error) {
+      functions.logger.error('Failed to increment post comment counter', {
+        postId,
+        commentId,
+        eventId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+/**
+ * Decrement commentCount/commentsCount when a comment is deleted.
+ * Trigger: onDelete posts/{postId}/comments/{commentId}
+ */
+export const onPostCommentDeleted = functions.firestore
+  .document('posts/{postId}/comments/{commentId}')
+  .onDelete(async (_snap, context) => {
+    const { postId, commentId } = context.params;
+    const eventId = context.eventId;
+
+    try {
+      functions.logger.info('Post comment deleted', { postId, commentId, eventId });
+      await handlePostCommentChange(eventId, postId, -1);
+      functions.logger.info('Post comment counter decremented', { postId, eventId });
+    } catch (error) {
+      functions.logger.error('Failed to decrement post comment counter', {
+        postId,
+        commentId,
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });
