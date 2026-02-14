@@ -466,18 +466,34 @@ Inicio: 2026-02-11
    - Comentarios nativos integrados en iOS:
      - lectura de comentarios por post;
      - creacion de comentarios con snapshot de autor;
-     - detalle de post accesible desde Feed (`Ver detalle` / icono de comentario).
+     - detalle de post accesible desde `Discover > Publicaciones` (tap en card) con refresco de contador al volver.
    - Composer de comentarios con validaciones de longitud (<=1000).
+   - Media upload nativo integrado en `Crear`:
+     - seleccion desde galeria (`PhotosPicker`);
+     - captura desde camara nativa (`UIImagePickerController`);
+     - compresion de imagen y validacion de limite (<10MB);
+     - subida a Firebase Storage (`posts/{uid}/{postId}/images/*`) con progreso y cancelacion;
+     - actualizacion de post en Firestore (`uploading -> ready/failed`) con metadata de media.
+   - Render de media de post en Discover:
+     - parsing de media primaria en feed iOS;
+     - card de publicacion muestra imagen real cuando existe;
+     - detalle de post muestra preview de imagen al abrir comentarios.
 3. Evidencia tecnica:
    - `ios-native/VinctusNative/Sources/PostCommentsRepo.swift`
    - `ios-native/VinctusNative/Sources/PostDetailViewModel.swift`
    - `ios-native/VinctusNative/Sources/PostDetailView.swift`
-   - `ios-native/VinctusNative/Sources/FeedView.swift`
+   - `ios-native/VinctusNative/Sources/DiscoverView.swift`
+   - `ios-native/VinctusNative/Sources/FeedRepo.swift`
+   - `ios-native/VinctusNative/Sources/CreatePostRepo.swift`
+   - `ios-native/VinctusNative/Sources/CreatePostViewModel.swift`
+   - `ios-native/VinctusNative/Sources/CreatePostView.swift`
 4. Validacion tecnica:
    - `xcodegen generate` -> PASS.
    - `./scripts/run-ios-dev.sh` -> PASS (build/install/launch).
 5. Pendiente para cierre Semana 14:
-   - QA manual comentario real (crear + refrescar + contador).
-   - Iniciar media upload nativo (camara/galeria + pipeline).
+   - QA manual end-to-end en simulador:
+     - crear post con imagen;
+     - abrir desde `Discover > Publicaciones`;
+     - comentar y validar refresco de contador/estado.
 6. Proximo paso operativo:
-   - Cerrar bloque de comentarios y avanzar a media upload.
+   - Cerrar Semana 14 con QA manual y abrir Semana 15 (Chat I).

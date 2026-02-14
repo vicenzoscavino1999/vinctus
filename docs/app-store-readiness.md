@@ -1,14 +1,14 @@
 # App Store Readiness Tracker - Vinctus
 
-Fecha base: 2026-02-11  
-Ultima actualizacion: 2026-02-12  
+Fecha base: 2026-02-11
+Ultima actualizacion: 2026-02-13
 Objetivo: concentrar checklist por guideline de Apple y evidencia tecnica real.
 
 ## Punto actual del plan maestro (hoy)
 
-- Semanas 0-3 de migracion (gobernanza + hardening backend + compliance base): completadas.
+- Semanas 0-13 de migracion iOS nativa: completadas.
+- Semana activa: Semana 14 (Create path II: media/comment) en progreso.
 - Fases App Store 1-5 (legal/auth/delete account/moderacion/IA): completadas en baseline funcional.
-- Estado actual de ejecucion: listo para iniciar Semana 4 (base iOS nativa en Mac/Xcode).
 - Bloqueadores vigentes para cierre App Store:
   1. Entorno Mac + Xcode + firma real.
   2. Pruebas en iPhone real (SIWA nativo, push/camara/haptics, safe areas).
