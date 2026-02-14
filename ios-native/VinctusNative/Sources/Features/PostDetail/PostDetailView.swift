@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct PostDetailView: View {
+  private static let mediaHeight: CGFloat = 220
+
   private let item: FeedItem
   private let profileRepo: ProfileRepo
   private let onCommentCountChange: ((Int) -> Void)?
@@ -44,6 +46,10 @@ struct PostDetailView: View {
               Text("Sin texto")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            }
+
+            if let mediaURL = item.primaryMediaURL, item.primaryMediaType == nil || item.primaryMediaType == "image" {
+              mediaPreview(url: mediaURL)
             }
 
             HStack(spacing: 12) {
@@ -209,6 +215,37 @@ struct PostDetailView: View {
       .redacted(reason: .placeholder)
       .listRowSeparator(.hidden)
     }
+  }
+
+  private func mediaPreview(url: URL) -> some View {
+    ZStack {
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .fill(VinctusTokens.Color.surface2.opacity(0.8))
+
+      AsyncImage(url: url) { phase in
+        switch phase {
+        case .empty:
+          ProgressView()
+            .tint(VinctusTokens.Color.accent)
+        case .success(let image):
+          image
+            .resizable()
+            .scaledToFit()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            .background(VinctusTokens.Color.surface2.opacity(0.8))
+        case .failure:
+          Label("No se pudo cargar la imagen", systemImage: "photo")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        @unknown default:
+          EmptyView()
+        }
+      }
+    }
+    .frame(maxWidth: .infinity)
+    .frame(height: Self.mediaHeight)
+    .clipped()
+    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
   }
 }
 

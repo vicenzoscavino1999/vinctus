@@ -20,11 +20,11 @@ final class PostDetailViewModel: ObservableObject {
   }
 
   var remainingCharacters: Int {
-    commentLimit - normalizedText(draftComment).count
+    commentLimit - FirestoreHelpers.normalizedText(draftComment).count
   }
 
   var canSendComment: Bool {
-    !isSubmittingComment && !normalizedText(draftComment).isEmpty && remainingCharacters >= 0
+    !isSubmittingComment && !FirestoreHelpers.normalizedText(draftComment).isEmpty && remainingCharacters >= 0
   }
 
   func refreshComments() async {
@@ -46,7 +46,7 @@ final class PostDetailViewModel: ObservableObject {
   func submitComment() {
     guard !isSubmittingComment else { return }
 
-    let normalizedDraft = normalizedText(draftComment)
+    let normalizedDraft = FirestoreHelpers.normalizedText(draftComment)
     guard !normalizedDraft.isEmpty else {
       errorMessage = "Escribe un comentario antes de enviar."
       return
@@ -83,7 +83,4 @@ final class PostDetailViewModel: ObservableObject {
     }
   }
 
-  private func normalizedText(_ value: String) -> String {
-    value.trimmingCharacters(in: .whitespacesAndNewlines)
-  }
 }

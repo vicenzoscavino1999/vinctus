@@ -26,8 +26,8 @@ struct AuthGateView: View {
         HStack(spacing: 14) {
           VInlineStatus(title: "Env: \(AppEnvironment.current.rawValue)", isGood: true)
           VInlineStatus(
-            title: FirebaseApp.app() == nil ? "Firebase: NOT configured" : "Firebase: configured",
-            isGood: FirebaseApp.app() != nil
+            title: !FirebaseBootstrap.isConfigured ? "Firebase: NOT configured" : "Firebase: configured",
+            isGood: FirebaseBootstrap.isConfigured
           )
         }
       }

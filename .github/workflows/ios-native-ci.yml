@@ -1,0 +1,51 @@
+name: iOS Native CI
+
+on:
+  pull_request:
+    paths:
+      - ios-native/**
+      - scripts/run-ios-ci.sh
+      - scripts/run-ios-dev.sh
+      - .github/workflows/ios-native-ci.yml
+  push:
+    branches: [main]
+    paths:
+      - ios-native/**
+      - scripts/run-ios-ci.sh
+      - scripts/run-ios-dev.sh
+      - .github/workflows/ios-native-ci.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ios-native-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gates:
+    name: iOS quality gates
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify Firebase plist files are not committed
+        run: |
+          tracked="$(git ls-files 'ios-native/VinctusNative/Resources/Firebase/*.plist' || true)"
+          if [ -n "$tracked" ]; then
+            echo "Tracked Firebase plist(s) detected:"
+            echo "$tracked"
+            echo "Do not commit GoogleService-Info-*.plist files."
+            exit 1
+          fi
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install SwiftLint
+        run: HOMEBREW_NO_AUTO_UPDATE=1 brew install swiftlint
+
+      - name: SwiftLint quality gate
+        run: ./scripts/run-ios-swiftlint.sh
+
+      - name: Build and test native iOS
+        run: ./scripts/run-ios-ci.sh

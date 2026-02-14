@@ -1,0 +1,22 @@
+included:
+  - ios-native/VinctusNative/Sources
+  - ios-native/VinctusNative/Tests
+
+excluded:
+  - ios-native/VinctusNative/Resources
+  - ios-native/VinctusNative/VinctusNative.xcodeproj
+  - ios-native/VinctusNative/.build
+
+disabled_rules:
+  - line_length
+  - file_length
+  - type_body_length
+  - function_body_length
+  - cyclomatic_complexity
+  - identifier_name
+  - large_tuple
+  - force_unwrapping
+  - force_cast
+  - todo
+
+reporter: 'xcode'

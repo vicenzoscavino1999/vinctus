@@ -8,6 +8,8 @@ struct FeedItem: Identifiable, Hashable {
   let authorName: String
   let text: String
   let createdAt: Date?
+  let primaryMediaURL: URL?
+  let primaryMediaType: String?
   var likeCount: Int
   var commentCount: Int
 }
@@ -49,7 +51,7 @@ final class FirebaseFeedRepo: FeedRepo {
   }
 
   func fetchFeedPage(limit: Int, after cursor: FeedCursor?) async throws -> FeedPage {
-    guard FirebaseApp.app() != nil else { throw FeedRepoError.firebaseNotConfigured }
+    guard FirebaseBootstrap.isConfigured else { throw FeedRepoError.firebaseNotConfigured }
 
     let db = self.db ?? Firestore.firestore()
     let pageSize = max(1, min(30, limit))
@@ -63,12 +65,12 @@ final class FirebaseFeedRepo: FeedRepo {
     }
 
     do {
-      let snapshot = try await getDocuments(query)
+      let snapshot = try await FirestoreAsyncBridge.getDocuments(query)
       return buildPage(snapshot: snapshot, pageSize: pageSize)
     } catch {
       // Only first page tries cache fallback. Paginated requests should fail fast.
       guard cursor == nil else { throw error }
-      let cacheSnapshot = try await getDocuments(query, source: .cache)
+      let cacheSnapshot = try await FirestoreAsyncBridge.getDocuments(query, source: .cache)
       return buildPage(snapshot: cacheSnapshot, pageSize: pageSize)
     }
   }
@@ -85,8 +87,7 @@ final class FirebaseFeedRepo: FeedRepo {
         if
           let authorSnapshot = data["authorSnapshot"] as? [String: Any],
           let displayName = authorSnapshot["displayName"] as? String,
-          !displayName.isEmpty
-        {
+          !displayName.isEmpty {
           return displayName
         }
 
@@ -101,11 +102,12 @@ final class FirebaseFeedRepo: FeedRepo {
         return ""
       }()
 
-      let createdAt = (data["createdAt"] as? Timestamp)?.dateValue()
-      let authorID = nonEmptyString(data["authorId"]) ?? nonEmptyString(data["authorID"])
+      let createdAt = FirestoreHelpers.dateValue(data["createdAt"]) ?? FirestoreHelpers.dateValue(data["updatedAt"])
+      let authorID = FirestoreHelpers.nonEmptyString(data["authorId"]) ?? FirestoreHelpers.nonEmptyString(data["authorID"])
 
       let likeCount = intValue(data["likeCount"]) ?? intValue(data["likesCount"]) ?? 0
       let commentCount = intValue(data["commentCount"]) ?? intValue(data["commentsCount"]) ?? 0
+      let mediaSelection = resolvePrimaryMedia(from: data["media"])
 
       return FeedItem(
         id: doc.documentID,
@@ -113,10 +115,14 @@ final class FirebaseFeedRepo: FeedRepo {
         authorName: authorName,
         text: text,
         createdAt: createdAt,
+        primaryMediaURL: mediaSelection.url,
+        primaryMediaType: mediaSelection.type,
         likeCount: max(0, likeCount),
         commentCount: max(0, commentCount)
       )
     }
+
+    let sortedItems = items.sorted(by: isNewerItem)
 
     let nextCursor: FeedCursor?
     if hasMore, let lastVisible = pageDocs.last {
@@ -126,7 +132,7 @@ final class FirebaseFeedRepo: FeedRepo {
     }
 
     return FeedPage(
-      items: items,
+      items: sortedItems,
       nextCursor: nextCursor,
       hasMore: hasMore,
       isFromCache: snapshot.metadata.isFromCache
@@ -140,25 +146,44 @@ final class FirebaseFeedRepo: FeedRepo {
     return nil
   }
 
-  private func nonEmptyString(_ value: Any?) -> String? {
-    guard let stringValue = value as? String else { return nil }
-    let trimmed = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
-  }
-
-  private func getDocuments(_ query: Query, source: FirestoreSource = .default) async throws -> QuerySnapshot {
-    try await withCheckedThrowingContinuation { continuation in
-      query.getDocuments(source: source) { snapshot, error in
-        if let error = error {
-          continuation.resume(throwing: error)
-          return
-        }
-        guard let snapshot = snapshot else {
-          continuation.resume(throwing: FeedRepoError.missingSnapshot)
-          return
-        }
-        continuation.resume(returning: snapshot)
-      }
+  private func isNewerItem(_ lhs: FeedItem, _ rhs: FeedItem) -> Bool {
+    switch (lhs.createdAt, rhs.createdAt) {
+    case let (left?, right?):
+      if left != right { return left > right }
+      return lhs.id > rhs.id
+    case (_?, nil):
+      return true
+    case (nil, _?):
+      return false
+    default:
+      return lhs.id > rhs.id
     }
   }
+
+  private func resolvePrimaryMedia(from rawMedia: Any?) -> (url: URL?, type: String?) {
+    guard let mediaItems = rawMedia as? [[String: Any]], !mediaItems.isEmpty else {
+      return (nil, nil)
+    }
+
+    func parsedEntry(_ item: [String: Any]) -> (url: URL?, type: String?) {
+      let urlString = FirestoreHelpers.nonEmptyString(item["url"])
+      let url = urlString.flatMap(URL.init(string:))
+      let type = FirestoreHelpers.nonEmptyString(item["type"])?.lowercased()
+      return (url, type)
+    }
+
+    if let preferredImage = mediaItems.first(where: {
+      let parsed = parsedEntry($0)
+      return parsed.url != nil && parsed.type == "image"
+    }) {
+      return parsedEntry(preferredImage)
+    }
+
+    if let firstValid = mediaItems.first(where: { parsedEntry($0).url != nil }) {
+      return parsedEntry(firstValid)
+    }
+
+    return (nil, nil)
+  }
+
 }

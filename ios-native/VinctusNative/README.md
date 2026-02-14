@@ -53,3 +53,21 @@ SIMULATOR_NAME="iPhone 17 Pro" ./scripts/run-ios-dev.sh
 SIMULATOR_ID="<SIMULATOR_UDID>" ./scripts/run-ios-dev.sh
 SCHEME="VinctusNative-Dev" CONFIG="DebugDev" ./scripts/run-ios-dev.sh
 ```
+
+## Run iOS CI gates locally
+
+From repository root:
+
+```bash
+brew install swiftlint
+./scripts/run-ios-swiftlint.sh
+./scripts/run-ios-ci.sh
+```
+
+Optional overrides:
+
+```bash
+SIMULATOR_NAME="iPhone 17 Pro" ./scripts/run-ios-ci.sh
+SIMULATOR_ID="<SIMULATOR_UDID>" ./scripts/run-ios-ci.sh
+SCHEME="VinctusNative-Dev" CONFIG="DebugDev" ./scripts/run-ios-ci.sh
+```

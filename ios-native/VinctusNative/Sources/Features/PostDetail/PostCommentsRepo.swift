@@ -58,7 +58,7 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
   }
 
   func fetchComments(postID: String, limit: Int) async throws -> PostCommentsPage {
-    guard FirebaseApp.app() != nil else { throw PostCommentsRepoError.firebaseNotConfigured }
+    guard FirebaseBootstrap.isConfigured else { throw PostCommentsRepoError.firebaseNotConfigured }
 
     let normalizedPostID = postID.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedPostID.isEmpty else { throw PostCommentsRepoError.invalidPostID }
@@ -72,22 +72,22 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
       .order(by: "createdAt", descending: false)
       .limit(to: pageSize)
 
-    let (snapshot, isFromCache) = try await getDocumentsWithFallback(query)
+    let (snapshot, isFromCache) = try await FirestoreAsyncBridge.getDocumentsWithFallback(query)
     let items = snapshot.documents.map { doc in
       let data = doc.data()
       let authorSnapshot = data["authorSnapshot"] as? [String: Any]
-      let authorName = nonEmptyString(authorSnapshot?["displayName"])
-        ?? nonEmptyString(data["authorName"])
-        ?? nonEmptyString(data["authorId"])
+      let authorName = FirestoreHelpers.nonEmptyString(authorSnapshot?["displayName"])
+        ?? FirestoreHelpers.nonEmptyString(data["authorName"])
+        ?? FirestoreHelpers.nonEmptyString(data["authorId"])
         ?? "Usuario"
-      let text = nonEmptyString(data["text"]) ?? ""
+      let text = FirestoreHelpers.nonEmptyString(data["text"]) ?? ""
 
       return PostComment(
         id: doc.documentID,
-        authorID: nonEmptyString(data["authorId"]),
+        authorID: FirestoreHelpers.nonEmptyString(data["authorId"]),
         authorName: authorName,
         text: text,
-        createdAt: dateValue(data["createdAt"])
+        createdAt: FirestoreHelpers.dateValue(data["createdAt"])
       )
     }
 
@@ -95,7 +95,7 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
   }
 
   func addComment(postID: String, text: String) async throws {
-    guard FirebaseApp.app() != nil else { throw PostCommentsRepoError.firebaseNotConfigured }
+    guard FirebaseBootstrap.isConfigured else { throw PostCommentsRepoError.firebaseNotConfigured }
 
     let normalizedPostID = postID.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedPostID.isEmpty else { throw PostCommentsRepoError.invalidPostID }
@@ -110,6 +110,7 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     guard let currentUser = auth.currentUser else { throw PostCommentsRepoError.userNotAuthenticated }
 
     let db = self.db ?? Firestore.firestore()
+    let postRef = db.collection("posts").document(normalizedPostID)
     let authorSnapshot = try await resolveAuthorSnapshot(uid: currentUser.uid, fallbackUser: currentUser, db: db)
     let commentRef = db.collection("posts")
       .document(normalizedPostID)
@@ -118,7 +119,7 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
 
     let authorSnapshotPayload: [String: Any] = [
       "displayName": authorSnapshot.displayName,
-      "photoURL": authorSnapshot.photoURL ?? NSNull(),
+      "photoURL": authorSnapshot.photoURL ?? NSNull()
     ]
 
     let payload: [String: Any] = [
@@ -126,10 +127,10 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
       "authorId": currentUser.uid,
       "authorSnapshot": authorSnapshotPayload,
       "text": normalizedText,
-      "createdAt": FieldValue.serverTimestamp(),
+      "createdAt": FieldValue.serverTimestamp()
     ]
 
-    try await setData(commentRef, data: payload)
+    try await commitComment(commentRef: commentRef, postRef: postRef, payload: payload, db: db)
   }
 
   private func resolveAuthorSnapshot(
@@ -138,14 +139,14 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     db: Firestore
   ) async throws -> (displayName: String, photoURL: String?) {
     let publicRef = db.collection("users_public").document(uid)
-    let snapshot = try await getDocument(publicRef)
+    let snapshot = try await FirestoreAsyncBridge.getDocument(publicRef)
     let data = snapshot.data() ?? [:]
 
-    let displayName = nonEmptyString(data["displayName"])
-      ?? nonEmptyString(fallbackUser.displayName)
+    let displayName = FirestoreHelpers.nonEmptyString(data["displayName"])
+      ?? FirestoreHelpers.nonEmptyString(fallbackUser.displayName)
       ?? fallbackDisplayName(for: fallbackUser)
       ?? "Usuario"
-    let photoURL = nonEmptyString(data["photoURL"]) ?? fallbackUser.photoURL?.absoluteString
+    let photoURL = FirestoreHelpers.nonEmptyString(data["photoURL"]) ?? fallbackUser.photoURL?.absoluteString
     return (displayName, photoURL)
   }
 
@@ -160,69 +161,24 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     return nil
   }
 
-  private func getDocumentsWithFallback(_ query: Query) async throws -> (QuerySnapshot, Bool) {
-    do {
-      let snapshot = try await getDocuments(query, source: .server)
-      return (snapshot, false)
-    } catch {
-      let cachedSnapshot = try await getDocuments(query, source: .cache)
-      return (cachedSnapshot, true)
-    }
+  private func commitComment(
+    commentRef: DocumentReference,
+    postRef: DocumentReference,
+    payload: [String: Any],
+    db: Firestore
+  ) async throws {
+    let batch = db.batch()
+    batch.setData(payload, forDocument: commentRef)
+    batch.setData(
+      [
+        "commentCount": FieldValue.increment(Int64(1)),
+        "updatedAt": FieldValue.serverTimestamp()
+      ],
+      forDocument: postRef,
+      merge: true
+    )
+
+    try await FirestoreAsyncBridge.commit(batch)
   }
 
-  private func getDocuments(_ query: Query, source: FirestoreSource) async throws -> QuerySnapshot {
-    try await withCheckedThrowingContinuation { continuation in
-      query.getDocuments(source: source) { snapshot, error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        guard let snapshot else {
-          continuation.resume(throwing: PostCommentsRepoError.missingSnapshot)
-          return
-        }
-        continuation.resume(returning: snapshot)
-      }
-    }
-  }
-
-  private func getDocument(_ ref: DocumentReference) async throws -> DocumentSnapshot {
-    try await withCheckedThrowingContinuation { continuation in
-      ref.getDocument { snapshot, error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        guard let snapshot else {
-          continuation.resume(throwing: PostCommentsRepoError.missingSnapshot)
-          return
-        }
-        continuation.resume(returning: snapshot)
-      }
-    }
-  }
-
-  private func setData(_ ref: DocumentReference, data: [String: Any]) async throws {
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      ref.setData(data) { error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
-  }
-
-  private func nonEmptyString(_ value: Any?) -> String? {
-    guard let stringValue = value as? String else { return nil }
-    let trimmed = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
-  }
-
-  private func dateValue(_ value: Any?) -> Date? {
-    if let timestamp = value as? Timestamp { return timestamp.dateValue() }
-    if let date = value as? Date { return date }
-    return nil
-  }
 }

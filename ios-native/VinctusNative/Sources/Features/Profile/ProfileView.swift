@@ -1,121 +1,136 @@
 import SwiftUI
 
+enum ProfileContentTab: String, CaseIterable, Identifiable {
+  case myProfile = "Mi Perfil"
+  case collections = "Colecciones"
+
+  var id: String { rawValue }
+}
+
+struct ProfileStoryItem: Identifiable, Hashable {
+  let id: String
+  let title: String
+  let imageURL: String?
+  let isOwnStory: Bool
+}
+
+struct FollowedCategory: Identifiable, Hashable {
+  let id: String
+  let icon: String
+  let title: String
+}
+
 struct ProfileView: View {
   let userID: String
 
   @StateObject private var vm: ProfileViewModel
+  @State private var selectedTab: ProfileContentTab = .myProfile
+  @State private var isCreatePostPresented = false
+  @State private var isSettingsPresented = false
 
-  init(repo: ProfileRepo, userID: String) {
+  private let createPostRepo: any CreatePostRepo
+
+  init(
+    repo: ProfileRepo,
+    userID: String,
+    createPostRepo: any CreatePostRepo = FirebaseCreatePostRepo()
+  ) {
     self.userID = userID
+    self.createPostRepo = createPostRepo
     _vm = StateObject(wrappedValue: ProfileViewModel(repo: repo))
   }
 
   var body: some View {
     List {
+      VinctusHeaderBar {
+        isCreatePostPresented = true
+      }
+      .vinctusProfileListRowStyle()
+
       if vm.isLoading, vm.profile == nil {
         profileSkeleton
       }
 
       if let profile = vm.profile {
-        Section {
-          VCard {
-            HStack(alignment: .center, spacing: VinctusTokens.Spacing.md) {
-              AvatarView(name: profile.displayName, photoURLString: profile.photoURL, size: 62)
+        ProfileIdentityCard(
+          profile: profile,
+          memberLabel: memberLabel(for: profile),
+          locationLabel: locationLabel(for: profile),
+          onTapSettings: { isSettingsPresented = true },
+          onTapEdit: { isSettingsPresented = true }
+        )
+        .vinctusProfileListRowStyle()
 
-              VStack(alignment: .leading, spacing: 4) {
-                Text(profile.displayName)
-                  .font(.title3)
-                  .bold()
+        HStack(spacing: 10) {
+          ProfileStatTile(title: "Publicaciones", value: profile.postsCount)
+          ProfileStatTile(title: "Seguidores", value: profile.followersCount)
+          ProfileStatTile(title: "Siguiendo", value: profile.followingCount)
+        }
+        .vinctusProfileListRowStyle()
 
-                if let username = profile.username {
-                  Text("@\(username)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                }
+        VStack(alignment: .leading, spacing: 10) {
+          Text("HISTORIAS")
+            .font(.system(size: 11, weight: .semibold))
+            .tracking(2.4)
+            .foregroundStyle(VinctusTokens.Color.textMuted)
 
-                Text(profile.accountVisibility == .private ? "Cuenta privada" : "Cuenta publica")
-                  .font(.caption)
-                  .padding(.horizontal, 8)
-                  .padding(.vertical, 4)
-                  .background(
-                    profile.accountVisibility == .private
-                      ? SwiftUI.Color.orange.opacity(0.15)
-                      : SwiftUI.Color.green.opacity(0.15)
-                  )
-                  .foregroundStyle(profile.accountVisibility == .private ? .orange : .green)
-                  .clipShape(Capsule())
+          ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 14) {
+              ForEach(storyItems(for: profile)) { item in
+                ProfileStoryBubble(item: item, fallbackName: profile.displayName)
               }
-
-              Spacer()
             }
+            .padding(.horizontal, 1)
           }
         }
-        .listRowSeparator(.hidden)
+        .vinctusProfileListRowStyle()
 
-        Section("Actividad") {
-          LabeledContent("Publicaciones") { Text("\(profile.postsCount)") }
-          LabeledContent("Seguidores") { Text("\(profile.followersCount)") }
-          LabeledContent("Siguiendo") { Text("\(profile.followingCount)") }
-          LabeledContent("Reputacion") { Text("\(profile.reputation)") }
-        }
+        ProfileTabSelector(selectedTab: $selectedTab)
+          .vinctusProfileListRowStyle()
 
-        Section("Perfil") {
-          if let role = profile.role {
-            LabeledContent("Rol") { Text(role) }
-          }
-
-          if let location = profile.location {
-            LabeledContent("Ubicacion") { Text(location) }
-          }
-
-          if let email = profile.email {
-            LabeledContent("Email") {
-              Text(email)
-                .lineLimit(1)
-            }
-          }
-
-          LabeledContent("Actualizado") {
-            Text(profile.updatedAt.formatted(date: .abbreviated, time: .shortened))
-          }
-
-          LabeledContent("Creado") {
-            Text(profile.createdAt.formatted(date: .abbreviated, time: .omitted))
-          }
-        }
-
-        if let bio = profile.bio, !bio.isEmpty {
-          Section("Bio") {
-            Text(bio)
-              .font(.body)
-              .foregroundStyle(.primary)
-              .multilineTextAlignment(.leading)
-          }
+        if selectedTab == .myProfile {
+          ProfileMyProfileContent(
+            profile: profile,
+            previewText: publicationPreview(for: profile),
+            onTapCreate: { isCreatePostPresented = true }
+          )
+          .vinctusProfileListRowStyle()
+        } else {
+          ProfileCollectionsContent(profile: profile)
+            .vinctusProfileListRowStyle()
         }
       }
 
       if let error = vm.errorMessage {
-        Section {
-          VCard {
-            VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
-              Text(error)
-                .font(.footnote)
-                .foregroundStyle(.red)
+        VCard {
+          VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
+            Text(error)
+              .font(.footnote)
+              .foregroundStyle(.red)
 
-              VButton("Reintentar", variant: .secondary) {
-                Task {
-                  await vm.load(userID: userID)
-                }
+            VButton("Reintentar", variant: .secondary) {
+              Task {
+                await vm.load(userID: userID)
               }
             }
           }
         }
-        .listRowSeparator(.hidden)
+        .vinctusProfileListRowStyle()
       }
     }
-    .listStyle(.insetGrouped)
-    .navigationTitle(vm.profile?.displayName ?? "Perfil")
-    .navigationBarTitleDisplayMode(.inline)
+    .listStyle(.plain)
+    .toolbar(.hidden, for: .navigationBar)
+    .scrollContentBackground(.hidden)
+    .background(VinctusTokens.Color.background)
+    .overlay(alignment: .top) {
+      VTopSafeAreaBackground()
+    }
+    .navigationDestination(isPresented: $isCreatePostPresented) {
+      CreatePostView(repo: createPostRepo)
+    }
+    .navigationDestination(isPresented: $isSettingsPresented) {
+      SettingsView()
+    }
     .task(id: userID) {
       await vm.load(userID: userID)
     }
@@ -124,75 +139,76 @@ struct ProfileView: View {
     }
   }
 
+  private func storyItems(for profile: UserProfile) -> [ProfileStoryItem] {
+    var items: [ProfileStoryItem] = [
+      .init(id: "story_own", title: "Tu historia", imageURL: profile.photoURL, isOwnStory: true)
+    ]
+
+    let generatedCount = min(max(profile.postsCount, 0), 4)
+    guard generatedCount > 0 else { return items }
+
+    for index in 1...generatedCount {
+      items.append(
+        .init(
+          id: "story_generated_\(profile.id)_\(index)",
+          title: "Historia \(index)",
+          imageURL: profile.photoURL,
+          isOwnStory: false
+        )
+      )
+    }
+
+    return items
+  }
+
+  private func memberLabel(for profile: UserProfile) -> String {
+    let days = max(Calendar.current.dateComponents([.day], from: profile.createdAt, to: Date()).day ?? 0, 0)
+    if days < 30 { return "Nuevo miembro" }
+    return "Miembro desde \(Calendar.current.component(.year, from: profile.createdAt))"
+  }
+
+  private func locationLabel(for profile: UserProfile) -> String {
+    guard let location = profile.location, !location.isEmpty else { return "Sin ubicacion" }
+    return location
+  }
+
+  private func publicationPreview(for profile: UserProfile) -> String {
+    if let bio = profile.bio, !bio.isEmpty {
+      return bio
+    }
+    return "Comparte tu primera publicacion con la comunidad."
+  }
+
   @ViewBuilder
   private var profileSkeleton: some View {
-    VStack(alignment: .leading, spacing: VinctusTokens.Spacing.md) {
-      RoundedRectangle(cornerRadius: 8, style: .continuous)
-        .fill(SwiftUI.Color.gray.opacity(0.22))
-        .frame(width: 220, height: 22)
+    VCard {
+      VStack(alignment: .leading, spacing: 12) {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+          .fill(SwiftUI.Color.gray.opacity(0.22))
+          .frame(width: 220, height: 24)
 
-      RoundedRectangle(cornerRadius: 8, style: .continuous)
-        .fill(SwiftUI.Color.gray.opacity(0.18))
-        .frame(width: 150, height: 16)
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+          .fill(SwiftUI.Color.gray.opacity(0.18))
+          .frame(width: 170, height: 18)
 
-      RoundedRectangle(cornerRadius: 8, style: .continuous)
-        .fill(SwiftUI.Color.gray.opacity(0.16))
-        .frame(height: 14)
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+          .fill(SwiftUI.Color.gray.opacity(0.15))
+          .frame(height: 14)
 
-      RoundedRectangle(cornerRadius: 8, style: .continuous)
-        .fill(SwiftUI.Color.gray.opacity(0.15))
-        .frame(height: 14)
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+          .fill(SwiftUI.Color.gray.opacity(0.14))
+          .frame(height: 14)
+      }
     }
     .redacted(reason: .placeholder)
-    .listRowSeparator(.hidden)
+    .vinctusProfileListRowStyle()
   }
 }
 
-private struct AvatarView: View {
-  let name: String
-  let photoURLString: String?
-  let size: CGFloat
-
-  var body: some View {
-    ZStack {
-      Circle()
-        .fill(VinctusTokens.Color.surface2)
-
-      if let url = avatarURL {
-        AsyncImage(url: url) { phase in
-          switch phase {
-          case .empty:
-            ProgressView()
-          case .success(let image):
-            image
-              .resizable()
-              .scaledToFill()
-          case .failure:
-            initialText
-          @unknown default:
-            initialText
-          }
-        }
-      } else {
-        initialText
-      }
-    }
-    .frame(width: size, height: size)
-    .clipShape(Circle())
-    .overlay(
-      Circle()
-        .stroke(VinctusTokens.Color.border.opacity(0.35), lineWidth: 1)
-    )
-  }
-
-  private var avatarURL: URL? {
-    guard let photoURLString else { return nil }
-    return URL(string: photoURLString)
-  }
-
-  private var initialText: some View {
-    Text(String(name.prefix(1)).uppercased())
-      .font(.headline)
-      .foregroundStyle(.secondary)
+private extension View {
+  func vinctusProfileListRowStyle() -> some View {
+    self
+      .listRowSeparator(.hidden)
+      .listRowBackground(SwiftUI.Color.clear)
   }
 }

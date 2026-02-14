@@ -76,6 +76,9 @@ targets:
     platform: iOS
     sources:
       - path: Tests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: VinctusNative
 

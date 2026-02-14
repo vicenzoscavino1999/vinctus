@@ -127,8 +127,7 @@ final class FirebaseDeleteAccountRepo: DeleteAccountRepo {
   }
 
   private func requestAccountDeletion() async throws
-    -> (status: AccountDeletionStatus, jobID: String?)
-  {
+    -> (status: AccountDeletionStatus, jobID: String?) {
     let data = try await callCallable(named: "requestAccountDeletion")
     let accepted = data["accepted"] as? Bool ?? false
     guard accepted else { throw DeleteAccountRepoError.requestNotAccepted }
@@ -144,7 +143,7 @@ final class FirebaseDeleteAccountRepo: DeleteAccountRepo {
   }
 
   private func callCallable(named name: String) async throws -> [String: Any] {
-    guard FirebaseApp.app() != nil else { throw DeleteAccountRepoError.firebaseNotConfigured }
+    guard FirebaseBootstrap.isConfigured else { throw DeleteAccountRepoError.firebaseNotConfigured }
 
     let callable = (functions ?? Functions.functions()).httpsCallable(name)
     let result = try await callable.call()
@@ -170,8 +169,7 @@ final class FirebaseDeleteAccountRepo: DeleteAccountRepo {
     let nsError = error as NSError
 
     if nsError.domain == FunctionsErrorDomain,
-      let code = FunctionsErrorCode(rawValue: nsError.code)
-    {
+      let code = FunctionsErrorCode(rawValue: nsError.code) {
       return code == .notFound || code == .unimplemented
     }
 

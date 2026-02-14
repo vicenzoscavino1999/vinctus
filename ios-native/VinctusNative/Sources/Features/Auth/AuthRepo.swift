@@ -22,6 +22,7 @@ protocol AuthRepo {
 
 enum AuthRepoError: LocalizedError {
   case firebaseNotConfigured
+  case invalidEmailFormat
   case missingGoogleClientID
   case googleURLSchemeNotConfigured
   case missingGoogleIDToken
@@ -32,6 +33,8 @@ enum AuthRepoError: LocalizedError {
     switch self {
     case .firebaseNotConfigured:
       return "Firebase not configured. Add GoogleService-Info plist for this environment."
+    case .invalidEmailFormat:
+      return "Ingresa un email valido."
     case .missingGoogleClientID:
       return "Google Sign-In is not configured. Missing Firebase client ID."
     case .googleURLSchemeNotConfigured:
@@ -49,47 +52,31 @@ enum AuthRepoError: LocalizedError {
 final class FirebaseAuthRepo: AuthRepo {
   var currentUser: FirebaseAuth.User? {
     // FirebaseAuth will assert if Firebase isn't configured yet.
-    guard FirebaseApp.app() != nil else { return nil }
+    guard FirebaseBootstrap.isConfigured else { return nil }
     return Auth.auth().currentUser
   }
 
   func signInAnonymously() async throws {
-    guard FirebaseApp.app() != nil else { throw AuthRepoError.firebaseNotConfigured }
+    guard FirebaseBootstrap.isConfigured else { throw AuthRepoError.firebaseNotConfigured }
     _ = try await Auth.auth().signInAnonymously()
   }
 
   func signIn(email: String, password: String) async throws {
-    guard FirebaseApp.app() != nil else { throw AuthRepoError.firebaseNotConfigured }
-
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      Auth.auth().signIn(withEmail: email, password: password) { _, error in
-        if let error = error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
+    guard FirebaseBootstrap.isConfigured else { throw AuthRepoError.firebaseNotConfigured }
+    let normalizedEmail = try validatedEmail(email)
+    try await AuthAsyncBridge.signIn(email: normalizedEmail, password: password)
   }
 
   func createAccount(email: String, password: String) async throws {
-    guard FirebaseApp.app() != nil else { throw AuthRepoError.firebaseNotConfigured }
-
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      Auth.auth().createUser(withEmail: email, password: password) { _, error in
-        if let error = error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
+    guard FirebaseBootstrap.isConfigured else { throw AuthRepoError.firebaseNotConfigured }
+    let normalizedEmail = try validatedEmail(email)
+    try await AuthAsyncBridge.createUser(email: normalizedEmail, password: password)
   }
 
   @MainActor
   func signInWithGoogle(presentingViewController: UIViewController) async throws {
-    guard FirebaseApp.app() != nil else { throw AuthRepoError.firebaseNotConfigured }
-    guard let clientID = FirebaseApp.app()?.options.clientID, !clientID.isEmpty else {
+    guard FirebaseBootstrap.isConfigured else { throw AuthRepoError.firebaseNotConfigured }
+    guard let clientID = FirebaseBootstrap.configuredClientID, !clientID.isEmpty else {
       throw AuthRepoError.missingGoogleClientID
     }
 
@@ -117,7 +104,7 @@ final class FirebaseAuthRepo: AuthRepo {
     rawNonce: String,
     fullName: PersonNameComponents?
   ) async throws {
-    guard FirebaseApp.app() != nil else { throw AuthRepoError.firebaseNotConfigured }
+    guard FirebaseBootstrap.isConfigured else { throw AuthRepoError.firebaseNotConfigured }
     guard !idTokenString.isEmpty else { throw AuthRepoError.missingAppleIDToken }
     guard !rawNonce.isEmpty else { throw AuthRepoError.missingAppleNonce }
 
@@ -130,21 +117,13 @@ final class FirebaseAuthRepo: AuthRepo {
   }
 
   func sendPasswordReset(email: String) async throws {
-    guard FirebaseApp.app() != nil else { throw AuthRepoError.firebaseNotConfigured }
-
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      Auth.auth().sendPasswordReset(withEmail: email) { error in
-        if let error = error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
+    guard FirebaseBootstrap.isConfigured else { throw AuthRepoError.firebaseNotConfigured }
+    let normalizedEmail = try validatedEmail(email)
+    try await AuthAsyncBridge.sendPasswordReset(email: normalizedEmail)
   }
 
   func signOut() throws {
-    guard FirebaseApp.app() != nil else { throw AuthRepoError.firebaseNotConfigured }
+    guard FirebaseBootstrap.isConfigured else { throw AuthRepoError.firebaseNotConfigured }
     try Auth.auth().signOut()
   }
 
@@ -158,5 +137,16 @@ final class FirebaseAuthRepo: AuthRepo {
       }
     }
     return false
+  }
+
+  private func validatedEmail(_ value: String) throws -> String {
+    let normalized = FirestoreHelpers.normalizedText(value).lowercased()
+    guard isValidEmail(normalized) else { throw AuthRepoError.invalidEmailFormat }
+    return normalized
+  }
+
+  private func isValidEmail(_ value: String) -> Bool {
+    let pattern = #"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$"#
+    return value.range(of: pattern, options: .regularExpression) != nil
   }
 }

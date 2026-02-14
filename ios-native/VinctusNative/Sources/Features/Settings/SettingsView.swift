@@ -12,7 +12,7 @@ struct SettingsView: View {
     List {
       Section("App") {
         LabeledContent("Env") { Text(AppEnvironment.current.rawValue) }
-        LabeledContent("Firebase") { Text(FirebaseApp.app() == nil ? "Not configured" : "Configured") }
+        LabeledContent("Firebase") { Text(!FirebaseBootstrap.isConfigured ? "Not configured" : "Configured") }
       }
 
       Section("IA") {
@@ -125,8 +125,7 @@ struct SettingsView: View {
         }
 
         if let failureDetail = viewModel.deletionStatus.lastError,
-          viewModel.deletionStatus.status == .failed
-        {
+          viewModel.deletionStatus.status == .failed {
           Text(failureDetail)
             .font(.footnote)
             .foregroundStyle(.red)

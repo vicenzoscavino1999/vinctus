@@ -53,12 +53,12 @@ final class FirebaseAIConsentRepo: AIConsentRepo {
   }
 
   func getConsent(uid: String) async throws -> AIConsentState {
-    guard FirebaseApp.app() != nil else { throw AIConsentRepoError.firebaseNotConfigured }
+    guard FirebaseBootstrap.isConfigured else { throw AIConsentRepoError.firebaseNotConfigured }
     guard !uid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       throw AIConsentRepoError.invalidUserID
     }
 
-    let snapshot = try await getUserDocument(uid: uid)
+    let snapshot = try await getUserDocumentWithFallback(uid: uid)
     guard snapshot.exists, let data = snapshot.data() else {
       return .default
     }
@@ -85,7 +85,7 @@ final class FirebaseAIConsentRepo: AIConsentRepo {
   }
 
   func setConsent(uid: String, granted: Bool, source: AIConsentSource) async throws {
-    guard FirebaseApp.app() != nil else { throw AIConsentRepoError.firebaseNotConfigured }
+    guard FirebaseBootstrap.isConfigured else { throw AIConsentRepoError.firebaseNotConfigured }
     guard !uid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       throw AIConsentRepoError.invalidUserID
     }
@@ -97,57 +97,33 @@ final class FirebaseAIConsentRepo: AIConsentRepo {
         "ai": [
           "consentGranted": granted,
           "consentSource": source.rawValue,
-          "consentUpdatedAt": FieldValue.serverTimestamp(),
+          "consentUpdatedAt": FieldValue.serverTimestamp()
         ]
       ],
-      "updatedAt": FieldValue.serverTimestamp(),
+      "updatedAt": FieldValue.serverTimestamp()
     ]
 
-    try await setData(
-      ref: ref,
-      payload: payload,
+    try await FirestoreAsyncBridge.setData(
+      ref,
+      data: payload,
       mergeFields: [
         "settings.ai.consentGranted",
         "settings.ai.consentSource",
         "settings.ai.consentUpdatedAt",
-        "updatedAt",
+        "updatedAt"
       ]
     )
   }
 
-  private func getUserDocument(uid: String) async throws -> DocumentSnapshot {
+  private func getUserDocumentWithFallback(uid: String) async throws -> DocumentSnapshot {
     let db = self.db ?? Firestore.firestore()
     let ref = db.collection("users").document(uid)
 
-    return try await withCheckedThrowingContinuation {
-      (continuation: CheckedContinuation<DocumentSnapshot, Error>) in
-      ref.getDocument { snapshot, error in
-        if let error = error {
-          continuation.resume(throwing: error)
-          return
-        }
-        guard let snapshot = snapshot else {
-          continuation.resume(throwing: AIConsentRepoError.missingSnapshot)
-          return
-        }
-        continuation.resume(returning: snapshot)
-      }
+    do {
+      return try await FirestoreAsyncBridge.getDocument(ref, source: .server)
+    } catch {
+      return try await FirestoreAsyncBridge.getDocument(ref, source: .cache)
     }
   }
 
-  private func setData(
-    ref: DocumentReference,
-    payload: [String: Any],
-    mergeFields: [Any]
-  ) async throws {
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      ref.setData(payload, mergeFields: mergeFields) { error in
-        if let error = error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
-  }
 }

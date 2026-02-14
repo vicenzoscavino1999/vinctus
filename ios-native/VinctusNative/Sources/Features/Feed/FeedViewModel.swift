@@ -16,6 +16,7 @@ final class FeedViewModel: ObservableObject {
   private let pageSize = 15
   private var nextCursor: FeedCursor?
   private var hasLoadedOnce = false
+  private var loadMoreTask: Task<Void, Never>?
 
   init(repo: FeedRepo) {
     self.repo = repo
@@ -23,6 +24,10 @@ final class FeedViewModel: ObservableObject {
 
   func refresh() async {
     guard !isInitialLoading, !isRefreshing else { return }
+
+    loadMoreTask?.cancel()
+    loadMoreTask = nil
+    isLoadingMore = false
 
     if hasLoadedOnce {
       isRefreshing = true
@@ -92,17 +97,23 @@ final class FeedViewModel: ObservableObject {
     isLoadingMore = true
     loadMoreErrorMessage = nil
 
-    Task {
+    loadMoreTask?.cancel()
+    loadMoreTask = Task {
       defer { isLoadingMore = false }
+      defer { loadMoreTask = nil }
       do {
+        try Task.checkCancellation()
         AppLog.ui.info("feed.loadMore.start")
         let page = try await repo.fetchFeedPage(limit: pageSize, after: nextCursor)
+        try Task.checkCancellation()
         appendDeduped(page.items)
         nextCursor = page.nextCursor
         canLoadMore = page.hasMore
         AppLog.ui.info(
           "feed.loadMore.success added=\(page.items.count, privacy: .public) hasMore=\(page.hasMore, privacy: .public)"
         )
+      } catch is CancellationError {
+        AppLog.ui.info("feed.loadMore.cancelled")
       } catch {
         AppLog.ui.error(
           "feed.loadMore.failed errorType=\(AppLog.errorType(error), privacy: .public)"

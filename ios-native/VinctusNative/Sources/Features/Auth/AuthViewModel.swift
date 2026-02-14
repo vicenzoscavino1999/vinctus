@@ -14,6 +14,23 @@ final class AuthViewModel: ObservableObject {
     repo.currentUser?.uid
   }
 
+  var currentUserDisplayName: String {
+    if let displayName = normalizedNonEmpty(repo.currentUser?.displayName) {
+      return displayName
+    }
+    if let email = normalizedNonEmpty(repo.currentUser?.email) {
+      return email.components(separatedBy: "@").first?.capitalized ?? email
+    }
+    if let userID = normalizedNonEmpty(repo.currentUser?.uid) {
+      return userID
+    }
+    return "Usuario"
+  }
+
+  var currentUserEmail: String? {
+    normalizedNonEmpty(repo.currentUser?.email)
+  }
+
   init(repo: AuthRepo) {
     self.repo = repo
     self.isSignedIn = repo.currentUser != nil
@@ -139,5 +156,11 @@ final class AuthViewModel: ObservableObject {
       AppLog.auth.error("signOut.failed errorType=\(AppLog.errorType(error), privacy: .public)")
       errorMessage = error.localizedDescription
     }
+  }
+
+  private func normalizedNonEmpty(_ value: String?) -> String? {
+    guard let value else { return nil }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 }

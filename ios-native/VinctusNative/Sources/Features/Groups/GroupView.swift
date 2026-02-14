@@ -1,105 +1,5 @@
 import SwiftUI
 
-struct GroupsListView: View {
-  @StateObject private var vm: GroupsListViewModel
-
-  private let repo: any GroupsRepo
-
-  init(repo: any GroupsRepo) {
-    self.repo = repo
-    _vm = StateObject(wrappedValue: GroupsListViewModel(repo: repo))
-  }
-
-  var body: some View {
-    List {
-      if vm.isShowingCachedData {
-        VCard {
-          HStack(spacing: 8) {
-            Image(systemName: "externaldrive.badge.clock")
-              .foregroundStyle(.orange)
-            Text("Mostrando grupos desde cache local.")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-          }
-        }
-        .listRowSeparator(.hidden)
-      }
-
-      if vm.isLoading, vm.groups.isEmpty {
-        skeletonRows
-      } else if vm.groups.isEmpty, let error = vm.errorMessage {
-        VCard {
-          VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
-            Text("No se pudo cargar grupos")
-              .font(.headline)
-            Text(error)
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-
-            VButton("Reintentar", variant: .secondary) {
-              Task {
-                await vm.refresh()
-              }
-            }
-          }
-        }
-        .listRowSeparator(.hidden)
-      } else if vm.groups.isEmpty {
-        VCard {
-          VStack(alignment: .leading, spacing: 6) {
-            Text("Aun no hay grupos")
-              .font(.headline)
-            Text("Cuando existan grupos disponibles apareceran aqui.")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-          }
-        }
-        .listRowSeparator(.hidden)
-      } else {
-        Section("Grupos") {
-          ForEach(vm.groups) { group in
-            NavigationLink(destination: GroupView(repo: repo, groupID: group.id)) {
-              GroupSummaryRow(group: group)
-            }
-          }
-        }
-      }
-    }
-    .listStyle(.insetGrouped)
-    .navigationTitle("Grupos")
-    .task {
-      await vm.refresh()
-    }
-    .refreshable {
-      await vm.refresh()
-    }
-  }
-
-  @ViewBuilder
-  private var skeletonRows: some View {
-    ForEach(0..<5, id: \.self) { _ in
-      HStack(spacing: VinctusTokens.Spacing.md) {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .fill(SwiftUI.Color.gray.opacity(0.2))
-          .frame(width: 46, height: 46)
-
-        VStack(alignment: .leading, spacing: 6) {
-          RoundedRectangle(cornerRadius: 4, style: .continuous)
-            .fill(SwiftUI.Color.gray.opacity(0.2))
-            .frame(width: 170, height: 14)
-          RoundedRectangle(cornerRadius: 4, style: .continuous)
-            .fill(SwiftUI.Color.gray.opacity(0.16))
-            .frame(width: 230, height: 12)
-        }
-
-        Spacer()
-      }
-      .redacted(reason: .placeholder)
-      .listRowSeparator(.hidden)
-    }
-  }
-}
-
 struct GroupView: View {
   @StateObject private var vm: GroupDetailViewModel
   @StateObject private var connectivity = ConnectivityMonitor()
@@ -135,7 +35,7 @@ struct GroupView: View {
           VCard {
             VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
               HStack(alignment: .center, spacing: VinctusTokens.Spacing.md) {
-                GroupIconView(name: detail.name, iconURL: detail.iconURL, size: 54)
+                VGroupIconView(name: detail.name, iconURLString: detail.iconURL, size: 54)
 
                 VStack(alignment: .leading, spacing: 4) {
                   Text(detail.name)
@@ -287,113 +187,18 @@ struct GroupView: View {
   }
 }
 
-private struct GroupSummaryRow: View {
-  let group: GroupSummary
-
-  var body: some View {
-    HStack(spacing: VinctusTokens.Spacing.md) {
-      GroupIconView(name: group.name, iconURL: group.iconURL, size: 44)
-
-      VStack(alignment: .leading, spacing: 3) {
-        Text(group.name)
-          .font(.headline)
-
-        if !group.description.isEmpty {
-          Text(group.description)
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-        }
-
-        Text("\(group.memberCount) miembros")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
-
-      Spacer()
-    }
-    .padding(.vertical, 2)
-  }
-}
-
-private struct GroupIconView: View {
-  let name: String
-  let iconURL: String?
-  let size: CGFloat
-
-  var body: some View {
-    ZStack {
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .fill(VinctusTokens.Color.surface2)
-
-      if let iconURL, let url = URL(string: iconURL) {
-        AsyncImage(url: url) { phase in
-          switch phase {
-          case .empty:
-            ProgressView()
-              .controlSize(.small)
-          case .success(let image):
-            image
-              .resizable()
-              .scaledToFill()
-          case .failure:
-            initials
-          @unknown default:
-            initials
-          }
-        }
-      } else {
-        initials
-      }
-    }
-    .frame(width: size, height: size)
-    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-  }
-
-  private var initials: some View {
-    Text(String(name.prefix(1)).uppercased())
-      .font(.headline)
-      .foregroundStyle(.secondary)
-  }
-}
-
 private struct GroupMemberAvatar: View {
   let name: String
   let photoURL: String?
   let size: CGFloat
 
   var body: some View {
-    ZStack {
-      Circle()
-        .fill(VinctusTokens.Color.surface2)
-
-      if let photoURL, let url = URL(string: photoURL) {
-        AsyncImage(url: url) { phase in
-          switch phase {
-          case .empty:
-            ProgressView()
-              .controlSize(.small)
-          case .success(let image):
-            image
-              .resizable()
-              .scaledToFill()
-          case .failure:
-            initials
-          @unknown default:
-            initials
-          }
-        }
-      } else {
-        initials
-      }
-    }
-    .frame(width: size, height: size)
-    .clipShape(Circle())
-  }
-
-  private var initials: some View {
-    Text(String(name.prefix(1)).uppercased())
-      .font(.caption)
-      .foregroundStyle(.secondary)
+    VAvatarView(
+      name: name,
+      photoURLString: photoURL,
+      size: size,
+      textColor: .secondary,
+      textFont: .caption
+    )
   }
 }

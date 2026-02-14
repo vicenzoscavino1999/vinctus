@@ -41,6 +41,12 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Vinctus necesita acceso a la camara para adjuntar imagenes en publicaciones.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Vinctus necesita acceso a tu galeria para adjuntar imagenes en publicaciones.</string>
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<false/>
 	<key>VINCTUS_ENV</key>
 	<string>$(VINCTUS_ENV)</string>
 	<key>VINCTUS_PRIVACY_URL</key>

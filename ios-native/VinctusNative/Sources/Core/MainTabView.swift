@@ -7,6 +7,8 @@ struct MainTabView: View {
   private let feedRepo = FirebaseFeedRepo()
   private let profileRepo = FirebaseProfileRepo()
   private let groupsRepo = FirebaseGroupsRepo()
+  private let chatRepo = FirebaseChatRepo()
+  private let commentsRepo = FirebasePostCommentsRepo()
 
   init() {
     let appearance = UITabBarAppearance()
@@ -18,13 +20,13 @@ struct MainTabView: View {
     let normalColor = UIColor(VinctusTokens.Color.textMuted)
     let selectedColor = UIColor(VinctusTokens.Color.accent)
     let hiddenTitleAttributes: [NSAttributedString.Key: Any] = [
-      .foregroundColor: UIColor.clear,
+      .foregroundColor: UIColor.clear
     ]
 
     for layout in [
       appearance.stackedLayoutAppearance,
       appearance.inlineLayoutAppearance,
-      appearance.compactInlineLayoutAppearance,
+      appearance.compactInlineLayoutAppearance
     ] {
       layout.normal.iconColor = normalColor
       layout.normal.titleTextAttributes = hiddenTitleAttributes
@@ -44,9 +46,11 @@ struct MainTabView: View {
       NavigationStack {
         DiscoverView(
           repo: discoverRepo,
+          feedRepo: feedRepo,
           profileRepo: profileRepo,
           groupsRepo: groupsRepo,
-          createPostRepo: createPostRepo
+          createPostRepo: createPostRepo,
+          commentsRepo: commentsRepo
         )
       }
       .tabItem { Label("Descubrir", systemImage: "location.north.line") }
@@ -55,13 +59,18 @@ struct MainTabView: View {
         ConnectionsSearchView(
           repo: discoverRepo,
           profileRepo: profileRepo,
-          groupsRepo: groupsRepo
+          createPostRepo: createPostRepo
         )
       }
       .tabItem { Label("Buscar", systemImage: "magnifyingglass") }
 
       NavigationStack {
-        FeedView(repo: feedRepo, profileRepo: profileRepo)
+        FeedView(
+          groupsRepo: groupsRepo,
+          createPostRepo: createPostRepo,
+          discoverRepo: discoverRepo,
+          chatRepo: chatRepo
+        )
       }
       .tabItem { Label("Comunidad", systemImage: "number") }
 

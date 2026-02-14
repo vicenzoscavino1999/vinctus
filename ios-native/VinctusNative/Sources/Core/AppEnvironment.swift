@@ -20,5 +20,10 @@ enum AppEnvironment: String {
       return "GoogleService-Info-Prod"
     }
   }
-}
 
+  static var isRunningTests: Bool {
+    let environment = ProcessInfo.processInfo.environment
+    if environment["XCTestConfigurationFilePath"] != nil { return true }
+    return NSClassFromString("XCTestCase") != nil
+  }
+}
