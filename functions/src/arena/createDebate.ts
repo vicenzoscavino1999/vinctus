@@ -34,14 +34,17 @@ const SOURCE_ENTITY_STOPWORDS = new Set([
   'veredicto',
   'ganador',
 ]);
+// gemini-2.0-flash* were shut down and gemini-2.5-flash* are scheduled for shutdown; once a model
+// returns 404 the next candidate is tried, so the 3.8 / -latest entries take over automatically.
 const DEFAULT_GEMINI_MODEL_CANDIDATES = [
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
   'gemini-flash-lite-latest',
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-lite',
+  'gemini-3.8-flash',
+  'gemini-flash-latest',
 ] as const;
-const DEFAULT_NVIDIA_MODEL_CANDIDATES = ['moonshotai/kimi-k2-instruct'] as const;
+// moonshotai/kimi-k2-instruct was retired on NVIDIA (410 Gone).
+const DEFAULT_NVIDIA_MODEL_CANDIDATES = ['meta/llama-3.3-70b-instruct'] as const;
 const DEFAULT_NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 const DEFAULT_PROVIDER_ORDER = ['gemini', 'nvidia'] as const;
 type AIProvider = (typeof DEFAULT_PROVIDER_ORDER)[number];
@@ -146,6 +149,8 @@ const isModelLevelFallbackError = (rawMessage: string): boolean => {
   const message = rawMessage.toLowerCase();
   return (
     message.includes('[404') ||
+    // Retired models answer 410 Gone (NVIDIA)
+    message.includes('[410') ||
     message.includes('not found') ||
     message.includes('is not supported') ||
     message.includes('model not found')
