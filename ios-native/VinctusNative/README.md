@@ -34,9 +34,14 @@ cd ios-native/VinctusNative
 xcodegen generate
 ```
 
-2. In Xcode, set `GOOGLE_REVERSED_CLIENT_ID` in target Build Settings for each config (`DebugDev`, `DebugStaging`, `DebugProd`, `ReleaseProd`).
-3. The value is the local `REVERSED_CLIENT_ID` from each environment's `GoogleService-Info-*.plist`.
-4. Build and run using `VinctusNative-Dev` and validate `Continue with Google`.
+2. For each environment (`Dev`, `Staging`, `Prod`), create the uncommitted `Config/<Env>.local.xcconfig` with the `REVERSED_CLIENT_ID` from that environment's `GoogleService-Info-*.plist`. `Config/<Env>.xcconfig` includes it, so the value survives `xcodegen generate`. Do not set `GOOGLE_REVERSED_CLIENT_ID` in the target Build Settings: that overrides the xcconfig.
+
+```bash
+cd ios-native/VinctusNative
+echo "GOOGLE_REVERSED_CLIENT_ID = $(/usr/libexec/PlistBuddy -c 'Print :REVERSED_CLIENT_ID' Resources/Firebase/GoogleService-Info-Dev.plist)" > Config/Dev.local.xcconfig
+```
+
+3. Build and run using `VinctusNative-Dev` and validate `Continue with Google`.
 
 ## Run Dev build from CLI
 

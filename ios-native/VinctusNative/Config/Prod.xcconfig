@@ -1,0 +1,6 @@
+// Target build settings for the Prod environment.
+// GOOGLE_REVERSED_CLIENT_ID is REVERSED_CLIENT_ID from GoogleService-Info-Prod.plist.
+// Set it in the uncommitted Prod.local.xcconfig next to this file (see README).
+GOOGLE_REVERSED_CLIENT_ID =
+
+#include? "Prod.local.xcconfig"

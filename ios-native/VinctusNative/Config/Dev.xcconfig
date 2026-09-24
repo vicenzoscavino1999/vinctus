@@ -1,0 +1,6 @@
+// Target build settings for the Dev environment.
+// GOOGLE_REVERSED_CLIENT_ID is REVERSED_CLIENT_ID from GoogleService-Info-Dev.plist.
+// Set it in the uncommitted Dev.local.xcconfig next to this file (see README).
+GOOGLE_REVERSED_CLIENT_ID =
+
+#include? "Dev.local.xcconfig"
