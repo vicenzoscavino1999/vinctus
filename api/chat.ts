@@ -72,6 +72,17 @@ interface UserDocShape {
   };
 }
 
+interface FirestoreRestValue {
+  booleanValue?: boolean;
+  mapValue?: {
+    fields?: Record<string, FirestoreRestValue>;
+  };
+}
+
+interface FirestoreRestDocument {
+  fields?: Record<string, FirestoreRestValue>;
+}
+
 type AIProvider = 'gemini' | 'nvidia';
 type AICallErrorCode = 'invalid_response' | 'network' | 'rate_limit' | 'timeout' | 'upstream';
 
@@ -226,6 +237,10 @@ function getFirebaseWebApiKey(): string {
   return normalizeSecret(process.env.FIREBASE_WEB_API_KEY || process.env.VITE_FIREBASE_API_KEY);
 }
 
+function getFirebaseProjectId(): string {
+  return normalizeSecret(process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID);
+}
+
 async function verifyIdTokenWithIdentityToolkit(token: string): Promise<string | null> {
   const webApiKey = getFirebaseWebApiKey();
   if (!webApiKey) {
@@ -275,14 +290,61 @@ async function verifyAuthUid(token: string): Promise<string | null> {
   }
 }
 
-async function hasServerAIConsent(uid: string): Promise<boolean> {
-  const snap = await getDb().doc(`users/${uid}`).get();
-  if (!snap.exists) {
-    return false;
+// Reads the consent flag as the user through the Firestore REST API (security rules apply), for
+// deployments where the Admin SDK credentials (FIREBASE_SERVICE_ACCOUNT) are missing or broken.
+async function readAIConsentWithFirestoreRest(uid: string, token: string): Promise<boolean | null> {
+  const projectId = getFirebaseProjectId();
+  if (!projectId) {
+    return null;
   }
 
-  const data = snap.data() as UserDocShape | undefined;
-  return data?.settings?.ai?.consentGranted === true;
+  try {
+    const response = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}` +
+        `/databases/(default)/documents/users/${encodeURIComponent(uid)}` +
+        '?mask.fieldPaths=settings.ai.consentGranted',
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+
+    if (response.status === 404) {
+      return false;
+    }
+    if (!response.ok) {
+      return null;
+    }
+
+    const doc = (await response.json().catch(() => null)) as FirestoreRestDocument | null;
+    if (!doc) {
+      return null;
+    }
+    const consent = doc.fields?.settings?.mapValue?.fields?.ai?.mapValue?.fields?.consentGranted;
+    return consent?.booleanValue === true;
+  } catch {
+    return null;
+  }
+}
+
+async function hasServerAIConsent(uid: string, token: string): Promise<boolean> {
+  try {
+    const snap = await getDb().doc(`users/${uid}`).get();
+    if (!snap.exists) {
+      return false;
+    }
+
+    const data = snap.data() as UserDocShape | undefined;
+    return data?.settings?.ai?.consentGranted === true;
+  } catch (error) {
+    const fallbackConsent = await readAIConsentWithFirestoreRest(uid, token);
+    if (fallbackConsent !== null) {
+      console.warn('[chat-api] consent lookup via Admin SDK failed, recovered with Firestore REST');
+      return fallbackConsent;
+    }
+    throw error;
+  }
 }
 
 function isLikelyPhoneCandidate(input: string): boolean {
@@ -739,7 +801,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let aiConsentGranted = false;
   try {
-    aiConsentGranted = await hasServerAIConsent(authUid);
+    aiConsentGranted = await hasServerAIConsent(authUid, token);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[chat-api] consent lookup failed: ${truncateForLog(message, 220)}`);
