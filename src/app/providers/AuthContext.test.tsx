@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { getRedirectResult, signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { appleProvider, googleProvider } from '@/shared/lib/firebase';
@@ -112,6 +112,72 @@ describe('AuthContext social sign-in', () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
 
     await waitFor(() => expect(result.current.error).toBe('Credenciales invalidas'));
+  });
+
+  describe('installed PWA', () => {
+    const mockStandalone = (standalone: boolean) =>
+      vi.spyOn(window, 'matchMedia').mockImplementation(
+        (query: string) =>
+          ({
+            matches: standalone && query === '(display-mode: standalone)',
+            media: query,
+          }) as MediaQueryList,
+      );
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      // Keep the Apple flag stub from beforeAll; only the auth domain changes per test
+      vi.stubEnv('VITE_FIREBASE_AUTH_DOMAIN', undefined);
+    });
+
+    it.each([
+      ['google', 'signInWithGoogle', googleProvider],
+      ['apple', 'signInWithApple', appleProvider],
+    ] as const)(
+      'uses a full-page %s redirect when the auth domain is the app host',
+      async (provider, method, authProvider) => {
+        mockStandalone(true);
+        vi.stubEnv('VITE_FIREBASE_AUTH_DOMAIN', window.location.host);
+        vi.mocked(signInWithRedirect).mockResolvedValue(undefined as never);
+        const { result } = renderHook(() => useAuth(), { wrapper });
+
+        await act(async () => {
+          await result.current[method]();
+        });
+
+        expect(signInWithPopup).not.toHaveBeenCalled();
+        expect(signInWithRedirect).toHaveBeenCalledWith(expect.anything(), authProvider);
+        expect(window.sessionStorage.getItem(REDIRECT_PENDING_KEY)).toBe(provider);
+      },
+    );
+
+    it('keeps the popup while the auth domain is still firebaseapp.com', async () => {
+      mockStandalone(true);
+      vi.stubEnv('VITE_FIREBASE_AUTH_DOMAIN', 'vinctus-daf32.firebaseapp.com');
+      vi.mocked(signInWithPopup).mockResolvedValue(undefined as never);
+      const { result } = renderHook(() => useAuth(), { wrapper });
+
+      await act(async () => {
+        await result.current.signInWithGoogle();
+      });
+
+      expect(signInWithPopup).toHaveBeenCalled();
+      expect(signInWithRedirect).not.toHaveBeenCalled();
+    });
+  });
+
+  it('keeps the popup in a regular browser tab even with the app-host auth domain', async () => {
+    vi.stubEnv('VITE_FIREBASE_AUTH_DOMAIN', window.location.host);
+    vi.mocked(signInWithPopup).mockResolvedValue(undefined as never);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await act(async () => {
+      await result.current.signInWithGoogle();
+    });
+
+    expect(signInWithPopup).toHaveBeenCalled();
+    expect(signInWithRedirect).not.toHaveBeenCalled();
+    vi.stubEnv('VITE_FIREBASE_AUTH_DOMAIN', undefined);
   });
 
   it('skips the redirect result when no redirect is pending', async () => {

@@ -85,6 +85,18 @@ const consumeRedirectPendingFlag = (): RedirectProvider | null => {
   }
 };
 
+// Installed PWA (home screen): on iOS the popup opens outside the app and never reports back, so
+// sign in with a full-page redirect instead. The redirect result only survives Safari/Firefox
+// storage partitioning when the auth handler is served from our own domain, i.e.
+// VITE_FIREBASE_AUTH_DOMAIN is the app host (proxied to Firebase in vercel.json).
+const shouldUseRedirectSignIn = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const isStandalone =
+    window.matchMedia?.('(display-mode: standalone)').matches === true ||
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+  return isStandalone && import.meta.env.VITE_FIREBASE_AUTH_DOMAIN === window.location.host;
+};
+
 // The user closed the popup, or a newer popup request replaced it: this is a cancel, not a failure
 const isPopupCancelled = (code: string | undefined): boolean =>
   code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request';
@@ -321,7 +333,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return () => unsubscribe();
   }, []);
 
-  // Handle redirect result (Google/Apple fallback when the popup was blocked)
+  // Handle redirect result (installed PWA, or Google/Apple fallback when the popup was blocked)
   useEffect(() => {
     const handleRedirectResult = async () => {
       const provider = consumeRedirectPendingFlag();
@@ -363,6 +375,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setError(null);
     try {
       trackAppCall('auth.signInWithGoogle');
+      if (shouldUseRedirectSignIn()) {
+        setRedirectPendingFlag('google');
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      }
       // Try popup first - works better on Safari/iOS than redirect
       await signInWithPopup(auth, googleProvider);
     } catch (err) {
@@ -404,6 +421,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setError(null);
     try {
       trackAppCall('auth.signInWithApple');
+      if (shouldUseRedirectSignIn()) {
+        setRedirectPendingFlag('apple');
+        await signInWithRedirect(auth, appleProvider);
+        return;
+      }
       await signInWithPopup(auth, appleProvider);
     } catch (err) {
       const error = err as { code?: string };
