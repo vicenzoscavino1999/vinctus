@@ -83,10 +83,6 @@ const consumeRedirectPendingFlag = (): boolean => {
   }
 };
 
-// Older ensureUserProfile versions wrote these with setDoc, which stores dotted keys as
-// literal top-level field names instead of the nested settings fields
-const LEGACY_DOTTED_SETTINGS_KEYS = ['settings.privacy', 'settings.notifications'] as const;
-
 const normalizeNullableString = (value: string | null | undefined): string | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -105,6 +101,10 @@ const mapUser = (firebaseUser: User | null): AuthUser | null => {
     emailVerified: firebaseUser.emailVerified,
   };
 };
+
+// Older ensureUserProfile versions wrote these with setDoc, which stores dotted keys as
+// literal top-level field names instead of the nested settings fields
+const LEGACY_DOTTED_SETTINGS_KEYS = ['settings.privacy', 'settings.notifications'] as const;
 
 const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
   try {
