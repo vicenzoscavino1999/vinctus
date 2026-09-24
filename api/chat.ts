@@ -3,8 +3,11 @@ import { createGroupAction, type CreateGroupArgs } from './lib/aiActions.js';
 import { getAuth, getDb } from './lib/firebaseAdmin.js';
 import { checkRateLimit } from './lib/rateLimit.js';
 
-const DEFAULT_GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-flash-latest'] as const;
-const DEFAULT_NVIDIA_MODEL = 'moonshotai/kimi-k2-instruct';
+// gemini-2.0-flash was shut down (404) and moonshotai/kimi-k2-instruct was retired (410).
+// gemini-3.8-flash is the replacement the Gemini API itself points to; the -latest alias
+// follows Google's current stable Flash. Override with GEMINI_MODELS / NVIDIA_MODEL.
+const DEFAULT_GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest'] as const;
+const DEFAULT_NVIDIA_MODEL = 'meta/llama-3.3-70b-instruct';
 const DEFAULT_NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const MAX_BODY_BYTES = 64 * 1024;
