@@ -61,27 +61,33 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const REDIRECT_PENDING_KEY = 'vinctus_auth_redirect_pending';
 const APPLE_SIGN_IN_ENABLED = import.meta.env.VITE_ENABLE_APPLE_SIGN_IN === 'true';
 
-const setRedirectPendingFlag = (): void => {
+type RedirectProvider = 'google' | 'apple';
+
+const setRedirectPendingFlag = (provider: RedirectProvider): void => {
   if (typeof window === 'undefined') return;
   try {
-    window.sessionStorage.setItem(REDIRECT_PENDING_KEY, '1');
+    window.sessionStorage.setItem(REDIRECT_PENDING_KEY, provider);
   } catch {
     // Ignore storage failures in restricted modes
   }
 };
 
-const consumeRedirectPendingFlag = (): boolean => {
-  if (typeof window === 'undefined') return false;
+const consumeRedirectPendingFlag = (): RedirectProvider | null => {
+  if (typeof window === 'undefined') return null;
   try {
-    const isPending = window.sessionStorage.getItem(REDIRECT_PENDING_KEY) === '1';
-    if (isPending) {
-      window.sessionStorage.removeItem(REDIRECT_PENDING_KEY);
-    }
-    return isPending;
+    const pending = window.sessionStorage.getItem(REDIRECT_PENDING_KEY);
+    if (pending === null) return null;
+    window.sessionStorage.removeItem(REDIRECT_PENDING_KEY);
+    // Anything other than 'apple' (including the legacy '1' flag) gets the generic messages
+    return pending === 'apple' ? 'apple' : 'google';
   } catch {
-    return false;
+    return null;
   }
 };
+
+// The user closed the popup, or a newer popup request replaced it: this is a cancel, not a failure
+const isPopupCancelled = (code: string | undefined): boolean =>
+  code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request';
 
 const normalizeNullableString = (value: string | null | undefined): string | null => {
   if (typeof value !== 'string') return null;
@@ -262,6 +268,13 @@ const translateError = (code: string): string => {
     'auth/account-exists-with-different-credential':
       'Este correo ya esta asociado a otro metodo de acceso',
     'auth/credential-already-in-use': 'Esta credencial ya esta en uso',
+    'auth/unauthorized-domain': 'Este dominio no esta autorizado para iniciar sesion',
+    'auth/popup-blocked': 'El navegador bloqueo la ventana de inicio de sesion',
+    'auth/network-request-failed': 'Error de conexion. Revisa tu internet e intenta de nuevo',
+    'auth/operation-not-supported-in-this-environment':
+      'Este metodo de inicio de sesion no esta disponible en este entorno',
+    'auth/web-storage-unsupported':
+      'Tu navegador bloquea el almacenamiento necesario para iniciar sesion. Revisa las cookies o sal del modo privado',
   };
   return errors[code] || 'Error de autenticacion';
 };
@@ -308,10 +321,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return () => unsubscribe();
   }, []);
 
-  // Handle redirect result (for mobile/PWA Google sign-in)
+  // Handle redirect result (Google/Apple fallback when the popup was blocked)
   useEffect(() => {
     const handleRedirectResult = async () => {
-      if (!consumeRedirectPendingFlag()) {
+      const provider = consumeRedirectPendingFlag();
+      if (!provider) {
         return;
       }
       try {
@@ -321,7 +335,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
       } catch (err) {
         const code = (err as { code?: string }).code || '';
-        setError(translateError(code));
+        setError(provider === 'apple' ? translateAppleError(code) : translateError(code));
       }
     };
     void handleRedirectResult();
@@ -344,7 +358,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // Sign in with Google
   // Strategy: Try popup first (works on most browsers including Safari)
-  // If popup is blocked or fails, fall back to redirect
+  // If the browser blocks the popup, fall back to redirect
   const signInWithGoogle = useCallback(async () => {
     setError(null);
     try {
@@ -354,15 +368,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     } catch (err) {
       const error = err as { code?: string };
 
-      // If popup was blocked or closed, try redirect as fallback
-      if (
-        error.code === 'auth/popup-blocked' ||
-        error.code === 'auth/popup-closed-by-user' ||
-        error.code === 'auth/cancelled-popup-request'
-      ) {
+      if (isPopupCancelled(error.code)) {
+        return;
+      }
+
+      // If popup was blocked, try redirect as fallback
+      if (error.code === 'auth/popup-blocked') {
         try {
           trackAppCall('auth.signInWithGoogle.redirectFallback');
-          setRedirectPendingFlag();
+          setRedirectPendingFlag('google');
           // Fallback to redirect
           await signInWithRedirect(auth, googleProvider);
           return; // Redirect will handle the rest
@@ -380,7 +394,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   // Sign in with Apple
-  // Strategy: Try popup first, then redirect fallback for strict browsers.
+  // Strategy: Try popup first, then redirect fallback when the browser blocks it.
   const signInWithApple = useCallback(async () => {
     if (!APPLE_SIGN_IN_ENABLED) {
       setError('Apple Sign-In no esta habilitado en este entorno.');
@@ -394,14 +408,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     } catch (err) {
       const error = err as { code?: string };
 
-      if (
-        error.code === 'auth/popup-blocked' ||
-        error.code === 'auth/popup-closed-by-user' ||
-        error.code === 'auth/cancelled-popup-request'
-      ) {
+      if (isPopupCancelled(error.code)) {
+        return;
+      }
+
+      if (error.code === 'auth/popup-blocked') {
         try {
           trackAppCall('auth.signInWithApple.redirectFallback');
-          setRedirectPendingFlag();
+          setRedirectPendingFlag('apple');
           await signInWithRedirect(auth, appleProvider);
           return;
         } catch (redirectErr) {
