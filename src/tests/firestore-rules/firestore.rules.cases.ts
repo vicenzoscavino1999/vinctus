@@ -1,7 +1,7 @@
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
-import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { cleanupRulesTestEnv, clearRulesTestData, getRulesTestEnv } from '@/tests/rules/testEnv';
 
@@ -386,6 +386,53 @@ describe('Firestore Rules - critical access controls', () => {
         createdAt: serverTimestamp(),
       }),
     );
+  });
+
+  it('allows owner profile backfill as nested settings and removal of stray dotted fields', async () => {
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx
+        .firestore()
+        .doc('users/user_a')
+        .set({
+          uid: 'user_a',
+          reputation: 5,
+          karmaGlobal: 3,
+          karmaByInterest: { science: 3 },
+          settings: { notifications: { pushEnabled: true } },
+          // Literal top-level field left by the old setDoc-based backfill
+          'settings.privacy': { accountVisibility: 'public' },
+        });
+    });
+
+    const ownerDb = env.authenticatedContext('user_a').firestore();
+    await assertSucceeds(
+      ownerDb.doc('users/user_a').update({
+        'settings.privacy': { accountVisibility: 'public' },
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      ownerDb
+        .doc('users/user_a')
+        .set({ 'settings.privacy': firebase.firestore.FieldValue.delete() }, { merge: true }),
+    );
+
+    const outsiderDb = env.authenticatedContext('user_b').firestore();
+    await assertFails(
+      outsiderDb
+        .doc('users/user_a')
+        .update({ 'settings.privacy': { accountVisibility: 'private' } }),
+    );
+
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const data = (await ctx.firestore().doc('users/user_a').get()).data() ?? {};
+      expect(data.settings).toEqual({
+        notifications: { pushEnabled: true },
+        privacy: { accountVisibility: 'public' },
+      });
+      expect(Object.keys(data)).not.toContain('settings.privacy');
+    });
   });
 
   it('denies writing followed categories for another user', async () => {
