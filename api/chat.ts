@@ -4,9 +4,16 @@ import { getAuth, getDb } from './lib/firebaseAdmin.js';
 import { checkRateLimit } from './lib/rateLimit.js';
 
 // gemini-2.0-flash was shut down (404) and moonshotai/kimi-k2-instruct was retired (410).
-// gemini-3.8-flash is the replacement the Gemini API itself points to; the -latest alias
-// follows Google's current stable Flash. Override with GEMINI_MODELS / NVIDIA_MODEL.
-const DEFAULT_GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest'] as const;
+// gemini-3.8-flash is the replacement the Gemini API itself points to, but it often answers
+// 503 "high demand", so keep fallbacks on other capacity: gemini-2.5-flash until its shutdown
+// (then a fast 404), and the -lite / -latest aliases that follow Google's current models.
+// GEMINI_MODELS / NVIDIA_MODEL are tried first; these defaults stay as the safety net.
+const DEFAULT_GEMINI_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-2.5-flash',
+  'gemini-flash-lite-latest',
+  'gemini-flash-latest',
+] as const;
 const DEFAULT_NVIDIA_MODEL = 'meta/llama-3.3-70b-instruct';
 const DEFAULT_NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -155,13 +162,14 @@ function parseNumberEnv(
   return Math.min(max, Math.max(min, parsed));
 }
 
+// Configured models go first; the defaults are appended so a stale env value (e.g. a retired
+// model) can't leave a provider without a working candidate.
 function parseModelList(value: string | undefined, fallback: readonly string[]): string[] {
   const parsed = (value ?? '')
     .split(/[,\n]/)
     .map((part) => part.trim())
     .filter(Boolean);
-  const unique = Array.from(new Set(parsed));
-  return unique.length > 0 ? unique : [...fallback];
+  return Array.from(new Set([...parsed, ...fallback]));
 }
 
 function normalizeSecret(value: string | undefined): string {

@@ -215,7 +215,8 @@ Copia `.env.example` a `.env.local` y completa lo necesario:
 - `NVIDIA_API_KEY` — API key de NVIDIA
 - `NVIDIA_BASE_URL` — URL base de la API NVIDIA
 - `NVIDIA_MODEL` — Modelo a usar (default `meta/llama-3.3-70b-instruct`)
-- `GEMINI_MODELS` — Lista de modelos Gemini separados por coma (default `gemini-3.8-flash,gemini-flash-latest`)
+- `GEMINI_MODELS` — Lista de modelos Gemini separados por coma (default `gemini-3.8-flash,gemini-2.5-flash,gemini-flash-lite-latest,gemini-flash-latest`)
+- `NVIDIA_MODEL` y `GEMINI_MODELS` se prueban primero; los modelos default quedan siempre como respaldo, así un modelo retirado en estas variables no deja el chat sin IA.
 - `CHAT_USER_MINUTE_LIMIT` / `CHAT_USER_DAY_LIMIT` — Rate limits por usuario
 - `CHAT_IP_MINUTE_LIMIT` / `CHAT_IP_DAY_LIMIT` — Rate limits por IP
 - `FIREBASE_SERVICE_ACCOUNT` — JSON de la cuenta de servicio de Firebase Admin (en una línea). `api/chat.ts` lo usa para verificar el consentimiento de IA y para acciones que escriben datos (crear grupo). Si falta, el consentimiento se verifica con Firestore REST y el token del usuario, pero esas acciones fallan.
