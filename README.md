@@ -322,7 +322,7 @@ Triggers de Firestore para operaciones server-side:
 ## Headers de seguridad (Vercel)
 
 - `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`
+- `X-Frame-Options: SAMEORIGIN` (el iframe de Firebase Auth en `/__/auth/iframe` se sirve desde el mismo dominio)
 - `X-XSS-Protection: 1; mode=block`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`

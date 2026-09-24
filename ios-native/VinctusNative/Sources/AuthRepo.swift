@@ -24,6 +24,7 @@ enum AuthRepoError: LocalizedError {
   case firebaseNotConfigured
   case missingGoogleClientID
   case googleURLSchemeNotConfigured
+  case googleSignInCanceled
   case missingGoogleIDToken
   case missingAppleIDToken
   case missingAppleNonce
@@ -35,7 +36,9 @@ enum AuthRepoError: LocalizedError {
     case .missingGoogleClientID:
       return "Google Sign-In is not configured. Missing Firebase client ID."
     case .googleURLSchemeNotConfigured:
-      return "Google Sign-In URL scheme is missing. Set GOOGLE_REVERSED_CLIENT_ID from REVERSED_CLIENT_ID."
+      return "Google Sign-In URL scheme is missing. Set GOOGLE_REVERSED_CLIENT_ID in Config/<Env>.local.xcconfig."
+    case .googleSignInCanceled:
+      return "Google Sign-In canceled."
     case .missingGoogleIDToken:
       return "Google Sign-In failed to return an ID token."
     case .missingAppleIDToken:
@@ -99,9 +102,14 @@ final class FirebaseAuthRepo: AuthRepo {
     }
 
     GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
-    let signInResult = try await GIDSignIn.sharedInstance.signIn(
-      withPresenting: presentingViewController
-    )
+    let signInResult: GIDSignInResult
+    do {
+      signInResult = try await GIDSignIn.sharedInstance.signIn(
+        withPresenting: presentingViewController
+      )
+    } catch let error as GIDSignInError where error.code == .canceled {
+      throw AuthRepoError.googleSignInCanceled
+    }
 
     guard let idToken = signInResult.user.idToken?.tokenString else {
       throw AuthRepoError.missingGoogleIDToken
