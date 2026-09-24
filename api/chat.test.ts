@@ -109,6 +109,8 @@ describe('api/chat', () => {
     process.env.NVIDIA_MODEL = '';
     process.env.FIREBASE_WEB_API_KEY = '';
     process.env.VITE_FIREBASE_API_KEY = '';
+    process.env.FIREBASE_PROJECT_ID = '';
+    process.env.VITE_FIREBASE_PROJECT_ID = '';
     mockVerifyIdToken.mockResolvedValue({ uid: 'user_1' });
     mockGetUserDocGet.mockResolvedValue({
       data: () => ({
@@ -356,5 +358,89 @@ describe('api/chat', () => {
     expect(result.statusCode).toBe(503);
     expect(result.payload).toEqual({ error: 'Unable to verify AI consent' });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  describe('when the Admin SDK cannot read the user doc', () => {
+    const firestoreConsentResponse = (consentGranted: boolean): Response =>
+      ({
+        json: vi.fn(async () => ({
+          fields: {
+            settings: {
+              mapValue: {
+                fields: {
+                  ai: {
+                    mapValue: { fields: { consentGranted: { booleanValue: consentGranted } } },
+                  },
+                },
+              },
+            },
+          },
+        })),
+        ok: true,
+        status: 200,
+      }) as unknown as Response;
+
+    const routeFetch = (firestoreResponse: Response) =>
+      vi.fn(async (url: string) =>
+        url.startsWith('https://firestore.googleapis.com/')
+          ? firestoreResponse
+          : createSuccessfulUpstreamResponse('respuesta'),
+      );
+
+    beforeEach(() => {
+      process.env.VITE_FIREBASE_PROJECT_ID = 'vinctus-test';
+      mockGetUserDocGet.mockRejectedValueOnce(new Error('FIREBASE_SERVICE_ACCOUNT not configured'));
+    });
+
+    it('reads consent through Firestore REST with the caller token', async () => {
+      const fetchMock = routeFetch(firestoreConsentResponse(true));
+      vi.stubGlobal('fetch', fetchMock);
+      const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+
+      await handler(createReq({ authorization: 'Bearer token_1' }), createRes(result));
+
+      expect(result.statusCode).toBe(200);
+      const [firestoreUrl, firestoreInit] = fetchMock.mock.calls[0] as unknown as [
+        string,
+        RequestInit,
+      ];
+      expect(firestoreUrl).toBe(
+        'https://firestore.googleapis.com/v1/projects/vinctus-test/databases/(default)/documents/users/user_1?mask.fieldPaths=settings.ai.consentGranted',
+      );
+      expect(firestoreInit.headers).toEqual({ Authorization: 'Bearer token_1' });
+    });
+
+    it('still requires consent when Firestore REST says it was not granted', async () => {
+      const fetchMock = routeFetch(firestoreConsentResponse(false));
+      vi.stubGlobal('fetch', fetchMock);
+      const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+
+      await handler(createReq({ authorization: 'Bearer token_1' }), createRes(result));
+
+      expect(result.statusCode).toBe(403);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('treats a missing user doc as no consent', async () => {
+      const fetchMock = routeFetch({ ok: false, status: 404 } as Response);
+      vi.stubGlobal('fetch', fetchMock);
+      const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+
+      await handler(createReq({ authorization: 'Bearer token_1' }), createRes(result));
+
+      expect(result.statusCode).toBe(403);
+    });
+
+    it('returns 503 when Firestore REST also fails', async () => {
+      const fetchMock = routeFetch({ ok: false, status: 500 } as Response);
+      vi.stubGlobal('fetch', fetchMock);
+      const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+
+      await handler(createReq({ authorization: 'Bearer token_1' }), createRes(result));
+
+      expect(result.statusCode).toBe(503);
+      expect(result.payload).toEqual({ error: 'Unable to verify AI consent' });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
   });
 });

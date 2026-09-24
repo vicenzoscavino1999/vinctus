@@ -217,6 +217,7 @@ Copia `.env.example` a `.env.local` y completa lo necesario:
 - `NVIDIA_MODEL` — Modelo a usar (default `moonshotai/kimi-k2-instruct`)
 - `CHAT_USER_MINUTE_LIMIT` / `CHAT_USER_DAY_LIMIT` — Rate limits por usuario
 - `CHAT_IP_MINUTE_LIMIT` / `CHAT_IP_DAY_LIMIT` — Rate limits por IP
+- `FIREBASE_SERVICE_ACCOUNT` — JSON de la cuenta de servicio de Firebase Admin (en una línea). `api/chat.ts` lo usa para verificar el consentimiento de IA y para acciones que escriben datos (crear grupo). Si falta, el consentimiento se verifica con Firestore REST y el token del usuario, pero esas acciones fallan.
 
 ## APIs externas
 
