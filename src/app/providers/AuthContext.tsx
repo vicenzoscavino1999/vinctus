@@ -24,7 +24,7 @@ import {
   type User,
   type ConfirmationResult,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { deleteField, doc, getDoc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { appleProvider, auth, googleProvider, db } from '@/shared/lib/firebase';
 import { trackAppCall, trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
 
@@ -119,6 +119,10 @@ const mapUser = (firebaseUser: User | null): AuthUser | null => {
     emailVerified: firebaseUser.emailVerified,
   };
 };
+
+// Older ensureUserProfile versions wrote these with setDoc, which stores dotted keys as
+// literal top-level field names instead of the nested settings fields
+const LEGACY_DOTTED_SETTINGS_KEYS = ['settings.privacy', 'settings.notifications'] as const;
 
 const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
   try {
@@ -233,7 +237,17 @@ const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
       if (Object.keys(updates).length > 0) {
         updates.updatedAt = serverTimestamp();
         trackFirestoreWrite('auth.ensureUserProfile.updateUser');
-        await setDoc(userRef, updates, { merge: true });
+        // updateDoc (not setDoc) so dotted keys like 'settings.privacy' are nested field paths
+        await updateDoc(userRef, updates);
+      }
+
+      const strayKeys = LEGACY_DOTTED_SETTINGS_KEYS.filter((key) => key in data);
+      if (strayKeys.length > 0) {
+        trackFirestoreWrite('auth.ensureUserProfile.removeStrayFields');
+        // setDoc treats keys as literal field names, which is what targets the stray fields
+        await setDoc(userRef, Object.fromEntries(strayKeys.map((key) => [key, deleteField()])), {
+          merge: true,
+        });
       }
     }
 
