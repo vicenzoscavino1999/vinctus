@@ -1,0 +1,6 @@
+// Target build settings for the Staging environment.
+// GOOGLE_REVERSED_CLIENT_ID is REVERSED_CLIENT_ID from GoogleService-Info-Staging.plist.
+// Set it in the uncommitted Staging.local.xcconfig next to this file (see README).
+GOOGLE_REVERSED_CLIENT_ID =
+
+#include? "Staging.local.xcconfig"

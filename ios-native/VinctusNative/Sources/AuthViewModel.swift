@@ -9,14 +9,22 @@ final class AuthViewModel: ObservableObject {
   @Published var infoMessage: String?
 
   private let repo: AuthRepo
+  private let profileBootstrap: UserProfileBootstrapRepo
 
   var currentUserID: String? {
     repo.currentUser?.uid
   }
 
-  init(repo: AuthRepo) {
+  init(
+    repo: AuthRepo,
+    profileBootstrap: UserProfileBootstrapRepo = FirebaseUserProfileBootstrapRepo()
+  ) {
     self.repo = repo
+    self.profileBootstrap = profileBootstrap
     self.isSignedIn = repo.currentUser != nil
+    if isSignedIn {
+      ensureUserProfile()
+    }
   }
 
   func signIn(email: String, password: String) {
@@ -27,6 +35,7 @@ final class AuthViewModel: ObservableObject {
         AppLog.auth.info("signIn.email.start")
         try await repo.signIn(email: email, password: password)
         isSignedIn = true
+        ensureUserProfile()
         AppLog.auth.info("signIn.email.success")
       } catch {
         AppLog.auth.error("signIn.email.failed errorType=\(AppLog.errorType(error), privacy: .public)")
@@ -43,6 +52,7 @@ final class AuthViewModel: ObservableObject {
         AppLog.auth.info("createAccount.email.start")
         try await repo.createAccount(email: email, password: password)
         isSignedIn = true
+        ensureUserProfile()
         AppLog.auth.info("createAccount.email.success")
       } catch {
         AppLog.auth.error(
@@ -61,7 +71,11 @@ final class AuthViewModel: ObservableObject {
         AppLog.auth.info("signIn.google.start")
         try await repo.signInWithGoogle(presentingViewController: presentingViewController)
         isSignedIn = true
+        ensureUserProfile()
         AppLog.auth.info("signIn.google.success")
+      } catch AuthRepoError.googleSignInCanceled {
+        AppLog.auth.info("signIn.google.canceled")
+        infoMessage = "Google Sign-In canceled."
       } catch {
         AppLog.auth.error("signIn.google.failed errorType=\(AppLog.errorType(error), privacy: .public)")
         errorMessage = error.localizedDescription
@@ -85,6 +99,7 @@ final class AuthViewModel: ObservableObject {
           fullName: fullName
         )
         isSignedIn = true
+        ensureUserProfile()
         AppLog.auth.info("signIn.apple.success")
       } catch {
         AppLog.auth.error("signIn.apple.failed errorType=\(AppLog.errorType(error), privacy: .public)")
@@ -125,6 +140,20 @@ final class AuthViewModel: ObservableObject {
           "signInAnonymously.failed errorType=\(AppLog.errorType(error), privacy: .public)"
         )
         errorMessage = error.localizedDescription
+      }
+    }
+  }
+
+  /// Creates or backfills the Firestore profile docs, like the web app does on every sign-in.
+  /// Runs in the background so a slow or offline write never blocks entering the app.
+  private func ensureUserProfile() {
+    Task {
+      do {
+        try await profileBootstrap.ensureCurrentUserProfile()
+      } catch {
+        AppLog.auth.error(
+          "ensureUserProfile.failed errorType=\(AppLog.errorType(error), privacy: .public)"
+        )
       }
     }
   }

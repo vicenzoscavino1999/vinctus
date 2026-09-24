@@ -27,6 +27,9 @@ coverage/
 .env.*
 !.env.example
 
+# iOS native local build settings (GOOGLE_REVERSED_CLIENT_ID per environment)
+ios-native/VinctusNative/Config/*.local.xcconfig
+
 # Logs
 npm-debug.log*
 yarn-debug.log*

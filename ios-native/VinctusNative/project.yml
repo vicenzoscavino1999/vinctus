@@ -48,8 +48,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: app.vinctus.social
         CODE_SIGN_ENTITLEMENTS: Resources/VinctusNative.entitlements
         INFOPLIST_FILE: Resources/Info.plist
-        # Set locally from REVERSED_CLIENT_ID in GoogleService-Info plist.
-        GOOGLE_REVERSED_CLIENT_ID: ''
       configs:
         DebugDev:
           VINCTUS_ENV: dev
@@ -59,6 +57,13 @@ targets:
           VINCTUS_ENV: prod
         ReleaseProd:
           VINCTUS_ENV: prod
+    # GOOGLE_REVERSED_CLIENT_ID lives here (and in the uncommitted *.local.xcconfig overrides),
+    # not in `settings`, because target settings would override the xcconfig value.
+    configFiles:
+      DebugDev: Config/Dev.xcconfig
+      DebugStaging: Config/Staging.xcconfig
+      DebugProd: Config/Prod.xcconfig
+      ReleaseProd: Config/Prod.xcconfig
     dependencies:
       - package: Firebase
         product: FirebaseAuth
