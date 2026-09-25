@@ -16,13 +16,15 @@ struct AuthGateView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: VinctusTokens.Spacing.lg) {
       VStack(alignment: .leading, spacing: 8) {
-        Text("VinctusNative")
+        Text("Vinctus")
           .font(.largeTitle)
           .bold()
 
-        Text("Base nativa iOS")
+        Text("Inicia sesion para continuar")
           .foregroundStyle(.secondary)
 
+        // Developer diagnostics stay out of App Store builds (App Review rejects test UI).
+        #if DEBUG
         HStack(spacing: 14) {
           VInlineStatus(title: "Env: \(AppEnvironment.current.rawValue)", isGood: true)
           VInlineStatus(
@@ -30,6 +32,7 @@ struct AuthGateView: View {
             isGood: FirebaseApp.app() != nil
           )
         }
+        #endif
       }
 
       if let error = authVM.errorMessage {
@@ -62,24 +65,24 @@ struct AuthGateView: View {
             .background(VinctusTokens.Color.surface2)
             .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.sm, style: .continuous))
 
-          SecureField("Password", text: $password)
+          SecureField("Contrasena", text: $password)
             .textContentType(.password)
             .padding(12)
             .background(VinctusTokens.Color.surface2)
             .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.sm, style: .continuous))
 
-          VButton("Sign in", variant: .primary) {
+          VButton("Ingresar", variant: .primary) {
             authVM.signIn(email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
           }
 
-          VButton("Create account", variant: .secondary) {
+          VButton("Crear cuenta", variant: .secondary) {
             authVM.createAccount(
               email: email.trimmingCharacters(in: .whitespacesAndNewlines),
               password: password
             )
           }
 
-          Button("Forgot password?") {
+          Button("Olvidaste tu contrasena?") {
             authVM.sendPasswordReset(email: email.trimmingCharacters(in: .whitespacesAndNewlines))
           }
           .font(.subheadline)
@@ -87,11 +90,11 @@ struct AuthGateView: View {
 
           Divider().padding(.vertical, 4)
 
-          Text("Social login")
+          Text("O continua con")
             .font(.subheadline)
             .foregroundStyle(.secondary)
 
-          VButton("Continue with Google", variant: .secondary) {
+          VButton("Continuar con Google", variant: .secondary) {
             AppLog.auth.info("signIn.google.tap")
             guard let presentingViewController = topViewControllerForGoogleSignIn() else {
               authVM.errorMessage = "Could not start Google Sign-In. Please try again."
@@ -112,6 +115,23 @@ struct AuthGateView: View {
         }
       }
 
+      // Apple asks social apps to have users accept terms that rule out objectionable content
+      // and abusive users (App Review Guideline 1.2).
+      VStack(alignment: .leading, spacing: 6) {
+        Text(
+          "Al continuar aceptas los Terminos de servicio y las Normas de la comunidad. En Vinctus no se tolera el contenido ofensivo ni los usuarios abusivos."
+        )
+        .foregroundStyle(.secondary)
+
+        HStack(spacing: 16) {
+          Link("Terminos de servicio", destination: LegalConfig.termsOfServiceURL)
+          Link("Normas de la comunidad", destination: LegalConfig.communityGuidelinesURL)
+        }
+        .foregroundStyle(VinctusTokens.Color.accent)
+      }
+      .font(.footnote)
+
+      #if DEBUG
       Button(showDebug ? "Hide debug" : "Show debug") {
         showDebug.toggle()
       }
@@ -135,6 +155,7 @@ struct AuthGateView: View {
           }
         }
       }
+      #endif
 
       Spacer()
     }

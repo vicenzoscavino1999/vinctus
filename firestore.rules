@@ -300,7 +300,10 @@ service cloud.firestore {
         && isAccountPublic(targetUid)
         && isValidFollowDoc(targetUid);
 
-      allow delete: if isAuthenticated() && request.auth.uid == uid;
+      // Either side can end the relationship: the follower unfollows, or the followed user
+      // removes the follower (e.g. when blocking them). Mirrors the followers rule above.
+      allow delete: if isAuthenticated()
+        && (request.auth.uid == uid || request.auth.uid == targetUid);
       // Allow idempotent updates (e.g. duplicate follow attempts) without opening extra fields.
       allow update: if isAuthenticated()
         && request.auth.uid == uid

@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		F4959BE6304D4258E3207F70 /* UserProfileBootstrapRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D6482438FECB08E71E74C0D /* UserProfileBootstrapRepo.swift */; };
+		10EC263FD908223BB393DB4A /* ModerationRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 716AD1141AB9AA2BB3B6CC8F /* ModerationRepo.swift */; };
+		4ADA75BDCBDC897A85B7A731 /* ModerationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1189B0D9AD1852D63121139 /* ModerationViews.swift */; };
 		02F41F5F99438C72D3C5C678 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA9C1E82EF5046931A4836E1 /* AuthViewModel.swift */; };
 		09FB5615596633DBD5D66CB5 /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91A189A9A27D16EDFC528BAB /* ProfileViewModel.swift */; };
 		0CE0763B58615D781C926DFC /* AIConsentRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D9DF1499FD92B5FAB4F8DDC /* AIConsentRepo.swift */; };
@@ -63,6 +65,8 @@
 
 /* Begin PBXFileReference section */
 		1D6482438FECB08E71E74C0D /* UserProfileBootstrapRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileBootstrapRepo.swift; sourceTree = "<group>"; };
+		716AD1141AB9AA2BB3B6CC8F /* ModerationRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModerationRepo.swift; sourceTree = "<group>"; };
+		B1189B0D9AD1852D63121139 /* ModerationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModerationViews.swift; sourceTree = "<group>"; };
 		235BE65D2CE0757438B70A55 /* Dev.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Dev.xcconfig; sourceTree = "<group>"; };
 		D6C09D4B377B9B02796800B2 /* Staging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Staging.xcconfig; sourceTree = "<group>"; };
 		B4C9BC91B686EE6CC279FA08 /* Prod.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Prod.xcconfig; sourceTree = "<group>"; };
@@ -186,6 +190,8 @@
 				26FE52B28F2FC44604BA6243 /* GroupViewModel.swift */,
 				22C10FCE85A81B518DE14724 /* LegalConfig.swift */,
 				96CAF38CE6383118EC248A7B /* MainTabView.swift */,
+				716AD1141AB9AA2BB3B6CC8F /* ModerationRepo.swift */,
+				B1189B0D9AD1852D63121139 /* ModerationViews.swift */,
 				C2673DC1E8F61273FA967957 /* PostCommentsRepo.swift */,
 				87AC161541773301749278DA /* PostDetailView.swift */,
 				5A86FFB513B46EC14B6D6E5E /* PostDetailViewModel.swift */,
@@ -313,6 +319,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				F4959BE6304D4258E3207F70 /* UserProfileBootstrapRepo.swift in Sources */,
+				10EC263FD908223BB393DB4A /* ModerationRepo.swift in Sources */,
+				4ADA75BDCBDC897A85B7A731 /* ModerationViews.swift in Sources */,
 				0CE0763B58615D781C926DFC /* AIConsentRepo.swift in Sources */,
 				9AA68A3394E43CD6F1560C3C /* AppEnvironment.swift in Sources */,
 				DC21EDB06F435E6ECE9D8984 /* AppLog.swift in Sources */,

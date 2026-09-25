@@ -22,6 +22,8 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  /** Set when the assistant created a group, to link straight to it. */
+  groupId?: string;
 }
 
 export default function AIChatPage() {
@@ -189,6 +191,7 @@ export default function AIChatPage() {
         role: 'assistant',
         content: response.response,
         timestamp: new Date(),
+        groupId: response.action?.type === 'createGroup' ? response.action.groupId : undefined,
       };
       setMessages((prev) => [...prev, assistantMessage]);
       setHistory(response.history);
@@ -313,6 +316,15 @@ export default function AIChatPage() {
                 >
                   <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
                 </div>
+
+                {msg.groupId && (
+                  <Link
+                    to={`/group/${msg.groupId}`}
+                    className="self-start rounded-full border border-brand-gold/40 px-3 py-1 text-xs text-brand-gold transition-colors hover:bg-brand-gold/10"
+                  >
+                    Ver grupo
+                  </Link>
+                )}
 
                 {msg.role === 'assistant' && voiceSupported && msg.id !== 'welcome' && (
                   <button

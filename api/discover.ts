@@ -126,6 +126,9 @@ class RequestError extends Error {
 const DISCOVER_CACHE = new Map<string, CacheEntry>();
 const CACHE_MAX_ENTRIES = 200;
 const REQUEST_TIMEOUT_MS = 9000;
+// Wikimedia blocks or throttles generic agents such as Node's default `node`
+// (https://meta.wikimedia.org/wiki/User-Agent_policy); the other sources also ask for one.
+const UPSTREAM_USER_AGENT = 'Vinctus/1.0 (+https://vinctus.vercel.app)';
 
 const SOURCE_DEFAULT_QUERY: Record<SupportedSource, string> = {
   arxiv: 'physics',
@@ -293,7 +296,10 @@ const fetchWithTimeout = async (url: string, label: string): Promise<Response> =
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await fetch(url, {
+      headers: { 'User-Agent': UPSTREAM_USER_AGENT },
+      signal: controller.signal,
+    });
     if (!response.ok) {
       const statusText = response.statusText || 'Unknown';
       throw new Error(`${label} failed (${response.status} ${statusText})`);

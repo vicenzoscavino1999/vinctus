@@ -7,10 +7,25 @@ interface GeminiMessage {
   parts: { text: string }[];
 }
 
+/** Something the assistant did on the user's behalf, e.g. the group it just created. */
+interface ChatAction {
+  type: 'createGroup';
+  groupId: string;
+}
+
 interface ChatResponse {
   response: string;
   history: GeminiMessage[];
+  action?: ChatAction;
 }
+
+const parseChatAction = (value: unknown): ChatAction | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const { type, groupId } = value as { type?: unknown; groupId?: unknown };
+  return type === 'createGroup' && typeof groupId === 'string' && groupId.length > 0
+    ? { type, groupId }
+    : undefined;
+};
 
 /**
  * Send a message to the AI chat via secure proxy
@@ -67,7 +82,9 @@ export async function sendChatMessage(
     throw new Error(errorMessage);
   }
 
-  return payload as ChatResponse;
+  const { action, ...rest } = payload as ChatResponse & { action?: unknown };
+  const parsedAction = parseChatAction(action);
+  return parsedAction ? { ...rest, action: parsedAction } : rest;
 }
 
-export type { GeminiMessage, ChatResponse };
+export type { GeminiMessage, ChatAction, ChatResponse };

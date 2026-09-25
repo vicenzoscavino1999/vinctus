@@ -5,6 +5,8 @@ struct PostDetailView: View {
   private let profileRepo: ProfileRepo
   private let onCommentCountChange: ((Int) -> Void)?
   @StateObject private var vm: PostDetailViewModel
+  @EnvironmentObject private var blockedUsers: BlockedUsersStore
+  @Environment(\.dismiss) private var dismiss
 
   init(
     item: FeedItem,
@@ -34,6 +36,13 @@ struct PostDetailView: View {
               }
 
               Spacer()
+
+              ModerationMenu(
+                target: .post(postID: item.id, authorID: item.authorID),
+                authorID: item.authorID,
+                authorName: item.authorName,
+                onBlocked: { dismiss() }
+              )
             }
 
             if !item.text.isEmpty {
@@ -91,8 +100,8 @@ struct PostDetailView: View {
           }
           .listRowSeparator(.hidden)
         } else {
-          ForEach(vm.comments) { comment in
-            CommentRow(comment: comment)
+          ForEach(vm.comments.filter { !blockedUsers.isBlocked($0.authorID) }) { comment in
+            CommentRow(postID: item.id, comment: comment)
               .listRowSeparator(.hidden)
           }
         }
@@ -213,6 +222,7 @@ struct PostDetailView: View {
 }
 
 private struct CommentRow: View {
+  let postID: String
   let comment: PostComment
 
   var body: some View {
@@ -228,6 +238,12 @@ private struct CommentRow: View {
               .foregroundStyle(.secondary)
           }
           Spacer()
+
+          ModerationMenu(
+            target: .comment(postID: postID, commentID: comment.id, authorID: comment.authorID),
+            authorID: comment.authorID,
+            authorName: comment.authorName
+          )
         }
 
         Text(comment.text)

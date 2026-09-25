@@ -94,6 +94,14 @@ function createNvidiaSuccessResponse(text = 'ok'): Response {
   } as unknown as Response;
 }
 
+function upstreamError(status: number, text: string): Response {
+  return {
+    ok: false,
+    status,
+    text: vi.fn(async () => text),
+  } as unknown as Response;
+}
+
 describe('api/chat', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -218,27 +226,18 @@ describe('api/chat', () => {
 
     expect(result.statusCode).toBe(504);
     expect(result.payload).toEqual({ error: 'AI provider timeout' });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it('falls back to NVIDIA when Gemini models are rate limited', async () => {
     process.env.NVIDIA_API_KEY = 'nvidia-test-key';
     process.env.NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
-    process.env.NVIDIA_MODEL = 'moonshotai/kimi-k2-instruct';
 
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 429,
-        text: vi.fn(async () => 'RESOURCE_EXHAUSTED'),
-      } as unknown as Response)
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 429,
-        text: vi.fn(async () => 'rate limit'),
-      } as unknown as Response)
-      .mockResolvedValueOnce(createNvidiaSuccessResponse('respuesta desde nvidia'));
+    const fetchMock = vi.fn(async (url: string) =>
+      url.includes('integrate.api.nvidia.com')
+        ? createNvidiaSuccessResponse('respuesta desde nvidia')
+        : upstreamError(429, 'RESOURCE_EXHAUSTED'),
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
@@ -250,12 +249,64 @@ describe('api/chat', () => {
     expect(result.statusCode).toBe(200);
     expect(result.payload).toEqual(
       expect.objectContaining({
-        model: 'moonshotai/kimi-k2-instruct',
+        model: 'meta/llama-3.3-70b-instruct',
         provider: 'nvidia',
         response: 'respuesta desde nvidia',
       }),
     );
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it('moves to another Gemini model when the first one is overloaded', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(upstreamError(503, 'This model is currently experiencing high demand'))
+      .mockResolvedValueOnce(createSuccessfulUpstreamResponse('respuesta desde 2.5'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({ authorization: 'Bearer token_1', body: { message: 'hola' } }),
+      createRes(result),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(result.payload).toEqual(
+      expect.objectContaining({ model: 'gemini-2.5-flash', response: 'respuesta desde 2.5' }),
+    );
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/gemini-3.8-flash:');
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('/gemini-2.5-flash:');
+  });
+
+  it('keeps the default NVIDIA model as a fallback when NVIDIA_MODEL is retired', async () => {
+    process.env.GEMINI_API_KEY = '';
+    process.env.NVIDIA_API_KEY = 'nvidia-test-key';
+    process.env.NVIDIA_MODEL = 'moonshotai/kimi-k2-instruct';
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(upstreamError(410, 'Gone'))
+      .mockResolvedValueOnce(createNvidiaSuccessResponse('respuesta desde llama'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({ authorization: 'Bearer token_1', body: { message: 'hola' } }),
+      createRes(result),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(result.payload).toEqual(
+      expect.objectContaining({
+        model: 'meta/llama-3.3-70b-instruct',
+        provider: 'nvidia',
+        response: 'respuesta desde llama',
+      }),
+    );
+    const requestedModels = fetchMock.mock.calls.map(
+      ([, init]) => JSON.parse(String((init as RequestInit).body)).model,
+    );
+    expect(requestedModels).toEqual(['moonshotai/kimi-k2-instruct', 'meta/llama-3.3-70b-instruct']);
   });
 
   it('uses Identity Toolkit lookup when verifyIdToken fails', async () => {

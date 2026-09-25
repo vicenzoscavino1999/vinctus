@@ -12,6 +12,7 @@ enum AppLog {
   static let posts = Logger(subsystem: subsystem, category: "posts")
   static let profile = Logger(subsystem: subsystem, category: "profile")
   static let ui = Logger(subsystem: subsystem, category: "ui")
+  static let moderation = Logger(subsystem: subsystem, category: "moderation")
   static let settings = Logger(subsystem: subsystem, category: "settings")
 
   /// Log errors without leaking PII by default.
