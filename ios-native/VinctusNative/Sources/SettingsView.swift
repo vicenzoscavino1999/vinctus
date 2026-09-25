@@ -10,10 +10,13 @@ struct SettingsView: View {
 
   var body: some View {
     List {
+      // Developer diagnostics stay out of App Store builds
+      #if DEBUG
       Section("App") {
         LabeledContent("Env") { Text(AppEnvironment.current.rawValue) }
         LabeledContent("Firebase") { Text(FirebaseApp.app() == nil ? "Not configured" : "Configured") }
       }
+      #endif
 
       Section("IA") {
         Button {
