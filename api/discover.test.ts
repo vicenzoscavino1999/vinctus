@@ -177,6 +177,12 @@ describe('api/discover', () => {
       }),
     );
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/w/rest.php/v1/search/page');
+    // Without it, Wikimedia rejects Node's default `node` agent and the REST search fails
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'User-Agent': expect.stringMatching(/^Vinctus\//) }),
+      }),
+    );
   });
 
   it('falls back to Wikipedia Action API when REST search fails', async () => {
