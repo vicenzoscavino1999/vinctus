@@ -7,6 +7,7 @@ struct MainTabView: View {
   private let feedRepo = FirebaseFeedRepo()
   private let profileRepo = FirebaseProfileRepo()
   private let groupsRepo = FirebaseGroupsRepo()
+  @StateObject private var blockedUsers = BlockedUsersStore(repo: FirebaseModerationRepo())
 
   init() {
     let appearance = UITabBarAppearance()
@@ -77,6 +78,10 @@ struct MainTabView: View {
     }
     .tint(VinctusTokens.Color.accent)
     .background(VinctusTokens.Color.background.ignoresSafeArea())
+    .environmentObject(blockedUsers)
+    .task {
+      await blockedUsers.refresh()
+    }
   }
 }
 

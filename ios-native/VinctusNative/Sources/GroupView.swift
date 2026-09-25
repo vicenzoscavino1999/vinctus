@@ -103,6 +103,7 @@ struct GroupsListView: View {
 struct GroupView: View {
   @StateObject private var vm: GroupDetailViewModel
   @StateObject private var connectivity = ConnectivityMonitor()
+  @EnvironmentObject private var blockedUsers: BlockedUsersStore
 
   init(repo: any GroupsRepo, groupID: String) {
     _vm = StateObject(wrappedValue: GroupDetailViewModel(repo: repo, groupID: groupID))
@@ -177,24 +178,34 @@ struct GroupView: View {
               .font(.footnote)
               .foregroundStyle(.secondary)
           } else {
-            ForEach(detail.recentPosts) { post in
-              VStack(alignment: .leading, spacing: 4) {
-                Text(post.title)
-                  .font(.subheadline)
-                  .foregroundStyle(.primary)
-                  .lineLimit(2)
+            ForEach(detail.recentPosts.filter { !blockedUsers.isBlocked($0.authorID) }) { post in
+              HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                  Text(post.title)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
 
-                HStack(spacing: 8) {
-                  Text(post.authorName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                  if let createdAt = post.createdAt {
-                    Text(createdAt, style: .relative)
+                  HStack(spacing: 8) {
+                    Text(post.authorName)
                       .font(.caption)
                       .foregroundStyle(.secondary)
+
+                    if let createdAt = post.createdAt {
+                      Text(createdAt, style: .relative)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
                   }
                 }
+
+                Spacer()
+
+                ModerationMenu(
+                  target: .post(postID: post.id, authorID: post.authorID),
+                  authorID: post.authorID,
+                  authorName: post.authorName
+                )
               }
               .padding(.vertical, 2)
             }

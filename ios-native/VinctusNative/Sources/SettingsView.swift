@@ -53,6 +53,12 @@ struct SettingsView: View {
         .disabled(viewModel.isLoadingConsent || viewModel.isSavingConsent || authVM.currentUserID == nil)
       }
 
+      Section("Privacidad") {
+        NavigationLink(destination: BlockedUsersView()) {
+          Label("Usuarios bloqueados", systemImage: "hand.raised")
+        }
+      }
+
       Section("Legal y soporte") {
         legalLinkRow(
           title: "Politica de privacidad",

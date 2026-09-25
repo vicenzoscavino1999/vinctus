@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FeedView: View {
   @StateObject private var vm: FeedViewModel
+  @EnvironmentObject private var blockedUsers: BlockedUsersStore
   private let profileRepo: ProfileRepo
   private let commentsRepo: any PostCommentsRepo
 
@@ -68,7 +69,7 @@ struct FeedView: View {
         .listRowSeparator(.hidden)
         .listRowBackground(SwiftUI.Color.clear)
       } else {
-        ForEach(vm.items) { item in
+        ForEach(vm.items.filter { !blockedUsers.isBlocked($0.authorID) }) { item in
           FeedCard(
             item: item,
             profileRepo: profileRepo,
@@ -200,6 +201,12 @@ private struct FeedCard: View {
           }
 
           Spacer()
+
+          ModerationMenu(
+            target: .post(postID: item.id, authorID: item.authorID),
+            authorID: item.authorID,
+            authorName: item.authorName
+          )
         }
 
         if !item.text.isEmpty {

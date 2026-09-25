@@ -16,6 +16,7 @@ struct GroupSummary: Identifiable, Hashable {
 struct GroupPostPreview: Identifiable, Hashable {
   let id: String
   let title: String
+  let authorID: String?
   let authorName: String
   let createdAt: Date?
 }
@@ -168,6 +169,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
       return GroupPostPreview(
         id: doc.documentID,
         title: normalizedPostTitle(title),
+        authorID: nonEmptyString(data["authorId"]) ?? nonEmptyString(data["authorID"]),
         authorName: authorName,
         createdAt: dateValue(data["createdAt"])
       )
