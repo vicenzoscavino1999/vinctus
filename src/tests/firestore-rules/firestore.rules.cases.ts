@@ -631,6 +631,45 @@ describe('Firestore Rules - critical access controls', () => {
     await assertFails(userBdb.doc('follow_requests/user_x_user_y').get());
   });
 
+  it('allows every write of blockUser and keeps follow removal to the two sides', async () => {
+    // user_a blocks user_b. Mirrors blockUser() in src/shared/lib/firestore/blockedUsers.ts and
+    // FirebaseModerationRepo.blockUser in ios-native: one batch, then separate cleanup writes.
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      const createdAt = new Date('2026-01-01T00:00:00Z');
+      await db.doc('users/user_a/following/user_b').set({ uid: 'user_b', createdAt });
+      await db.doc('users/user_a/followers/user_b').set({ uid: 'user_b', createdAt });
+      await db.doc('users/user_b/following/user_a').set({ uid: 'user_a', createdAt });
+      await db.doc('users/user_b/followers/user_a').set({ uid: 'user_a', createdAt });
+      await db.doc('users/user_c/following/user_d').set({ uid: 'user_d', createdAt });
+    });
+    await seedFollowRequest('user_b_user_a', 'user_b', 'user_a', 'pending');
+
+    const blockerDb = env.authenticatedContext('user_a').firestore();
+    const batch = blockerDb.batch();
+    batch.set(blockerDb.doc('users/user_a/blockedUsers/user_b'), {
+      blockedUid: 'user_b',
+      status: 'active',
+      blockedAt: serverTimestamp(),
+    });
+    batch.delete(blockerDb.doc('users/user_a/following/user_b'));
+    batch.delete(blockerDb.doc('users/user_a/followers/user_b'));
+    batch.delete(blockerDb.doc('users/user_b/followers/user_a'));
+    batch.delete(blockerDb.doc('users/user_a/directConversations/dm_user_a_user_b'));
+    await assertSucceeds(batch.commit());
+
+    // The followed user can remove the follower's edge; requests only once they exist
+    await assertSucceeds(blockerDb.doc('users/user_b/following/user_a').delete());
+    await assertSucceeds(blockerDb.doc('follow_requests/user_b_user_a').get());
+    await assertSucceeds(blockerDb.doc('follow_requests/user_b_user_a').delete());
+    await assertSucceeds(blockerDb.doc('follow_requests/user_a_user_b').get());
+    await assertFails(blockerDb.doc('follow_requests/user_a_user_b').delete());
+
+    const outsiderDb = env.authenticatedContext('user_x').firestore();
+    await assertFails(outsiderDb.doc('users/user_c/following/user_d').delete());
+  });
+
   it('enforces strict friend request updates and allowed status transitions', async () => {
     await seedFriendRequest('friend_pending', 'user_a', 'user_b', 'pending');
     await seedFriendRequest('friend_rejected', 'user_a', 'user_b', 'rejected');

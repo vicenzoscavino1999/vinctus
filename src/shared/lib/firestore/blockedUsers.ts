@@ -42,21 +42,30 @@ export async function blockUser(currentUid: string, blockedUid: string): Promise
     { merge: false },
   );
 
-  // Remove follow relationships in both directions
+  // Remove follow relationships the rules let the blocker delete, in both directions
   batch.delete(doc(db, 'users', currentUid, 'following', blockedUid));
   batch.delete(doc(db, 'users', currentUid, 'followers', blockedUid));
-  batch.delete(doc(db, 'users', blockedUid, 'following', currentUid));
   batch.delete(doc(db, 'users', blockedUid, 'followers', currentUid));
-
-  // Remove pending follow requests in both directions
-  batch.delete(doc(db, 'follow_requests', buildFollowRequestId(currentUid, blockedUid)));
-  batch.delete(doc(db, 'follow_requests', buildFollowRequestId(blockedUid, currentUid)));
 
   // Hide direct conversation from blocker (index only)
   const conversationId = `dm_${[currentUid, blockedUid].sort().join('_')}`;
   batch.delete(doc(db, 'users', currentUid, 'directConversations', conversationId));
 
   await batch.commit();
+
+  // Outside the batch so a denied cleanup can't undo the block (a batch is all-or-nothing):
+  // - the blocked user's following edge needs the rule that lets the followed user remove it
+  // - follow requests may only be deleted by a participant once they exist
+  const requestRefs = [
+    doc(db, 'follow_requests', buildFollowRequestId(currentUid, blockedUid)),
+    doc(db, 'follow_requests', buildFollowRequestId(blockedUid, currentUid)),
+  ];
+  await Promise.allSettled([
+    deleteDoc(doc(db, 'users', blockedUid, 'following', currentUid)),
+    ...requestRefs.map(async (requestRef) => {
+      if ((await getDoc(requestRef)).exists()) await deleteDoc(requestRef);
+    }),
+  ]);
 }
 
 export async function unblockUser(currentUid: string, blockedUid: string): Promise<void> {
