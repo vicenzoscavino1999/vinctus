@@ -1,5 +1,7 @@
 # VinctusNative (iOS)
 
+Publishing to the App Store / TestFlight: see [GUIA_APP_STORE.md](GUIA_APP_STORE.md) (Spanish).
+
 SwiftUI base app for the native iOS migration (Semana 4+).
 
 ## Generate project
@@ -41,7 +43,7 @@ cd ios-native/VinctusNative
 echo "GOOGLE_REVERSED_CLIENT_ID = $(/usr/libexec/PlistBuddy -c 'Print :REVERSED_CLIENT_ID' Resources/Firebase/GoogleService-Info-Dev.plist)" > Config/Dev.local.xcconfig
 ```
 
-3. Build and run using `VinctusNative-Dev` and validate `Continue with Google`.
+3. Build and run using `VinctusNative-Dev` and validate `Continuar con Google`.
 
 ## Run Dev build from CLI
 

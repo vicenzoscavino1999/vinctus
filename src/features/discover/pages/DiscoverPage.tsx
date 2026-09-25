@@ -39,6 +39,7 @@ import {
 import { getPublicArenaDebates } from '@/features/arena/api/queries';
 import { getPersonaById, type Debate } from '@/features/arena/types';
 import { getGlobalFeed, type PostCursor, type PostRead } from '@/features/posts/api';
+import { appendToStream, type AppendOnlyStream } from '@/features/discover/model/appendOnlyStream';
 import { toDate } from '@/shared/lib/formatUtils';
 import { getYouTubeThumbnailUrl } from '@/shared/lib/youtube';
 import { fetchYouTubeSearchVideos, type YouTubeSearchVideo } from '@/shared/lib/youtubeSearchApi';
@@ -260,6 +261,13 @@ const buildYouTubePublication = (
   };
 };
 
+const getPublicationDedupeKey = (item: PublicationStreamItem): string =>
+  item.source === 'community'
+    ? `community:${item.id}`
+    : item.source === 'youtube'
+      ? `youtube:${item.youtubeVideoId ?? item.id}`
+      : `editorial:${item.title.toLowerCase().trim()}`;
+
 type TrendPreviewItem = {
   id: string;
   title: string;
@@ -461,6 +469,11 @@ const DiscoverPage = () => {
   const [youtubeHasMore, setYoutubeHasMore] = useState(false);
   const [youtubeLoading, setYoutubeLoading] = useState(false);
   const [youtubeReady, setYoutubeReady] = useState(false);
+  // Query the current youtubePublications were loaded for; lags youtubeQuery while a search loads.
+  const [youtubeResultsQuery, setYoutubeResultsQuery] = useState<string | null>(null);
+  const [shownPublications, setShownPublications] = useState<
+    AppendOnlyStream<PublicationStreamItem>
+  >({ scope: '', items: [] });
   const [activeYouTubePublication, setActiveYouTubePublication] =
     useState<PublicationStreamItem | null>(null);
 
@@ -524,8 +537,12 @@ const DiscoverPage = () => {
       .slice(0, 6);
   }, [arenaDebates]);
 
-  const publicationStream = useMemo<PublicationStreamItem[]>(() => {
-    const targetCount = Math.max(PUBLICATION_BATCH_SIZE, visiblePublicationCount);
+  const publicationTargetCount = Math.max(PUBLICATION_BATCH_SIZE, visiblePublicationCount);
+
+  // Ideal mix for the current target count. It is recomputed from scratch, so posts or videos
+  // that load later land in the middle of it; the rendered feed only appends from it (below).
+  const candidatePublicationStream = useMemo<PublicationStreamItem[]>(() => {
+    const targetCount = publicationTargetCount;
     const isYouTubeSearchActive =
       youtubeQuery.trim().toLowerCase() !== YOUTUBE_FALLBACK_QUERY.toLowerCase();
 
@@ -562,13 +579,7 @@ const DiscoverPage = () => {
     const seen = new Set<string>();
 
     for (const item of merged) {
-      const normalizedTitle = item.title.toLowerCase().trim();
-      const dedupeKey =
-        item.source === 'community'
-          ? `community:${item.id}`
-          : item.source === 'youtube'
-            ? `youtube:${item.youtubeVideoId ?? item.id}`
-            : `editorial:${normalizedTitle}`;
+      const dedupeKey = getPublicationDedupeKey(item);
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
       uniqueItems.push(item);
@@ -589,7 +600,25 @@ const DiscoverPage = () => {
     }
 
     return uniqueItems;
-  }, [communityPublications, youtubePublications, visiblePublicationCount, youtubeQuery]);
+  }, [communityPublications, youtubePublications, publicationTargetCount, youtubeQuery]);
+
+  // Grow the rendered feed only once pending loads settle, and only by appending: items the user
+  // already scrolled past never move, so scrolling back up shows the same feed.
+  const publicationSourcesSettled =
+    communityReady && !communityLoading && youtubeResultsQuery === youtubeQuery && !youtubeLoading;
+  if (publicationSourcesSettled) {
+    const nextShownPublications = appendToStream(
+      shownPublications,
+      youtubeQuery,
+      candidatePublicationStream,
+      publicationTargetCount,
+      getPublicationDedupeKey,
+    );
+    if (nextShownPublications !== shownPublications) {
+      setShownPublications(nextShownPublications);
+    }
+  }
+  const publicationStream = shownPublications.scope === youtubeQuery ? shownPublications.items : [];
 
   const hasMoreEditorial = visiblePublicationCount < PUBLICATION_MAX_ITEMS;
   const hasMorePublications = communityHasMore || youtubeHasMore || hasMoreEditorial;
@@ -665,6 +694,7 @@ const DiscoverPage = () => {
         if (active) {
           setYoutubeLoading(false);
           setYoutubeReady(true);
+          setYoutubeResultsQuery(youtubeQuery);
         }
       }
     };
@@ -1029,7 +1059,8 @@ const DiscoverPage = () => {
   }, [filteredCategories, loadTrendPreview]);
 
   useEffect(() => {
-    if (!hasMorePublications) return;
+    // Wait for the current batch to render before asking for the next one.
+    if (!hasMorePublications || !publicationSourcesSettled) return;
     const sentinel = publicationLoadMoreRef.current;
     if (!sentinel) return;
 
@@ -1062,6 +1093,7 @@ const DiscoverPage = () => {
     return () => observer.disconnect();
   }, [
     hasMorePublications,
+    publicationSourcesSettled,
     communityHasMore,
     youtubeHasMore,
     loadMoreCommunityPublications,
@@ -2009,9 +2041,14 @@ const DiscoverPage = () => {
               renderPublicationFeedItem(publication, index),
             )}
           </div>
+          {publicationStream.length === 0 && (
+            <p className="py-10 text-center text-[11px] uppercase tracking-wider text-neutral-500">
+              Cargando publicaciones...
+            </p>
+          )}
         </div>
 
-        {hasMorePublications && (
+        {hasMorePublications && publicationStream.length > 0 && (
           <div className="mt-7 flex flex-col items-center gap-3">
             <button
               type="button"

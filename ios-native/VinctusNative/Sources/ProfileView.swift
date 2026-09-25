@@ -4,6 +4,7 @@ struct ProfileView: View {
   let userID: String
 
   @StateObject private var vm: ProfileViewModel
+  @EnvironmentObject private var authVM: AuthViewModel
 
   init(repo: ProfileRepo, userID: String) {
     self.userID = userID
@@ -116,6 +117,17 @@ struct ProfileView: View {
     .listStyle(.insetGrouped)
     .navigationTitle(vm.profile?.displayName ?? "Perfil")
     .navigationBarTitleDisplayMode(.inline)
+    .toolbar {
+      ToolbarItem(placement: .topBarTrailing) {
+        if userID != authVM.currentUserID {
+          ModerationMenu(
+            target: .user(userID: userID),
+            authorID: userID,
+            authorName: vm.profile?.displayName ?? "este usuario"
+          )
+        }
+      }
+    }
     .task(id: userID) {
       await vm.load(userID: userID)
     }
