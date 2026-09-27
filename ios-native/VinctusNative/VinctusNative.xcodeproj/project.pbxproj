@@ -12,6 +12,7 @@
 		0CE0763B58615D781C926DFC /* AIConsentRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D9DF1499FD92B5FAB4F8DDC /* AIConsentRepo.swift */; };
 		0D34F6877EFB0CAB0EA18CA4 /* DeleteAccountRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = B772B059C02A23108B14BB2F /* DeleteAccountRepo.swift */; };
 		172E6F17AFA31216AF8F4B1A /* PostCommentsRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2673DC1E8F61273FA967957 /* PostCommentsRepo.swift */; };
+		1BAC67BD621D13F0522D21D1 /* AgeAssurance.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB582285AF9DD60015B0F366 /* AgeAssurance.swift */; };
 		1FD745B241CC985DA29E71E4 /* VinctusNativeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32FBE102A72FA92BC6E78DE8 /* VinctusNativeTests.swift */; };
 		21CF725A4E12453C0FEE51E2 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F9EE591DFED4E4354C5765A /* ProfileView.swift */; };
 		258B93107D59AE1D2710F3C7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0E6159A864B4EAEF43187E9D /* Assets.xcassets */; };
@@ -107,6 +108,7 @@
 		B2619FF522552A7B09CCF96E /* ModerationRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModerationRepo.swift; sourceTree = "<group>"; };
 		B772B059C02A23108B14BB2F /* DeleteAccountRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteAccountRepo.swift; sourceTree = "<group>"; };
 		B97C2ED97BA8671BCE68D4D2 /* FeedRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedRepo.swift; sourceTree = "<group>"; };
+		BB582285AF9DD60015B0F366 /* AgeAssurance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgeAssurance.swift; sourceTree = "<group>"; };
 		BE62D674D9DAFE9F84660E60 /* Firebase */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Firebase; path = Resources/Firebase; sourceTree = SOURCE_ROOT; };
 		BEA6D982A8EF52916A959CEE /* AppLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLog.swift; sourceTree = "<group>"; };
 		C2673DC1E8F61273FA967957 /* PostCommentsRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostCommentsRepo.swift; sourceTree = "<group>"; };
@@ -163,6 +165,7 @@
 		7E35AC2003C6EC59284F4C89 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				BB582285AF9DD60015B0F366 /* AgeAssurance.swift */,
 				6D9DF1499FD92B5FAB4F8DDC /* AIConsentRepo.swift */,
 				1D2857E7CB3FBA00E77D4226 /* AIRepo.swift */,
 				37E43DFFCCB5C7BD188F6B65 /* AIViews.swift */,
@@ -333,6 +336,7 @@
 				0CE0763B58615D781C926DFC /* AIConsentRepo.swift in Sources */,
 				EE76FE36210568580CEA8628 /* AIRepo.swift in Sources */,
 				D01B65DBBECE937BD34D658A /* AIViews.swift in Sources */,
+				1BAC67BD621D13F0522D21D1 /* AgeAssurance.swift in Sources */,
 				9AA68A3394E43CD6F1560C3C /* AppEnvironment.swift in Sources */,
 				DC21EDB06F435E6ECE9D8984 /* AppLog.swift in Sources */,
 				DC9D3D7FCAFD3227F0940FFA /* AuthGateView.swift in Sources */,
