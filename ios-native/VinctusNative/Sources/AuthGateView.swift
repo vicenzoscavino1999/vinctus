@@ -89,7 +89,7 @@ struct AuthGateView: View {
           RoundedRectangle(cornerRadius: 24, style: .continuous)
             .stroke(.white.opacity(0.12), lineWidth: 1)
         )
-        .shadow(color: logoGlow.opacity(0.45), radius: 28, y: 8)
+        .shadow(color: logoGlow.opacity(0.25), radius: 28, y: 6)
         .accessibilityHidden(true)
 
       Text("Vinctus")
@@ -259,7 +259,7 @@ struct AuthGateView: View {
     ZStack {
       VinctusTokens.Color.background
       RadialGradient(
-        colors: [logoGlow.opacity(0.28), .clear],
+        colors: [logoGlow.opacity(0.14), .clear],
         center: .top,
         startRadius: 10,
         endRadius: 420
@@ -276,8 +276,8 @@ struct AuthGateView: View {
 
   // MARK: Helpers
 
-  /// The blue of the Vinctus logo.
-  private var logoGlow: SwiftUI.Color { SwiftUI.Color(red: 0.36, green: 0.70, blue: 1.0) }
+  /// Soft light behind the white Vinctus logo.
+  private var logoGlow: SwiftUI.Color { SwiftUI.Color(red: 0.85, green: 0.88, blue: 0.95) }
 
   private var trimmedEmail: String {
     email.trimmingCharacters(in: .whitespacesAndNewlines)
