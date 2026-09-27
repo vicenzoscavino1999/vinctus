@@ -140,6 +140,8 @@ final class FirebaseAuthRepo: AuthRepo {
   func sendPasswordReset(email: String) async throws {
     guard FirebaseApp.app() != nil else { throw AuthRepoError.firebaseNotConfigured }
 
+    // The reset email follows the app's language (Spanish) instead of Firebase's default English.
+    Auth.auth().languageCode = "es"
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
       Auth.auth().sendPasswordReset(withEmail: email) { error in
         if let error = error {

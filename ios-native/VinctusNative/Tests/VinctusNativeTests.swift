@@ -1,3 +1,4 @@
+import FirebaseAuth
 import XCTest
 @testable import VinctusNative
 
@@ -109,5 +110,26 @@ final class AIChatHistoryTests: XCTestCase {
     XCTAssertLessThanOrEqual(trimmed.reduce(0) { $0 + $1.text.count }, 12_000)
     XCTAssertEqual(trimmed.first?.role, "user")
     XCTAssertEqual(trimmed.last?.text, "ok")
+  }
+}
+
+@MainActor
+final class PasswordResetTests: XCTestCase {
+  func testEmailCheck() {
+    XCTAssertTrue(AuthViewModel.looksLikeEmail("ana@vinctus.app"))
+    XCTAssertFalse(AuthViewModel.looksLikeEmail(""))
+    XCTAssertFalse(AuthViewModel.looksLikeEmail("ana"))
+    XCTAssertFalse(AuthViewModel.looksLikeEmail("ana@vinctus"))
+    XCTAssertFalse(AuthViewModel.looksLikeEmail("ana @vinctus.app"))
+  }
+
+  func testFirebaseErrorsAreShownInSpanish() {
+    func error(_ code: AuthErrorCode) -> NSError {
+      NSError(domain: AuthErrorDomain, code: code.rawValue)
+    }
+
+    XCTAssertEqual(AuthViewModel.message(for: error(.invalidEmail)), "Escribe un email válido.")
+    XCTAssertEqual(AuthViewModel.message(for: error(.wrongPassword)), "Email o contraseña incorrectos.")
+    XCTAssertTrue(AuthViewModel.message(for: error(.userDisabled)).hasPrefix("Tu cuenta fue suspendida"))
   }
 }

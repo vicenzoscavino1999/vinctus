@@ -13,6 +13,7 @@ struct AuthGateView: View {
   @State private var appleRawNonce = ""
   @State private var showDebug = false
   @State private var isShowingTerms = false
+  @State private var isShowingPasswordReset = false
   /// Sign-in action waiting for the terms to be accepted.
   @State private var pendingAction: (() -> Void)?
   // Remembered on this device so returning users aren't asked on every sign-in.
@@ -53,7 +54,15 @@ struct AuthGateView: View {
     }
     .scrollDismissesKeyboard(.interactively)
     .background(background)
+    .sheet(isPresented: $isShowingPasswordReset) {
+      PasswordResetSheet(initialEmail: trimmedEmail)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
     .onAppear {
+      if ProcessInfo.processInfo.arguments.contains("-VinctusShowPasswordReset") {
+        isShowingPasswordReset = true
+      }
       // Lets the screenshot workflow (.github/workflows/ios-screenshots.yml) capture the sheet.
       if ProcessInfo.processInfo.arguments.contains("-VinctusShowTerms") {
         isShowingTerms = true
@@ -197,7 +206,7 @@ struct AuthGateView: View {
       HStack {
         Spacer()
         Button("¿Olvidaste tu contraseña?") {
-          authVM.sendPasswordReset(email: trimmedEmail)
+          isShowingPasswordReset = true
         }
         .font(.footnote)
         .foregroundStyle(VinctusTokens.Color.accent)
@@ -515,5 +524,90 @@ private struct AuthBanner: View {
     .padding(12)
     .background(tint.opacity(0.12))
     .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.sm, style: .continuous))
+  }
+}
+
+/// Asks for the account email and sends Firebase's password reset link to it.
+private struct PasswordResetSheet: View {
+  @EnvironmentObject private var authVM: AuthViewModel
+  @Environment(\.dismiss) private var dismiss
+  @State private var email: String
+  @State private var isSending = false
+  @State private var errorMessage: String?
+  @State private var sentTo: String?
+
+  init(initialEmail: String) {
+    _email = State(initialValue: initialEmail)
+  }
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: VinctusTokens.Spacing.lg) {
+        Image(systemName: sentTo == nil ? "key.fill" : "envelope.badge.fill")
+          .font(.system(size: 36))
+          .foregroundStyle(VinctusTokens.Color.accent)
+
+        if let sentTo {
+          Text("Revisa tu correo")
+            .font(.title2.bold())
+          Text(
+            "Si existe una cuenta con \(sentTo), te enviamos un enlace para crear una contraseña nueva. Revisa también la carpeta de spam."
+          )
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+          Text("Si entras con Apple o Google, no necesitas contraseña: usa ese botón para entrar.")
+            .font(.footnote)
+            .foregroundStyle(VinctusTokens.Color.textMuted)
+
+          VButton("Volver a iniciar sesión", variant: .primary) {
+            dismiss()
+          }
+        } else {
+          Text("Recuperar contraseña")
+            .font(.title2.bold())
+          Text("Escribe el email de tu cuenta y te enviaremos un enlace para crear una contraseña nueva.")
+            .foregroundStyle(VinctusTokens.Color.textMuted)
+
+          AuthField(systemImage: "envelope") {
+            TextField("Email", text: $email)
+              .textInputAutocapitalization(.never)
+              .keyboardType(.emailAddress)
+              .autocorrectionDisabled()
+              .textContentType(.username)
+              .submitLabel(.send)
+              .onSubmit(send)
+          }
+
+          if let errorMessage {
+            AuthBanner(text: errorMessage, systemImage: "exclamationmark.triangle.fill", tint: .red)
+          }
+
+          VButton(isSending ? "Enviando..." : "Enviar enlace", variant: .primary, action: send)
+            .disabled(isSending)
+
+          Button("Cancelar") {
+            dismiss()
+          }
+          .frame(maxWidth: .infinity)
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+        }
+      }
+      .padding(VinctusTokens.Spacing.xl)
+    }
+    .background(VinctusTokens.Color.surface.ignoresSafeArea())
+  }
+
+  private func send() {
+    guard !isSending else { return }
+    isSending = true
+    errorMessage = nil
+    Task {
+      let target = email.trimmingCharacters(in: .whitespacesAndNewlines)
+      if let error = await authVM.requestPasswordReset(email: target) {
+        errorMessage = error
+      } else {
+        sentTo = target
+      }
+      isSending = false
+    }
   }
 }
