@@ -12,7 +12,7 @@ struct CreatePostView: View {
       VStack(alignment: .leading, spacing: VinctusTokens.Spacing.lg) {
         VCard {
           VStack(alignment: .leading, spacing: VinctusTokens.Spacing.md) {
-            Text("Nueva publicacion")
+            Text("Nueva publicación")
               .font(.headline)
 
             ZStack(alignment: .topLeading) {
@@ -74,7 +74,7 @@ struct CreatePostView: View {
               .disabled(!vm.canSubmit)
 
               if vm.canRetryPendingSubmission {
-                VButton("Reintentar envio", variant: .secondary) {
+                VButton("Reintentar envío", variant: .secondary) {
                   vm.retryPendingSubmission()
                 }
               }

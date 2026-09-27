@@ -71,13 +71,13 @@ enum AIRepoError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .firebaseNotConfigured:
-      return "Firebase no esta configurado."
+      return "Firebase no está configurado."
     case .userNotAuthenticated:
-      return "Debes iniciar sesion."
+      return "Debes iniciar sesión."
     case .server(let message):
       return message
     case .invalidResponse:
-      return "La IA devolvio una respuesta invalida. Intenta de nuevo."
+      return "La IA devolvió una respuesta inválida. Intenta de nuevo."
     }
   }
 }
@@ -224,13 +224,13 @@ final class FirebaseAIRepo: AIRepo {
   private static func chatErrorMessage(status: Int, serverMessage: String?) -> String {
     switch status {
     case 401:
-      return "Tu sesion expiro. Vuelve a iniciar sesion."
+      return "Tu sesión expiró. Vuelve a iniciar sesión."
     case 403:
       return serverMessage ?? "Debes aceptar el consentimiento de IA."
     case 429:
-      return "Llegaste al limite de mensajes por ahora. Intenta mas tarde."
+      return "Llegaste al límite de mensajes por ahora. Intenta más tarde."
     case 504:
-      return "La IA tardo demasiado en responder. Intenta de nuevo."
+      return "La IA tardó demasiado en responder. Intenta de nuevo."
     default:
       return "No se pudo contactar a la IA. Intenta de nuevo."
     }

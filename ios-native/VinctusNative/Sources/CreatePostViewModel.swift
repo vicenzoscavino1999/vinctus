@@ -67,12 +67,12 @@ final class CreatePostViewModel: ObservableObject {
       return
     }
     guard normalizedDraft.count <= characterLimit else {
-      errorMessage = "El texto supera el limite de \(characterLimit) caracteres."
+      errorMessage = "El texto supera el límite de \(characterLimit) caracteres."
       return
     }
 
     if !allowDuplicateCooldownBypass, isLikelyDuplicate(draft: normalizedDraft) {
-      infoMessage = "Este texto ya se publico hace unos segundos."
+      infoMessage = "Este texto ya se publicó hace unos segundos."
       return
     }
 
@@ -103,7 +103,7 @@ final class CreatePostViewModel: ObservableObject {
         lastPublishedDraftText = normalizedDraft
         lastPublishedAt = Date()
         draftText = ""
-        infoMessage = "Publicacion enviada."
+        infoMessage = "Publicación enviada."
         isSubmitting = false
       } catch {
         AppLog.posts.error(

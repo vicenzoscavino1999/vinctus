@@ -32,15 +32,15 @@ enum PostCommentsRepoError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .firebaseNotConfigured:
-      return "Firebase no esta configurado."
+      return "Firebase no está configurado."
     case .userNotAuthenticated:
-      return "Debes iniciar sesion para comentar."
+      return "Debes iniciar sesión para comentar."
     case .invalidPostID:
       return "No se pudo resolver el post."
     case .emptyComment:
       return "Escribe un comentario antes de enviar."
     case .commentTooLong(let limit):
-      return "El comentario supera el limite de \(limit) caracteres."
+      return "El comentario supera el límite de \(limit) caracteres."
     case .missingSnapshot:
       return "No se pudo cargar comentarios."
     }

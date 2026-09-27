@@ -85,7 +85,7 @@ struct ModerationMenu: View {
         .contentShape(Rectangle())
     }
     .buttonStyle(.borderless)
-    .accessibilityLabel("Mas opciones")
+    .accessibilityLabel("Más opciones")
     .disabled(isUpdatingBlock)
     .sheet(isPresented: $isShowingReport) {
       ReportSheet(target: target, repo: blockedUsers.repo)
@@ -101,7 +101,7 @@ struct ModerationMenu: View {
       Button("Cancelar", role: .cancel) {}
     } message: {
       Text(
-        "Dejaras de ver sus publicaciones y comentarios, y se eliminara el seguimiento entre ustedes. Puedes desbloquearlo en Ajustes."
+        "Dejarás de ver sus publicaciones y comentarios, y se eliminará el seguimiento entre ustedes. Puedes desbloquearlo en Ajustes."
       )
     }
     .alert(
@@ -173,7 +173,7 @@ struct ReportSheet: View {
           Section {
             Label("Gracias. Revisaremos tu denuncia.", systemImage: "checkmark.shield")
           } footer: {
-            Text("El equipo de moderacion revisa las denuncias y retira el contenido que incumple las normas de la comunidad.")
+            Text("El equipo de moderación revisa las denuncias y retira el contenido que incumple las normas de la comunidad.")
           }
         } else {
           Section("Motivo") {

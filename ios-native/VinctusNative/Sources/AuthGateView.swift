@@ -23,7 +23,7 @@ struct AuthGateView: View {
             .font(.largeTitle)
             .bold()
 
-          Text("Inicia sesion para continuar")
+          Text("Inicia sesión para continuar")
             .foregroundStyle(.secondary)
 
           // Developer diagnostics stay out of App Store builds (App Review rejects test UI).
@@ -70,7 +70,7 @@ struct AuthGateView: View {
               .background(VinctusTokens.Color.surface2)
               .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.sm, style: .continuous))
 
-            SecureField("Contrasena", text: $password)
+            SecureField("Contraseña", text: $password)
               .textContentType(.password)
               .padding(12)
               .background(VinctusTokens.Color.surface2)
@@ -89,7 +89,7 @@ struct AuthGateView: View {
             }
             .requiresAcceptedTerms(acceptedTerms)
 
-            Button("Olvidaste tu contrasena?") {
+            Button("¿Olvidaste tu contraseña?") {
               authVM.sendPasswordReset(email: email.trimmingCharacters(in: .whitespacesAndNewlines))
             }
             .font(.subheadline)
@@ -97,14 +97,14 @@ struct AuthGateView: View {
 
             Divider().padding(.vertical, 4)
 
-            Text("O continua con")
+            Text("O continúa con")
               .font(.subheadline)
               .foregroundStyle(.secondary)
 
             VButton("Continuar con Google", variant: .secondary) {
               AppLog.auth.info("signIn.google.tap")
               guard let presentingViewController = topViewControllerForGoogleSignIn() else {
-                authVM.errorMessage = "No se pudo abrir el inicio de sesion con Google. Intenta de nuevo."
+                authVM.errorMessage = "No se pudo abrir el inicio de sesión con Google. Intenta de nuevo."
                 return
               }
               authVM.signInWithGoogle(presentingViewController: presentingViewController)
@@ -137,7 +137,7 @@ struct AuthGateView: View {
               Text("Debug")
                 .font(.headline)
 
-              Text("Acciones tecnicas (no productivo).")
+              Text("Acciones técnicas (no productivo).")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
@@ -169,7 +169,7 @@ struct AuthGateView: View {
             .font(.title3)
             .foregroundStyle(acceptedTerms ? VinctusTokens.Color.accent : .secondary)
           Text(
-            "Acepto los Terminos de servicio y las Normas de la comunidad. Entiendo que en Vinctus no se tolera el contenido ofensivo ni los usuarios abusivos, y que ese contenido se elimina y sus autores son expulsados."
+            "Acepto los Términos de servicio y las Normas de la comunidad. Entiendo que en Vinctus no se tolera el contenido ofensivo ni los usuarios abusivos, y que ese contenido se elimina y sus autores son expulsados."
           )
           .foregroundStyle(.primary)
           .multilineTextAlignment(.leading)
@@ -179,7 +179,7 @@ struct AuthGateView: View {
       .accessibilityAddTraits(acceptedTerms ? .isSelected : [])
 
       HStack(spacing: 16) {
-        Link("Terminos de servicio", destination: LegalConfig.termsOfServiceURL)
+        Link("Términos de servicio", destination: LegalConfig.termsOfServiceURL)
         Link("Normas de la comunidad", destination: LegalConfig.communityGuidelinesURL)
       }
       .foregroundStyle(VinctusTokens.Color.accent)
@@ -224,11 +224,11 @@ struct AuthGateView: View {
     switch result {
     case .success(let authorization):
       guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
-        authVM.errorMessage = "No se pudo iniciar sesion con Apple. Intenta de nuevo."
+        authVM.errorMessage = "No se pudo iniciar sesión con Apple. Intenta de nuevo."
         return
       }
       guard !appleRawNonce.isEmpty else {
-        authVM.errorMessage = "No se pudo iniciar sesion con Apple. Intenta de nuevo."
+        authVM.errorMessage = "No se pudo iniciar sesión con Apple. Intenta de nuevo."
         return
       }
       guard
@@ -236,7 +236,7 @@ struct AuthGateView: View {
         let idTokenString = String(data: identityToken, encoding: .utf8),
         !idTokenString.isEmpty
       else {
-        authVM.errorMessage = "No se pudo iniciar sesion con Apple. Intenta de nuevo."
+        authVM.errorMessage = "No se pudo iniciar sesión con Apple. Intenta de nuevo."
         return
       }
 
@@ -251,7 +251,7 @@ struct AuthGateView: View {
       if let authError = error as? ASAuthorizationError, authError.code == .canceled {
         AppLog.auth.info("signIn.apple.canceled")
         authVM.errorMessage = nil
-        authVM.infoMessage = "Inicio de sesion con Apple cancelado."
+        authVM.infoMessage = "Inicio de sesión con Apple cancelado."
         return
       }
       AppLog.auth.error("signIn.apple.failed errorType=\(AppLog.errorType(error), privacy: .public)")

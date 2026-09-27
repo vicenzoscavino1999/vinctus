@@ -97,7 +97,7 @@ private struct ProfileRootView: View {
         ProfileView(repo: repo, userID: currentUserID)
       } else {
         VCard {
-          Text("No hay sesion activa.")
+          Text("No hay sesión activa.")
             .foregroundStyle(VinctusTokens.Color.textMuted)
         }
         .padding()

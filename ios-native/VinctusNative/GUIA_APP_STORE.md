@@ -59,6 +59,7 @@ En Xcode, abre el target **VinctusNative** y la pestaña **Signing & Capabilitie
 - **Team**: tu equipo de Apple Developer.
 - **Bundle Identifier**: `app.vinctus.social`.
 - **Sign in with Apple** ya viene activado en `Resources/VinctusNative.entitlements`.
+- **Declared Age Range** (verificación de edad para leyes de EE. UU.) también viene en ese archivo. Si Xcode dice que el perfil no incluye esa capacidad, actívala en developer.apple.com > Identifiers > `app.vinctus.social`.
 
 ## 4. Probar la app
 
@@ -72,6 +73,7 @@ En Xcode, abre el target **VinctusNative** y la pestaña **Signing & Capabilitie
    - [ ] **Desbloquear**: en **Perfil > Ajustes > Usuarios bloqueados**.
    - [ ] **Eliminar cuenta**: en **Ajustes > Zona de riesgo**. Pruebalo con una cuenta de prueba. Si la cuenta es de Apple, la app pide confirmar con Apple.
    - [ ] El icono aparece y el nombre bajo el icono es **Vinctus**.
+   - [ ] En IA, el enlace **Denunciar respuesta** abre el formulario de denuncia.
    - [ ] **IA**: en **Descubrir > Inteligencia artificial**, abre Chat con IA y Arena IA. La primera vez pide permiso; despues responde. El permiso se retira en **Ajustes > IA**.
 
 ## 5. Publicar las funciones, las reglas y las paginas legales

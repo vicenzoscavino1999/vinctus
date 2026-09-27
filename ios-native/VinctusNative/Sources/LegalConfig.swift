@@ -31,7 +31,7 @@ enum LegalConfig {
   }
 
   static var aiConsentDescription: String {
-    "Chat con IA y Arena IA envian lo que escribes a proveedores externos de IA (Google Gemini y NVIDIA) para generar respuestas. No se envian tu correo ni tu nombre."
+    "Chat con IA y Arena IA envían lo que escribes a proveedores externos de IA (Google Gemini y NVIDIA) para generar respuestas. No se envían tu correo ni tu nombre."
   }
 
   private static func stringValue(for key: String, fallback: String) -> String {

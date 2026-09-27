@@ -78,13 +78,13 @@ enum DeleteAccountRepoError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .firebaseNotConfigured:
-      return "Firebase no esta configurado."
+      return "Firebase no está configurado."
     case .invalidResponse:
-      return "Respuesta invalida del servidor para eliminar cuenta."
+      return "Respuesta inválida del servidor para eliminar cuenta."
     case .requestNotAccepted:
-      return "La solicitud de eliminacion no fue aceptada."
+      return "La solicitud de eliminación no fue aceptada."
     case .legacyDeleteFailed:
-      return "No se pudo iniciar la eliminacion de cuenta."
+      return "No se pudo iniciar la eliminación de cuenta."
     }
   }
 }

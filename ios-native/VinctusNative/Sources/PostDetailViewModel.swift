@@ -52,7 +52,7 @@ final class PostDetailViewModel: ObservableObject {
       return
     }
     guard normalizedDraft.count <= commentLimit else {
-      errorMessage = "El comentario supera el limite de \(commentLimit) caracteres."
+      errorMessage = "El comentario supera el límite de \(commentLimit) caracteres."
       return
     }
 

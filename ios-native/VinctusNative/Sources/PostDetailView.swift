@@ -94,7 +94,7 @@ struct PostDetailView: View {
           commentSkeleton
         } else if vm.comments.isEmpty {
           VCard {
-            Text("Aun no hay comentarios.")
+            Text("Aún no hay comentarios.")
               .font(.footnote)
               .foregroundStyle(.secondary)
           }

@@ -47,9 +47,9 @@ struct GroupsListView: View {
       } else if vm.groups.isEmpty {
         VCard {
           VStack(alignment: .leading, spacing: 6) {
-            Text("Aun no hay grupos")
+            Text("Aún no hay grupos")
               .font(.headline)
-            Text("Cuando existan grupos disponibles apareceran aqui.")
+            Text("Cuando existan grupos disponibles aparecerán aquí.")
               .font(.footnote)
               .foregroundStyle(.secondary)
           }
@@ -143,7 +143,7 @@ struct GroupView: View {
                     .font(.title3)
                     .bold()
 
-                  Text(detail.visibility == .private ? "Grupo privado" : "Grupo publico")
+                  Text(detail.visibility == .private ? "Grupo privado" : "Grupo público")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
@@ -174,7 +174,7 @@ struct GroupView: View {
 
         Section("Publicaciones recientes") {
           if detail.recentPosts.isEmpty {
-            Text("Aun no hay publicaciones en este grupo.")
+            Text("Aún no hay publicaciones en este grupo.")
               .font(.footnote)
               .foregroundStyle(.secondary)
           } else {

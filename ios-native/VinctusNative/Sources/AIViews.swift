@@ -41,14 +41,14 @@ struct AIConsentGate<Content: View>: View {
             .foregroundStyle(VinctusTokens.Color.accent)
 
           Text(
-            "Para responderte, lo que escribas se envia a proveedores externos de inteligencia artificial: Google (Gemini) y NVIDIA."
+            "Para responderte, lo que escribas se envía a proveedores externos de inteligencia artificial: Google (Gemini) y NVIDIA."
           )
-          Text("No se envian tu correo ni tu nombre, y quitamos correos y telefonos del texto.")
+          Text("No se envían tu correo ni tu nombre, y quitamos correos y teléfonos del texto.")
             .foregroundStyle(VinctusTokens.Color.textMuted)
           Text("Puedes retirar este permiso cuando quieras en Perfil > Ajustes > IA.")
             .foregroundStyle(VinctusTokens.Color.textMuted)
 
-          Link("Ver la Politica de privacidad", destination: LegalConfig.privacyPolicyURL)
+          Link("Ver la Política de privacidad", destination: LegalConfig.privacyPolicyURL)
             .font(.footnote)
             .foregroundStyle(VinctusTokens.Color.accent)
 
@@ -106,7 +106,7 @@ struct AIHubView: View {
           Label {
             VStack(alignment: .leading, spacing: 2) {
               Text("Chat con IA")
-              Text("Preguntale lo que quieras al asistente de Vinctus.")
+              Text("Pregúntale lo que quieras al asistente de Vinctus.")
                 .font(.footnote)
                 .foregroundStyle(VinctusTokens.Color.textMuted)
             }
@@ -264,12 +264,41 @@ private struct AIChatBubble: View {
   var body: some View {
     HStack {
       if message.isUser { Spacer(minLength: 40) }
-      Text(message.text)
-        .textSelection(.enabled)
-        .padding(12)
-        .background(message.isUser ? VinctusTokens.Color.accent.opacity(0.22) : VinctusTokens.Color.surface2)
-        .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.md, style: .continuous))
+      VStack(alignment: .leading, spacing: 4) {
+        Text(message.text)
+          .textSelection(.enabled)
+          .padding(12)
+          .background(message.isUser ? VinctusTokens.Color.accent.opacity(0.22) : VinctusTokens.Color.surface2)
+          .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.md, style: .continuous))
+
+        if !message.isUser {
+          AIReportButton(target: .aiResponse(contextID: "chat", excerpt: message.text))
+        }
+      }
       if !message.isUser { Spacer(minLength: 40) }
+    }
+  }
+}
+
+/// Lets people flag an offensive or harmful AI reply; it reaches the moderation queue like any
+/// other report.
+private struct AIReportButton: View {
+  let target: ReportTarget
+
+  @EnvironmentObject private var blockedUsers: BlockedUsersStore
+  @State private var isShowingReport = false
+
+  var body: some View {
+    Button {
+      isShowingReport = true
+    } label: {
+      Label("Denunciar respuesta", systemImage: "flag")
+        .font(.caption)
+        .foregroundStyle(VinctusTokens.Color.textMuted)
+    }
+    .buttonStyle(.borderless)
+    .sheet(isPresented: $isShowingReport) {
+      ReportSheet(target: target, repo: blockedUsers.repo)
     }
   }
 }
@@ -435,6 +464,14 @@ struct ArenaView: View {
               Text(result.verdictReason)
                 .foregroundStyle(VinctusTokens.Color.textMuted)
             }
+
+            AIReportButton(
+              target: .aiResponse(
+                contextID: "arena_\(result.debateID)",
+                excerpt: ([result.summary, result.verdictReason] + result.turns.map(\.text))
+                  .joined(separator: " / ")
+              )
+            )
           } header: {
             Text("Resumen y veredicto")
           } footer: {

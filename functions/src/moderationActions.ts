@@ -16,8 +16,9 @@ const ACTIONS: readonly ModerationEnforcementAction[] = [
   'restore_user',
 ];
 
-// reportedUid values that are not real accounts (see upsertAutoModerationReport in index.ts).
-const NON_USER_IDS = new Set(['system_moderation', 'unknown_user']);
+// reportedUid values that are not real accounts: auto-moderation (upsertAutoModerationReport in
+// index.ts) and reports on AI replies from the iOS app (ReportTarget.aiReportedUID).
+const NON_USER_IDS = new Set(['system_moderation', 'unknown_user', 'ai_assistant']);
 
 const fail = (code: functions.https.FunctionsErrorCode, message: string): never => {
   throw new functions.https.HttpsError(code, message);

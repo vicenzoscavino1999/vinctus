@@ -16,7 +16,7 @@ final class ProfileViewModel: ObservableObject {
     let normalizedUID = userID.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedUID.isEmpty else {
       profile = nil
-      errorMessage = "UID invalido"
+      errorMessage = "UID inválido"
       return
     }
 

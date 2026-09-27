@@ -60,7 +60,7 @@ final class SettingsViewModel: ObservableObject {
 
   func toggleAIConsent(userID: String?) async {
     guard let userID, !userID.isEmpty else {
-      errorMessage = "Sesion no valida para actualizar consentimiento."
+      errorMessage = "Sesión no válida para actualizar consentimiento."
       return
     }
 
@@ -114,7 +114,7 @@ final class SettingsViewModel: ObservableObject {
         "deleteAccount.status.refresh.failed errorType=\(AppLog.errorType(error), privacy: .public)"
       )
       if !silent {
-        deletionErrorMessage = "No se pudo cargar el estado de eliminacion de cuenta."
+        deletionErrorMessage = "No se pudo cargar el estado de eliminación de cuenta."
       }
     }
 
@@ -128,12 +128,12 @@ final class SettingsViewModel: ObservableObject {
   @discardableResult
   func requestAccountDeletion(userID: String?, appleAuthorizationCode: String? = nil) async -> Bool {
     guard let userID, !userID.isEmpty else {
-      deletionErrorMessage = "Sesion no valida para eliminar cuenta."
+      deletionErrorMessage = "Sesión no válida para eliminar cuenta."
       return false
     }
 
     guard canSubmitDeletionRequest else {
-      deletionErrorMessage = "Ya existe una solicitud activa de eliminacion."
+      deletionErrorMessage = "Ya existe una solicitud activa de eliminación."
       return false
     }
 
@@ -167,7 +167,7 @@ final class SettingsViewModel: ObservableObject {
       )
 
       if result.mode == .legacy {
-        deletionInfoMessage = "Eliminacion iniciada (modo legacy). Cerraremos sesion ahora."
+        deletionInfoMessage = "Eliminación iniciada (modo legacy). Cerraremos sesión ahora."
         AppLog.settings.info("deleteAccount.request.success mode=legacy")
         return true
       }
@@ -175,7 +175,7 @@ final class SettingsViewModel: ObservableObject {
       if result.status == .completed {
         deletionInfoMessage = "Cuenta eliminada correctamente."
       } else {
-        deletionInfoMessage = "Solicitud enviada. Puedes seguir el estado aqui."
+        deletionInfoMessage = "Solicitud enviada. Puedes seguir el estado aquí."
       }
 
       AppLog.settings.info(

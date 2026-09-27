@@ -23,7 +23,7 @@ enum DiscoverRepoError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .firebaseNotConfigured:
-      return "Firebase no esta configurado."
+      return "Firebase no está configurado."
     case .missingSnapshot:
       return "No se pudieron cargar usuarios."
     }

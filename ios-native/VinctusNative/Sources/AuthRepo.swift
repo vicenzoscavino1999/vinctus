@@ -32,19 +32,19 @@ enum AuthRepoError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .firebaseNotConfigured:
-      return "Firebase no esta configurado. Falta el archivo GoogleService-Info de este entorno."
+      return "Firebase no está configurado. Falta el archivo GoogleService-Info de este entorno."
     case .missingGoogleClientID:
-      return "El inicio de sesion con Google no esta configurado (falta el client ID de Firebase)."
+      return "El inicio de sesión con Google no está configurado (falta el client ID de Firebase)."
     case .googleURLSchemeNotConfigured:
       return "Falta el URL scheme de Google. Define GOOGLE_REVERSED_CLIENT_ID en Config/<Env>.local.xcconfig."
     case .googleSignInCanceled:
-      return "Inicio de sesion con Google cancelado."
+      return "Inicio de sesión con Google cancelado."
     case .missingGoogleIDToken:
-      return "Google no devolvio un token de identidad. Intenta de nuevo."
+      return "Google no devolvió un token de identidad. Intenta de nuevo."
     case .missingAppleIDToken:
-      return "Apple no devolvio un token de identidad. Intenta de nuevo."
+      return "Apple no devolvió un token de identidad. Intenta de nuevo."
     case .missingAppleNonce:
-      return "No se pudo iniciar sesion con Apple. Intenta de nuevo."
+      return "No se pudo iniciar sesión con Apple. Intenta de nuevo."
     }
   }
 }

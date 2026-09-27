@@ -58,10 +58,10 @@ struct FeedView: View {
       } else if vm.items.isEmpty {
         VCard {
           VStack(alignment: .leading, spacing: 6) {
-            Text("Tu feed esta vacio")
+            Text("Tu feed está vacío")
               .font(.headline)
               .foregroundStyle(VinctusTokens.Color.textPrimary)
-            Text("Cuando haya publicaciones recientes, apareceran aqui.")
+            Text("Cuando haya publicaciones recientes, aparecerán aquí.")
               .font(.footnote)
               .foregroundStyle(VinctusTokens.Color.textMuted)
           }
@@ -90,11 +90,11 @@ struct FeedView: View {
             if vm.isLoadingMore {
               ProgressView()
                 .controlSize(.small)
-              Text("Cargando mas publicaciones…")
+              Text("Cargando más publicaciones…")
                 .font(.footnote)
                 .foregroundStyle(VinctusTokens.Color.textMuted)
             } else {
-              Text("Desliza para cargar mas")
+              Text("Desliza para cargar más")
                 .font(.footnote)
                 .foregroundStyle(VinctusTokens.Color.textMuted)
             }
@@ -107,7 +107,7 @@ struct FeedView: View {
           .listRowSeparator(.hidden)
           .listRowBackground(SwiftUI.Color.clear)
         } else {
-          Text("No hay mas publicaciones por ahora.")
+          Text("No hay más publicaciones por ahora.")
             .font(.footnote)
             .foregroundStyle(VinctusTokens.Color.textMuted)
             .frame(maxWidth: .infinity, alignment: .center)

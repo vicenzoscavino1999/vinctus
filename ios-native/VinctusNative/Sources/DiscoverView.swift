@@ -17,18 +17,18 @@ private let discoverTrendSeed: [DiscoverTrend] = [
     id: "science",
     icon: "atom",
     title: "Ciencia y Materia",
-    subtitle: "La busqueda de la verdad fundamental.",
+    subtitle: "La búsqueda de la verdad fundamental.",
     rankLabel: "TOP 1",
     scoreLabel: "87 SCORE",
     signalLabel: "6 papers hoy",
     groupsLabel: "2 grupos activos",
-    tags: ["mecanica cuantica", "cosmologia", "astronomia"]
+    tags: ["mecánica cuántica", "cosmología", "astronomía"]
   ),
   DiscoverTrend(
     id: "music",
     icon: "music.note",
     title: "Ritmos y Cultura",
-    subtitle: "Frecuencias, historia y expresion colectiva.",
+    subtitle: "Frecuencias, historia y expresión colectiva.",
     rankLabel: "TOP 2",
     scoreLabel: "81 SCORE",
     signalLabel: "6 novedades hoy",
@@ -39,7 +39,7 @@ private let discoverTrendSeed: [DiscoverTrend] = [
     id: "technology",
     icon: "cpu",
     title: "Tecnologia Aplicada",
-    subtitle: "Innovacion util para problemas reales.",
+    subtitle: "Innovación útil para problemas reales.",
     rankLabel: "TOP 3",
     scoreLabel: "79 SCORE",
     signalLabel: "4 papers hoy",
@@ -149,7 +149,7 @@ struct DiscoverView: View {
 
           if filteredTrends.isEmpty {
             VCard {
-              Text("No hay tendencias para ese termino. Prueba otro filtro.")
+              Text("No hay tendencias para ese término. Prueba otro filtro.")
                 .font(.footnote)
                 .foregroundStyle(VinctusTokens.Color.textMuted)
             }
@@ -232,7 +232,7 @@ struct DiscoverView: View {
           .padding(.top, 2)
         } else if filteredGroups.isEmpty {
           VCard {
-            Text("Aun no hay grupos para este filtro.")
+            Text("Aún no hay grupos para este filtro.")
               .font(.footnote)
               .foregroundStyle(VinctusTokens.Color.textMuted)
           }
@@ -437,7 +437,7 @@ struct ConnectionsSearchView: View {
         .listRowBackground(SwiftUI.Color.clear)
       } else if filteredGroups.isEmpty, vm.isSearchActive {
         VCard {
-          Text("Sin grupos para esa busqueda.")
+          Text("Sin grupos para esa búsqueda.")
             .font(.footnote)
             .foregroundStyle(VinctusTokens.Color.textMuted)
         }
@@ -475,13 +475,13 @@ struct ConnectionsSearchView: View {
       } else if vm.displayedUsers.isEmpty {
         VCard {
           VStack(alignment: .leading, spacing: 6) {
-            Text(vm.isSearchActive ? "Sin resultados" : "Aun no hay personas recientes")
+            Text(vm.isSearchActive ? "Sin resultados" : "Aún no hay personas recientes")
               .font(.headline)
               .foregroundStyle(VinctusTokens.Color.textPrimary)
             Text(
               vm.isSearchActive
-                ? "Prueba otro termino de busqueda."
-                : "Cuando existan perfiles recientes, apareceran aqui."
+                ? "Prueba otro término de búsqueda."
+                : "Cuando existan perfiles recientes, aparecerán aquí."
             )
             .font(.footnote)
             .foregroundStyle(VinctusTokens.Color.textMuted)
@@ -632,7 +632,7 @@ private struct DiscoverUserRow: View {
           .font(.headline)
           .foregroundStyle(VinctusTokens.Color.textPrimary)
 
-        Text(user.accountVisibility == .private ? "Perfil privado" : "Perfil publico")
+        Text(user.accountVisibility == .private ? "Perfil privado" : "Perfil público")
           .font(.caption)
           .foregroundStyle(VinctusTokens.Color.textMuted)
       }
@@ -711,7 +711,7 @@ private struct DiscoverHeaderBar: View {
           .onTapGesture {
             onTapCreatePost()
           }
-          .accessibilityLabel("Crear publicacion")
+          .accessibilityLabel("Crear publicación")
           .accessibilityAddTraits(.isButton)
 
         Spacer()
@@ -787,7 +787,7 @@ private struct DiscoverCurationHero: View {
         .foregroundStyle(VinctusTokens.Color.textMuted)
 
       (
-        Text("Curaduria de ")
+        Text("Curaduría de ")
           .foregroundStyle(VinctusTokens.Color.textPrimary) +
         Text("Intereses")
           .foregroundStyle(VinctusTokens.Color.accent)
@@ -934,7 +934,7 @@ private struct DiscoverGroupCard: View {
             .foregroundStyle(VinctusTokens.Color.textPrimary)
             .lineLimit(1)
 
-          Text(group.description.isEmpty ? "Sin descripcion." : group.description)
+          Text(group.description.isEmpty ? "Sin descripción." : group.description)
             .font(.footnote)
             .foregroundStyle(VinctusTokens.Color.textMuted)
             .lineLimit(2)

@@ -27,6 +27,9 @@ const priorityClass: Record<string, string> = {
   low: 'border-sky-500/40 text-sky-200',
 };
 
+// Report targets that aren't accounts (auto-moderation, AI replies), so there's no one to suspend.
+const NON_USER_IDS = new Set(['system_moderation', 'unknown_user', 'ai_assistant']);
+
 const enforcementConfirm: Record<ModerationEnforcementAction, string> = {
   remove_content: 'Eliminar el contenido denunciado? Esta accion no se puede deshacer.',
   suspend_user: 'Suspender la cuenta denunciada? No podra volver a iniciar sesion.',
@@ -370,6 +373,7 @@ const ModerationQueuePage = () => {
                     </button>
                   )}
                   {item.reportedUid &&
+                    !NON_USER_IDS.has(item.reportedUid) &&
                     (item.reviewAction === 'user_suspended' ? (
                       <button
                         type="button"

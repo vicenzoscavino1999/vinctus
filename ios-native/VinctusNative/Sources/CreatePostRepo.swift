@@ -26,19 +26,19 @@ enum CreatePostRepoError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .firebaseNotConfigured:
-      return "Firebase no esta configurado."
+      return "Firebase no está configurado."
     case .userNotAuthenticated:
-      return "Debes iniciar sesion para publicar."
+      return "Debes iniciar sesión para publicar."
     case .invalidPostID:
-      return "No se pudo generar un identificador valido para el post."
+      return "No se pudo generar un identificador válido para el post."
     case .emptyText:
       return "Escribe algo antes de publicar."
     case .textTooLong(let limit):
-      return "El texto supera el limite de \(limit) caracteres."
+      return "El texto supera el límite de \(limit) caracteres."
     case .postOwnedByAnotherUser:
       return "No puedes reutilizar un post que pertenece a otro usuario."
     case .draftMismatchForRetry:
-      return "El borrador cambio. Intenta publicar de nuevo."
+      return "El borrador cambió. Intenta publicar de nuevo."
     case .missingSnapshot:
       return "No se pudo leer el estado del post."
     }

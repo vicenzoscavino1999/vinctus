@@ -107,7 +107,7 @@ final class FeedViewModel: ObservableObject {
         AppLog.ui.error(
           "feed.loadMore.failed errorType=\(AppLog.errorType(error), privacy: .public)"
         )
-        loadMoreErrorMessage = "No se pudieron cargar mas publicaciones."
+        loadMoreErrorMessage = "No se pudieron cargar más publicaciones."
       }
     }
   }

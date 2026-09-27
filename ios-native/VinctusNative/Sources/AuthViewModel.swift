@@ -80,7 +80,7 @@ final class AuthViewModel: ObservableObject {
         AppLog.auth.info("signIn.google.success")
       } catch AuthRepoError.googleSignInCanceled {
         AppLog.auth.info("signIn.google.canceled")
-        infoMessage = "Inicio de sesion con Google cancelado."
+        infoMessage = "Inicio de sesión con Google cancelado."
       } catch {
         AppLog.auth.error("signIn.google.failed errorType=\(AppLog.errorType(error), privacy: .public)")
         errorMessage = error.localizedDescription
@@ -121,7 +121,7 @@ final class AuthViewModel: ObservableObject {
         AppLog.auth.info("passwordReset.start")
         try await repo.sendPasswordReset(email: email)
         AppLog.auth.info("passwordReset.success")
-        infoMessage = "Si la cuenta existe, te enviamos un correo para restablecer la contrasena."
+        infoMessage = "Si la cuenta existe, te enviamos un correo para restablecer la contraseña."
       } catch {
         AppLog.auth.error(
           "passwordReset.failed errorType=\(AppLog.errorType(error), privacy: .public)"

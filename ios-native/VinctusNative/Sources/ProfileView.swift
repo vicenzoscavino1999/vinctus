@@ -34,7 +34,7 @@ struct ProfileView: View {
                     .foregroundStyle(.secondary)
                 }
 
-                Text(profile.accountVisibility == .private ? "Cuenta privada" : "Cuenta publica")
+                Text(profile.accountVisibility == .private ? "Cuenta privada" : "Cuenta pública")
                   .font(.caption)
                   .padding(.horizontal, 8)
                   .padding(.vertical, 4)
@@ -57,7 +57,7 @@ struct ProfileView: View {
           LabeledContent("Publicaciones") { Text("\(profile.postsCount)") }
           LabeledContent("Seguidores") { Text("\(profile.followersCount)") }
           LabeledContent("Siguiendo") { Text("\(profile.followingCount)") }
-          LabeledContent("Reputacion") { Text("\(profile.reputation)") }
+          LabeledContent("Reputación") { Text("\(profile.reputation)") }
         }
 
         Section("Perfil") {
@@ -66,7 +66,7 @@ struct ProfileView: View {
           }
 
           if let location = profile.location {
-            LabeledContent("Ubicacion") { Text(location) }
+            LabeledContent("Ubicación") { Text(location) }
           }
 
           if let email = profile.email {

@@ -36,7 +36,7 @@ enum ProfileRepoError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .firebaseNotConfigured:
-      return "Firebase no esta configurado."
+      return "Firebase no está configurado."
     case .missingSnapshot:
       return "No se pudo cargar el perfil."
     }

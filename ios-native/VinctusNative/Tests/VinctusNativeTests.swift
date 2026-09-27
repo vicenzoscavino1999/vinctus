@@ -66,6 +66,20 @@ final class ReportFieldsTests: XCTestCase {
   }
 }
 
+final class AIReportFieldsTests: XCTestCase {
+  func testAIReportsPointAtTheAssistantAndFitTheRules() {
+    let fields = ReportFields(
+      target: .aiResponse(contextID: "chat", excerpt: String(repeating: "x", count: 5000)),
+      details: "ofensivo"
+    )
+
+    XCTAssertEqual(fields.reportedUID, ReportTarget.aiReportedUID)
+    XCTAssertEqual(fields.conversationID, "ai_chat")
+    XCTAssertTrue(fields.details?.hasSuffix("| Motivo: ofensivo") ?? false)
+    XCTAssertTrue(fields.fitsRules)
+  }
+}
+
 /// The chat API rejects histories over 20 messages or 12,000 characters.
 final class AIChatHistoryTests: XCTestCase {
   private func message(_ role: String, _ text: String) -> AIChatMessage {

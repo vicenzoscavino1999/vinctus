@@ -59,7 +59,7 @@ struct SettingsView: View {
       } header: {
         Text("IA")
       } footer: {
-        Text("Toca para permitir o retirar el permiso. Sin permiso, Chat con IA y Arena IA no envian nada.")
+        Text("Toca para permitir o retirar el permiso. Sin permiso, Chat con IA y Arena IA no envían nada.")
       }
 
       Section("Privacidad") {
@@ -70,20 +70,20 @@ struct SettingsView: View {
 
       Section("Legal y soporte") {
         legalLinkRow(
-          title: "Politica de privacidad",
-          subtitle: "Como usamos y protegemos datos",
+          title: "Política de privacidad",
+          subtitle: "Cómo usamos y protegemos datos",
           icon: "hand.raised",
           url: LegalConfig.privacyPolicyURL
         )
         legalLinkRow(
-          title: "Terminos de servicio",
+          title: "Términos de servicio",
           subtitle: "Condiciones de uso de Vinctus",
           icon: "doc.text",
           url: LegalConfig.termsOfServiceURL
         )
         legalLinkRow(
           title: "Normas de la comunidad",
-          subtitle: "Reglas de comunidad y moderacion",
+          subtitle: "Reglas de comunidad y moderación",
           icon: "checkmark.shield",
           url: LegalConfig.communityGuidelinesURL
         )
@@ -119,7 +119,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 6) {
           Text("Eliminar cuenta")
             .font(.headline)
-          Text("Accion irreversible: se elimina perfil, posts, chats y configuraciones.")
+          Text("Acción irreversible: se elimina perfil, posts, chats y configuraciones.")
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
@@ -191,7 +191,7 @@ struct SettingsView: View {
               ProgressView()
                 .controlSize(.small)
             }
-            Text("Solicitar eliminacion de cuenta")
+            Text("Solicitar eliminación de cuenta")
           }
         }
         .disabled(
@@ -205,7 +205,7 @@ struct SettingsView: View {
           Button(role: .destructive) {
             authVM.signOut()
           } label: {
-            Text("Cerrar sesion ahora")
+            Text("Cerrar sesión ahora")
           }
         }
       }
@@ -231,7 +231,7 @@ struct SettingsView: View {
           AppLog.auth.info("signOut.tap")
           authVM.signOut()
         } label: {
-          Text("Cerrar sesion")
+          Text("Cerrar sesión")
         }
       }
     }
@@ -253,7 +253,7 @@ struct SettingsView: View {
       }
     }
     .confirmationDialog(
-      "Confirmar eliminacion de cuenta",
+      "Confirmar eliminación de cuenta",
       isPresented: $showDeleteConfirmationDialog,
       titleVisibility: .visible
     ) {
@@ -262,7 +262,7 @@ struct SettingsView: View {
       }
       Button("Cancelar", role: .cancel) {}
     } message: {
-      Text("Esta accion es irreversible y puede tardar unos minutos en completarse.")
+      Text("Esta acción es irreversible y puede tardar unos minutos en completarse.")
     }
     .sheet(isPresented: $showAppleDeletionSheet) {
       AppleDeletionConfirmationSheet { authorizationCode in
@@ -293,11 +293,11 @@ struct SettingsView: View {
 
   private var deletionStatusDetail: String? {
     if viewModel.deletionStatus.status == .queued || viewModel.deletionStatus.status == .processing {
-      return "La solicitud esta en proceso. Puedes cerrar sesion mientras se completa."
+      return "La solicitud está en proceso. Puedes cerrar sesión mientras se completa."
     }
 
     if viewModel.deletionStatus.status == .completed {
-      return "Borrado completado. Si sigues logueado, cierra sesion."
+      return "Borrado completado. Si sigues logueado, cierra sesión."
     }
 
     return nil
@@ -362,10 +362,10 @@ private struct AppleDeletionConfirmationSheet: View {
     NavigationStack {
       VStack(alignment: .leading, spacing: VinctusTokens.Spacing.lg) {
         Text(
-          "Tu cuenta usa Iniciar sesion con Apple. Para eliminarla, confirma con Apple: asi tambien quitamos el acceso de Vinctus a tu Apple ID."
+          "Tu cuenta usa Iniciar sesión con Apple. Para eliminarla, confirma con Apple: así también quitamos el acceso de Vinctus a tu Apple ID."
         )
 
-        Text("Esta accion es irreversible y puede tardar unos minutos en completarse.")
+        Text("Esta acción es irreversible y puede tardar unos minutos en completarse.")
           .font(.footnote)
           .foregroundStyle(.secondary)
 
@@ -410,7 +410,7 @@ private struct AppleDeletionConfirmationSheet: View {
         let code = String(data: codeData, encoding: .utf8),
         !code.isEmpty
       else {
-        errorMessage = "Apple no confirmo la solicitud. Intenta de nuevo."
+        errorMessage = "Apple no confirmó la solicitud. Intenta de nuevo."
         return
       }
       onConfirmed(code)

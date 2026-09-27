@@ -65,7 +65,7 @@ enum GroupsRepoError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .firebaseNotConfigured:
-      return "Firebase no esta configurado."
+      return "Firebase no está configurado."
     case .missingSnapshot:
       return "No se pudo cargar grupos."
     }
@@ -260,7 +260,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
 
   private func normalizedPostTitle(_ text: String) -> String {
     let normalized = text.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !normalized.isEmpty else { return "Publicacion" }
+    guard !normalized.isEmpty else { return "Publicación" }
     if normalized.count <= 90 { return normalized }
     let endIndex = normalized.index(normalized.startIndex, offsetBy: 87)
     return String(normalized[..<endIndex]) + "..."

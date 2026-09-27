@@ -53,7 +53,7 @@ final class GroupDetailViewModel: ObservableObject {
     let normalizedGroupID = groupID.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedGroupID.isEmpty else {
       detail = nil
-      errorMessage = "Grupo invalido."
+      errorMessage = "Grupo inválido."
       return
     }
 
