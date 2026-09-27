@@ -52,7 +52,7 @@ struct MainTabView: View {
           aiRepo: aiRepo
         )
       }
-      .tabItem { Label("Descubrir", systemImage: "location.north.line") }
+      .tabItem { Label("Descubrir", systemImage: "safari") }
 
       NavigationStack {
         ConnectionsSearchView(

@@ -100,24 +100,23 @@ struct DiscoverView: View {
       .listRowBackground(SwiftUI.Color.clear)
 
       Section {
-        NavigationLink(destination: AIHubView(repo: aiRepo)) {
-          Label {
-            VStack(alignment: .leading, spacing: 2) {
-              Text("Inteligencia artificial")
-                .foregroundStyle(VinctusTokens.Color.textPrimary)
-              Text("Chat con IA y Arena IA")
-                .font(.footnote)
-                .foregroundStyle(VinctusTokens.Color.textMuted)
-            }
-          } icon: {
-            Image(systemName: "sparkles")
-              .foregroundStyle(VinctusTokens.Color.accent)
-          }
-        }
+        DiscoverCurationHero(searchText: $discoverQuery)
       }
+      .listRowSeparator(.hidden)
+      .listRowBackground(SwiftUI.Color.clear)
+
+      Section {
+        NavigationLink(destination: AIHubView(repo: aiRepo)) {
+          DiscoverAIPromoCard()
+        }
+        .buttonStyle(.plain)
+      }
+      .listRowSeparator(.hidden)
+      .listRowBackground(SwiftUI.Color.clear)
 
       if !visibleSuggestedUsers.isEmpty {
-        Section("Historias") {
+        Section {
+          DiscoverSectionHeader(title: "Personas para conocer")
           ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: VinctusTokens.Spacing.md) {
               ForEach(Array(visibleSuggestedUsers.prefix(12))) { user in
@@ -127,25 +126,16 @@ struct DiscoverView: View {
                 .buttonStyle(.plain)
               }
             }
-            .padding(.vertical, 6)
+            .padding(.vertical, 4)
           }
         }
-        .textCase(.uppercase)
         .listRowSeparator(.hidden)
         .listRowBackground(SwiftUI.Color.clear)
       }
 
       Section {
-        DiscoverCurationHero(searchText: $discoverQuery)
-      }
-      .listRowSeparator(.hidden)
-      .listRowBackground(SwiftUI.Color.clear)
-
-      Section {
         VStack(alignment: .leading, spacing: VinctusTokens.Spacing.md) {
-          Text("Tendencias esta semana")
-            .font(VinctusTokens.Typography.sectionTitle(size: 32))
-            .foregroundStyle(VinctusTokens.Color.textPrimary)
+          DiscoverSectionHeader(title: "Tendencias esta semana")
 
           if filteredTrends.isEmpty {
             VCard {
@@ -169,14 +159,12 @@ struct DiscoverView: View {
       .listRowBackground(SwiftUI.Color.clear)
 
       Section {
-        HStack {
-          Text("Grupos recomendados")
-            .font(VinctusTokens.Typography.sectionTitle(size: 30))
-            .foregroundStyle(VinctusTokens.Color.textPrimary)
+        HStack(alignment: .firstTextBaseline) {
+          DiscoverSectionHeader(title: "Grupos recomendados")
           Spacer()
           NavigationLink(destination: GroupsListView(repo: groupsRepo)) {
             Text("Ver todos")
-              .font(.caption.weight(.semibold))
+              .font(.subheadline.weight(.semibold))
               .foregroundStyle(VinctusTokens.Color.accent)
           }
           .buttonStyle(.plain)
@@ -697,38 +685,30 @@ private struct DiscoverHeaderBar: View {
   let onTapCreatePost: () -> Void
 
   var body: some View {
-    ZStack {
-      HStack {
-        Circle()
-          .fill(VinctusTokens.Color.accent)
-          .frame(width: 44, height: 44)
-          .overlay(
-            Image(systemName: "plus")
-              .font(.title3.weight(.semibold))
-              .foregroundStyle(.black)
-          )
-          .contentShape(Circle())
-          .onTapGesture {
-            onTapCreatePost()
-          }
-          .accessibilityLabel("Crear publicación")
-          .accessibilityAddTraits(.isButton)
+    HStack(spacing: 10) {
+      Image("Logo")
+        .resizable()
+        .scaledToFill()
+        .frame(width: 34, height: 34)
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .accessibilityHidden(true)
 
-        Spacer()
-
-        HStack(spacing: 16) {
-          Image(systemName: "sparkles")
-          Image(systemName: "bell")
-        }
-        .foregroundStyle(VinctusTokens.Color.textMuted)
-        .allowsHitTesting(false)
-      }
-      .frame(maxWidth: .infinity)
       Text("Vinctus")
-        .font(VinctusTokens.Typography.brandTitle(size: 38))
+        .font(VinctusTokens.Typography.brandTitle(size: 28))
         .foregroundStyle(VinctusTokens.Color.textPrimary)
-        .frame(maxWidth: .infinity, alignment: .center)
-        .allowsHitTesting(false)
+
+      Spacer()
+
+      Button(action: onTapCreatePost) {
+        Image(systemName: "plus")
+          .font(.system(size: 17, weight: .bold))
+          .foregroundStyle(.black)
+          .frame(width: 38, height: 38)
+          .background(VinctusTokens.Color.accent)
+          .clipShape(Circle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Crear publicación")
     }
     .padding(.top, 2)
     .padding(.bottom, 4)
@@ -780,40 +760,99 @@ private struct DiscoverCurationHero: View {
   @Binding var searchText: String
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("DESCUBRIR")
-        .font(.caption.weight(.semibold))
-        .tracking(4)
-        .foregroundStyle(VinctusTokens.Color.textMuted)
+    VStack(alignment: .leading, spacing: 14) {
+      VStack(alignment: .leading, spacing: 4) {
+        (
+          Text("Descubre ")
+            .foregroundStyle(VinctusTokens.Color.textPrimary) +
+          Text("tus intereses")
+            .foregroundStyle(VinctusTokens.Color.accent)
+        )
+        .font(VinctusTokens.Typography.brandTitle(size: 30))
 
-      (
-        Text("Curaduría de ")
-          .foregroundStyle(VinctusTokens.Color.textPrimary) +
-        Text("Intereses")
-          .foregroundStyle(VinctusTokens.Color.accent)
-      )
-      .font(VinctusTokens.Typography.brandTitle(size: 40))
+        Text("Personas, grupos y temas que valen la pena.")
+          .font(.subheadline)
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+      }
 
       HStack(spacing: 10) {
-        Image(systemName: "line.3.horizontal.decrease.circle")
+        Image(systemName: "magnifyingglass")
           .foregroundStyle(VinctusTokens.Color.textMuted)
-        TextField("Buscar intereses o grupos...", text: $searchText)
+        TextField("Buscar intereses o grupos", text: $searchText)
           .textInputAutocapitalization(.never)
           .autocorrectionDisabled()
           .foregroundStyle(VinctusTokens.Color.textPrimary)
-        Image(systemName: "magnifyingglass")
-          .foregroundStyle(VinctusTokens.Color.textMuted)
+        if !searchText.isEmpty {
+          Button {
+            searchText = ""
+          } label: {
+            Image(systemName: "xmark.circle.fill")
+              .foregroundStyle(VinctusTokens.Color.textMuted)
+          }
+          .accessibilityLabel("Borrar búsqueda")
+        }
       }
       .padding(.horizontal, 14)
-      .padding(.vertical, 12)
+      .frame(height: 46)
       .background(VinctusTokens.Color.surface)
-      .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+      .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
       .overlay(
-        RoundedRectangle(cornerRadius: 20, style: .continuous)
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
           .stroke(VinctusTokens.Color.border.opacity(0.6), lineWidth: 1)
       )
     }
-    .padding(.bottom, 10)
+    .padding(.top, 4)
+  }
+}
+
+private struct DiscoverSectionHeader: View {
+  let title: String
+
+  var body: some View {
+    Text(title)
+      .font(VinctusTokens.Typography.sectionTitle(size: 22))
+      .foregroundStyle(VinctusTokens.Color.textPrimary)
+  }
+}
+
+private struct DiscoverAIPromoCard: View {
+  var body: some View {
+    HStack(spacing: 14) {
+      Image(systemName: "sparkles")
+        .font(.system(size: 22, weight: .semibold))
+        .foregroundStyle(.black)
+        .frame(width: 48, height: 48)
+        .background(VinctusTokens.Color.accent)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+      VStack(alignment: .leading, spacing: 3) {
+        Text("Pregúntale a la IA")
+          .font(.headline)
+          .foregroundStyle(VinctusTokens.Color.textPrimary)
+        Text("Chat con IA y debates en Arena IA")
+          .font(.footnote)
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+      }
+
+      Spacer()
+
+      Image(systemName: "chevron.right")
+        .font(.footnote.weight(.semibold))
+        .foregroundStyle(VinctusTokens.Color.textMuted)
+    }
+    .padding(14)
+    .background(
+      LinearGradient(
+        colors: [VinctusTokens.Color.accent.opacity(0.18), VinctusTokens.Color.surface],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+      )
+    )
+    .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous)
+        .stroke(VinctusTokens.Color.accent.opacity(0.35), lineWidth: 1)
+    )
   }
 }
 
@@ -857,17 +896,24 @@ private struct DiscoverStoryChip: View {
     VStack(spacing: 8) {
       ZStack {
         Circle()
-          .stroke(VinctusTokens.Color.accent, lineWidth: 2)
-          .frame(width: 66, height: 66)
+          .stroke(
+            LinearGradient(
+              colors: [VinctusTokens.Color.accent, VinctusTokens.Color.accentAlt],
+              startPoint: .topLeading,
+              endPoint: .bottomTrailing
+            ),
+            lineWidth: 2
+          )
+          .frame(width: 64, height: 64)
         DiscoverAvatarView(name: user.displayName, photoURLString: user.photoURL, size: 56)
       }
 
-      Text(user.displayName)
+      Text(user.displayName.split(separator: " ").first.map(String.init) ?? user.displayName)
         .font(.caption)
-        .foregroundStyle(VinctusTokens.Color.textMuted)
+        .foregroundStyle(VinctusTokens.Color.textPrimary)
         .lineLimit(1)
     }
-    .frame(width: 84)
+    .frame(width: 76)
   }
 }
 
@@ -875,48 +921,59 @@ private struct DiscoverTrendCard: View {
   let trend: DiscoverTrend
 
   var body: some View {
-    VCard {
-      VStack(alignment: .leading, spacing: 12) {
-        HStack {
-          Image(systemName: trend.icon)
-            .foregroundStyle(SwiftUI.Color.blue)
-          Spacer()
-          Text(trend.rankLabel)
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(VinctusTokens.Color.accent.opacity(0.18))
-            .foregroundStyle(VinctusTokens.Color.accent)
+    VStack(alignment: .leading, spacing: 10) {
+      HStack {
+        Image(systemName: trend.icon)
+          .font(.system(size: 17, weight: .semibold))
+          .foregroundStyle(VinctusTokens.Color.accent)
+          .frame(width: 36, height: 36)
+          .background(VinctusTokens.Color.accent.opacity(0.14))
+          .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        Spacer()
+        Text(trend.rankLabel)
+          .font(.caption2.weight(.bold))
+          .padding(.horizontal, 9)
+          .padding(.vertical, 4)
+          .background(VinctusTokens.Color.accent.opacity(0.18))
+          .foregroundStyle(VinctusTokens.Color.accent)
+          .clipShape(Capsule())
+      }
+
+      Text(trend.title)
+        .font(VinctusTokens.Typography.sectionTitle(size: 20))
+        .foregroundStyle(VinctusTokens.Color.textPrimary)
+        .lineLimit(1)
+
+      Text(trend.subtitle)
+        .font(.footnote)
+        .foregroundStyle(VinctusTokens.Color.textMuted)
+        .lineLimit(2, reservesSpace: true)
+
+      Text("\(trend.signalLabel) · \(trend.groupsLabel)")
+        .font(.caption)
+        .foregroundStyle(VinctusTokens.Color.textMuted)
+
+      HStack(spacing: 6) {
+        ForEach(trend.tags.prefix(2), id: \.self) { tag in
+          Text(tag.capitalized)
+            .font(.caption2.weight(.medium))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(VinctusTokens.Color.surface2)
+            .foregroundStyle(VinctusTokens.Color.textMuted)
             .clipShape(Capsule())
+            .lineLimit(1)
         }
-
-        Text(trend.title)
-          .font(VinctusTokens.Typography.sectionTitle(size: 34))
-          .foregroundStyle(VinctusTokens.Color.textPrimary)
-
-        Text(trend.subtitle)
-          .font(.footnote)
-          .foregroundStyle(VinctusTokens.Color.textMuted)
-          .lineLimit(2)
-
-        HStack(spacing: 8) {
-          Text(trend.scoreLabel)
-            .badgeStyle()
-          Text("SIGUIENDO")
-            .badgeStyle(selected: true)
-        }
-
-        HStack(spacing: 8) {
-          Text(trend.signalLabel)
-            .badgeStyle()
-          Text(trend.groupsLabel)
-            .badgeStyle()
-        }
-
-        WrapTags(tags: trend.tags)
       }
     }
-    .frame(width: 320)
+    .padding(14)
+    .frame(width: 250, alignment: .leading)
+    .background(VinctusTokens.Color.surface)
+    .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous)
+        .stroke(VinctusTokens.Color.border.opacity(0.55), lineWidth: 1)
+    )
   }
 }
 
@@ -992,54 +1049,5 @@ private struct DiscoverGroupIcon: View {
     Text(String(name.prefix(1)).uppercased())
       .font(.headline)
       .foregroundStyle(VinctusTokens.Color.textMuted)
-  }
-}
-
-private struct WrapTags: View {
-  let tags: [String]
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      ForEach(rows, id: \.self) { row in
-        HStack(spacing: 8) {
-          ForEach(row, id: \.self) { tag in
-            Text(tag.uppercased())
-              .font(.caption2)
-              .padding(.horizontal, 10)
-              .padding(.vertical, 6)
-              .background(VinctusTokens.Color.surface2)
-              .foregroundStyle(VinctusTokens.Color.textMuted)
-              .clipShape(Capsule())
-          }
-        }
-      }
-    }
-  }
-
-  private var rows: [[String]] {
-    var result: [[String]] = []
-    var current: [String] = []
-
-    for (index, tag) in tags.enumerated() {
-      current.append(tag)
-      if current.count == 2 || index == tags.count - 1 {
-        result.append(current)
-        current = []
-      }
-    }
-
-    return result
-  }
-}
-
-private extension View {
-  func badgeStyle(selected: Bool = false) -> some View {
-    self
-      .font(.caption2.weight(.semibold))
-      .padding(.horizontal, 10)
-      .padding(.vertical, 6)
-      .background(selected ? VinctusTokens.Color.accent.opacity(0.2) : VinctusTokens.Color.surface2)
-      .foregroundStyle(selected ? VinctusTokens.Color.accent : VinctusTokens.Color.textMuted)
-      .clipShape(Capsule())
   }
 }
