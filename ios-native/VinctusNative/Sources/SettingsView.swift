@@ -1,3 +1,4 @@
+import AuthenticationServices
 import FirebaseCore
 import SwiftUI
 
@@ -7,6 +8,7 @@ struct SettingsView: View {
   @StateObject private var viewModel = SettingsViewModel(repo: FirebaseAIConsentRepo())
   @State private var deleteConfirmationText = ""
   @State private var showDeleteConfirmationDialog = false
+  @State private var showAppleDeletionSheet = false
 
   var body: some View {
     List {
@@ -17,44 +19,6 @@ struct SettingsView: View {
         LabeledContent("Firebase") { Text(FirebaseApp.app() == nil ? "Not configured" : "Configured") }
       }
       #endif
-
-      Section("IA") {
-        Button {
-          Task {
-            await viewModel.toggleAIConsent(userID: authVM.currentUserID)
-          }
-        } label: {
-          HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "sparkles")
-              .foregroundStyle(VinctusTokens.Color.accent)
-              .frame(width: 20)
-
-            VStack(alignment: .leading, spacing: 4) {
-              Text("Consentimiento de IA")
-                .foregroundStyle(.primary)
-              Text(LegalConfig.aiConsentDescription)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            if viewModel.isLoadingConsent || viewModel.isSavingConsent {
-              ProgressView()
-            } else {
-              Text(viewModel.aiConsent.granted ? "Aceptado" : "Pendiente")
-                .font(.caption)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(viewModel.aiConsent.granted ? SwiftUI.Color.green.opacity(0.15) : SwiftUI.Color.gray.opacity(0.15))
-                .foregroundStyle(viewModel.aiConsent.granted ? SwiftUI.Color.green : SwiftUI.Color.secondary)
-                .clipShape(Capsule())
-            }
-          }
-        }
-        .buttonStyle(.plain)
-        .disabled(viewModel.isLoadingConsent || viewModel.isSavingConsent || authVM.currentUserID == nil)
-      }
 
       Section("Privacidad") {
         NavigationLink(destination: BlockedUsersView()) {
@@ -76,7 +40,7 @@ struct SettingsView: View {
           url: LegalConfig.termsOfServiceURL
         )
         legalLinkRow(
-          title: "Community Guidelines",
+          title: "Normas de la comunidad",
           subtitle: "Reglas de comunidad y moderacion",
           icon: "checkmark.shield",
           url: LegalConfig.communityGuidelinesURL
@@ -90,7 +54,7 @@ struct SettingsView: View {
 
         if let supportMailURL = mailtoURL(for: LegalConfig.supportEmail) {
           Link(destination: supportMailURL) {
-            LabeledContent("Support email") {
+            LabeledContent("Correo de soporte") {
               Text(LegalConfig.supportEmail)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -100,7 +64,7 @@ struct SettingsView: View {
 
         if let securityMailURL = mailtoURL(for: LegalConfig.securityEmail) {
           Link(destination: securityMailURL) {
-            LabeledContent("Security email") {
+            LabeledContent("Correo de seguridad") {
               Text(LegalConfig.securityEmail)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -174,7 +138,11 @@ struct SettingsView: View {
         .disabled(authVM.currentUserID == nil || viewModel.isLoadingDeletionStatus)
 
         Button(role: .destructive) {
-          showDeleteConfirmationDialog = true
+          if authVM.isSignedInWithApple {
+            showAppleDeletionSheet = true
+          } else {
+            showDeleteConfirmationDialog = true
+          }
         } label: {
           HStack {
             if viewModel.isSubmittingDeletionRequest {
@@ -221,19 +189,12 @@ struct SettingsView: View {
           AppLog.auth.info("signOut.tap")
           authVM.signOut()
         } label: {
-          Text("Sign out")
+          Text("Cerrar sesion")
         }
-      }
-
-      Section("Debug") {
-        Text("No mostrar PII en logs.")
-          .font(.footnote)
-          .foregroundStyle(.secondary)
       }
     }
     .navigationTitle("Ajustes")
     .task(id: authVM.currentUserID) {
-      await viewModel.refreshConsent(userID: authVM.currentUserID)
       await viewModel.refreshDeletionStatus(userID: authVM.currentUserID)
     }
     .task(id: viewModel.deletionStatus.status) {
@@ -254,19 +215,32 @@ struct SettingsView: View {
       titleVisibility: .visible
     ) {
       Button("Eliminar mi cuenta", role: .destructive) {
-        Task {
-          let shouldSignOut = await viewModel.requestAccountDeletion(userID: authVM.currentUserID)
-          if viewModel.deletionErrorMessage == nil {
-            deleteConfirmationText = ""
-          }
-          if shouldSignOut {
-            authVM.signOut()
-          }
-        }
+        deleteAccount(appleAuthorizationCode: nil)
       }
       Button("Cancelar", role: .cancel) {}
     } message: {
       Text("Esta accion es irreversible y puede tardar unos minutos en completarse.")
+    }
+    .sheet(isPresented: $showAppleDeletionSheet) {
+      AppleDeletionConfirmationSheet { authorizationCode in
+        showAppleDeletionSheet = false
+        deleteAccount(appleAuthorizationCode: authorizationCode)
+      }
+    }
+  }
+
+  private func deleteAccount(appleAuthorizationCode: String?) {
+    Task {
+      let shouldSignOut = await viewModel.requestAccountDeletion(
+        userID: authVM.currentUserID,
+        appleAuthorizationCode: appleAuthorizationCode
+      )
+      if viewModel.deletionErrorMessage == nil {
+        deleteConfirmationText = ""
+      }
+      if shouldSignOut {
+        authVM.signOut()
+      }
     }
   }
 
@@ -330,5 +304,82 @@ struct SettingsView: View {
     components.scheme = "mailto"
     components.path = email
     return components.url
+  }
+}
+
+/// Accounts that use Sign in with Apple confirm with Apple before being deleted, which returns
+/// the authorization code needed to revoke the app's Apple tokens.
+private struct AppleDeletionConfirmationSheet: View {
+  let onConfirmed: (String) -> Void
+
+  @Environment(\.dismiss) private var dismiss
+  @State private var errorMessage: String?
+
+  var body: some View {
+    NavigationStack {
+      VStack(alignment: .leading, spacing: VinctusTokens.Spacing.lg) {
+        Text(
+          "Tu cuenta usa Iniciar sesion con Apple. Para eliminarla, confirma con Apple: asi tambien quitamos el acceso de Vinctus a tu Apple ID."
+        )
+
+        Text("Esta accion es irreversible y puede tardar unos minutos en completarse.")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+
+        if let errorMessage {
+          Text(errorMessage)
+            .font(.footnote)
+            .foregroundStyle(.red)
+        }
+
+        SignInWithAppleButton(
+          .continue,
+          onRequest: { request in
+            request.requestedScopes = []
+          },
+          onCompletion: handleCompletion
+        )
+        .signInWithAppleButtonStyle(.white)
+        .frame(maxWidth: .infinity)
+        .frame(height: 48)
+
+        Spacer()
+      }
+      .padding(VinctusTokens.Spacing.xl)
+      .navigationTitle("Eliminar cuenta")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancelar") {
+            dismiss()
+          }
+        }
+      }
+    }
+  }
+
+  private func handleCompletion(_ result: Result<ASAuthorization, Error>) {
+    switch result {
+    case .success(let authorization):
+      guard
+        let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+        let codeData = credential.authorizationCode,
+        let code = String(data: codeData, encoding: .utf8),
+        !code.isEmpty
+      else {
+        errorMessage = "Apple no confirmo la solicitud. Intenta de nuevo."
+        return
+      }
+      onConfirmed(code)
+
+    case .failure(let error):
+      if let authError = error as? ASAuthorizationError, authError.code == .canceled {
+        return
+      }
+      AppLog.settings.error(
+        "deleteAccount.appleConfirm.failed errorType=\(AppLog.errorType(error), privacy: .public)"
+      )
+      errorMessage = "No se pudo confirmar con Apple. Intenta de nuevo."
+    }
   }
 }

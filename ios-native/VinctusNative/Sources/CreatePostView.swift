@@ -12,12 +12,8 @@ struct CreatePostView: View {
       VStack(alignment: .leading, spacing: VinctusTokens.Spacing.lg) {
         VCard {
           VStack(alignment: .leading, spacing: VinctusTokens.Spacing.md) {
-            Text("Nuevo post")
+            Text("Nueva publicacion")
               .font(.headline)
-
-            Text("Semana 13: publicacion de texto (sin media).")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
 
             ZStack(alignment: .topLeading) {
               if vm.draftText.isEmpty {

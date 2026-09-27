@@ -15,6 +15,11 @@ final class AuthViewModel: ObservableObject {
     repo.currentUser?.uid
   }
 
+  /// Whether the account can sign in with Apple, so deleting it must also revoke the Apple tokens.
+  var isSignedInWithApple: Bool {
+    repo.currentUser?.providerData.contains { $0.providerID == "apple.com" } ?? false
+  }
+
   init(
     repo: AuthRepo,
     profileBootstrap: UserProfileBootstrapRepo = FirebaseUserProfileBootstrapRepo()
@@ -75,7 +80,7 @@ final class AuthViewModel: ObservableObject {
         AppLog.auth.info("signIn.google.success")
       } catch AuthRepoError.googleSignInCanceled {
         AppLog.auth.info("signIn.google.canceled")
-        infoMessage = "Google Sign-In canceled."
+        infoMessage = "Inicio de sesion con Google cancelado."
       } catch {
         AppLog.auth.error("signIn.google.failed errorType=\(AppLog.errorType(error), privacy: .public)")
         errorMessage = error.localizedDescription
@@ -116,7 +121,7 @@ final class AuthViewModel: ObservableObject {
         AppLog.auth.info("passwordReset.start")
         try await repo.sendPasswordReset(email: email)
         AppLog.auth.info("passwordReset.success")
-        infoMessage = "Password reset email sent (if the account exists)."
+        infoMessage = "Si la cuenta existe, te enviamos un correo para restablecer la contrasena."
       } catch {
         AppLog.auth.error(
           "passwordReset.failed errorType=\(AppLog.errorType(error), privacy: .public)"

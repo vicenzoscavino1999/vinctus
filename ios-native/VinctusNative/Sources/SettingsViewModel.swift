@@ -123,8 +123,10 @@ final class SettingsViewModel: ObservableObject {
     }
   }
 
+  /// `appleAuthorizationCode` comes from confirming with Apple; it is set for accounts that use
+  /// Sign in with Apple, whose tokens are revoked before the deletion starts.
   @discardableResult
-  func requestAccountDeletion(userID: String?) async -> Bool {
+  func requestAccountDeletion(userID: String?, appleAuthorizationCode: String? = nil) async -> Bool {
     guard let userID, !userID.isEmpty else {
       deletionErrorMessage = "Sesion no valida para eliminar cuenta."
       return false
@@ -139,6 +141,18 @@ final class SettingsViewModel: ObservableObject {
     deletionErrorMessage = nil
     deletionInfoMessage = nil
     defer { isSubmittingDeletionRequest = false }
+
+    if let appleAuthorizationCode {
+      do {
+        try await deleteAccountRepo.revokeAppleToken(authorizationCode: appleAuthorizationCode)
+        AppLog.settings.info("deleteAccount.appleRevoke.success")
+      } catch {
+        // A failed revocation must not block the deletion itself.
+        AppLog.settings.error(
+          "deleteAccount.appleRevoke.failed errorType=\(AppLog.errorType(error), privacy: .public)"
+        )
+      }
+    }
 
     do {
       let result = try await deleteAccountRepo.startAccountDeletion()

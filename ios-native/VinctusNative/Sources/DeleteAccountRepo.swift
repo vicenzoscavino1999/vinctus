@@ -1,3 +1,4 @@
+import FirebaseAuth
 import FirebaseCore
 import FirebaseFunctions
 import Foundation
@@ -63,6 +64,9 @@ struct AccountDeletionStatusState {
 protocol DeleteAccountRepo {
   func startAccountDeletion() async throws -> AccountDeletionStartResult
   func getAccountDeletionStatus() async throws -> AccountDeletionStatusState
+  /// Revokes the Sign in with Apple tokens, as Apple requires when deleting such an account.
+  /// Needs a fresh authorization code because Firebase does not keep Apple's tokens.
+  func revokeAppleToken(authorizationCode: String) async throws
 }
 
 enum DeleteAccountRepoError: LocalizedError {
@@ -111,6 +115,11 @@ final class FirebaseDeleteAccountRepo: DeleteAccountRepo {
     guard success else { throw DeleteAccountRepoError.legacyDeleteFailed }
 
     return AccountDeletionStartResult(mode: .legacy, status: .processing, jobID: nil)
+  }
+
+  func revokeAppleToken(authorizationCode: String) async throws {
+    guard FirebaseApp.app() != nil else { throw DeleteAccountRepoError.firebaseNotConfigured }
+    try await Auth.auth().revokeToken(withAuthorizationCode: authorizationCode)
   }
 
   func getAccountDeletionStatus() async throws -> AccountDeletionStatusState {

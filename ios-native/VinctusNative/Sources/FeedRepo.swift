@@ -34,9 +34,9 @@ enum FeedRepoError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .firebaseNotConfigured:
-      return "Firebase not configured."
+      return "Firebase no esta configurado."
     case .missingSnapshot:
-      return "Failed to load feed."
+      return "No se pudo cargar el feed."
     }
   }
 }

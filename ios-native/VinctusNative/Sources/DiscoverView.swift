@@ -50,6 +50,7 @@ private let discoverTrendSeed: [DiscoverTrend] = [
 
 struct DiscoverView: View {
   @EnvironmentObject private var authVM: AuthViewModel
+  @EnvironmentObject private var blockedUsers: BlockedUsersStore
   @StateObject private var vm: DiscoverViewModel
 
   @State private var discoverQuery = ""
@@ -95,11 +96,11 @@ struct DiscoverView: View {
       .listRowSeparator(.hidden)
       .listRowBackground(SwiftUI.Color.clear)
 
-      if !vm.suggestedUsers.isEmpty {
+      if !visibleSuggestedUsers.isEmpty {
         Section("Historias") {
           ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: VinctusTokens.Spacing.md) {
-              ForEach(Array(vm.suggestedUsers.prefix(12))) { user in
+              ForEach(Array(visibleSuggestedUsers.prefix(12))) { user in
                 NavigationLink(destination: ProfileView(repo: profileRepo, userID: user.uid)) {
                   DiscoverStoryChip(user: user)
                 }
@@ -325,6 +326,10 @@ struct DiscoverView: View {
     }
   }
 
+  private var visibleSuggestedUsers: [DiscoverUser] {
+    vm.suggestedUsers.filter { !blockedUsers.isBlocked($0.uid) }
+  }
+
   @MainActor
   private func refreshDiscoverData() async {
     vm.currentUserID = authVM.currentUserID
@@ -351,6 +356,7 @@ struct DiscoverView: View {
 
 struct ConnectionsSearchView: View {
   @EnvironmentObject private var authVM: AuthViewModel
+  @EnvironmentObject private var blockedUsers: BlockedUsersStore
   @StateObject private var vm: DiscoverViewModel
 
   @State private var groups: [GroupSummary] = []
@@ -465,7 +471,7 @@ struct ConnectionsSearchView: View {
         .listRowBackground(SwiftUI.Color.clear)
       } else {
         Section(vm.isSearchActive ? "Resultados de personas" : "Personas recientes") {
-          ForEach(vm.displayedUsers) { user in
+          ForEach(vm.displayedUsers.filter { !blockedUsers.isBlocked($0.uid) }) { user in
             NavigationLink(destination: ProfileView(repo: profileRepo, userID: user.uid)) {
               DiscoverUserRow(user: user)
             }
