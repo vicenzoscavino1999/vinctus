@@ -67,16 +67,19 @@ struct DiscoverView: View {
   private let profileRepo: ProfileRepo
   private let groupsRepo: any GroupsRepo
   private let createPostRepo: any CreatePostRepo
+  private let aiRepo: AIRepo
 
   init(
     repo: DiscoverRepo,
     profileRepo: ProfileRepo,
     groupsRepo: any GroupsRepo,
-    createPostRepo: any CreatePostRepo
+    createPostRepo: any CreatePostRepo,
+    aiRepo: AIRepo
   ) {
     self.profileRepo = profileRepo
     self.groupsRepo = groupsRepo
     self.createPostRepo = createPostRepo
+    self.aiRepo = aiRepo
     _vm = StateObject(wrappedValue: DiscoverViewModel(repo: repo))
   }
 
@@ -95,6 +98,23 @@ struct DiscoverView: View {
       )
       .listRowSeparator(.hidden)
       .listRowBackground(SwiftUI.Color.clear)
+
+      Section {
+        NavigationLink(destination: AIHubView(repo: aiRepo)) {
+          Label {
+            VStack(alignment: .leading, spacing: 2) {
+              Text("Inteligencia artificial")
+                .foregroundStyle(VinctusTokens.Color.textPrimary)
+              Text("Chat con IA y Arena IA")
+                .font(.footnote)
+                .foregroundStyle(VinctusTokens.Color.textMuted)
+            }
+          } icon: {
+            Image(systemName: "sparkles")
+              .foregroundStyle(VinctusTokens.Color.accent)
+          }
+        }
+      }
 
       if !visibleSuggestedUsers.isEmpty {
         Section("Historias") {

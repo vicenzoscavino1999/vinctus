@@ -7,6 +7,7 @@ struct MainTabView: View {
   private let feedRepo = FirebaseFeedRepo()
   private let profileRepo = FirebaseProfileRepo()
   private let groupsRepo = FirebaseGroupsRepo()
+  private let aiRepo = FirebaseAIRepo()
   @StateObject private var blockedUsers = BlockedUsersStore(repo: FirebaseModerationRepo())
 
   init() {
@@ -47,7 +48,8 @@ struct MainTabView: View {
           repo: discoverRepo,
           profileRepo: profileRepo,
           groupsRepo: groupsRepo,
-          createPostRepo: createPostRepo
+          createPostRepo: createPostRepo,
+          aiRepo: aiRepo
         )
       }
       .tabItem { Label("Descubrir", systemImage: "location.north.line") }

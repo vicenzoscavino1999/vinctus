@@ -77,7 +77,7 @@ final class SettingsViewModel: ObservableObject {
         source: .settings,
         updatedAt: Date()
       )
-      infoMessage = nextValue ? "Consentimiento de IA actualizado." : "Consentimiento de IA revocado."
+      infoMessage = nextValue ? "Permiso de IA concedido." : "Permiso de IA retirado."
       AppLog.settings.info("aiConsent.update.success granted=\(nextValue, privacy: .public)")
     } catch {
       AppLog.settings.error(

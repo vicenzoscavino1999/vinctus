@@ -20,6 +20,48 @@ struct SettingsView: View {
       }
       #endif
 
+      Section {
+        Button {
+          Task {
+            await viewModel.toggleAIConsent(userID: authVM.currentUserID)
+          }
+        } label: {
+          HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "sparkles")
+              .foregroundStyle(VinctusTokens.Color.accent)
+              .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Enviar mis mensajes a la IA")
+                .foregroundStyle(.primary)
+              Text(LegalConfig.aiConsentDescription)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if viewModel.isLoadingConsent || viewModel.isSavingConsent {
+              ProgressView()
+            } else {
+              Text(viewModel.aiConsent.granted ? "Permitido" : "No permitido")
+                .font(.caption)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(viewModel.aiConsent.granted ? SwiftUI.Color.green.opacity(0.15) : SwiftUI.Color.gray.opacity(0.15))
+                .foregroundStyle(viewModel.aiConsent.granted ? SwiftUI.Color.green : SwiftUI.Color.secondary)
+                .clipShape(Capsule())
+            }
+          }
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isLoadingConsent || viewModel.isSavingConsent || authVM.currentUserID == nil)
+      } header: {
+        Text("IA")
+      } footer: {
+        Text("Toca para permitir o retirar el permiso. Sin permiso, Chat con IA y Arena IA no envian nada.")
+      }
+
       Section("Privacidad") {
         NavigationLink(destination: BlockedUsersView()) {
           Label("Usuarios bloqueados", systemImage: "hand.raised")
@@ -195,6 +237,7 @@ struct SettingsView: View {
     }
     .navigationTitle("Ajustes")
     .task(id: authVM.currentUserID) {
+      await viewModel.refreshConsent(userID: authVM.currentUserID)
       await viewModel.refreshDeletionStatus(userID: authVM.currentUserID)
     }
     .task(id: viewModel.deletionStatus.status) {

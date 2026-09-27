@@ -25,8 +25,13 @@ enum LegalConfig {
     stringValue(for: "VINCTUS_SECURITY_EMAIL", fallback: "security@vinctus.app")
   }
 
+  /// Host of the web API routes (`api/chat`).
+  static var apiBaseURL: URL {
+    urlValue(for: "VINCTUS_API_BASE_URL", fallback: "https://vinctus.vercel.app")
+  }
+
   static var aiConsentDescription: String {
-    "Debes aceptar el envio de mensajes a proveedores externos de IA antes de usar AI Chat o Arena IA."
+    "Chat con IA y Arena IA envian lo que escribes a proveedores externos de IA (Google Gemini y NVIDIA) para generar respuestas. No se envian tu correo ni tu nombre."
   }
 
   private static func stringValue(for key: String, fallback: String) -> String {

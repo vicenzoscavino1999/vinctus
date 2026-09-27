@@ -72,6 +72,7 @@ En Xcode, abre el target **VinctusNative** y la pestaña **Signing & Capabilitie
    - [ ] **Desbloquear**: en **Perfil > Ajustes > Usuarios bloqueados**.
    - [ ] **Eliminar cuenta**: en **Ajustes > Zona de riesgo**. Pruebalo con una cuenta de prueba. Si la cuenta es de Apple, la app pide confirmar con Apple.
    - [ ] El icono aparece y el nombre bajo el icono es **Vinctus**.
+   - [ ] **IA**: en **Descubrir > Inteligencia artificial**, abre Chat con IA y Arena IA. La primera vez pide permiso; despues responde. El permiso se retira en **Ajustes > IA**.
 
 ## 5. Publicar las funciones, las reglas y las paginas legales
 
@@ -130,7 +131,7 @@ Completa la ficha en App Store Connect:
 - **Descripcion**, palabras clave y categoria (por ejemplo, Redes sociales).
 - **URL de soporte**: `https://vinctus.vercel.app/support.html`
 - **Politica de privacidad**: `https://vinctus.vercel.app/privacy.html`
-- **Privacidad de la app** (etiquetas de privacidad): declara **correo electronico**, **nombre**, **contenido del usuario** (publicaciones, comentarios, perfil) e **ID de usuario**, todos vinculados a la cuenta, usados para el **funcionamiento de la app** y **sin rastreo**. La app nativa no envia datos a proveedores de IA.
+- **Privacidad de la app** (etiquetas de privacidad): declara **correo electronico**, **nombre**, **contenido del usuario** (publicaciones, comentarios, perfil) e **ID de usuario**, todos vinculados a la cuenta, usados para el **funcionamiento de la app** y **sin rastreo**. Declara tambien que el **contenido del usuario** que se escribe en Chat con IA y Arena IA se comparte con terceros (Google Gemini y NVIDIA) para el funcionamiento de la app, solo con el permiso del usuario.
 - **Clasificacion por edad**: responde el cuestionario completo, que desde septiembre de 2026 es obligatorio e incluye preguntas de **redes sociales**. Vinctus tiene un feed de contenido de usuarios, asi que responde que **si tiene capacidades de red social** y **contenido generado por usuarios**. El resultado sera 13+ como minimo.
 - **Paises**: Australia prohibe las redes sociales a menores de 16 años. Lo mas simple es no publicar alli por ahora (**Precios y disponibilidad**). Si la publicas en la Union Europea, completa el estado de **comerciante (DSA)** en **Negocios**.
 - **Informacion para la revision**:
@@ -142,6 +143,7 @@ Completa la ficha en App Store Connect:
     - Denunciar: menu ··· en publicaciones, comentarios y perfiles. Las denuncias llegan a un panel de moderacion donde el equipo elimina el contenido y suspende al autor en menos de 24 horas.
     - Bloquear: el mismo menu. El contenido del usuario bloqueado desaparece al instante. Desbloquear: Ajustes > Usuarios bloqueados.
     - Eliminar cuenta: Ajustes > Zona de riesgo. En cuentas de Apple, tambien se revoca el acceso a Apple.
+    - IA: Descubrir > Inteligencia artificial (Chat con IA y Arena IA). Antes del primer uso, la app explica que los mensajes se envian a Google Gemini y NVIDIA y pide permiso. El permiso se retira en Ajustes > IA.
 
 ## Lo que Apple revisa y como lo cubre la app
 
@@ -159,3 +161,4 @@ Completa la ficha en App Store Connect:
 | 4.8 Iniciar sesion con Apple | Obligatorio si hay Google                            | ✅                                                                                                             |
 | 5.1.1(i) Privacidad          | Politica completa, enlazada en la app y en la ficha  | ✅ `public/privacy.html`: datos, terceros, retencion y como retirar el consentimiento.                         |
 | 5.1.1(v) Eliminar cuenta     | Desde la app, y revocar el token de Apple            | ✅ Ajustes > Zona de riesgo. ⚠️ La revocacion necesita el paso 6.                                              |
+| 5.1.2(i) IA de terceros      | Avisar y pedir permiso antes de enviar datos a IA    | ✅ Pantalla de permiso antes del primer uso de Chat con IA o Arena IA. Se retira en Ajustes > IA.              |

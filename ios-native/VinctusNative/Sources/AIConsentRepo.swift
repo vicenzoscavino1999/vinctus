@@ -36,11 +36,11 @@ enum AIConsentRepoError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .firebaseNotConfigured:
-      return "Firebase not configured."
+      return "Firebase no esta configurado."
     case .invalidUserID:
-      return "Invalid user session."
+      return "Sesion no valida."
     case .missingSnapshot:
-      return "Failed to load AI consent."
+      return "No se pudo cargar el consentimiento de IA."
     }
   }
 }
