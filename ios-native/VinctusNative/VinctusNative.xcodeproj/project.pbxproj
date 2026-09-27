@@ -32,6 +32,7 @@
 		762D0E675177D06AAED7085C /* AuthRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87E1E1F20B56DDF4BBA975CC /* AuthRepo.swift */; };
 		784110CF5F85F66F636C1955 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 64134F618816ABD24D123A39 /* FirebaseFirestore */; };
 		7F9876E0165D8BE65F2DC3EF /* PostDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A86FFB513B46EC14B6D6E5E /* PostDetailViewModel.swift */; };
+		808A66BBD707675DE8B5710A /* DemoMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B32C3DB5EBF834956DBF4AB /* DemoMode.swift */; };
 		810E609C0A67DB876D741C1D /* UserProfileBootstrapRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FFC5C68F3210531C19A536 /* UserProfileBootstrapRepo.swift */; };
 		912F15F4581F1B37A3B1EDFB /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9704ADBE4A84D079E0A04D1C /* FeedView.swift */; };
 		92BE777934F5439B14239842 /* LegalConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C10FCE85A81B518DE14724 /* LegalConfig.swift */; };
@@ -87,6 +88,7 @@
 		5A86FFB513B46EC14B6D6E5E /* PostDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailViewModel.swift; sourceTree = "<group>"; };
 		5FB7C98DFC400FC410886829 /* FeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
 		60DB300F1649A8258629249E /* Prod.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Prod.xcconfig; sourceTree = "<group>"; };
+		6B32C3DB5EBF834956DBF4AB /* DemoMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoMode.swift; sourceTree = "<group>"; };
 		6D9DF1499FD92B5FAB4F8DDC /* AIConsentRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConsentRepo.swift; sourceTree = "<group>"; };
 		738173928D7C851A8787675F /* CreatePostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostView.swift; sourceTree = "<group>"; };
 		77DD360D19A75E29E48BE665 /* ConnectivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityMonitor.swift; sourceTree = "<group>"; };
@@ -179,6 +181,7 @@
 				738173928D7C851A8787675F /* CreatePostView.swift */,
 				3B01A4BA80AFADDC5F9FC6C0 /* CreatePostViewModel.swift */,
 				B772B059C02A23108B14BB2F /* DeleteAccountRepo.swift */,
+				6B32C3DB5EBF834956DBF4AB /* DemoMode.swift */,
 				A0DCD1A9CBE839EEC2FBB8C2 /* DesignSystem.swift */,
 				87150562DCD542A9C566CFE9 /* DiscoverRepo.swift */,
 				2BF88070E3E7255C4689EAEE /* DiscoverView.swift */,
@@ -347,6 +350,7 @@
 				3EECBC0FCA2D06D8DC9C8116 /* CreatePostView.swift in Sources */,
 				E45BB586FE2F7F4E2ACCA029 /* CreatePostViewModel.swift in Sources */,
 				0D34F6877EFB0CAB0EA18CA4 /* DeleteAccountRepo.swift in Sources */,
+				808A66BBD707675DE8B5710A /* DemoMode.swift in Sources */,
 				A672645BF02654F4B697F75F /* DesignSystem.swift in Sources */,
 				E5A6C52BEA78FB216E2C1F65 /* DiscoverRepo.swift in Sources */,
 				F82863C928F8BDECC89E28E0 /* DiscoverView.swift in Sources */,

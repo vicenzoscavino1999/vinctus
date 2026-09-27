@@ -106,10 +106,12 @@ struct DiscoverView: View {
       .listRowBackground(SwiftUI.Color.clear)
 
       Section {
-        NavigationLink(destination: AIHubView(repo: aiRepo)) {
-          DiscoverAIPromoCard()
-        }
-        .buttonStyle(.plain)
+        // A hidden link keeps List from adding its own disclosure arrow next to the card's.
+        DiscoverAIPromoCard()
+          .background(
+            NavigationLink(destination: AIHubView(repo: aiRepo)) { EmptyView() }
+              .opacity(0)
+          )
       }
       .listRowSeparator(.hidden)
       .listRowBackground(SwiftUI.Color.clear)
