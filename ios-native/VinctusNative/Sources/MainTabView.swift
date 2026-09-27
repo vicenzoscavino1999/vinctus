@@ -3,10 +3,10 @@ import UIKit
 
 struct MainTabView: View {
   private let createPostRepo = FirebaseCreatePostRepo()
-  private let discoverRepo = FirebaseDiscoverRepo()
-  private let feedRepo = FirebaseFeedRepo()
-  private let profileRepo = FirebaseProfileRepo()
-  private let groupsRepo = FirebaseGroupsRepo()
+  private let discoverRepo = AppRepos.discover()
+  private let feedRepo = AppRepos.feed()
+  private let profileRepo = AppRepos.profile()
+  private let groupsRepo = AppRepos.groups()
   private let aiRepo = FirebaseAIRepo()
   @StateObject private var blockedUsers = BlockedUsersStore(repo: FirebaseModerationRepo())
 

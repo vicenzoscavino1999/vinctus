@@ -5,7 +5,9 @@ struct RootView: View {
 
   var body: some View {
     Group {
-      if authVM.isSignedIn {
+      if AppRepos.isDemo {
+        MainTabView()
+      } else if authVM.isSignedIn {
         AgeGate {
           MainTabView()
         }

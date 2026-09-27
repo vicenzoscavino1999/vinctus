@@ -51,6 +51,7 @@ jobs:
             -derivedDataPath build \
             -clonedSourcePackagesDirPath .spm \
             CODE_SIGNING_ALLOWED=NO \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) SCREENSHOTS' \
             -quiet
 
       - name: Take screenshots
@@ -76,6 +77,11 @@ jobs:
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusShowPasswordReset
           sleep 8
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/03-password-reset.png"
+          # Signed-in screens with sample data (DemoMode.swift).
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo
+          sleep 10
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/04-discover.png"
 
       - name: Push screenshots to the ios-screenshots branch
         working-directory: ${{ runner.temp }}/shots
