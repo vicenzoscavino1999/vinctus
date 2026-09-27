@@ -1824,6 +1824,12 @@ export const revokeUserSessions = functions.https.onCall(async (_data, context) 
 });
 
 // ==========================================================
+// TRUST & SAFETY - MODERATOR ACTIONS (Callable)
+// ==========================================================
+
+export { moderationTakeAction } from './moderationActions';
+
+// ==========================================================
 // ARENA AI (Callable)
 // ==========================================================
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { moderateUserText } from './moderation';
+import { moderateUserText, parseReportedContentTarget } from './moderation';
 
 const blocked = (text: string) => moderateUserText([text]).blocked;
 
@@ -40,5 +40,26 @@ describe('moderateUserText', () => {
       matchedTerms: [],
       normalizedText: '',
     });
+  });
+});
+
+describe('parseReportedContentTarget', () => {
+  it('reads posts and comments from the report conversationId', () => {
+    expect(parseReportedContentTarget('post_abc123')).toEqual({
+      postId: 'abc123',
+      commentId: null,
+    });
+    expect(parseReportedContentTarget('post_abc123_comment_c9')).toEqual({
+      postId: 'abc123',
+      commentId: 'c9',
+    });
+  });
+
+  it('ignores groups, direct messages, paths and missing values', () => {
+    expect(parseReportedContentTarget('grp_g1')).toBeNull();
+    expect(parseReportedContentTarget('dm_a_b')).toBeNull();
+    expect(parseReportedContentTarget('post_a/b')).toBeNull();
+    expect(parseReportedContentTarget(null)).toBeNull();
+    expect(parseReportedContentTarget('')).toBeNull();
   });
 });

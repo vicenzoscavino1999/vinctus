@@ -182,3 +182,26 @@ export const moderateUserText = (
     normalizedText,
   };
 };
+
+export interface ReportedContentTarget {
+  postId: string;
+  commentId: string | null;
+}
+
+/**
+ * Post or comment a report points at, from the conversationId that reports carry
+ * (`post_<postId>` or `post_<postId>_comment_<commentId>`, see src/shared/lib/firestore/reports.ts).
+ */
+export const parseReportedContentTarget = (
+  conversationId: unknown,
+): ReportedContentTarget | null => {
+  if (typeof conversationId !== 'string') return null;
+
+  const comment = /^post_([^/]+?)_comment_([^/]+)$/.exec(conversationId);
+  if (comment) return { postId: comment[1], commentId: comment[2] };
+
+  const post = /^post_([^/]+)$/.exec(conversationId);
+  if (post) return { postId: post[1], commentId: null };
+
+  return null;
+};
