@@ -7,10 +7,12 @@ on:
   push:
     paths:
       - 'ios-native/**'
+      - '!ios-native/**/*.md'
       - '.github/workflows/ios-native.yml'
   pull_request:
     paths:
       - 'ios-native/**'
+      - '!ios-native/**/*.md'
       - '.github/workflows/ios-native.yml'
   workflow_dispatch:
 
