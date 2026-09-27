@@ -42,6 +42,7 @@
 		CDC9D7CBCC3AF1F3D9FC8224 /* GroupsRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43987B024B88B7BCC5D0DB15 /* GroupsRepo.swift */; };
 		CED347EFDC5DA085E7D07226 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 044E1F95CB1FA517D5923FCC /* FirebaseFunctions */; };
 		CEE76351CF20E4D879BB5F0F /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 215BFDEA7DFD70B3F014FF94 /* FirebaseStorage */; };
+		D01B65DBBECE937BD34D658A /* AIViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E43DFFCCB5C7BD188F6B65 /* AIViews.swift */; };
 		DC21EDB06F435E6ECE9D8984 /* AppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEA6D982A8EF52916A959CEE /* AppLog.swift */; };
 		DC9D3D7FCAFD3227F0940FFA /* AuthGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3490CF87CA7E820D155A69B /* AuthGateView.swift */; };
 		DD869C7A3714791D3731F73F /* FirebaseBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E21170D470DA7A3A12EDEF1 /* FirebaseBootstrap.swift */; };
@@ -49,6 +50,7 @@
 		E5A6C52BEA78FB216E2C1F65 /* DiscoverRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87150562DCD542A9C566CFE9 /* DiscoverRepo.swift */; };
 		E6AF61E51BD52E4B36A534D7 /* Firebase in Resources */ = {isa = PBXBuildFile; fileRef = BE62D674D9DAFE9F84660E60 /* Firebase */; };
 		EE0EE25FE375FF48E832A502 /* ConnectivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DD360D19A75E29E48BE665 /* ConnectivityMonitor.swift */; };
+		EE76FE36210568580CEA8628 /* AIRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D2857E7CB3FBA00E77D4226 /* AIRepo.swift */; };
 		F82863C928F8BDECC89E28E0 /* DiscoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BF88070E3E7255C4689EAEE /* DiscoverView.swift */; };
 		FE84CEDAE60B0B9D3C3ED94E /* ModerationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CEF9ECC3BCED45FF9FD5583 /* ModerationViews.swift */; };
 		FF33F35D2B8DCCFF45DA458C /* FeedRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = B97C2ED97BA8671BCE68D4D2 /* FeedRepo.swift */; };
@@ -70,10 +72,12 @@
 		0B22A4DAC5EE2AAB608DB50D /* VinctusNativeTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VinctusNativeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0E6159A864B4EAEF43187E9D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		19D8A1159261082593EAD650 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		1D2857E7CB3FBA00E77D4226 /* AIRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIRepo.swift; sourceTree = "<group>"; };
 		22C10FCE85A81B518DE14724 /* LegalConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalConfig.swift; sourceTree = "<group>"; };
 		26FE52B28F2FC44604BA6243 /* GroupViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupViewModel.swift; sourceTree = "<group>"; };
 		2BF88070E3E7255C4689EAEE /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
 		32FBE102A72FA92BC6E78DE8 /* VinctusNativeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VinctusNativeTests.swift; sourceTree = "<group>"; };
+		37E43DFFCCB5C7BD188F6B65 /* AIViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIViews.swift; sourceTree = "<group>"; };
 		3B01A4BA80AFADDC5F9FC6C0 /* CreatePostViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostViewModel.swift; sourceTree = "<group>"; };
 		43987B024B88B7BCC5D0DB15 /* GroupsRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupsRepo.swift; sourceTree = "<group>"; };
 		4F9EE591DFED4E4354C5765A /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
@@ -160,6 +164,8 @@
 			isa = PBXGroup;
 			children = (
 				6D9DF1499FD92B5FAB4F8DDC /* AIConsentRepo.swift */,
+				1D2857E7CB3FBA00E77D4226 /* AIRepo.swift */,
+				37E43DFFCCB5C7BD188F6B65 /* AIViews.swift */,
 				969B5D6EE835BE96B822EF6E /* AppEnvironment.swift */,
 				BEA6D982A8EF52916A959CEE /* AppLog.swift */,
 				D3490CF87CA7E820D155A69B /* AuthGateView.swift */,
@@ -325,6 +331,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				0CE0763B58615D781C926DFC /* AIConsentRepo.swift in Sources */,
+				EE76FE36210568580CEA8628 /* AIRepo.swift in Sources */,
+				D01B65DBBECE937BD34D658A /* AIViews.swift in Sources */,
 				9AA68A3394E43CD6F1560C3C /* AppEnvironment.swift in Sources */,
 				DC21EDB06F435E6ECE9D8984 /* AppLog.swift in Sources */,
 				DC9D3D7FCAFD3227F0940FFA /* AuthGateView.swift in Sources */,
