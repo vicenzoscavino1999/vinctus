@@ -198,7 +198,7 @@ final class FirebaseModerationRepo: ModerationRepo {
     batch.deleteDocument(users.document(blocked).collection("followers").document(uid))
 
     // Hide the direct conversation from the blocker (index only)
-    let conversationID = "dm_" + [uid, blocked].sorted().joined(separator: "_")
+    let conversationID = FirebaseChatRepo.directConversationID(uid, blocked)
     batch.deleteDocument(
       users.document(uid).collection("directConversations").document(conversationID)
     )

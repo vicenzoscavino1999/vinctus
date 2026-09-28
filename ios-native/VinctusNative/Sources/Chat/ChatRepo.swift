@@ -201,7 +201,7 @@ final class FirebaseChatRepo: ChatRepo {
   func openDirectConversation(with otherUserID: String) async throws -> String {
     let (db, uid) = try context()
     let memberIDs = [uid, otherUserID].sorted()
-    let conversationID = "dm_" + memberIDs.joined(separator: "_")
+    let conversationID = Self.directConversationID(uid, otherUserID)
     let conversation = db.collection("conversations").document(conversationID)
 
     // The read is denied while the conversation doesn't exist, so a failure means "create it".
@@ -284,15 +284,23 @@ final class FirebaseChatRepo: ChatRepo {
     return profile
   }
 
+  /// Id of the direct conversation between two users, the same for both (`dm_<a>_<b>`, sorted).
+  static func directConversationID(_ firstUID: String, _ secondUID: String) -> String {
+    "dm_" + [firstUID, secondUID].sorted().joined(separator: "_")
+  }
+
   static func message(from document: QueryDocumentSnapshot) -> ChatMessage? {
-    let data = document.data()
+    message(id: document.documentID, data: document.data())
+  }
+
+  static func message(id: String, data: [String: Any]) -> ChatMessage? {
     guard let senderID = data["senderId"] as? String else { return nil }
     let createdAt = (data["createdAt"] as? Timestamp)?.dateValue()
       ?? (data["clientCreatedAt"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue / 1000) }
       ?? Date()
     let attachments = data["attachments"] as? [Any] ?? []
     return ChatMessage(
-      id: document.documentID,
+      id: id,
       senderID: senderID,
       senderName: data["senderName"] as? String,
       text: data["text"] as? String ?? "",

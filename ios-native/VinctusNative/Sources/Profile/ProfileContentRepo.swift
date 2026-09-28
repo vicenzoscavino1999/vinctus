@@ -38,6 +38,17 @@ struct ProfileUserSummary: Identifiable, Hashable {
   let username: String?
 }
 
+/// Where the next page of a profile list starts. Opaque outside the repo.
+struct ProfileListCursor {
+  fileprivate let lastDocument: DocumentSnapshot
+}
+
+/// One page of a profile list; `next` is nil on the last page.
+struct ProfileListPage<Item> {
+  let items: [Item]
+  let next: ProfileListCursor?
+}
+
 struct IncomingFollowRequest: Identifiable, Hashable {
   let id: String
   let from: ProfileUserSummary
@@ -92,6 +103,22 @@ struct NewContribution {
   var description = ""
   var link = ""
   var categoryID: String?
+
+  /// Trimmed fields that pass `isValidContributionCreate` in firestore.rules (title 1-140,
+  /// description up to 2000, link up to 500 and http or https). Empty optional fields become nil.
+  func validated() throws -> (title: String, description: String?, link: String?) {
+    let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    let description = description.trimmingCharacters(in: .whitespacesAndNewlines)
+    let link = link.trimmingCharacters(in: .whitespacesAndNewlines)
+    let scheme = URL(string: link)?.scheme?.lowercased()
+    guard
+      !title.isEmpty, title.count <= 140, description.count <= 2000, link.count <= 500,
+      link.isEmpty || scheme == "http" || scheme == "https"
+    else {
+      throw ProfileContentRepoError.invalidContribution
+    }
+    return (title, description.isEmpty ? nil : description, link.isEmpty ? nil : link)
+  }
 }
 
 struct SavedDebate: Identifiable, Hashable {
@@ -119,8 +146,10 @@ struct SavedDebate: Identifiable, Hashable {
 /// Everything the profile shows besides the profile document itself, over the same Firestore
 /// data as the web profile (`src/features/profile`).
 protocol ProfileContentRepo {
-  func fetchPosts(uid: String, limit: Int) async throws -> [FeedItem]
-  func fetchFollowList(uid: String, kind: FollowListKind, limit: Int) async throws -> [ProfileUserSummary]
+  func fetchPosts(uid: String, limit: Int, after cursor: ProfileListCursor?) async throws -> ProfileListPage<FeedItem>
+  func fetchFollowList(
+    uid: String, kind: FollowListKind, limit: Int, after cursor: ProfileListCursor?
+  ) async throws -> ProfileListPage<ProfileUserSummary>
   func fetchIncomingFollowRequests() async throws -> [IncomingFollowRequest]
   /// Whether `fromUID` asked to follow the signed-in user and is waiting for an answer.
   func hasPendingFollowRequest(from fromUID: String) async throws -> Bool
@@ -169,29 +198,32 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
   // MARK: Posts
 
   /// Mirrors `getPostsByUser` in `src/shared/lib/firestore/posts.ts`.
-  func fetchPosts(uid: String, limit: Int) async throws -> [FeedItem] {
-    let snapshot = try await database().collection("posts")
+  func fetchPosts(uid: String, limit: Int, after cursor: ProfileListCursor?) async throws -> ProfileListPage<FeedItem> {
+    let query = try database().collection("posts")
       .whereField("authorId", isEqualTo: uid)
       .order(by: "createdAt", descending: true)
-      .limit(to: limit)
-      .getDocuments()
-    return snapshot.documents.map(FirebaseFeedRepo.feedItem(from:))
+    let snapshot = try await page(query, limit: limit, after: cursor).getDocuments()
+    return ProfileListPage(
+      items: snapshot.documents.map(FirebaseFeedRepo.feedItem(from:)),
+      next: Self.nextCursor(snapshot, limit: limit)
+    )
   }
 
   // MARK: Follows
 
   /// Mirrors `getFollowList` in `src/shared/lib/firestore/follows.ts`.
-  func fetchFollowList(uid: String, kind: FollowListKind, limit: Int) async throws -> [ProfileUserSummary] {
+  func fetchFollowList(
+    uid: String, kind: FollowListKind, limit: Int, after cursor: ProfileListCursor?
+  ) async throws -> ProfileListPage<ProfileUserSummary> {
     let db = try database()
-    let snapshot = try await db.collection("users").document(uid).collection(kind.rawValue)
+    let query = db.collection("users").document(uid).collection(kind.rawValue)
       .order(by: "createdAt", descending: true)
-      .limit(to: limit)
-      .getDocuments()
+    let snapshot = try await page(query, limit: limit, after: cursor).getDocuments()
     var users: [ProfileUserSummary] = []
     for document in snapshot.documents {
       users.append(await user(document.documentID, db: db))
     }
-    return users
+    return ProfileListPage(items: users, next: Self.nextCursor(snapshot, limit: limit))
   }
 
   /// Mirrors `getIncomingFollowRequests` in `src/shared/lib/firestore/follows.ts`.
@@ -258,22 +290,14 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
   /// Mirrors `createContribution`; files are uploaded from the web.
   func createContribution(_ contribution: NewContribution) async throws {
     let (db, uid) = try context()
-    let title = contribution.title.trimmingCharacters(in: .whitespacesAndNewlines)
-    let description = contribution.description.trimmingCharacters(in: .whitespacesAndNewlines)
-    let link = contribution.link.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard
-      !title.isEmpty, title.count <= 140, description.count <= 2000, link.count <= 500,
-      link.isEmpty || URL(string: link)?.scheme?.hasPrefix("http") == true
-    else {
-      throw ProfileContentRepoError.invalidContribution
-    }
+    let (title, description, link) = try contribution.validated()
     try await db.collection("contributions").document().setData([
       "userId": uid,
       "type": contribution.type.rawValue,
       "title": title,
-      "description": description.isEmpty ? NSNull() : description,
+      "description": description ?? NSNull(),
       "categoryId": contribution.categoryID ?? NSNull(),
-      "link": link.isEmpty ? NSNull() : link,
+      "link": link ?? NSNull(),
       "fileUrl": NSNull(),
       "filePath": NSNull(),
       "fileName": NSNull(),
@@ -353,6 +377,18 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
   }
 
   // MARK: Helpers
+
+  private func page(_ query: Query, limit: Int, after cursor: ProfileListCursor?) -> Query {
+    let limited = query.limit(to: limit)
+    guard let cursor else { return limited }
+    return limited.start(afterDocument: cursor.lastDocument)
+  }
+
+  /// A full page may have more after it; a short one is the last.
+  private static func nextCursor(_ snapshot: QuerySnapshot, limit: Int) -> ProfileListCursor? {
+    guard snapshot.documents.count == limit, let last = snapshot.documents.last else { return nil }
+    return ProfileListCursor(lastDocument: last)
+  }
 
   private func user(_ uid: String, db: Firestore) async -> ProfileUserSummary {
     if let cached = userCache[uid] { return cached }

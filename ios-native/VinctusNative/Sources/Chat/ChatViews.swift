@@ -224,13 +224,15 @@ final class ConversationViewModel: ObservableObject {
     subscription = nil
   }
 
-  func send() {
-    guard canSend else { return }
+  /// Sends the draft. Returns the send task, so tests can wait for it.
+  @discardableResult
+  func send() -> Task<Void, Never>? {
+    guard canSend else { return nil }
     let text = draft
     draft = ""
     isSending = true
     errorMessage = nil
-    Task {
+    return Task {
       do {
         try await repo.sendMessage(conversationID: conversationID, text: text)
       } catch {
@@ -371,7 +373,7 @@ struct ConversationView: View {
         .background(VinctusTokens.Color.surface2)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
-      Button(action: vm.send) {
+      Button { vm.send() } label: {
         Image(systemName: "arrow.up.circle.fill")
           .font(.system(size: 32))
           .foregroundStyle(vm.canSend ? VinctusTokens.Color.accent : VinctusTokens.Color.textMuted)

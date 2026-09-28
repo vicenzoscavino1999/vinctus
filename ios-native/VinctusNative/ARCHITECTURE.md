@@ -7,7 +7,7 @@ SwiftUI app that reads and writes the same Firebase data as the web app (`src/`)
 | Folder        | Contents                                                                 |
 | ------------- | ------------------------------------------------------------------------ |
 | `App/`        | Entry point, root and tab views, `AppRepos` (data sources), demo data    |
-| `Shared/`     | Design system, `FirestoreValue` helpers, connectivity, legal links       |
+| `Shared/`     | Design system, avatar, `FirestoreValue` helpers, connectivity, legal     |
 | `Auth/`       | Sign-in screen, auth repo and view model, age checks, profile bootstrap  |
 | `Discover/`   | Discover tab and people search                                           |
 | `Feed/`       | Community feed, post detail, comments, creating posts, likes and follows |
@@ -39,6 +39,12 @@ View  →  ViewModel (screen state, @MainActor)  →  Repo protocol  →  Fireba
   `firestore.rules` when writing a new field.
 - **Firestore values:** read loose fields with `FirestoreValue.string/int/double/date`, and use
   the `async` Firebase APIs (`try await ref.getDocument()`) instead of callback wrappers.
+
+## Tests
+
+`Tests/` runs without Firebase: view models get the fakes in `Tests/TestFakes.swift`, and data
+rules (conversation ids, report fields, contribution checks) are plain functions tested directly.
+When a screen gets new logic, put it in its view model or a `static func` so it can be tested.
 
 ## Checks
 

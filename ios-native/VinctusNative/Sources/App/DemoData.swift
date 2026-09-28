@@ -79,15 +79,20 @@ struct SampleProfileRepo: ProfileRepo {
 }
 
 struct SampleProfileContentRepo: ProfileContentRepo {
-  func fetchPosts(uid: String, limit: Int) async throws -> [FeedItem] {
-    [
+  func fetchPosts(uid: String, limit: Int, after cursor: ProfileListCursor?) async throws -> ProfileListPage<FeedItem> {
+    ProfileListPage(items: [
       FeedItem(id: "p1", authorID: uid, authorName: "Lucía Fernández", text: "Hoy empecé un club de lectura de divulgación científica. ¿Qué libro recomiendan para el primer mes?", createdAt: Date().addingTimeInterval(-7200), likeCount: 24, commentCount: 9),
       FeedItem(id: "p2", authorID: uid, authorName: "Lucía Fernández", text: "Grabé mi primera pieza de jazz al piano. ¡Gracias a todos por los consejos!", createdAt: Date().addingTimeInterval(-259_200), likeCount: 57, commentCount: 14),
-    ]
+    ], next: nil)
   }
 
-  func fetchFollowList(uid: String, kind: FollowListKind, limit: Int) async throws -> [ProfileUserSummary] {
-    Sample.users.prefix(5).map { ProfileUserSummary(id: $0.uid, name: $0.displayName, photoURL: nil, username: nil) }
+  func fetchFollowList(
+    uid: String, kind: FollowListKind, limit: Int, after cursor: ProfileListCursor?
+  ) async throws -> ProfileListPage<ProfileUserSummary> {
+    ProfileListPage(
+      items: Sample.users.prefix(5).map { ProfileUserSummary(id: $0.uid, name: $0.displayName, photoURL: nil, username: nil) },
+      next: nil
+    )
   }
 
   func fetchIncomingFollowRequests() async throws -> [IncomingFollowRequest] {
