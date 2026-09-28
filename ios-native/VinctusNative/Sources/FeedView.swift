@@ -218,9 +218,8 @@ private struct FeedCard: View {
         }
 
         HStack(spacing: 12) {
-          Label("\(item.likeCount)", systemImage: "heart")
+          LikeButton(postID: item.id, initialCount: item.likeCount)
             .font(.caption)
-            .foregroundStyle(VinctusTokens.Color.textMuted)
 
           Label("\(item.commentCount)", systemImage: "text.bubble")
             .font(.caption)

@@ -5,6 +5,7 @@ struct ProfileView: View {
 
   @StateObject private var vm: ProfileViewModel
   @EnvironmentObject private var authVM: AuthViewModel
+  @EnvironmentObject private var blockedUsers: BlockedUsersStore
 
   init(repo: ProfileRepo, userID: String) {
     self.userID = userID
@@ -20,34 +21,40 @@ struct ProfileView: View {
       if let profile = vm.profile {
         Section {
           VCard {
-            HStack(alignment: .center, spacing: VinctusTokens.Spacing.md) {
-              AvatarView(name: profile.displayName, photoURLString: profile.photoURL, size: 62)
+            VStack(alignment: .leading, spacing: VinctusTokens.Spacing.md) {
+              HStack(alignment: .center, spacing: VinctusTokens.Spacing.md) {
+                AvatarView(name: profile.displayName, photoURLString: profile.photoURL, size: 62)
 
-              VStack(alignment: .leading, spacing: 4) {
-                Text(profile.displayName)
-                  .font(.title3)
-                  .bold()
+                VStack(alignment: .leading, spacing: 4) {
+                  Text(profile.displayName)
+                    .font(.title3)
+                    .bold()
 
-                if let username = profile.username {
-                  Text("@\(username)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                  if let username = profile.username {
+                    Text("@\(username)")
+                      .font(.subheadline)
+                      .foregroundStyle(.secondary)
+                  }
+
+                  Text(profile.accountVisibility == .private ? "Cuenta privada" : "Cuenta pública")
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                      profile.accountVisibility == .private
+                        ? SwiftUI.Color.orange.opacity(0.15)
+                        : SwiftUI.Color.green.opacity(0.15)
+                    )
+                    .foregroundStyle(profile.accountVisibility == .private ? .orange : .green)
+                    .clipShape(Capsule())
                 }
 
-                Text(profile.accountVisibility == .private ? "Cuenta privada" : "Cuenta pública")
-                  .font(.caption)
-                  .padding(.horizontal, 8)
-                  .padding(.vertical, 4)
-                  .background(
-                    profile.accountVisibility == .private
-                      ? SwiftUI.Color.orange.opacity(0.15)
-                      : SwiftUI.Color.green.opacity(0.15)
-                  )
-                  .foregroundStyle(profile.accountVisibility == .private ? .orange : .green)
-                  .clipShape(Capsule())
+                Spacer()
               }
 
-              Spacer()
+              if userID != authVM.currentUserID, !blockedUsers.isBlocked(userID) {
+                FollowButton(targetUID: userID, isPrivate: profile.accountVisibility == .private)
+              }
             }
           }
         }

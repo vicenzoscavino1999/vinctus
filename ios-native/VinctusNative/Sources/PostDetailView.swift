@@ -56,7 +56,7 @@ struct PostDetailView: View {
             }
 
             HStack(spacing: 12) {
-              Label("\(item.likeCount)", systemImage: "heart")
+              LikeButton(postID: item.id, initialCount: item.likeCount)
               Label("\(displayCommentCount)", systemImage: "text.bubble")
             }
             .font(.caption)
