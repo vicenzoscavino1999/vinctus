@@ -7,61 +7,63 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		02F41F5F99438C72D3C5C678 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA9C1E82EF5046931A4836E1 /* AuthViewModel.swift */; };
-		09FB5615596633DBD5D66CB5 /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91A189A9A27D16EDFC528BAB /* ProfileViewModel.swift */; };
-		0CE0763B58615D781C926DFC /* AIConsentRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D9DF1499FD92B5FAB4F8DDC /* AIConsentRepo.swift */; };
-		0D34F6877EFB0CAB0EA18CA4 /* DeleteAccountRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = B772B059C02A23108B14BB2F /* DeleteAccountRepo.swift */; };
-		172E6F17AFA31216AF8F4B1A /* PostCommentsRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2673DC1E8F61273FA967957 /* PostCommentsRepo.swift */; };
-		1BAC67BD621D13F0522D21D1 /* AgeAssurance.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB582285AF9DD60015B0F366 /* AgeAssurance.swift */; };
+		18E69CD2D7C19C207A26333D /* AppRepos.swift in Sources */ = {isa = PBXBuildFile; fileRef = 549812F17882081A5B8BFFA5 /* AppRepos.swift */; };
+		1F3034CAABEEC408FC5C3349 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D5F3DAD2CE5B6479618FA78 /* AppEnvironment.swift */; };
 		1FD745B241CC985DA29E71E4 /* VinctusNativeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32FBE102A72FA92BC6E78DE8 /* VinctusNativeTests.swift */; };
-		20F3CF42BD4E7B77973F3395 /* ChatRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54028D9F502CD602C62B9BE3 /* ChatRepo.swift */; };
-		21CF725A4E12453C0FEE51E2 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F9EE591DFED4E4354C5765A /* ProfileView.swift */; };
 		258B93107D59AE1D2710F3C7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0E6159A864B4EAEF43187E9D /* Assets.xcassets */; };
-		27F150C00E619300371947BE /* ProfileContentRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96A72C6C04B3656E0101327B /* ProfileContentRepo.swift */; };
-		2872AB670EE624BE1113A7EF /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96CAF38CE6383118EC248A7B /* MainTabView.swift */; };
-		28D59DB474B7E4271177ED8F /* ModerationRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2619FF522552A7B09CCF96E /* ModerationRepo.swift */; };
-		2A0895B2DE051B88C4A53475 /* EngagementRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A8093F838B72DDD00288C /* EngagementRepo.swift */; };
-		34FE30974A6A8E892C066E9C /* CreatePostRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8637752390EF81683C107A1B /* CreatePostRepo.swift */; };
-		36C48C27188F959CE78BEBD1 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D8A1159261082593EAD650 /* RootView.swift */; };
-		38D341E6017E6264329F846C /* ChatViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4DB59CED41ACC090DDE53FF /* ChatViews.swift */; };
-		3EECBC0FCA2D06D8DC9C8116 /* CreatePostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 738173928D7C851A8787675F /* CreatePostView.swift */; };
-		3FAC60234AB6902F6C4CB3B0 /* GroupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84356F9AFB0962D3BB8E5495 /* GroupView.swift */; };
-		4D4ECFFA5D3457854EDD14D9 /* ProfileSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80383C8F3B2AAEA69425C509 /* ProfileSections.swift */; };
+		2A31DA0380732628BF5690AF /* AuthRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56BEAB7DDD89690EA42F3C05 /* AuthRepo.swift */; };
+		2E52E49553FC445ED1F933C9 /* EngagementViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38A1079016261021F698B1A1 /* EngagementViews.swift */; };
+		32AF883622775303F071DB98 /* FirestoreValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 351BF9B2FD2261C625C4EAB9 /* FirestoreValue.swift */; };
+		4226D89F89D8CF2F00A5103B /* LegalConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = B85DBA4268882F47AC4FE113 /* LegalConfig.swift */; };
+		4264A26CC00C6028BDE33BAF /* DeleteAccountRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3E7ACD7BADF8C41B974DC07 /* DeleteAccountRepo.swift */; };
 		5112777F595730C6B24455F9 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 94BC5A68B5818E1E2DCBF558 /* GoogleSignIn */; };
-		56E2496AAB7FFC497E3F56C9 /* VinctusNativeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F530F8AF276B069F15B8D136 /* VinctusNativeApp.swift */; };
-		5EDA88267DF019E77DDB98CA /* PostDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87AC161541773301749278DA /* PostDetailView.swift */; };
-		62B6218761B67FDE49D8DFF2 /* ProfileRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0027CD1B5879117991A482E1 /* ProfileRepo.swift */; };
-		6F6925F798056280F6CA6598 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C57F2C6BDB2BCBD884624112 /* SettingsView.swift */; };
-		702960F28BCE439F6C9EA39C /* DiscoverViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57528B806455FBABF83D1F54 /* DiscoverViewModel.swift */; };
-		75912EA3A40807C55950D224 /* FeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FB7C98DFC400FC410886829 /* FeedViewModel.swift */; };
-		762D0E675177D06AAED7085C /* AuthRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87E1E1F20B56DDF4BBA975CC /* AuthRepo.swift */; };
+		52AEADE0B160E870D82F9819 /* DiscoverRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEDC06F7AB07D1A9C402E63D /* DiscoverRepo.swift */; };
+		53CBAB862E2B28D33FE5A32D /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100FDADD6AA62CB22A34A95A /* SettingsView.swift */; };
+		5A40C4640057C5F9412D8458 /* ModerationRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00FE6D79AE71081B170ECC42 /* ModerationRepo.swift */; };
+		5D97750F7A08F3D9D6F60169 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D784C477D81A32320096F8E5 /* SettingsViewModel.swift */; };
+		6947D15503FA798A384B2003 /* GroupsRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4AF3E78776E008DCBCCE603 /* GroupsRepo.swift */; };
+		69DDA25CABB934F924FADB02 /* AppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5CF089CAB1B656C12ADFE0B /* AppLog.swift */; };
+		6E9B55544648086DFB8CABA6 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DDBE573FBD42A4C85601D7B /* RootView.swift */; };
 		784110CF5F85F66F636C1955 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 64134F618816ABD24D123A39 /* FirebaseFirestore */; };
-		7F9876E0165D8BE65F2DC3EF /* PostDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A86FFB513B46EC14B6D6E5E /* PostDetailViewModel.swift */; };
-		808A66BBD707675DE8B5710A /* DemoMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B32C3DB5EBF834956DBF4AB /* DemoMode.swift */; };
-		810E609C0A67DB876D741C1D /* UserProfileBootstrapRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FFC5C68F3210531C19A536 /* UserProfileBootstrapRepo.swift */; };
-		912F15F4581F1B37A3B1EDFB /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9704ADBE4A84D079E0A04D1C /* FeedView.swift */; };
-		92BE777934F5439B14239842 /* LegalConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C10FCE85A81B518DE14724 /* LegalConfig.swift */; };
-		9AA68A3394E43CD6F1560C3C /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 969B5D6EE835BE96B822EF6E /* AppEnvironment.swift */; };
-		9B753025E1F8A6BD3B86D3D2 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54F6683AF4E7CA5DBFEF9034 /* SettingsViewModel.swift */; };
-		A672645BF02654F4B697F75F /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DCD1A9CBE839EEC2FBB8C2 /* DesignSystem.swift */; };
+		79F9E78E4B27E25DFB090053 /* PostDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A24E4BFA109CFF45F2A56BB0 /* PostDetailViewModel.swift */; };
+		7CE1F09ABE92CF9FAFE94FCC /* ProfileRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BB9D35810751BEE413C976C /* ProfileRepo.swift */; };
+		805BF9AF2F39E585113C48C0 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24982B1AEE8BAAF3D06E0174 /* MainTabView.swift */; };
+		86DC8D1277CC1D448D9A899F /* AIViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3852A5AEEFD4FCA9D3F2B7F2 /* AIViews.swift */; };
+		93641E3774095EBCD077033C /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93322701149F177A0AEF9F25 /* ProfileView.swift */; };
+		98586795FD141F50225ED03D /* PostDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BC3C2302F1C7F09C103E59A /* PostDetailView.swift */; };
+		993435F28D7953EACE162F37 /* AuthGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7AA26EB3BB6396DF90851D0 /* AuthGateView.swift */; };
+		A82AE84E836F2FC6FA56AD3D /* CreatePostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 969DCF5079D202F9A0045B69 /* CreatePostView.swift */; };
 		AAA82ED739E25ABB8C4BB215 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 1DFC0389A2A3A8827925595D /* FirebaseAuth */; };
-		B8EF3A748A80DC812138B894 /* GroupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26FE52B28F2FC44604BA6243 /* GroupViewModel.swift */; };
-		BF2E55BB8E5C01062253F9B6 /* EngagementViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6725F3C0A28FAE4B1F343FA0 /* EngagementViews.swift */; };
-		CDC9D7CBCC3AF1F3D9FC8224 /* GroupsRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43987B024B88B7BCC5D0DB15 /* GroupsRepo.swift */; };
+		AE699BE6C1CD803E3A1EE6D9 /* ChatViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D46FC6F77E1DEA40E8E3FC1 /* ChatViews.swift */; };
+		AEA35BB4946DAA8143D58DBF /* CreatePostViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 619BA2769710F464678212B9 /* CreatePostViewModel.swift */; };
+		B545C26801EFDE89FC51388D /* GroupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D3883A3D5EE4D1D56210E1E /* GroupViewModel.swift */; };
+		B5AB10F32AC6F6F8E4120AE0 /* ChatRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A3C8624F89A758A2F43F7F4 /* ChatRepo.swift */; };
+		B9CC2B3538BDBFDD2A431A85 /* UserProfileBootstrapRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FA5855A011D4903141887BA /* UserProfileBootstrapRepo.swift */; };
+		BA9A905761323DA1D36E06AD /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41C1C55E29D9A12048BE7F59 /* ProfileViewModel.swift */; };
+		BE285E934ED68494D02B96F7 /* ConnectivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE7BCB9C0EC61E996BBAAA9 /* ConnectivityMonitor.swift */; };
+		C13F32D9EB35156C47828E28 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB514F677093B210934C295E /* AuthViewModel.swift */; };
+		C509E9852B6626529175A74D /* GroupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 956DEE8A59A8461A5CBE7352 /* GroupView.swift */; };
+		CA3B5562FC3E24E6CE7C8641 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCB596E78CD05ADBCC70A1A1 /* DesignSystem.swift */; };
+		CE57A236190A00295C87F25C /* DemoData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D6750387611187EEAC30DA0 /* DemoData.swift */; };
 		CED347EFDC5DA085E7D07226 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 044E1F95CB1FA517D5923FCC /* FirebaseFunctions */; };
 		CEE76351CF20E4D879BB5F0F /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 215BFDEA7DFD70B3F014FF94 /* FirebaseStorage */; };
-		D01B65DBBECE937BD34D658A /* AIViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E43DFFCCB5C7BD188F6B65 /* AIViews.swift */; };
-		DC21EDB06F435E6ECE9D8984 /* AppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEA6D982A8EF52916A959CEE /* AppLog.swift */; };
-		DC9D3D7FCAFD3227F0940FFA /* AuthGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3490CF87CA7E820D155A69B /* AuthGateView.swift */; };
-		DD869C7A3714791D3731F73F /* FirebaseBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E21170D470DA7A3A12EDEF1 /* FirebaseBootstrap.swift */; };
-		E45BB586FE2F7F4E2ACCA029 /* CreatePostViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B01A4BA80AFADDC5F9FC6C0 /* CreatePostViewModel.swift */; };
-		E5A6C52BEA78FB216E2C1F65 /* DiscoverRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87150562DCD542A9C566CFE9 /* DiscoverRepo.swift */; };
+		CF5C6A311CB01D8F2E91DD96 /* FeedRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5C3A78870ED44EC7D6DC521 /* FeedRepo.swift */; };
+		CF8CBF18BA51EC7CCEDFAC1C /* DiscoverViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B93B951A2821B579CB44C62A /* DiscoverViewModel.swift */; };
+		D178D81E8757DDF840736C56 /* VinctusNativeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6975F29455C320517E339868 /* VinctusNativeApp.swift */; };
+		D5DA1509EBED8861F6E351CB /* ProfileContentRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7158BB6F848B29745BE10476 /* ProfileContentRepo.swift */; };
+		D791976912511A0DF15BF95D /* EngagementRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45F00DFDCD36453B89C03AAB /* EngagementRepo.swift */; };
+		DBEBD44789F4FA2FE6F57A6B /* DiscoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E5E3AEA2C985B8F07A4139A /* DiscoverView.swift */; };
+		DF380FAF3EFD567A009B2F52 /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E1F0F7D204B17EB27F6FFE7 /* FeedView.swift */; };
+		E07E8492FFDFFDC9EED632C6 /* ProfileSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40F47345971A205011F4ACF8 /* ProfileSections.swift */; };
+		E1DA297FE73A129627CBBB62 /* ModerationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFB346CF048C6F5164438B10 /* ModerationViews.swift */; };
+		E4BFB9927E1A706F44F65317 /* AIConsentRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2963442B331DE781EFC87032 /* AIConsentRepo.swift */; };
+		E66D79B966BD740B6F7BF0E7 /* AgeAssurance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 812FD57B9F98A85E1A7FC557 /* AgeAssurance.swift */; };
 		E6AF61E51BD52E4B36A534D7 /* Firebase in Resources */ = {isa = PBXBuildFile; fileRef = BE62D674D9DAFE9F84660E60 /* Firebase */; };
-		EE0EE25FE375FF48E832A502 /* ConnectivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DD360D19A75E29E48BE665 /* ConnectivityMonitor.swift */; };
-		EE76FE36210568580CEA8628 /* AIRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D2857E7CB3FBA00E77D4226 /* AIRepo.swift */; };
-		F82863C928F8BDECC89E28E0 /* DiscoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BF88070E3E7255C4689EAEE /* DiscoverView.swift */; };
-		FE84CEDAE60B0B9D3C3ED94E /* ModerationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CEF9ECC3BCED45FF9FD5583 /* ModerationViews.swift */; };
-		FF33F35D2B8DCCFF45DA458C /* FeedRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = B97C2ED97BA8671BCE68D4D2 /* FeedRepo.swift */; };
+		E9C48790D106501001863F3F /* CreatePostRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F567663546FCDF88E0E2A0B /* CreatePostRepo.swift */; };
+		E9FAA40962B36E7BB9729D27 /* PostCommentsRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 845993418ADBC6A5831CA265 /* PostCommentsRepo.swift */; };
+		ED8DCE4A9E4D0252854E06A9 /* FirebaseBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7DBCD854E8F38BD2330EC30 /* FirebaseBootstrap.swift */; };
+		F39B625ACE880D4A5AAD5002 /* AIRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D606371AFA3FC76D94ADF52 /* AIRepo.swift */; };
+		F4FF69E1DD8C4F249250676D /* FeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2625341F82CE8AF3D4933DE /* FeedViewModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -75,61 +77,63 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		001A8093F838B72DDD00288C /* EngagementRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngagementRepo.swift; sourceTree = "<group>"; };
-		0027CD1B5879117991A482E1 /* ProfileRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileRepo.swift; sourceTree = "<group>"; };
+		00FE6D79AE71081B170ECC42 /* ModerationRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModerationRepo.swift; sourceTree = "<group>"; };
 		07714AE151DA08BF000A14ED /* Dev.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Dev.xcconfig; sourceTree = "<group>"; };
 		0B22A4DAC5EE2AAB608DB50D /* VinctusNativeTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VinctusNativeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		0D46FC6F77E1DEA40E8E3FC1 /* ChatViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViews.swift; sourceTree = "<group>"; };
+		0E1F0F7D204B17EB27F6FFE7 /* FeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
 		0E6159A864B4EAEF43187E9D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		19D8A1159261082593EAD650 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
-		1D2857E7CB3FBA00E77D4226 /* AIRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIRepo.swift; sourceTree = "<group>"; };
-		22C10FCE85A81B518DE14724 /* LegalConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalConfig.swift; sourceTree = "<group>"; };
-		26FE52B28F2FC44604BA6243 /* GroupViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupViewModel.swift; sourceTree = "<group>"; };
-		2BF88070E3E7255C4689EAEE /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
+		100FDADD6AA62CB22A34A95A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		1A3C8624F89A758A2F43F7F4 /* ChatRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRepo.swift; sourceTree = "<group>"; };
+		1BC3C2302F1C7F09C103E59A /* PostDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailView.swift; sourceTree = "<group>"; };
+		1D3883A3D5EE4D1D56210E1E /* GroupViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupViewModel.swift; sourceTree = "<group>"; };
+		24982B1AEE8BAAF3D06E0174 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
+		2963442B331DE781EFC87032 /* AIConsentRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConsentRepo.swift; sourceTree = "<group>"; };
+		2CE7BCB9C0EC61E996BBAAA9 /* ConnectivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityMonitor.swift; sourceTree = "<group>"; };
 		32FBE102A72FA92BC6E78DE8 /* VinctusNativeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VinctusNativeTests.swift; sourceTree = "<group>"; };
-		37E43DFFCCB5C7BD188F6B65 /* AIViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIViews.swift; sourceTree = "<group>"; };
-		3B01A4BA80AFADDC5F9FC6C0 /* CreatePostViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostViewModel.swift; sourceTree = "<group>"; };
-		43987B024B88B7BCC5D0DB15 /* GroupsRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupsRepo.swift; sourceTree = "<group>"; };
-		4F9EE591DFED4E4354C5765A /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
-		54028D9F502CD602C62B9BE3 /* ChatRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRepo.swift; sourceTree = "<group>"; };
-		54F6683AF4E7CA5DBFEF9034 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
-		57528B806455FBABF83D1F54 /* DiscoverViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverViewModel.swift; sourceTree = "<group>"; };
-		5A86FFB513B46EC14B6D6E5E /* PostDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailViewModel.swift; sourceTree = "<group>"; };
-		5FB7C98DFC400FC410886829 /* FeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
+		351BF9B2FD2261C625C4EAB9 /* FirestoreValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreValue.swift; sourceTree = "<group>"; };
+		3852A5AEEFD4FCA9D3F2B7F2 /* AIViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIViews.swift; sourceTree = "<group>"; };
+		38A1079016261021F698B1A1 /* EngagementViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngagementViews.swift; sourceTree = "<group>"; };
+		3D6750387611187EEAC30DA0 /* DemoData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoData.swift; sourceTree = "<group>"; };
+		3E5E3AEA2C985B8F07A4139A /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
+		40F47345971A205011F4ACF8 /* ProfileSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSections.swift; sourceTree = "<group>"; };
+		41C1C55E29D9A12048BE7F59 /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
+		45F00DFDCD36453B89C03AAB /* EngagementRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngagementRepo.swift; sourceTree = "<group>"; };
+		549812F17882081A5B8BFFA5 /* AppRepos.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRepos.swift; sourceTree = "<group>"; };
+		56BEAB7DDD89690EA42F3C05 /* AuthRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRepo.swift; sourceTree = "<group>"; };
 		60DB300F1649A8258629249E /* Prod.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Prod.xcconfig; sourceTree = "<group>"; };
-		6725F3C0A28FAE4B1F343FA0 /* EngagementViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngagementViews.swift; sourceTree = "<group>"; };
-		6B32C3DB5EBF834956DBF4AB /* DemoMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoMode.swift; sourceTree = "<group>"; };
-		6D9DF1499FD92B5FAB4F8DDC /* AIConsentRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConsentRepo.swift; sourceTree = "<group>"; };
-		738173928D7C851A8787675F /* CreatePostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostView.swift; sourceTree = "<group>"; };
-		77DD360D19A75E29E48BE665 /* ConnectivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityMonitor.swift; sourceTree = "<group>"; };
-		7CEF9ECC3BCED45FF9FD5583 /* ModerationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModerationViews.swift; sourceTree = "<group>"; };
-		7E21170D470DA7A3A12EDEF1 /* FirebaseBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseBootstrap.swift; sourceTree = "<group>"; };
-		80383C8F3B2AAEA69425C509 /* ProfileSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSections.swift; sourceTree = "<group>"; };
-		84356F9AFB0962D3BB8E5495 /* GroupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupView.swift; sourceTree = "<group>"; };
-		8637752390EF81683C107A1B /* CreatePostRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostRepo.swift; sourceTree = "<group>"; };
-		87150562DCD542A9C566CFE9 /* DiscoverRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverRepo.swift; sourceTree = "<group>"; };
-		87AC161541773301749278DA /* PostDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailView.swift; sourceTree = "<group>"; };
-		87E1E1F20B56DDF4BBA975CC /* AuthRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRepo.swift; sourceTree = "<group>"; };
-		91A189A9A27D16EDFC528BAB /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
+		619BA2769710F464678212B9 /* CreatePostViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostViewModel.swift; sourceTree = "<group>"; };
+		6975F29455C320517E339868 /* VinctusNativeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VinctusNativeApp.swift; sourceTree = "<group>"; };
+		6F567663546FCDF88E0E2A0B /* CreatePostRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostRepo.swift; sourceTree = "<group>"; };
+		6FA5855A011D4903141887BA /* UserProfileBootstrapRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileBootstrapRepo.swift; sourceTree = "<group>"; };
+		7158BB6F848B29745BE10476 /* ProfileContentRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileContentRepo.swift; sourceTree = "<group>"; };
+		7BB9D35810751BEE413C976C /* ProfileRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileRepo.swift; sourceTree = "<group>"; };
+		812FD57B9F98A85E1A7FC557 /* AgeAssurance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgeAssurance.swift; sourceTree = "<group>"; };
+		845993418ADBC6A5831CA265 /* PostCommentsRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostCommentsRepo.swift; sourceTree = "<group>"; };
+		8D5F3DAD2CE5B6479618FA78 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		8DDBE573FBD42A4C85601D7B /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		93322701149F177A0AEF9F25 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		956DEE8A59A8461A5CBE7352 /* GroupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupView.swift; sourceTree = "<group>"; };
 		95C5F3F30FF9C59DE0399CB7 /* VinctusNative.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VinctusNative.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		95FFC5C68F3210531C19A536 /* UserProfileBootstrapRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileBootstrapRepo.swift; sourceTree = "<group>"; };
-		969B5D6EE835BE96B822EF6E /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
-		96A72C6C04B3656E0101327B /* ProfileContentRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileContentRepo.swift; sourceTree = "<group>"; };
-		96CAF38CE6383118EC248A7B /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
-		9704ADBE4A84D079E0A04D1C /* FeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
-		A0DCD1A9CBE839EEC2FBB8C2 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
-		AA9C1E82EF5046931A4836E1 /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
-		B2619FF522552A7B09CCF96E /* ModerationRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModerationRepo.swift; sourceTree = "<group>"; };
-		B772B059C02A23108B14BB2F /* DeleteAccountRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteAccountRepo.swift; sourceTree = "<group>"; };
-		B97C2ED97BA8671BCE68D4D2 /* FeedRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedRepo.swift; sourceTree = "<group>"; };
-		BB582285AF9DD60015B0F366 /* AgeAssurance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgeAssurance.swift; sourceTree = "<group>"; };
+		969DCF5079D202F9A0045B69 /* CreatePostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostView.swift; sourceTree = "<group>"; };
+		9D606371AFA3FC76D94ADF52 /* AIRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIRepo.swift; sourceTree = "<group>"; };
+		A24E4BFA109CFF45F2A56BB0 /* PostDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailViewModel.swift; sourceTree = "<group>"; };
+		A3E7ACD7BADF8C41B974DC07 /* DeleteAccountRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteAccountRepo.swift; sourceTree = "<group>"; };
+		A7DBCD854E8F38BD2330EC30 /* FirebaseBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseBootstrap.swift; sourceTree = "<group>"; };
+		AB514F677093B210934C295E /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
+		B85DBA4268882F47AC4FE113 /* LegalConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalConfig.swift; sourceTree = "<group>"; };
+		B93B951A2821B579CB44C62A /* DiscoverViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverViewModel.swift; sourceTree = "<group>"; };
 		BE62D674D9DAFE9F84660E60 /* Firebase */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Firebase; path = Resources/Firebase; sourceTree = SOURCE_ROOT; };
-		BEA6D982A8EF52916A959CEE /* AppLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLog.swift; sourceTree = "<group>"; };
-		C2673DC1E8F61273FA967957 /* PostCommentsRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostCommentsRepo.swift; sourceTree = "<group>"; };
-		C57F2C6BDB2BCBD884624112 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		C746389AA28E20A7435ECC38 /* Staging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Staging.xcconfig; sourceTree = "<group>"; };
-		D3490CF87CA7E820D155A69B /* AuthGateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthGateView.swift; sourceTree = "<group>"; };
-		F4DB59CED41ACC090DDE53FF /* ChatViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViews.swift; sourceTree = "<group>"; };
-		F530F8AF276B069F15B8D136 /* VinctusNativeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VinctusNativeApp.swift; sourceTree = "<group>"; };
+		D784C477D81A32320096F8E5 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
+		D7AA26EB3BB6396DF90851D0 /* AuthGateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthGateView.swift; sourceTree = "<group>"; };
+		DCB596E78CD05ADBCC70A1A1 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		DEDC06F7AB07D1A9C402E63D /* DiscoverRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverRepo.swift; sourceTree = "<group>"; };
+		EFB346CF048C6F5164438B10 /* ModerationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModerationViews.swift; sourceTree = "<group>"; };
+		F2625341F82CE8AF3D4933DE /* FeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
+		F4AF3E78776E008DCBCCE603 /* GroupsRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupsRepo.swift; sourceTree = "<group>"; };
+		F5C3A78870ED44EC7D6DC521 /* FeedRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedRepo.swift; sourceTree = "<group>"; };
+		F5CF089CAB1B656C12ADFE0B /* AppLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLog.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -156,6 +160,38 @@
 			path = Tests;
 			sourceTree = "<group>";
 		};
+		0DB66482E25504FCC31927BB /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				A3E7ACD7BADF8C41B974DC07 /* DeleteAccountRepo.swift */,
+				100FDADD6AA62CB22A34A95A /* SettingsView.swift */,
+				D784C477D81A32320096F8E5 /* SettingsViewModel.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		27DA70C074B21B4ED49C8513 /* AI */ = {
+			isa = PBXGroup;
+			children = (
+				2963442B331DE781EFC87032 /* AIConsentRepo.swift */,
+				9D606371AFA3FC76D94ADF52 /* AIRepo.swift */,
+				3852A5AEEFD4FCA9D3F2B7F2 /* AIViews.swift */,
+			);
+			path = AI;
+			sourceTree = "<group>";
+		};
+		386C6A851BE4DE7032D22705 /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				7158BB6F848B29745BE10476 /* ProfileContentRepo.swift */,
+				7BB9D35810751BEE413C976C /* ProfileRepo.swift */,
+				40F47345971A205011F4ACF8 /* ProfileSections.swift */,
+				93322701149F177A0AEF9F25 /* ProfileView.swift */,
+				41C1C55E29D9A12048BE7F59 /* ProfileViewModel.swift */,
+			);
+			path = Profile;
+			sourceTree = "<group>";
+		};
 		3F86EB447F09E79F619D968A /* Resources */ = {
 			isa = PBXGroup;
 			children = (
@@ -163,6 +199,27 @@
 				BE62D674D9DAFE9F84660E60 /* Firebase */,
 			);
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		4E44F3687FDF9954256CCB41 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				812FD57B9F98A85E1A7FC557 /* AgeAssurance.swift */,
+				D7AA26EB3BB6396DF90851D0 /* AuthGateView.swift */,
+				56BEAB7DDD89690EA42F3C05 /* AuthRepo.swift */,
+				AB514F677093B210934C295E /* AuthViewModel.swift */,
+				6FA5855A011D4903141887BA /* UserProfileBootstrapRepo.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		5370FC67521FE59315E17905 /* Moderation */ = {
+			isa = PBXGroup;
+			children = (
+				00FE6D79AE71081B170ECC42 /* ModerationRepo.swift */,
+				EFB346CF048C6F5164438B10 /* ModerationViews.swift */,
+			);
+			path = Moderation;
 			sourceTree = "<group>";
 		};
 		542660F7CF2B2D3CE73C677E = {
@@ -176,58 +233,95 @@
 			);
 			sourceTree = "<group>";
 		};
+		5CE8747AEA03DAB2E013E7A8 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				8D5F3DAD2CE5B6479618FA78 /* AppEnvironment.swift */,
+				F5CF089CAB1B656C12ADFE0B /* AppLog.swift */,
+				549812F17882081A5B8BFFA5 /* AppRepos.swift */,
+				3D6750387611187EEAC30DA0 /* DemoData.swift */,
+				A7DBCD854E8F38BD2330EC30 /* FirebaseBootstrap.swift */,
+				24982B1AEE8BAAF3D06E0174 /* MainTabView.swift */,
+				8DDBE573FBD42A4C85601D7B /* RootView.swift */,
+				6975F29455C320517E339868 /* VinctusNativeApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		6F5FC76926A8383D6C09F6F5 /* Discover */ = {
+			isa = PBXGroup;
+			children = (
+				DEDC06F7AB07D1A9C402E63D /* DiscoverRepo.swift */,
+				3E5E3AEA2C985B8F07A4139A /* DiscoverView.swift */,
+				B93B951A2821B579CB44C62A /* DiscoverViewModel.swift */,
+			);
+			path = Discover;
+			sourceTree = "<group>";
+		};
 		7E35AC2003C6EC59284F4C89 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
-				BB582285AF9DD60015B0F366 /* AgeAssurance.swift */,
-				6D9DF1499FD92B5FAB4F8DDC /* AIConsentRepo.swift */,
-				1D2857E7CB3FBA00E77D4226 /* AIRepo.swift */,
-				37E43DFFCCB5C7BD188F6B65 /* AIViews.swift */,
-				969B5D6EE835BE96B822EF6E /* AppEnvironment.swift */,
-				BEA6D982A8EF52916A959CEE /* AppLog.swift */,
-				D3490CF87CA7E820D155A69B /* AuthGateView.swift */,
-				87E1E1F20B56DDF4BBA975CC /* AuthRepo.swift */,
-				AA9C1E82EF5046931A4836E1 /* AuthViewModel.swift */,
-				54028D9F502CD602C62B9BE3 /* ChatRepo.swift */,
-				F4DB59CED41ACC090DDE53FF /* ChatViews.swift */,
-				77DD360D19A75E29E48BE665 /* ConnectivityMonitor.swift */,
-				8637752390EF81683C107A1B /* CreatePostRepo.swift */,
-				738173928D7C851A8787675F /* CreatePostView.swift */,
-				3B01A4BA80AFADDC5F9FC6C0 /* CreatePostViewModel.swift */,
-				B772B059C02A23108B14BB2F /* DeleteAccountRepo.swift */,
-				6B32C3DB5EBF834956DBF4AB /* DemoMode.swift */,
-				A0DCD1A9CBE839EEC2FBB8C2 /* DesignSystem.swift */,
-				87150562DCD542A9C566CFE9 /* DiscoverRepo.swift */,
-				2BF88070E3E7255C4689EAEE /* DiscoverView.swift */,
-				57528B806455FBABF83D1F54 /* DiscoverViewModel.swift */,
-				001A8093F838B72DDD00288C /* EngagementRepo.swift */,
-				6725F3C0A28FAE4B1F343FA0 /* EngagementViews.swift */,
-				B97C2ED97BA8671BCE68D4D2 /* FeedRepo.swift */,
-				9704ADBE4A84D079E0A04D1C /* FeedView.swift */,
-				5FB7C98DFC400FC410886829 /* FeedViewModel.swift */,
-				7E21170D470DA7A3A12EDEF1 /* FirebaseBootstrap.swift */,
-				43987B024B88B7BCC5D0DB15 /* GroupsRepo.swift */,
-				84356F9AFB0962D3BB8E5495 /* GroupView.swift */,
-				26FE52B28F2FC44604BA6243 /* GroupViewModel.swift */,
-				22C10FCE85A81B518DE14724 /* LegalConfig.swift */,
-				96CAF38CE6383118EC248A7B /* MainTabView.swift */,
-				B2619FF522552A7B09CCF96E /* ModerationRepo.swift */,
-				7CEF9ECC3BCED45FF9FD5583 /* ModerationViews.swift */,
-				C2673DC1E8F61273FA967957 /* PostCommentsRepo.swift */,
-				87AC161541773301749278DA /* PostDetailView.swift */,
-				5A86FFB513B46EC14B6D6E5E /* PostDetailViewModel.swift */,
-				96A72C6C04B3656E0101327B /* ProfileContentRepo.swift */,
-				0027CD1B5879117991A482E1 /* ProfileRepo.swift */,
-				80383C8F3B2AAEA69425C509 /* ProfileSections.swift */,
-				4F9EE591DFED4E4354C5765A /* ProfileView.swift */,
-				91A189A9A27D16EDFC528BAB /* ProfileViewModel.swift */,
-				19D8A1159261082593EAD650 /* RootView.swift */,
-				C57F2C6BDB2BCBD884624112 /* SettingsView.swift */,
-				54F6683AF4E7CA5DBFEF9034 /* SettingsViewModel.swift */,
-				95FFC5C68F3210531C19A536 /* UserProfileBootstrapRepo.swift */,
-				F530F8AF276B069F15B8D136 /* VinctusNativeApp.swift */,
+				27DA70C074B21B4ED49C8513 /* AI */,
+				5CE8747AEA03DAB2E013E7A8 /* App */,
+				4E44F3687FDF9954256CCB41 /* Auth */,
+				ED106FA3363EFE4F09480D2D /* Chat */,
+				6F5FC76926A8383D6C09F6F5 /* Discover */,
+				EEDC1AC66C6DACB9BAD9E9CC /* Feed */,
+				A871CD08EFD4CF8E34208884 /* Groups */,
+				5370FC67521FE59315E17905 /* Moderation */,
+				386C6A851BE4DE7032D22705 /* Profile */,
+				0DB66482E25504FCC31927BB /* Settings */,
+				AE4DC11FA5C7067B6A316F82 /* Shared */,
 			);
 			path = Sources;
+			sourceTree = "<group>";
+		};
+		A871CD08EFD4CF8E34208884 /* Groups */ = {
+			isa = PBXGroup;
+			children = (
+				F4AF3E78776E008DCBCCE603 /* GroupsRepo.swift */,
+				956DEE8A59A8461A5CBE7352 /* GroupView.swift */,
+				1D3883A3D5EE4D1D56210E1E /* GroupViewModel.swift */,
+			);
+			path = Groups;
+			sourceTree = "<group>";
+		};
+		AE4DC11FA5C7067B6A316F82 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				2CE7BCB9C0EC61E996BBAAA9 /* ConnectivityMonitor.swift */,
+				DCB596E78CD05ADBCC70A1A1 /* DesignSystem.swift */,
+				351BF9B2FD2261C625C4EAB9 /* FirestoreValue.swift */,
+				B85DBA4268882F47AC4FE113 /* LegalConfig.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		ED106FA3363EFE4F09480D2D /* Chat */ = {
+			isa = PBXGroup;
+			children = (
+				1A3C8624F89A758A2F43F7F4 /* ChatRepo.swift */,
+				0D46FC6F77E1DEA40E8E3FC1 /* ChatViews.swift */,
+			);
+			path = Chat;
+			sourceTree = "<group>";
+		};
+		EEDC1AC66C6DACB9BAD9E9CC /* Feed */ = {
+			isa = PBXGroup;
+			children = (
+				6F567663546FCDF88E0E2A0B /* CreatePostRepo.swift */,
+				969DCF5079D202F9A0045B69 /* CreatePostView.swift */,
+				619BA2769710F464678212B9 /* CreatePostViewModel.swift */,
+				45F00DFDCD36453B89C03AAB /* EngagementRepo.swift */,
+				38A1079016261021F698B1A1 /* EngagementViews.swift */,
+				F5C3A78870ED44EC7D6DC521 /* FeedRepo.swift */,
+				0E1F0F7D204B17EB27F6FFE7 /* FeedView.swift */,
+				F2625341F82CE8AF3D4933DE /* FeedViewModel.swift */,
+				845993418ADBC6A5831CA265 /* PostCommentsRepo.swift */,
+				1BC3C2302F1C7F09C103E59A /* PostDetailView.swift */,
+				A24E4BFA109CFF45F2A56BB0 /* PostDetailViewModel.swift */,
+			);
+			path = Feed;
 			sourceTree = "<group>";
 		};
 		EF19899C63DF5830A8EBDCB3 /* Config */ = {
@@ -354,53 +448,55 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0CE0763B58615D781C926DFC /* AIConsentRepo.swift in Sources */,
-				EE76FE36210568580CEA8628 /* AIRepo.swift in Sources */,
-				D01B65DBBECE937BD34D658A /* AIViews.swift in Sources */,
-				1BAC67BD621D13F0522D21D1 /* AgeAssurance.swift in Sources */,
-				9AA68A3394E43CD6F1560C3C /* AppEnvironment.swift in Sources */,
-				DC21EDB06F435E6ECE9D8984 /* AppLog.swift in Sources */,
-				DC9D3D7FCAFD3227F0940FFA /* AuthGateView.swift in Sources */,
-				762D0E675177D06AAED7085C /* AuthRepo.swift in Sources */,
-				02F41F5F99438C72D3C5C678 /* AuthViewModel.swift in Sources */,
-				20F3CF42BD4E7B77973F3395 /* ChatRepo.swift in Sources */,
-				38D341E6017E6264329F846C /* ChatViews.swift in Sources */,
-				EE0EE25FE375FF48E832A502 /* ConnectivityMonitor.swift in Sources */,
-				34FE30974A6A8E892C066E9C /* CreatePostRepo.swift in Sources */,
-				3EECBC0FCA2D06D8DC9C8116 /* CreatePostView.swift in Sources */,
-				E45BB586FE2F7F4E2ACCA029 /* CreatePostViewModel.swift in Sources */,
-				0D34F6877EFB0CAB0EA18CA4 /* DeleteAccountRepo.swift in Sources */,
-				808A66BBD707675DE8B5710A /* DemoMode.swift in Sources */,
-				A672645BF02654F4B697F75F /* DesignSystem.swift in Sources */,
-				E5A6C52BEA78FB216E2C1F65 /* DiscoverRepo.swift in Sources */,
-				F82863C928F8BDECC89E28E0 /* DiscoverView.swift in Sources */,
-				702960F28BCE439F6C9EA39C /* DiscoverViewModel.swift in Sources */,
-				2A0895B2DE051B88C4A53475 /* EngagementRepo.swift in Sources */,
-				BF2E55BB8E5C01062253F9B6 /* EngagementViews.swift in Sources */,
-				FF33F35D2B8DCCFF45DA458C /* FeedRepo.swift in Sources */,
-				912F15F4581F1B37A3B1EDFB /* FeedView.swift in Sources */,
-				75912EA3A40807C55950D224 /* FeedViewModel.swift in Sources */,
-				DD869C7A3714791D3731F73F /* FirebaseBootstrap.swift in Sources */,
-				3FAC60234AB6902F6C4CB3B0 /* GroupView.swift in Sources */,
-				B8EF3A748A80DC812138B894 /* GroupViewModel.swift in Sources */,
-				CDC9D7CBCC3AF1F3D9FC8224 /* GroupsRepo.swift in Sources */,
-				92BE777934F5439B14239842 /* LegalConfig.swift in Sources */,
-				2872AB670EE624BE1113A7EF /* MainTabView.swift in Sources */,
-				28D59DB474B7E4271177ED8F /* ModerationRepo.swift in Sources */,
-				FE84CEDAE60B0B9D3C3ED94E /* ModerationViews.swift in Sources */,
-				172E6F17AFA31216AF8F4B1A /* PostCommentsRepo.swift in Sources */,
-				5EDA88267DF019E77DDB98CA /* PostDetailView.swift in Sources */,
-				7F9876E0165D8BE65F2DC3EF /* PostDetailViewModel.swift in Sources */,
-				27F150C00E619300371947BE /* ProfileContentRepo.swift in Sources */,
-				62B6218761B67FDE49D8DFF2 /* ProfileRepo.swift in Sources */,
-				4D4ECFFA5D3457854EDD14D9 /* ProfileSections.swift in Sources */,
-				21CF725A4E12453C0FEE51E2 /* ProfileView.swift in Sources */,
-				09FB5615596633DBD5D66CB5 /* ProfileViewModel.swift in Sources */,
-				36C48C27188F959CE78BEBD1 /* RootView.swift in Sources */,
-				6F6925F798056280F6CA6598 /* SettingsView.swift in Sources */,
-				9B753025E1F8A6BD3B86D3D2 /* SettingsViewModel.swift in Sources */,
-				810E609C0A67DB876D741C1D /* UserProfileBootstrapRepo.swift in Sources */,
-				56E2496AAB7FFC497E3F56C9 /* VinctusNativeApp.swift in Sources */,
+				E4BFB9927E1A706F44F65317 /* AIConsentRepo.swift in Sources */,
+				F39B625ACE880D4A5AAD5002 /* AIRepo.swift in Sources */,
+				86DC8D1277CC1D448D9A899F /* AIViews.swift in Sources */,
+				E66D79B966BD740B6F7BF0E7 /* AgeAssurance.swift in Sources */,
+				1F3034CAABEEC408FC5C3349 /* AppEnvironment.swift in Sources */,
+				69DDA25CABB934F924FADB02 /* AppLog.swift in Sources */,
+				18E69CD2D7C19C207A26333D /* AppRepos.swift in Sources */,
+				993435F28D7953EACE162F37 /* AuthGateView.swift in Sources */,
+				2A31DA0380732628BF5690AF /* AuthRepo.swift in Sources */,
+				C13F32D9EB35156C47828E28 /* AuthViewModel.swift in Sources */,
+				B5AB10F32AC6F6F8E4120AE0 /* ChatRepo.swift in Sources */,
+				AE699BE6C1CD803E3A1EE6D9 /* ChatViews.swift in Sources */,
+				BE285E934ED68494D02B96F7 /* ConnectivityMonitor.swift in Sources */,
+				E9C48790D106501001863F3F /* CreatePostRepo.swift in Sources */,
+				A82AE84E836F2FC6FA56AD3D /* CreatePostView.swift in Sources */,
+				AEA35BB4946DAA8143D58DBF /* CreatePostViewModel.swift in Sources */,
+				4264A26CC00C6028BDE33BAF /* DeleteAccountRepo.swift in Sources */,
+				CE57A236190A00295C87F25C /* DemoData.swift in Sources */,
+				CA3B5562FC3E24E6CE7C8641 /* DesignSystem.swift in Sources */,
+				52AEADE0B160E870D82F9819 /* DiscoverRepo.swift in Sources */,
+				DBEBD44789F4FA2FE6F57A6B /* DiscoverView.swift in Sources */,
+				CF8CBF18BA51EC7CCEDFAC1C /* DiscoverViewModel.swift in Sources */,
+				D791976912511A0DF15BF95D /* EngagementRepo.swift in Sources */,
+				2E52E49553FC445ED1F933C9 /* EngagementViews.swift in Sources */,
+				CF5C6A311CB01D8F2E91DD96 /* FeedRepo.swift in Sources */,
+				DF380FAF3EFD567A009B2F52 /* FeedView.swift in Sources */,
+				F4FF69E1DD8C4F249250676D /* FeedViewModel.swift in Sources */,
+				ED8DCE4A9E4D0252854E06A9 /* FirebaseBootstrap.swift in Sources */,
+				32AF883622775303F071DB98 /* FirestoreValue.swift in Sources */,
+				C509E9852B6626529175A74D /* GroupView.swift in Sources */,
+				B545C26801EFDE89FC51388D /* GroupViewModel.swift in Sources */,
+				6947D15503FA798A384B2003 /* GroupsRepo.swift in Sources */,
+				4226D89F89D8CF2F00A5103B /* LegalConfig.swift in Sources */,
+				805BF9AF2F39E585113C48C0 /* MainTabView.swift in Sources */,
+				5A40C4640057C5F9412D8458 /* ModerationRepo.swift in Sources */,
+				E1DA297FE73A129627CBBB62 /* ModerationViews.swift in Sources */,
+				E9FAA40962B36E7BB9729D27 /* PostCommentsRepo.swift in Sources */,
+				98586795FD141F50225ED03D /* PostDetailView.swift in Sources */,
+				79F9E78E4B27E25DFB090053 /* PostDetailViewModel.swift in Sources */,
+				D5DA1509EBED8861F6E351CB /* ProfileContentRepo.swift in Sources */,
+				7CE1F09ABE92CF9FAFE94FCC /* ProfileRepo.swift in Sources */,
+				E07E8492FFDFFDC9EED632C6 /* ProfileSections.swift in Sources */,
+				93641E3774095EBCD077033C /* ProfileView.swift in Sources */,
+				BA9A905761323DA1D36E06AD /* ProfileViewModel.swift in Sources */,
+				6E9B55544648086DFB8CABA6 /* RootView.swift in Sources */,
+				53CBAB862E2B28D33FE5A32D /* SettingsView.swift in Sources */,
+				5D97750F7A08F3D9D6F60169 /* SettingsViewModel.swift in Sources */,
+				B9CC2B3538BDBFDD2A431A85 /* UserProfileBootstrapRepo.swift in Sources */,
+				D178D81E8757DDF840736C56 /* VinctusNativeApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
