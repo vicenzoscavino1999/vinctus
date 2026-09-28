@@ -21,8 +21,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  # Lets the last step commit the regenerated Xcode project back to the branch.
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -41,7 +40,9 @@ jobs:
       - name: Generate Xcode project
         run: |
           xcodegen generate
-          # Drift between project.yml and the committed project (committed back by the last step).
+          # Drift between project.yml and the committed project. It is harmless (every setup runs
+          # `xcodegen generate` first, see GUIA_APP_STORE.md); the stat shows when to refresh it.
+          # Not committed back automatically: bot commits leave a PR's checks waiting for approval.
           git diff --stat -- VinctusNative.xcodeproj
 
       - uses: actions/cache@v4
@@ -76,20 +77,3 @@ jobs:
             -clonedSourcePackagesDirPath .spm \
             CODE_SIGNING_ALLOWED=NO \
             -quiet
-
-      # Without a Mac, nobody can run XcodeGen locally, so once the app builds and its tests pass the
-      # regenerated project is committed back to the branch that was pushed. Pushes made with
-      # GITHUB_TOKEN don't start new workflow runs, so this can't loop.
-      - name: Commit regenerated Xcode project
-        if: github.event_name == 'push'
-        run: |
-          if git diff --quiet -- VinctusNative.xcodeproj/project.pbxproj; then
-            echo "Xcode project is up to date."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add VinctusNative.xcodeproj/project.pbxproj
-          git commit -m "Regenerate Xcode project from project.yml"
-          # If the branch moved on meanwhile, the next run regenerates it again.
-          git push origin "HEAD:${GITHUB_REF_NAME}" || echo "::warning::Branch moved on; the next run will commit the project."
