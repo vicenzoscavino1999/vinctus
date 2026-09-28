@@ -80,16 +80,16 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
     let postRef = db.collection("posts").document(normalizedPostID)
     let authorSnapshot = try await resolveAuthorSnapshot(uid: currentUser.uid, fallbackUser: currentUser, db: db)
 
-    let existingDoc = try await getDocument(postRef)
+    let existingDoc = try await postRef.getDocument()
     if let existingData = existingDoc.data() {
-      let ownerID = nonEmptyString(existingData["authorId"])
+      let ownerID = FirestoreValue.string(existingData["authorId"])
       guard ownerID == currentUser.uid else { throw CreatePostRepoError.postOwnedByAnotherUser }
 
-      if let existingText = nonEmptyString(existingData["text"]), existingText != normalizedText {
+      if let existingText = FirestoreValue.string(existingData["text"]), existingText != normalizedText {
         throw CreatePostRepoError.draftMismatchForRetry
       }
 
-      if let existingStatus = nonEmptyString(existingData["status"]), existingStatus == "ready" {
+      if let existingStatus = FirestoreValue.string(existingData["status"]), existingStatus == "ready" {
         return
       }
     } else {
@@ -114,17 +114,14 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
         "createdAt": FieldValue.serverTimestamp(),
         "updatedAt": NSNull(),
       ]
-      try await setData(postRef, data: createPayload)
+      try await postRef.setData(createPayload)
     }
 
-    try await updateData(
-      postRef,
-      data: [
-        "status": "ready",
-        "media": [],
-        "updatedAt": FieldValue.serverTimestamp(),
-      ]
-    )
+    try await postRef.updateData([
+      "status": "ready",
+      "media": [],
+      "updatedAt": FieldValue.serverTimestamp(),
+    ])
   }
 
   private func resolveAuthorSnapshot(
@@ -133,14 +130,14 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
     db: Firestore
   ) async throws -> CreatePostAuthorSnapshot {
     let publicRef = db.collection("users_public").document(uid)
-    let publicDoc = try await getDocument(publicRef)
+    let publicDoc = try await publicRef.getDocument()
     let publicData = publicDoc.data() ?? [:]
 
-    let displayName = nonEmptyString(publicData["displayName"])
-      ?? nonEmptyString(fallbackUser.displayName)
+    let displayName = FirestoreValue.string(publicData["displayName"])
+      ?? FirestoreValue.string(fallbackUser.displayName)
       ?? fallbackDisplayName(for: fallbackUser)
       ?? "Usuario"
-    let photoURL = nonEmptyString(publicData["photoURL"]) ?? fallbackUser.photoURL?.absoluteString
+    let photoURL = FirestoreValue.string(publicData["photoURL"]) ?? fallbackUser.photoURL?.absoluteString
 
     return CreatePostAuthorSnapshot(displayName: displayName, photoURL: photoURL)
   }
@@ -154,51 +151,5 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
       }
     }
     return nil
-  }
-
-  private func getDocument(_ ref: DocumentReference) async throws -> DocumentSnapshot {
-    try await withCheckedThrowingContinuation { continuation in
-      ref.getDocument { snapshot, error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        guard let snapshot else {
-          continuation.resume(throwing: CreatePostRepoError.missingSnapshot)
-          return
-        }
-        continuation.resume(returning: snapshot)
-      }
-    }
-  }
-
-  private func setData(_ ref: DocumentReference, data: [String: Any]) async throws {
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      ref.setData(data) { error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
-  }
-
-  private func updateData(_ ref: DocumentReference, data: [String: Any]) async throws {
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      ref.updateData(data) { error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
-  }
-
-  private func nonEmptyString(_ value: Any?) -> String? {
-    guard let stringValue = value as? String else { return nil }
-    let trimmed = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
   }
 }

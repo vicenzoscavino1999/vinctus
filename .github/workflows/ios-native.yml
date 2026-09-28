@@ -40,6 +40,12 @@ jobs:
           # Drift between project.yml and the committed project, to copy back if needed.
           git diff --stat -- VinctusNative.xcodeproj
           git diff -- VinctusNative.xcodeproj/project.pbxproj
+          # When it drifted, print the whole generated file too, so it can be copied back without a Mac.
+          if ! git diff --quiet -- VinctusNative.xcodeproj/project.pbxproj; then
+            echo "=====BEGIN project.pbxproj====="
+            cat VinctusNative.xcodeproj/project.pbxproj
+            echo "=====END project.pbxproj====="
+          fi
 
       - uses: actions/cache@v4
         with:

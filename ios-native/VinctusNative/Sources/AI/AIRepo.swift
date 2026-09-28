@@ -142,9 +142,9 @@ final class FirebaseAIRepo: AIRepo {
       throw AIRepoError.invalidResponse
     }
     return ArenaUsage(
-      used: Self.int(data["used"]) ?? 0,
-      limit: Self.int(data["limit"]) ?? 0,
-      remaining: Self.int(data["remaining"]) ?? 0
+      used: FirestoreValue.int(data["used"]) ?? 0,
+      limit: FirestoreValue.int(data["limit"]) ?? 0,
+      remaining: FirestoreValue.int(data["remaining"]) ?? 0
     )
   }
 
@@ -170,7 +170,7 @@ final class FirebaseAIRepo: AIRepo {
       summary: data["summary"] as? String ?? "",
       winner: verdict?["winner"] as? String ?? "draw",
       verdictReason: verdict?["reason"] as? String ?? "",
-      remaining: Self.int(data["remaining"]),
+      remaining: FirestoreValue.int(data["remaining"]),
       turns: (try? await fetchTurns(debateID: debateID)) ?? []
     )
   }
@@ -191,7 +191,7 @@ final class FirebaseAIRepo: AIRepo {
       guard let text = data["text"] as? String else { return nil }
       return ArenaTurn(
         id: doc.documentID,
-        index: Self.int(data["idx"]) ?? 0,
+        index: FirestoreValue.int(data["idx"]) ?? 0,
         speaker: data["speaker"] as? String ?? "A",
         text: text
       )
@@ -241,13 +241,6 @@ final class FirebaseAIRepo: AIRepo {
     default:
       return "No se pudo contactar a la IA. Intenta de nuevo."
     }
-  }
-
-  private static func int(_ value: Any?) -> Int? {
-    if let value = value as? Int { return value }
-    if let value = value as? NSNumber { return value.intValue }
-    if let value = value as? Double { return Int(value) }
-    return nil
   }
 }
 

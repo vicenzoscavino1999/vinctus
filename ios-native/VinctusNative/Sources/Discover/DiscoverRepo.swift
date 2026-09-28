@@ -48,10 +48,10 @@ final class FirebaseDiscoverRepo: DiscoverRepo {
       .limit(to: pageSize + 1)
 
     do {
-      let snapshot = try await getDocuments(query)
+      let snapshot = try await query.getDocuments()
       return mapUsers(from: snapshot, excluding: uid, limit: pageSize)
     } catch {
-      let snapshot = try await getDocuments(query, source: .cache)
+      let snapshot = try await query.getDocuments(source: .cache)
       return mapUsers(from: snapshot, excluding: uid, limit: pageSize)
     }
   }
@@ -72,10 +72,10 @@ final class FirebaseDiscoverRepo: DiscoverRepo {
       .limit(to: pageSize + 1)
 
     do {
-      let snapshot = try await getDocuments(query)
+      let snapshot = try await query.getDocuments()
       return mapUsers(from: snapshot, excluding: uid, limit: pageSize)
     } catch {
-      let snapshot = try await getDocuments(query, source: .cache)
+      let snapshot = try await query.getDocuments(source: .cache)
       return mapUsers(from: snapshot, excluding: uid, limit: pageSize)
     }
   }
@@ -90,8 +90,8 @@ final class FirebaseDiscoverRepo: DiscoverRepo {
       if let excludedUID, doc.documentID == excludedUID { return nil }
 
       let data = doc.data()
-      let displayName = nonEmptyString(data["displayName"])
-        ?? nonEmptyString(data["username"])
+      let displayName = FirestoreValue.string(data["displayName"])
+        ?? FirestoreValue.string(data["username"])
         ?? "Usuario"
 
       let accountVisibility = (data["accountVisibility"] as? String) == ProfileAccountVisibility.private.rawValue
@@ -101,33 +101,11 @@ final class FirebaseDiscoverRepo: DiscoverRepo {
       return DiscoverUser(
         uid: doc.documentID,
         displayName: displayName,
-        photoURL: nonEmptyString(data["photoURL"]),
+        photoURL: FirestoreValue.string(data["photoURL"]),
         accountVisibility: accountVisibility
       )
     }
 
     return Array(users.prefix(limit))
-  }
-
-  private func getDocuments(_ query: Query, source: FirestoreSource = .default) async throws -> QuerySnapshot {
-    try await withCheckedThrowingContinuation { continuation in
-      query.getDocuments(source: source) { snapshot, error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        guard let snapshot else {
-          continuation.resume(throwing: DiscoverRepoError.missingSnapshot)
-          return
-        }
-        continuation.resume(returning: snapshot)
-      }
-    }
-  }
-
-  private func nonEmptyString(_ value: Any?) -> String? {
-    guard let stringValue = value as? String else { return nil }
-    let trimmed = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
   }
 }

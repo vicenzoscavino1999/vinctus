@@ -19,7 +19,7 @@ final class SettingsViewModel: ObservableObject {
 
   init(
     repo: AIConsentRepo,
-    deleteAccountRepo: DeleteAccountRepo = FirebaseDeleteAccountRepo()
+    deleteAccountRepo: DeleteAccountRepo = AppRepos.deleteAccount()
   ) {
     self.aiConsentRepo = repo
     self.deleteAccountRepo = deleteAccountRepo

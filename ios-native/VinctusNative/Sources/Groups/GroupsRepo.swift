@@ -147,8 +147,8 @@ final class FirebaseGroupsRepo: GroupsRepo {
 
     let topMembers = memberDocs.map { doc in
       let data = doc.data()
-      let role = nonEmptyString(data["role"]) ?? "member"
-      let joinedAt = dateValue(data["joinedAt"])
+      let role = FirestoreValue.string(data["role"]) ?? "member"
+      let joinedAt = FirestoreValue.date(data["joinedAt"])
       let profile = memberProfiles[doc.documentID]
       return GroupMemberPreview(
         uid: doc.documentID,
@@ -161,24 +161,24 @@ final class FirebaseGroupsRepo: GroupsRepo {
 
     let recentPosts = recentPostsSnapshot.documents.map { doc in
       let data = doc.data()
-      let title = nonEmptyString(data["title"]) ?? nonEmptyString(data["text"]) ?? nonEmptyString(data["content"]) ?? "Publicacion"
+      let title = FirestoreValue.string(data["title"]) ?? FirestoreValue.string(data["text"]) ?? FirestoreValue.string(data["content"]) ?? "Publicacion"
 
       let authorName: String = {
         if
           let authorSnapshot = data["authorSnapshot"] as? [String: Any],
-          let displayName = nonEmptyString(authorSnapshot["displayName"])
+          let displayName = FirestoreValue.string(authorSnapshot["displayName"])
         {
           return displayName
         }
-        return nonEmptyString(data["authorName"]) ?? "Usuario"
+        return FirestoreValue.string(data["authorName"]) ?? "Usuario"
       }()
 
       return GroupPostPreview(
         id: doc.documentID,
         title: normalizedPostTitle(title),
-        authorID: nonEmptyString(data["authorId"]) ?? nonEmptyString(data["authorID"]),
+        authorID: FirestoreValue.string(data["authorId"]) ?? FirestoreValue.string(data["authorID"]),
         authorName: authorName,
-        createdAt: dateValue(data["createdAt"])
+        createdAt: FirestoreValue.date(data["createdAt"])
       )
     }
 
@@ -196,16 +196,16 @@ final class FirebaseGroupsRepo: GroupsRepo {
 
     return GroupDetail(
       id: groupDoc.documentID,
-      name: nonEmptyString(groupData["name"]) ?? "Grupo",
-      description: nonEmptyString(groupData["description"]) ?? "",
-      categoryID: nonEmptyString(groupData["categoryId"]),
-      ownerID: nonEmptyString(groupData["ownerId"]),
+      name: FirestoreValue.string(groupData["name"]) ?? "Grupo",
+      description: FirestoreValue.string(groupData["description"]) ?? "",
+      categoryID: FirestoreValue.string(groupData["categoryId"]),
+      ownerID: FirestoreValue.string(groupData["ownerId"]),
       visibility: visibility,
-      iconURL: nonEmptyString(groupData["iconUrl"]),
-      memberCount: intValue(groupData["memberCount"]) ?? max(memberDocs.count, 0),
+      iconURL: FirestoreValue.string(groupData["iconUrl"]),
+      memberCount: FirestoreValue.int(groupData["memberCount"]) ?? max(memberDocs.count, 0),
       postsPerWeek: max(weeklyPostsSnapshot.documents.count, 0),
-      createdAt: dateValue(groupData["createdAt"]),
-      updatedAt: dateValue(groupData["updatedAt"]),
+      createdAt: FirestoreValue.date(groupData["createdAt"]),
+      updatedAt: FirestoreValue.date(groupData["updatedAt"]),
       recentPosts: recentPosts,
       topMembers: topMembers,
       isFromCache: isFromCache
@@ -216,7 +216,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
     guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
     let db = self.db ?? Firestore.firestore()
     let ref = db.collection("groups").document(groupID).collection("members").document(uid)
-    return try await getDocument(ref, source: .server).exists
+    return try await ref.getDocument(source: .server).exists
   }
 
   /// Mirrors `joinPublicGroup` / `joinGroupWithSync` in `src/shared/lib/firestore/groups.ts`.
@@ -224,7 +224,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
     guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
     let db = self.db ?? Firestore.firestore()
     let groupRef = db.collection("groups").document(groupID)
-    let groupDoc = try await getDocument(groupRef, source: .server)
+    let groupDoc = try await groupRef.getDocument(source: .server)
     guard let data = groupDoc.data() else { throw GroupsRepoError.missingSnapshot }
     if (data["visibility"] as? String) == ProfileAccountVisibility.private.rawValue {
       throw GroupsRepoError.privateGroup
@@ -272,8 +272,8 @@ final class FirebaseGroupsRepo: GroupsRepo {
           let (publicDoc, _) = try await self.getDocumentWithFallback(publicRef)
 
           if let data = publicDoc.data() {
-            let name = self.nonEmptyString(data["displayName"]) ?? self.nonEmptyString(data["username"]) ?? "Usuario"
-            let photoURL = self.nonEmptyString(data["photoURL"])
+            let name = FirestoreValue.string(data["displayName"]) ?? FirestoreValue.string(data["username"]) ?? "Usuario"
+            let photoURL = FirestoreValue.string(data["photoURL"])
             return (uid, (name, photoURL))
           }
 
@@ -281,8 +281,8 @@ final class FirebaseGroupsRepo: GroupsRepo {
           let (privateDoc, _) = try await self.getDocumentWithFallback(privateRef)
           let privateData = privateDoc.data() ?? [:]
 
-          let name = self.nonEmptyString(privateData["displayName"]) ?? self.nonEmptyString(privateData["username"]) ?? "Usuario"
-          let photoURL = self.nonEmptyString(privateData["photoURL"])
+          let name = FirestoreValue.string(privateData["displayName"]) ?? FirestoreValue.string(privateData["username"]) ?? "Usuario"
+          let photoURL = FirestoreValue.string(privateData["photoURL"])
           return (uid, (name, photoURL))
         }
       }
@@ -303,13 +303,13 @@ final class FirebaseGroupsRepo: GroupsRepo {
 
     return GroupSummary(
       id: doc.documentID,
-      name: nonEmptyString(data["name"]) ?? "Grupo",
-      description: nonEmptyString(data["description"]) ?? "",
-      categoryID: nonEmptyString(data["categoryId"]),
+      name: FirestoreValue.string(data["name"]) ?? "Grupo",
+      description: FirestoreValue.string(data["description"]) ?? "",
+      categoryID: FirestoreValue.string(data["categoryId"]),
       visibility: visibility,
-      iconURL: nonEmptyString(data["iconUrl"]),
-      memberCount: intValue(data["memberCount"]) ?? 0,
-      updatedAt: dateValue(data["updatedAt"]) ?? dateValue(data["createdAt"]) ?? Date()
+      iconURL: FirestoreValue.string(data["iconUrl"]),
+      memberCount: FirestoreValue.int(data["memberCount"]) ?? 0,
+      updatedAt: FirestoreValue.date(data["updatedAt"]) ?? FirestoreValue.date(data["createdAt"]) ?? Date()
     )
   }
 
@@ -323,72 +323,21 @@ final class FirebaseGroupsRepo: GroupsRepo {
 
   private func getDocumentsWithFallback(_ query: Query) async throws -> (QuerySnapshot, Bool) {
     do {
-      let snapshot = try await getDocuments(query, source: .server)
+      let snapshot = try await query.getDocuments(source: .server)
       return (snapshot, false)
     } catch {
-      let cachedSnapshot = try await getDocuments(query, source: .cache)
+      let cachedSnapshot = try await query.getDocuments(source: .cache)
       return (cachedSnapshot, true)
     }
   }
 
   private func getDocumentWithFallback(_ ref: DocumentReference) async throws -> (DocumentSnapshot, Bool) {
     do {
-      let snapshot = try await getDocument(ref, source: .server)
+      let snapshot = try await ref.getDocument(source: .server)
       return (snapshot, false)
     } catch {
-      let cachedSnapshot = try await getDocument(ref, source: .cache)
+      let cachedSnapshot = try await ref.getDocument(source: .cache)
       return (cachedSnapshot, true)
     }
-  }
-
-  private func getDocuments(_ query: Query, source: FirestoreSource) async throws -> QuerySnapshot {
-    try await withCheckedThrowingContinuation { continuation in
-      query.getDocuments(source: source) { snapshot, error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        guard let snapshot else {
-          continuation.resume(throwing: GroupsRepoError.missingSnapshot)
-          return
-        }
-        continuation.resume(returning: snapshot)
-      }
-    }
-  }
-
-  private func getDocument(_ ref: DocumentReference, source: FirestoreSource) async throws -> DocumentSnapshot {
-    try await withCheckedThrowingContinuation { continuation in
-      ref.getDocument(source: source) { snapshot, error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        guard let snapshot else {
-          continuation.resume(throwing: GroupsRepoError.missingSnapshot)
-          return
-        }
-        continuation.resume(returning: snapshot)
-      }
-    }
-  }
-
-  private func nonEmptyString(_ value: Any?) -> String? {
-    guard let stringValue = value as? String else { return nil }
-    let trimmed = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
-  }
-
-  private func intValue(_ value: Any?) -> Int? {
-    if let intValue = value as? Int { return intValue }
-    if let number = value as? NSNumber { return number.intValue }
-    if let string = value as? String, let parsed = Int(string) { return parsed }
-    return nil
-  }
-
-  private func dateValue(_ value: Any?) -> Date? {
-    if let timestamp = value as? Timestamp { return timestamp.dateValue() }
-    if let date = value as? Date { return date }
-    return nil
   }
 }

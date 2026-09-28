@@ -24,7 +24,7 @@ final class AuthViewModel: ObservableObject {
 
   init(
     repo: AuthRepo,
-    profileBootstrap: UserProfileBootstrapRepo = FirebaseUserProfileBootstrapRepo()
+    profileBootstrap: UserProfileBootstrapRepo = AppRepos.profileBootstrap()
   ) {
     self.repo = repo
     self.profileBootstrap = profileBootstrap

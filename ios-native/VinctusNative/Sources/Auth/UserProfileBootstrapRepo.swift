@@ -38,10 +38,10 @@ final class FirebaseUserProfileBootstrapRepo: UserProfileBootstrapRepo {
 
     let db = self.db ?? Firestore.firestore()
     let userRef = db.collection("users").document(user.uid)
-    let snapshot = try await getDocument(userRef)
+    let snapshot = try await userRef.getDocument()
 
-    let authDisplayName = nonEmptyString(user.displayName)
-    let authPhotoURL = nonEmptyString(user.photoURL?.absoluteString)
+    let authDisplayName = FirestoreValue.string(user.displayName)
+    let authPhotoURL = FirestoreValue.string(user.photoURL?.absoluteString)
     let email = user.email
     let phoneNumber = user.phoneNumber
 
@@ -55,31 +55,27 @@ final class FirebaseUserProfileBootstrapRepo: UserProfileBootstrapRepo {
       resolvedPhotoURL = authPhotoURL
       accountVisibility = "public"
 
-      try await setData(
-        userRef,
-        data: [
-          "uid": user.uid,
-          "displayName": nullable(authDisplayName),
-          "displayNameLowercase": nullable(authDisplayName?.lowercased()),
-          "email": nullable(email),
-          "photoURL": nullable(authPhotoURL),
-          "phoneNumber": nullable(phoneNumber),
-          "reputation": 0,
-          "karmaGlobal": 0,
-          "karmaByInterest": [String: Any](),
-          "settings": [
-            "privacy": Self.defaultPrivacy,
-            "notifications": Self.defaultNotifications,
-          ],
-          "createdAt": FieldValue.serverTimestamp(),
-          "updatedAt": FieldValue.serverTimestamp(),
+      try await userRef.setData([
+        "uid": user.uid,
+        "displayName": nullable(authDisplayName),
+        "displayNameLowercase": nullable(authDisplayName?.lowercased()),
+        "email": nullable(email),
+        "photoURL": nullable(authPhotoURL),
+        "phoneNumber": nullable(phoneNumber),
+        "reputation": 0,
+        "karmaGlobal": 0,
+        "karmaByInterest": [String: Any](),
+        "settings": [
+          "privacy": Self.defaultPrivacy,
+          "notifications": Self.defaultNotifications,
         ],
-        merge: false
-      )
+        "createdAt": FieldValue.serverTimestamp(),
+        "updatedAt": FieldValue.serverTimestamp(),
+      ], merge: false)
     } else {
       let data = snapshot.data() ?? [:]
-      let storedDisplayName = nonEmptyString(data["displayName"])
-      let storedPhotoURL = nonEmptyString(data["photoURL"])
+      let storedDisplayName = FirestoreValue.string(data["displayName"])
+      let storedPhotoURL = FirestoreValue.string(data["photoURL"])
       let settings = data["settings"] as? [String: Any]
       let privacy = settings?["privacy"] as? [String: Any]
       let storedVisibility = privacy?["accountVisibility"] as? String
@@ -119,7 +115,7 @@ final class FirebaseUserProfileBootstrapRepo: UserProfileBootstrapRepo {
 
       if !updates.isEmpty {
         updates["updatedAt"] = FieldValue.serverTimestamp()
-        try await updateData(userRef, data: updates)
+        try await userRef.updateData(updates)
       }
     }
 
@@ -138,11 +134,7 @@ final class FirebaseUserProfileBootstrapRepo: UserProfileBootstrapRepo {
       publicPayload["karmaByInterest"] = [String: Any]()
     }
 
-    try await setData(
-      db.collection("users_public").document(user.uid),
-      data: publicPayload,
-      merge: true
-    )
+    try await db.collection("users_public").document(user.uid).setData(publicPayload, merge: true)
     AppLog.profile.info("ensureUserProfile.success isNewUser=\(isNewUser, privacy: .public)")
   }
 
@@ -162,52 +154,6 @@ final class FirebaseUserProfileBootstrapRepo: UserProfileBootstrapRepo {
     "weeklyDigest": false,
     "productUpdates": true,
   ]
-
-  private func getDocument(_ ref: DocumentReference) async throws -> DocumentSnapshot {
-    try await withCheckedThrowingContinuation { continuation in
-      ref.getDocument { snapshot, error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        guard let snapshot else {
-          continuation.resume(throwing: UserProfileBootstrapRepoError.missingSnapshot)
-          return
-        }
-        continuation.resume(returning: snapshot)
-      }
-    }
-  }
-
-  private func setData(_ ref: DocumentReference, data: [String: Any], merge: Bool) async throws {
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      ref.setData(data, merge: merge) { error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
-  }
-
-  private func updateData(_ ref: DocumentReference, data: [String: Any]) async throws {
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      ref.updateData(data) { error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
-  }
-
-  private func nonEmptyString(_ value: Any?) -> String? {
-    guard let stringValue = value as? String else { return nil }
-    let trimmed = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
-  }
 
   private func nullable(_ value: String?) -> Any {
     value ?? NSNull()

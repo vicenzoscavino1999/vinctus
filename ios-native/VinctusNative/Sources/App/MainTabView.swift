@@ -2,14 +2,14 @@ import SwiftUI
 import UIKit
 
 struct MainTabView: View {
-  private let createPostRepo = FirebaseCreatePostRepo()
+  private let createPostRepo = AppRepos.createPost()
   private let discoverRepo = AppRepos.discover()
   private let feedRepo = AppRepos.feed()
   private let profileRepo = AppRepos.profile()
   private let groupsRepo = AppRepos.groups()
-  private let aiRepo = FirebaseAIRepo()
+  private let aiRepo = AppRepos.ai()
   private let chatRepo = AppRepos.chat()
-  @StateObject private var blockedUsers = BlockedUsersStore(repo: FirebaseModerationRepo())
+  @StateObject private var blockedUsers = BlockedUsersStore(repo: AppRepos.moderation())
 
   init() {
     let appearance = UITabBarAppearance()

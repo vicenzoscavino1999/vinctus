@@ -248,7 +248,7 @@ struct BlockedUsersView: View {
 
   private let profileRepo: ProfileRepo
 
-  init(profileRepo: ProfileRepo = FirebaseProfileRepo()) {
+  init(profileRepo: ProfileRepo = AppRepos.profile()) {
     self.profileRepo = profileRepo
   }
 

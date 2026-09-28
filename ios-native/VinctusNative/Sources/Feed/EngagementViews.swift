@@ -4,7 +4,7 @@ import SwiftUI
 struct LikeButton: View {
   let postID: String
   let initialCount: Int
-  var repo: EngagementRepo = FirebaseEngagementRepo()
+  var repo: EngagementRepo = AppRepos.engagement()
 
   @State private var isLiked = false
   @State private var count: Int?
@@ -46,7 +46,7 @@ struct LikeButton: View {
 struct FollowButton: View {
   let targetUID: String
   let isPrivate: Bool
-  var repo: EngagementRepo = FirebaseEngagementRepo()
+  var repo: EngagementRepo = AppRepos.engagement()
   /// Called with the loaded status and after every change.
   var onStatusChange: ((FollowStatus) -> Void)? = nil
 

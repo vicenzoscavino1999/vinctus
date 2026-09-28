@@ -14,7 +14,7 @@ struct AIConsentGate<Content: View>: View {
   @State private var isSaving = false
   @State private var errorMessage: String?
 
-  private let repo: AIConsentRepo = FirebaseAIConsentRepo()
+  private let repo: AIConsentRepo = AppRepos.aiConsent()
 
   var body: some View {
     Group {

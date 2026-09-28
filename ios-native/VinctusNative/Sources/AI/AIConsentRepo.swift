@@ -103,51 +103,18 @@ final class FirebaseAIConsentRepo: AIConsentRepo {
       "updatedAt": FieldValue.serverTimestamp(),
     ]
 
-    try await setData(
-      ref: ref,
-      payload: payload,
-      mergeFields: [
-        "settings.ai.consentGranted",
-        "settings.ai.consentSource",
-        "settings.ai.consentUpdatedAt",
-        "updatedAt",
-      ]
-    )
+    try await ref.setData(payload, mergeFields: [
+      "settings.ai.consentGranted",
+      "settings.ai.consentSource",
+      "settings.ai.consentUpdatedAt",
+      "updatedAt",
+    ])
   }
 
   private func getUserDocument(uid: String) async throws -> DocumentSnapshot {
     let db = self.db ?? Firestore.firestore()
     let ref = db.collection("users").document(uid)
 
-    return try await withCheckedThrowingContinuation {
-      (continuation: CheckedContinuation<DocumentSnapshot, Error>) in
-      ref.getDocument { snapshot, error in
-        if let error = error {
-          continuation.resume(throwing: error)
-          return
-        }
-        guard let snapshot = snapshot else {
-          continuation.resume(throwing: AIConsentRepoError.missingSnapshot)
-          return
-        }
-        continuation.resume(returning: snapshot)
-      }
-    }
-  }
-
-  private func setData(
-    ref: DocumentReference,
-    payload: [String: Any],
-    mergeFields: [Any]
-  ) async throws {
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      ref.setData(payload, mergeFields: mergeFields) { error in
-        if let error = error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
+    return try await ref.getDocument()
   }
 }

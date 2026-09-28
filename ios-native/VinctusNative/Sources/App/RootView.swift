@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct RootView: View {
-  @StateObject private var authVM = AuthViewModel(repo: FirebaseAuthRepo())
+  @StateObject private var authVM = AuthViewModel(repo: AppRepos.auth())
 
   var body: some View {
     Group {

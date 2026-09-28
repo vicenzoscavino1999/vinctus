@@ -116,24 +116,24 @@ final class FirebaseProfileRepo: ProfileRepo {
 
     let profile = UserProfile(
       id: normalizedUID,
-      displayName: nonEmptyString(privatePayload?["displayName"])
-        ?? nonEmptyString(publicPayload?["displayName"])
-        ?? nonEmptyString(privatePayload?["username"])
-        ?? nonEmptyString(publicPayload?["username"])
+      displayName: FirestoreValue.string(privatePayload?["displayName"])
+        ?? FirestoreValue.string(publicPayload?["displayName"])
+        ?? FirestoreValue.string(privatePayload?["username"])
+        ?? FirestoreValue.string(publicPayload?["username"])
         ?? "Usuario",
-      photoURL: nonEmptyString(privatePayload?["photoURL"]) ?? nonEmptyString(publicPayload?["photoURL"]),
-      username: nonEmptyString(privatePayload?["username"]) ?? nonEmptyString(publicPayload?["username"]),
-      email: nonEmptyString(privatePayload?["email"]),
-      bio: nonEmptyString(privatePayload?["bio"]),
-      role: nonEmptyString(privatePayload?["role"]),
-      location: nonEmptyString(privatePayload?["location"]),
-      reputation: intValue(privatePayload?["reputation"]) ?? intValue(publicPayload?["reputation"]) ?? 0,
-      followersCount: intValue(publicPayload?["followersCount"]) ?? intValue(privatePayload?["followersCount"]) ?? 0,
-      followingCount: intValue(publicPayload?["followingCount"]) ?? intValue(privatePayload?["followingCount"]) ?? 0,
-      postsCount: intValue(publicPayload?["postsCount"]) ?? intValue(privatePayload?["postsCount"]) ?? 0,
+      photoURL: FirestoreValue.string(privatePayload?["photoURL"]) ?? FirestoreValue.string(publicPayload?["photoURL"]),
+      username: FirestoreValue.string(privatePayload?["username"]) ?? FirestoreValue.string(publicPayload?["username"]),
+      email: FirestoreValue.string(privatePayload?["email"]),
+      bio: FirestoreValue.string(privatePayload?["bio"]),
+      role: FirestoreValue.string(privatePayload?["role"]),
+      location: FirestoreValue.string(privatePayload?["location"]),
+      reputation: FirestoreValue.int(privatePayload?["reputation"]) ?? FirestoreValue.int(publicPayload?["reputation"]) ?? 0,
+      followersCount: FirestoreValue.int(publicPayload?["followersCount"]) ?? FirestoreValue.int(privatePayload?["followersCount"]) ?? 0,
+      followingCount: FirestoreValue.int(publicPayload?["followingCount"]) ?? FirestoreValue.int(privatePayload?["followingCount"]) ?? 0,
+      postsCount: FirestoreValue.int(publicPayload?["postsCount"]) ?? FirestoreValue.int(privatePayload?["postsCount"]) ?? 0,
       accountVisibility: visibility,
-      createdAt: dateValue(privatePayload?["createdAt"]) ?? dateValue(publicPayload?["createdAt"]) ?? Date(),
-      updatedAt: dateValue(privatePayload?["updatedAt"]) ?? dateValue(publicPayload?["updatedAt"]) ?? Date(),
+      createdAt: FirestoreValue.date(privatePayload?["createdAt"]) ?? FirestoreValue.date(publicPayload?["createdAt"]) ?? Date(),
+      updatedAt: FirestoreValue.date(privatePayload?["updatedAt"]) ?? FirestoreValue.date(publicPayload?["updatedAt"]) ?? Date(),
       karmaByInterest: karma(privatePayload?["karmaByInterest"] ?? publicPayload?["karmaByInterest"])
     )
 
@@ -207,55 +207,14 @@ final class FirebaseProfileRepo: ProfileRepo {
     allowPermissionDenied: Bool = false
   ) async throws -> [String: Any]? {
     do {
-      let snapshot = try await getDocument(ref)
+      let snapshot = try await ref.getDocument()
       return snapshot.data()
     } catch {
-      if allowPermissionDenied, isPermissionDenied(error) {
+      if allowPermissionDenied, FirestoreValue.isPermissionDenied(error) {
         AppLog.profile.info("profile.private.permissionDenied path=\(ref.path, privacy: .private)")
         return nil
       }
       throw error
     }
-  }
-
-  private func getDocument(_ ref: DocumentReference) async throws -> DocumentSnapshot {
-    try await withCheckedThrowingContinuation { continuation in
-      ref.getDocument { snapshot, error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        guard let snapshot else {
-          continuation.resume(throwing: ProfileRepoError.missingSnapshot)
-          return
-        }
-        continuation.resume(returning: snapshot)
-      }
-    }
-  }
-
-  private func isPermissionDenied(_ error: Error) -> Bool {
-    let nsError = error as NSError
-    return nsError.domain == FirestoreErrorDomain
-      && nsError.code == FirestoreErrorCode.permissionDenied.rawValue
-  }
-
-  private func nonEmptyString(_ value: Any?) -> String? {
-    guard let stringValue = value as? String else { return nil }
-    let trimmed = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
-  }
-
-  private func intValue(_ value: Any?) -> Int? {
-    if let intValue = value as? Int { return intValue }
-    if let number = value as? NSNumber { return number.intValue }
-    if let string = value as? String, let parsed = Int(string) { return parsed }
-    return nil
-  }
-
-  private func dateValue(_ value: Any?) -> Date? {
-    if let timestamp = value as? Timestamp { return timestamp.dateValue() }
-    if let date = value as? Date { return date }
-    return nil
   }
 }

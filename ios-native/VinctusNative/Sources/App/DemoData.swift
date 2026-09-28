@@ -1,71 +1,7 @@
 import Foundation
 
-/// Picks the data sources for the signed-in app. Builds made by the screenshot workflow
-/// (.github/workflows/ios-screenshots.yml) compile with `SCREENSHOTS` and, when launched with
-/// `-VinctusDemo`, skip sign-in and show sample data, so screens can be reviewed without a Firebase
-/// account. App Store builds never contain the sample data.
-enum AppRepos {
-  static var isDemo: Bool {
-    #if SCREENSHOTS
-    return ProcessInfo.processInfo.arguments.contains("-VinctusDemo")
-    #else
-    return false
-    #endif
-  }
-
-  /// The signed-in user in demo mode (the sample chats use it for "my" messages).
-  static let demoUserID = "me"
-
-  /// Launch argument value after `name`, e.g. `-VinctusTab messages`. Screenshot builds only.
-  static func demoArgument(_ name: String) -> String? {
-    guard isDemo else { return nil }
-    let args = ProcessInfo.processInfo.arguments
-    guard let index = args.firstIndex(of: name), index + 1 < args.count else { return nil }
-    return args[index + 1]
-  }
-
-  static func discover() -> DiscoverRepo {
-    #if SCREENSHOTS
-    if isDemo { return SampleDiscoverRepo() }
-    #endif
-    return FirebaseDiscoverRepo()
-  }
-
-  static func groups() -> any GroupsRepo {
-    #if SCREENSHOTS
-    if isDemo { return SampleGroupsRepo() }
-    #endif
-    return FirebaseGroupsRepo()
-  }
-
-  static func profile() -> ProfileRepo {
-    #if SCREENSHOTS
-    if isDemo { return SampleProfileRepo() }
-    #endif
-    return FirebaseProfileRepo()
-  }
-
-  static func feed() -> FeedRepo {
-    #if SCREENSHOTS
-    if isDemo { return SampleFeedRepo() }
-    #endif
-    return FirebaseFeedRepo()
-  }
-
-  static func profileContent() -> ProfileContentRepo {
-    #if SCREENSHOTS
-    if isDemo { return SampleProfileContentRepo() }
-    #endif
-    return FirebaseProfileContentRepo()
-  }
-
-  static func chat() -> ChatRepo {
-    #if SCREENSHOTS
-    if isDemo { return SampleChatRepo() }
-    #endif
-    return FirebaseChatRepo()
-  }
-}
+// Sample data for screenshot builds (see AppRepos). Compiled only with `SCREENSHOTS`, so App Store
+// builds never contain it.
 
 #if SCREENSHOTS
 private enum Sample {

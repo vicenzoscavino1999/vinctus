@@ -70,15 +70,15 @@ struct ReportFields: Equatable {
   let conversationID: String?
 
   init(target: ReportTarget, details rawDetails: String?) {
-    let details = trimmedNonEmpty(rawDetails)
+    let details = FirestoreValue.string(rawDetails)
 
     switch target {
     case let .post(postID, authorID):
-      reportedUID = trimmedNonEmpty(authorID) ?? postID
+      reportedUID = FirestoreValue.string(authorID) ?? postID
       self.details = details.map { "[Post \(postID)] \($0)" } ?? "Reporte de publicacion \(postID)"
       conversationID = "post_\(postID)"
     case let .comment(postID, commentID, authorID):
-      reportedUID = trimmedNonEmpty(authorID) ?? commentID
+      reportedUID = FirestoreValue.string(authorID) ?? commentID
       self.details = details.map { "[Post \(postID)][Comment \(commentID)] \($0)" }
         ?? "Reporte de comentario \(commentID) en post \(postID)"
       conversationID = "post_\(postID)_comment_\(commentID)"
@@ -163,7 +163,7 @@ final class FirebaseModerationRepo: ModerationRepo {
       "status": "open",
       "createdAt": FieldValue.serverTimestamp(),
     ]
-    try await setData(db.collection("reports").document(), data: payload)
+    try await db.collection("reports").document().setData(payload)
     AppLog.moderation.info("report.created reason=\(reason.rawValue, privacy: .public)")
   }
 
@@ -171,14 +171,14 @@ final class FirebaseModerationRepo: ModerationRepo {
     let (db, uid) = try firestoreAndUser()
     let query = db.collection("users").document(uid).collection("blockedUsers")
       .limit(to: Self.blockedUsersFetchLimit)
-    let snapshot = try await getDocuments(query)
+    let snapshot = try await query.getDocuments()
     return Set(snapshot.documents.map(\.documentID))
   }
 
   /// Mirrors `blockUser` in `src/shared/lib/firestore/blockedUsers.ts`.
   func blockUser(_ blockedUID: String) async throws {
     let (db, uid) = try firestoreAndUser()
-    guard let blocked = trimmedNonEmpty(blockedUID) else { throw ModerationRepoError.invalidUserID }
+    guard let blocked = FirestoreValue.string(blockedUID) else { throw ModerationRepoError.invalidUserID }
     guard blocked != uid else { throw ModerationRepoError.cannotBlockSelf }
 
     let users = db.collection("users")
@@ -203,27 +203,25 @@ final class FirebaseModerationRepo: ModerationRepo {
       users.document(uid).collection("directConversations").document(conversationID)
     )
 
-    try await commit(batch)
+    try await batch.commit()
     AppLog.moderation.info("block.created")
 
     // Outside the batch so a denied cleanup can't undo the block (a batch is all-or-nothing):
     // the blocked user's following edge needs the rule that lets the followed user remove it,
     // and follow requests may only be deleted by a participant once they exist.
-    _ = try? await deleteDocument(users.document(blocked).collection("following").document(uid))
+    _ = try? await users.document(blocked).collection("following").document(uid).delete()
     for requestID in ["\(uid)_\(blocked)", "\(blocked)_\(uid)"] {
       let requestRef = db.collection("follow_requests").document(requestID)
-      if let snapshot = try? await getDocument(requestRef), snapshot.exists {
-        _ = try? await deleteDocument(requestRef)
+      if let snapshot = try? await requestRef.getDocument(), snapshot.exists {
+        _ = try? await requestRef.delete()
       }
     }
   }
 
   func unblockUser(_ blockedUID: String) async throws {
     let (db, uid) = try firestoreAndUser()
-    guard let blocked = trimmedNonEmpty(blockedUID) else { throw ModerationRepoError.invalidUserID }
-    try await deleteDocument(
-      db.collection("users").document(uid).collection("blockedUsers").document(blocked)
-    )
+    guard let blocked = FirestoreValue.string(blockedUID) else { throw ModerationRepoError.invalidUserID }
+    try await db.collection("users").document(uid).collection("blockedUsers").document(blocked).delete()
     AppLog.moderation.info("block.removed")
   }
 
@@ -234,79 +232,5 @@ final class FirebaseModerationRepo: ModerationRepo {
     }
     return (db ?? Firestore.firestore(), uid)
   }
-
-  private func setData(_ ref: DocumentReference, data: [String: Any]) async throws {
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      ref.setData(data) { error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
-  }
-
-  private func deleteDocument(_ ref: DocumentReference) async throws {
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      ref.delete { error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
-  }
-
-  private func commit(_ batch: WriteBatch) async throws {
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      batch.commit { error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
-  }
-
-  private func getDocument(_ ref: DocumentReference) async throws -> DocumentSnapshot {
-    try await withCheckedThrowingContinuation { continuation in
-      ref.getDocument { snapshot, error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        guard let snapshot else {
-          continuation.resume(throwing: ModerationRepoError.missingSnapshot)
-          return
-        }
-        continuation.resume(returning: snapshot)
-      }
-    }
-  }
-
-  private func getDocuments(_ query: Query) async throws -> QuerySnapshot {
-    try await withCheckedThrowingContinuation { continuation in
-      query.getDocuments { snapshot, error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        guard let snapshot else {
-          continuation.resume(throwing: ModerationRepoError.missingSnapshot)
-          return
-        }
-        continuation.resume(returning: snapshot)
-      }
-    }
-  }
 }
 
-private func trimmedNonEmpty(_ value: String?) -> String? {
-  guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
-    return nil
-  }
-  return trimmed
-}

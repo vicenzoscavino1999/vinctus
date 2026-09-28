@@ -244,11 +244,11 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
           id: document.documentID,
           type: ContributionType(rawValue: data["type"] as? String ?? "") ?? .other,
           title: data["title"] as? String ?? "Sin título",
-          description: nonEmpty(data["description"]),
-          link: nonEmpty(data["link"]),
-          fileURL: nonEmpty(data["fileUrl"]),
-          fileName: nonEmpty(data["fileName"]),
-          categoryID: nonEmpty(data["categoryId"]),
+          description: FirestoreValue.string(data["description"]),
+          link: FirestoreValue.string(data["link"]),
+          fileURL: FirestoreValue.string(data["fileUrl"]),
+          fileName: FirestoreValue.string(data["fileName"]),
+          categoryID: FirestoreValue.string(data["categoryId"]),
           createdAt: (data["createdAt"] as? Timestamp)?.dateValue() ?? Date(timeIntervalSince1970: 0)
         )
       }
@@ -324,8 +324,8 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
         topic: data["topic"] as? String ?? "Debate",
         personaA: data["personaA"] as? String ?? "",
         personaB: data["personaB"] as? String ?? "",
-        summary: nonEmpty(data["summary"]),
-        winner: nonEmpty(data["verdictWinner"]),
+        summary: FirestoreValue.string(data["summary"]),
+        winner: FirestoreValue.string(data["verdictWinner"]),
         createdAt: (data["createdAt"] as? Timestamp)?.dateValue()
       )
     }
@@ -359,18 +359,11 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
     let data = (try? await db.collection("users_public").document(uid).getDocument().data()) ?? [:]
     let summary = ProfileUserSummary(
       id: uid,
-      name: nonEmpty(data["displayName"]) ?? nonEmpty(data["username"]) ?? "Usuario",
-      photoURL: nonEmpty(data["photoURL"]),
-      username: nonEmpty(data["username"])
+      name: FirestoreValue.string(data["displayName"]) ?? FirestoreValue.string(data["username"]) ?? "Usuario",
+      photoURL: FirestoreValue.string(data["photoURL"]),
+      username: FirestoreValue.string(data["username"])
     )
     userCache[uid] = summary
     return summary
-  }
-
-  private func nonEmpty(_ value: Any?) -> String? {
-    guard let string = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !string.isEmpty else {
-      return nil
-    }
-    return string
   }
 }

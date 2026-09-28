@@ -344,7 +344,7 @@ struct ProfileSavedDebatesSection: View {
 /// A saved debate with its turns, read from `arenaDebates/{id}/turns`.
 private struct SavedDebateView: View {
   let debate: SavedDebate
-  var aiRepo: AIRepo = FirebaseAIRepo()
+  var aiRepo: AIRepo = AppRepos.ai()
 
   @State private var turns: [ArenaTurn] = []
   @State private var isLoading = true
@@ -422,7 +422,7 @@ struct ProfilePostsSection: View {
   @State private var posts: [FeedItem] = []
   @State private var isLoading = true
   @State private var errorMessage: String?
-  private let commentsRepo: any PostCommentsRepo = FirebasePostCommentsRepo()
+  private let commentsRepo: any PostCommentsRepo = AppRepos.postComments()
 
   var body: some View {
     ProfileSectionCard(title: "Publicaciones", icon: "square.text.square") {

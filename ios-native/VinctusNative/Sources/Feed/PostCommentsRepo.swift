@@ -76,18 +76,18 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     let items = snapshot.documents.map { doc in
       let data = doc.data()
       let authorSnapshot = data["authorSnapshot"] as? [String: Any]
-      let authorName = nonEmptyString(authorSnapshot?["displayName"])
-        ?? nonEmptyString(data["authorName"])
-        ?? nonEmptyString(data["authorId"])
+      let authorName = FirestoreValue.string(authorSnapshot?["displayName"])
+        ?? FirestoreValue.string(data["authorName"])
+        ?? FirestoreValue.string(data["authorId"])
         ?? "Usuario"
-      let text = nonEmptyString(data["text"]) ?? ""
+      let text = FirestoreValue.string(data["text"]) ?? ""
 
       return PostComment(
         id: doc.documentID,
-        authorID: nonEmptyString(data["authorId"]),
+        authorID: FirestoreValue.string(data["authorId"]),
         authorName: authorName,
         text: text,
-        createdAt: dateValue(data["createdAt"])
+        createdAt: FirestoreValue.date(data["createdAt"])
       )
     }
 
@@ -129,7 +129,7 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
       "createdAt": FieldValue.serverTimestamp(),
     ]
 
-    try await setData(commentRef, data: payload)
+    try await commentRef.setData(payload)
   }
 
   private func resolveAuthorSnapshot(
@@ -138,14 +138,14 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     db: Firestore
   ) async throws -> (displayName: String, photoURL: String?) {
     let publicRef = db.collection("users_public").document(uid)
-    let snapshot = try await getDocument(publicRef)
+    let snapshot = try await publicRef.getDocument()
     let data = snapshot.data() ?? [:]
 
-    let displayName = nonEmptyString(data["displayName"])
-      ?? nonEmptyString(fallbackUser.displayName)
+    let displayName = FirestoreValue.string(data["displayName"])
+      ?? FirestoreValue.string(fallbackUser.displayName)
       ?? fallbackDisplayName(for: fallbackUser)
       ?? "Usuario"
-    let photoURL = nonEmptyString(data["photoURL"]) ?? fallbackUser.photoURL?.absoluteString
+    let photoURL = FirestoreValue.string(data["photoURL"]) ?? fallbackUser.photoURL?.absoluteString
     return (displayName, photoURL)
   }
 
@@ -162,67 +162,11 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
 
   private func getDocumentsWithFallback(_ query: Query) async throws -> (QuerySnapshot, Bool) {
     do {
-      let snapshot = try await getDocuments(query, source: .server)
+      let snapshot = try await query.getDocuments(source: .server)
       return (snapshot, false)
     } catch {
-      let cachedSnapshot = try await getDocuments(query, source: .cache)
+      let cachedSnapshot = try await query.getDocuments(source: .cache)
       return (cachedSnapshot, true)
     }
-  }
-
-  private func getDocuments(_ query: Query, source: FirestoreSource) async throws -> QuerySnapshot {
-    try await withCheckedThrowingContinuation { continuation in
-      query.getDocuments(source: source) { snapshot, error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        guard let snapshot else {
-          continuation.resume(throwing: PostCommentsRepoError.missingSnapshot)
-          return
-        }
-        continuation.resume(returning: snapshot)
-      }
-    }
-  }
-
-  private func getDocument(_ ref: DocumentReference) async throws -> DocumentSnapshot {
-    try await withCheckedThrowingContinuation { continuation in
-      ref.getDocument { snapshot, error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        guard let snapshot else {
-          continuation.resume(throwing: PostCommentsRepoError.missingSnapshot)
-          return
-        }
-        continuation.resume(returning: snapshot)
-      }
-    }
-  }
-
-  private func setData(_ ref: DocumentReference, data: [String: Any]) async throws {
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      ref.setData(data) { error in
-        if let error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
-  }
-
-  private func nonEmptyString(_ value: Any?) -> String? {
-    guard let stringValue = value as? String else { return nil }
-    let trimmed = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
-  }
-
-  private func dateValue(_ value: Any?) -> Date? {
-    if let timestamp = value as? Timestamp { return timestamp.dateValue() }
-    if let date = value as? Date { return date }
-    return nil
   }
 }

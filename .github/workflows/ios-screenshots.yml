@@ -77,7 +77,7 @@ jobs:
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusShowPasswordReset
           sleep 8
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/03-password-reset.png"
-          # Signed-in screens with sample data (DemoMode.swift).
+          # Signed-in screens with sample data (App/DemoData.swift).
           xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo
           sleep 10

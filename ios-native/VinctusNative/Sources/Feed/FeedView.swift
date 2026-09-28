@@ -8,7 +8,7 @@ struct FeedView: View {
 
   init(repo: FeedRepo, profileRepo: ProfileRepo) {
     self.profileRepo = profileRepo
-    self.commentsRepo = FirebasePostCommentsRepo()
+    self.commentsRepo = AppRepos.postComments()
     _vm = StateObject(wrappedValue: FeedViewModel(repo: repo))
   }
 

@@ -5,7 +5,7 @@ import SwiftUI
 @MainActor
 struct SettingsView: View {
   @EnvironmentObject private var authVM: AuthViewModel
-  @StateObject private var viewModel = SettingsViewModel(repo: FirebaseAIConsentRepo())
+  @StateObject private var viewModel = SettingsViewModel(repo: AppRepos.aiConsent())
   @State private var deleteConfirmationText = ""
   @State private var showDeleteConfirmationDialog = false
   @State private var showAppleDeletionSheet = false

@@ -63,12 +63,12 @@ final class FirebaseFeedRepo: FeedRepo {
     }
 
     do {
-      let snapshot = try await getDocuments(query)
+      let snapshot = try await query.getDocuments()
       return buildPage(snapshot: snapshot, pageSize: pageSize)
     } catch {
       // Only first page tries cache fallback. Paginated requests should fail fast.
       guard cursor == nil else { throw error }
-      let cacheSnapshot = try await getDocuments(query, source: .cache)
+      let cacheSnapshot = try await query.getDocuments(source: .cache)
       return buildPage(snapshot: cacheSnapshot, pageSize: pageSize)
     }
   }
@@ -99,24 +99,10 @@ final class FirebaseFeedRepo: FeedRepo {
   static func feedItem(from doc: QueryDocumentSnapshot) -> FeedItem {
     let data = doc.data()
 
-    func nonEmpty(_ value: Any?) -> String? {
-      guard let string = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !string.isEmpty else {
-        return nil
-      }
-      return string
-    }
-
-    func int(_ value: Any?) -> Int? {
-      if let intValue = value as? Int { return intValue }
-      if let number = value as? NSNumber { return number.intValue }
-      if let string = value as? String, let parsed = Int(string) { return parsed }
-      return nil
-    }
-
     let authorSnapshot = data["authorSnapshot"] as? [String: Any]
-    let authorName = nonEmpty(authorSnapshot?["displayName"])
-      ?? nonEmpty(data["authorName"])
-      ?? nonEmpty(data["authorId"])
+    let authorName = FirestoreValue.string(authorSnapshot?["displayName"])
+      ?? FirestoreValue.string(data["authorName"])
+      ?? FirestoreValue.string(data["authorId"])
       ?? "Usuario"
     let text = (data["text"] as? String).flatMap { $0.isEmpty ? nil : $0 }
       ?? (data["content"] as? String)
@@ -124,28 +110,12 @@ final class FirebaseFeedRepo: FeedRepo {
 
     return FeedItem(
       id: doc.documentID,
-      authorID: nonEmpty(data["authorId"]) ?? nonEmpty(data["authorID"]),
+      authorID: FirestoreValue.string(data["authorId"]) ?? FirestoreValue.string(data["authorID"]),
       authorName: authorName,
       text: text,
       createdAt: (data["createdAt"] as? Timestamp)?.dateValue(),
-      likeCount: max(0, int(data["likeCount"]) ?? int(data["likesCount"]) ?? 0),
-      commentCount: max(0, int(data["commentCount"]) ?? int(data["commentsCount"]) ?? 0)
+      likeCount: max(0, FirestoreValue.int(data["likeCount"]) ?? FirestoreValue.int(data["likesCount"]) ?? 0),
+      commentCount: max(0, FirestoreValue.int(data["commentCount"]) ?? FirestoreValue.int(data["commentsCount"]) ?? 0)
     )
-  }
-
-  private func getDocuments(_ query: Query, source: FirestoreSource = .default) async throws -> QuerySnapshot {
-    try await withCheckedThrowingContinuation { continuation in
-      query.getDocuments(source: source) { snapshot, error in
-        if let error = error {
-          continuation.resume(throwing: error)
-          return
-        }
-        guard let snapshot = snapshot else {
-          continuation.resume(throwing: FeedRepoError.missingSnapshot)
-          return
-        }
-        continuation.resume(returning: snapshot)
-      }
-    }
   }
 }

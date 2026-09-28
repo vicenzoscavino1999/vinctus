@@ -64,29 +64,13 @@ final class FirebaseAuthRepo: AuthRepo {
   func signIn(email: String, password: String) async throws {
     guard FirebaseApp.app() != nil else { throw AuthRepoError.firebaseNotConfigured }
 
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      Auth.auth().signIn(withEmail: email, password: password) { _, error in
-        if let error = error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
+    _ = try await Auth.auth().signIn(withEmail: email, password: password)
   }
 
   func createAccount(email: String, password: String) async throws {
     guard FirebaseApp.app() != nil else { throw AuthRepoError.firebaseNotConfigured }
 
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      Auth.auth().createUser(withEmail: email, password: password) { _, error in
-        if let error = error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
+    _ = try await Auth.auth().createUser(withEmail: email, password: password)
   }
 
   @MainActor
@@ -142,15 +126,7 @@ final class FirebaseAuthRepo: AuthRepo {
 
     // The reset email follows the app's language (Spanish) instead of Firebase's default English.
     Auth.auth().languageCode = "es"
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      Auth.auth().sendPasswordReset(withEmail: email) { error in
-        if let error = error {
-          continuation.resume(throwing: error)
-          return
-        }
-        continuation.resume(returning: ())
-      }
-    }
+    try await Auth.auth().sendPasswordReset(withEmail: email)
   }
 
   func signOut() throws {
