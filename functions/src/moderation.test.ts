@@ -4,6 +4,7 @@ import {
   moderateUserText,
   parseReportedContentTarget,
   parseReportedMessageTarget,
+  parseReportedStoryTarget,
 } from './moderation';
 
 const blocked = (text: string) => moderateUserText([text]).blocked;
@@ -87,5 +88,18 @@ describe('parseReportedMessageTarget', () => {
     expect(parseReportedMessageTarget('msg|dm_a/b|m1')).toBeNull();
     expect(parseReportedMessageTarget('msg|dm_a_b|')).toBeNull();
     expect(parseReportedMessageTarget(null)).toBeNull();
+  });
+});
+
+describe('parseReportedStoryTarget', () => {
+  it('reads story reports', () => {
+    expect(parseReportedStoryTarget('story_abc123')).toBe('abc123');
+  });
+
+  it('rejects anything else', () => {
+    expect(parseReportedStoryTarget('post_abc')).toBeNull();
+    expect(parseReportedStoryTarget('story_a/b')).toBeNull();
+    expect(parseReportedStoryTarget('story_')).toBeNull();
+    expect(parseReportedStoryTarget(undefined)).toBeNull();
   });
 });

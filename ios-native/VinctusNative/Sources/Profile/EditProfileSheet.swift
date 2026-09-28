@@ -163,14 +163,6 @@ struct EditProfileSheet: View {
 
   /// Scales the photo down to 1024 px (storage.rules allows up to 10 MB) and encodes it as JPEG.
   static func jpegData(_ image: UIImage) -> Data? {
-    let maxSide: CGFloat = 1024
-    let scale = min(1, maxSide / max(image.size.width, image.size.height))
-    let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-    let format = UIGraphicsImageRendererFormat()
-    format.scale = 1
-    let resized = UIGraphicsImageRenderer(size: size, format: format).image { _ in
-      image.draw(in: CGRect(origin: .zero, size: size))
-    }
-    return resized.jpegData(compressionQuality: 0.85)
+    ImageEncoding.jpegData(image, maxSide: 1024)
   }
 }

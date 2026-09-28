@@ -223,3 +223,13 @@ export const parseReportedMessageTarget = (value: unknown): ReportedMessageTarge
 
 export const messageReportKey = (conversationId: string, messageId: string): string =>
   `msg|${conversationId}|${messageId}`;
+
+/**
+ * Story a report points at, from `story_<storyId>`
+ * (ReportFields in ios-native/VinctusNative/Sources/Moderation/ModerationRepo.swift).
+ */
+export const parseReportedStoryTarget = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const match = /^story_([^/|]+)$/.exec(value);
+  return match ? match[1] : null;
+};

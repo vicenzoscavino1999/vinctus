@@ -143,7 +143,7 @@ Completa la ficha en App Store Connect:
   - En las notas, explica donde estan las funciones que Apple revisa en apps sociales:
     - Terminos: se aceptan con una casilla en la pantalla de inicio de sesion, antes de cualquier opcion para entrar.
     - Filtro: un filtro automatico en el servidor retira publicaciones, comentarios y mensajes de chat con contenido ofensivo, y marca perfiles y grupos para revision.
-    - Denunciar: menu ··· en publicaciones, comentarios y perfiles. En el chat, manten pulsado un mensaje > Denunciar mensaje. Las denuncias llegan a un panel de moderacion donde el equipo elimina el contenido y suspende al autor en menos de 24 horas.
+    - Denunciar: menu ··· en publicaciones, comentarios, perfiles e historias. En el chat, manten pulsado un mensaje > Denunciar mensaje. Las denuncias llegan a un panel de moderacion donde el equipo elimina el contenido y suspende al autor en menos de 24 horas.
     - Bloquear: el mismo menu, o manten pulsado un mensaje > Bloquear. El contenido del usuario bloqueado desaparece al instante y ya no puede enviarte mensajes. Desbloquear: Ajustes > Usuarios bloqueados.
     - Mensajes: pestaña Mensajes. Solo se puede escribir a quien sigues o te sigue. Para probarlo, haz que la cuenta de prueba siga a la otra cuenta.
     - Eliminar cuenta: Ajustes > Zona de riesgo. En cuentas de Apple, tambien se revoca el acceso a Apple.

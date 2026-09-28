@@ -410,6 +410,8 @@ extension ReportTarget: Identifiable {
       return "ai_\(contextID)_\(excerpt.hashValue)"
     case let .message(conversationID, messageID, _, _):
       return "msg_\(conversationID)_\(messageID)"
+    case let .story(storyID, _):
+      return "story_\(storyID)"
     }
   }
 }

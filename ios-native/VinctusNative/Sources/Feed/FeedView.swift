@@ -20,6 +20,12 @@ struct FeedView: View {
       .listRowSeparator(.hidden)
       .listRowBackground(SwiftUI.Color.clear)
 
+      Section {
+        StoriesBar()
+      }
+      .listRowSeparator(.hidden)
+      .listRowBackground(SwiftUI.Color.clear)
+
       if vm.isShowingCachedData {
         VCard {
           HStack(spacing: 8) {

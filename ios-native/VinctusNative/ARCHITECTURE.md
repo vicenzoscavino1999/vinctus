@@ -4,19 +4,21 @@ SwiftUI app that reads and writes the same Firebase data as the web app (`src/`)
 
 ## Folders (`Sources/`)
 
-| Folder        | Contents                                                                 |
-| ------------- | ------------------------------------------------------------------------ |
-| `App/`        | Entry point, root and tab views, `AppRepos` (data sources), demo data    |
-| `Shared/`     | Design system, avatar, `FirestoreValue` helpers, connectivity, legal     |
-| `Auth/`       | Sign-in screen, auth repo and view model, age checks, profile bootstrap  |
-| `Discover/`   | Discover tab and people search                                           |
-| `Feed/`       | Community feed, post detail, comments, creating posts, likes and follows |
-| `Chat/`       | Messages tab: direct and group conversations                             |
-| `Groups/`     | Group list and detail, join and leave                                    |
-| `Profile/`    | Profile screen, its sections, followers lists, profile editing           |
-| `Moderation/` | Reports, blocking, blocked users                                         |
-| `AI/`         | Chat con IA, Arena IA, AI consent                                        |
-| `Settings/`   | Settings, account deletion                                               |
+| Folder         | Contents                                                                 |
+| -------------- | ------------------------------------------------------------------------ |
+| `App/`         | Entry point, root and tab views, `AppRepos` (data sources), demo data    |
+| `Shared/`      | Design system, avatar, `FirestoreValue` helpers, connectivity, legal     |
+| `Auth/`        | Sign-in screen, auth repo and view model, age checks, profile bootstrap  |
+| `Discover/`    | Discover tab and people search                                           |
+| `Feed/`        | Community feed, post detail, comments, creating posts, likes and follows |
+| `Chat/`        | Messages tab: direct and group conversations                             |
+| `Groups/`      | Group list and detail, join and leave                                    |
+| `Stories/`     | Stories bar, viewer and photo stories (24 hours)                         |
+| `Collections/` | Private collections of links and notes                                   |
+| `Profile/`     | Profile screen, its sections, followers lists, profile editing           |
+| `Moderation/`  | Reports, blocking, blocked users                                         |
+| `AI/`          | Chat con IA, Arena IA, AI consent                                        |
+| `Settings/`    | Settings, account deletion                                               |
 
 XcodeGen (`project.yml`) turns each folder into an Xcode group, so a new file only has to be
 placed in the right folder.

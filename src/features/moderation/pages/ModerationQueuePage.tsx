@@ -364,7 +364,8 @@ const ModerationQueuePage = () => {
                 <div className="flex flex-wrap items-center gap-2">
                   {(item.targetType === 'post' ||
                     item.targetType === 'comment' ||
-                    item.targetType === 'message') && (
+                    item.targetType === 'message' ||
+                    item.targetType === 'story') && (
                     <button
                       type="button"
                       onClick={() => void handleEnforcement(item, 'remove_content')}

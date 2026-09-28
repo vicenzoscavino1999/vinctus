@@ -334,6 +334,31 @@ struct ProfileView: View {
       ProfileAboutSection(profile: profile, isOwnProfile: isOwnProfile) { isEditing = true }
       ProfileReputationSection(reputation: profile.reputation, karma: profile.karmaByInterest)
       if isOwnProfile {
+        StoriesBar()
+        NavigationLink {
+          CollectionsView()
+        } label: {
+          HStack(spacing: VinctusTokens.Spacing.sm) {
+            Image(systemName: "books.vertical")
+              .foregroundStyle(VinctusTokens.Color.accent)
+            VStack(alignment: .leading, spacing: 2) {
+              Text("Colecciones")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(VinctusTokens.Color.textPrimary)
+              Text("Tus enlaces y notas guardados, solo para ti")
+                .font(.caption)
+                .foregroundStyle(VinctusTokens.Color.textMuted)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+              .foregroundStyle(VinctusTokens.Color.textMuted)
+          }
+          .padding(VinctusTokens.Spacing.md)
+          .background(VinctusTokens.Color.surface)
+          .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .id("collections")
         ProfileCategoriesSection(repo: contentRepo)
           .id("categories")
         ProfileSavedDebatesSection(repo: contentRepo)

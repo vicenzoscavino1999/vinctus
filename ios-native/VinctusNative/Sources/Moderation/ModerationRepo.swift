@@ -39,6 +39,9 @@ enum ReportTarget: Hashable {
   /// A chat message. The report's conversationId is `msg|<conversationId>|<messageId>`, which
   /// the moderation panel uses to remove the message (functions/src/moderation.ts).
   case message(conversationID: String, messageID: String, authorID: String, excerpt: String)
+  /// A story. The report's conversationId is `story_<storyId>`, which the moderation panel uses
+  /// to remove it (parseReportedStoryTarget in functions/src/moderation.ts).
+  case story(storyID: String, ownerID: String)
 
   /// `reportedUid` of AI reports; moderators can remove nothing and suspend no one for them.
   static let aiReportedUID = "ai_assistant"
@@ -55,6 +58,8 @@ enum ReportTarget: Hashable {
       return "Denunciar respuesta de IA"
     case .message:
       return "Denunciar mensaje"
+    case .story:
+      return "Denunciar historia"
     }
   }
 }
@@ -97,6 +102,10 @@ struct ReportFields: Equatable {
       reportedUID = authorID
       self.details = "[Mensaje en \(chatID)] \(excerpt)" + (details.map { " | Motivo: \($0)" } ?? "")
       conversationID = "msg|\(chatID)|\(messageID)"
+    case let .story(storyID, ownerID):
+      reportedUID = ownerID
+      self.details = "[Historia \(storyID)]" + (details.map { " \($0)" } ?? "")
+      conversationID = "story_\(storyID)"
     }
   }
 

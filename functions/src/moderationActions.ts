@@ -1,7 +1,11 @@
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
-import { parseReportedContentTarget, parseReportedMessageTarget } from './moderation';
+import {
+  parseReportedContentTarget,
+  parseReportedMessageTarget,
+  parseReportedStoryTarget,
+} from './moderation';
 
 export type ModerationEnforcementAction = 'remove_content' | 'suspend_user' | 'restore_user';
 
@@ -94,6 +98,7 @@ export const moderationTakeAction = functions.https.onCall(
     if (action === 'remove_content') {
       const content = parseReportedContentTarget(item.conversationId);
       const message = content ? null : parseReportedMessageTarget(item.conversationId);
+      const storyId = content || message ? null : parseReportedStoryTarget(item.conversationId);
       if (content) {
         target = content.commentId
           ? `posts/${content.postId}/comments/${content.commentId}`
@@ -102,10 +107,28 @@ export const moderationTakeAction = functions.https.onCall(
       } else if (message) {
         target = `conversations/${message.conversationId}/messages/${message.messageId}`;
         reviewAction = 'message_removed';
+      } else if (storyId) {
+        target = `stories/${storyId}`;
+        reviewAction = 'story_removed';
+        const story = (await db.doc(target).get()).data();
+        const mediaPaths = [story?.mediaPath, story?.thumbPath].filter(
+          (path): path is string => typeof path === 'string' && path.length > 0,
+        );
+        // The files go too; a missing file must not stop the removal.
+        await Promise.all(
+          mediaPaths.map((path) =>
+            admin
+              .storage()
+              .bucket()
+              .file(path)
+              .delete()
+              .catch(() => undefined),
+          ),
+        );
       } else {
         return fail(
           'failed-precondition',
-          'Este caso no apunta a una publicacion, un comentario o un mensaje.',
+          'Este caso no apunta a una publicacion, un comentario, un mensaje o una historia.',
         );
       }
       const messageData = message ? (await db.doc(target).get()).data() : undefined;

@@ -25,6 +25,7 @@ export type ModerationQueueTargetType =
   | 'post'
   | 'comment'
   | 'message'
+  | 'story'
   | 'unknown';
 
 export interface ModerationQueueItemRead {
@@ -84,7 +85,8 @@ const parseTargetType = (value: unknown): ModerationQueueTargetType => {
     value === 'group' ||
     value === 'post' ||
     value === 'comment' ||
-    value === 'message'
+    value === 'message' ||
+    value === 'story'
   )
     return value;
   return 'unknown';

@@ -1481,7 +1481,14 @@ export const onMessageCreatedModeration = functions.firestore
 // ==========================================================
 
 type ReportQueuePriority = 'low' | 'medium' | 'high';
-type ReportQueueTargetType = 'user' | 'group' | 'post' | 'comment' | 'message' | 'unknown';
+type ReportQueueTargetType =
+  | 'user'
+  | 'group'
+  | 'post'
+  | 'comment'
+  | 'message'
+  | 'story'
+  | 'unknown';
 
 function inferQueuePriority(reason: unknown): ReportQueuePriority {
   if (reason === 'abuse' || reason === 'harassment') return 'high';
@@ -1495,6 +1502,9 @@ function inferReportTargetType(conversationId: unknown): ReportQueueTargetType {
   }
   if (conversationId.startsWith('msg|')) {
     return 'message';
+  }
+  if (conversationId.startsWith('story_')) {
+    return 'story';
   }
   if (conversationId.startsWith('post_') && conversationId.includes('_comment_')) {
     return 'comment';
