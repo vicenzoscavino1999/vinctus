@@ -17,6 +17,7 @@
 		20F3CF42BD4E7B77973F3395 /* ChatRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54028D9F502CD602C62B9BE3 /* ChatRepo.swift */; };
 		21CF725A4E12453C0FEE51E2 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F9EE591DFED4E4354C5765A /* ProfileView.swift */; };
 		258B93107D59AE1D2710F3C7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0E6159A864B4EAEF43187E9D /* Assets.xcassets */; };
+		27F150C00E619300371947BE /* ProfileContentRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96A72C6C04B3656E0101327B /* ProfileContentRepo.swift */; };
 		2872AB670EE624BE1113A7EF /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96CAF38CE6383118EC248A7B /* MainTabView.swift */; };
 		28D59DB474B7E4271177ED8F /* ModerationRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2619FF522552A7B09CCF96E /* ModerationRepo.swift */; };
 		2A0895B2DE051B88C4A53475 /* EngagementRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A8093F838B72DDD00288C /* EngagementRepo.swift */; };
@@ -25,6 +26,7 @@
 		38D341E6017E6264329F846C /* ChatViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4DB59CED41ACC090DDE53FF /* ChatViews.swift */; };
 		3EECBC0FCA2D06D8DC9C8116 /* CreatePostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 738173928D7C851A8787675F /* CreatePostView.swift */; };
 		3FAC60234AB6902F6C4CB3B0 /* GroupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84356F9AFB0962D3BB8E5495 /* GroupView.swift */; };
+		4D4ECFFA5D3457854EDD14D9 /* ProfileSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80383C8F3B2AAEA69425C509 /* ProfileSections.swift */; };
 		5112777F595730C6B24455F9 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 94BC5A68B5818E1E2DCBF558 /* GoogleSignIn */; };
 		56E2496AAB7FFC497E3F56C9 /* VinctusNativeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F530F8AF276B069F15B8D136 /* VinctusNativeApp.swift */; };
 		5EDA88267DF019E77DDB98CA /* PostDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87AC161541773301749278DA /* PostDetailView.swift */; };
@@ -101,6 +103,7 @@
 		77DD360D19A75E29E48BE665 /* ConnectivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityMonitor.swift; sourceTree = "<group>"; };
 		7CEF9ECC3BCED45FF9FD5583 /* ModerationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModerationViews.swift; sourceTree = "<group>"; };
 		7E21170D470DA7A3A12EDEF1 /* FirebaseBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseBootstrap.swift; sourceTree = "<group>"; };
+		80383C8F3B2AAEA69425C509 /* ProfileSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSections.swift; sourceTree = "<group>"; };
 		84356F9AFB0962D3BB8E5495 /* GroupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupView.swift; sourceTree = "<group>"; };
 		8637752390EF81683C107A1B /* CreatePostRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostRepo.swift; sourceTree = "<group>"; };
 		87150562DCD542A9C566CFE9 /* DiscoverRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverRepo.swift; sourceTree = "<group>"; };
@@ -110,6 +113,7 @@
 		95C5F3F30FF9C59DE0399CB7 /* VinctusNative.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VinctusNative.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		95FFC5C68F3210531C19A536 /* UserProfileBootstrapRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileBootstrapRepo.swift; sourceTree = "<group>"; };
 		969B5D6EE835BE96B822EF6E /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		96A72C6C04B3656E0101327B /* ProfileContentRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileContentRepo.swift; sourceTree = "<group>"; };
 		96CAF38CE6383118EC248A7B /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		9704ADBE4A84D079E0A04D1C /* FeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
 		A0DCD1A9CBE839EEC2FBB8C2 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
@@ -212,7 +216,9 @@
 				C2673DC1E8F61273FA967957 /* PostCommentsRepo.swift */,
 				87AC161541773301749278DA /* PostDetailView.swift */,
 				5A86FFB513B46EC14B6D6E5E /* PostDetailViewModel.swift */,
+				96A72C6C04B3656E0101327B /* ProfileContentRepo.swift */,
 				0027CD1B5879117991A482E1 /* ProfileRepo.swift */,
+				80383C8F3B2AAEA69425C509 /* ProfileSections.swift */,
 				4F9EE591DFED4E4354C5765A /* ProfileView.swift */,
 				91A189A9A27D16EDFC528BAB /* ProfileViewModel.swift */,
 				19D8A1159261082593EAD650 /* RootView.swift */,
@@ -385,7 +391,9 @@
 				172E6F17AFA31216AF8F4B1A /* PostCommentsRepo.swift in Sources */,
 				5EDA88267DF019E77DDB98CA /* PostDetailView.swift in Sources */,
 				7F9876E0165D8BE65F2DC3EF /* PostDetailViewModel.swift in Sources */,
+				27F150C00E619300371947BE /* ProfileContentRepo.swift in Sources */,
 				62B6218761B67FDE49D8DFF2 /* ProfileRepo.swift in Sources */,
+				4D4ECFFA5D3457854EDD14D9 /* ProfileSections.swift in Sources */,
 				21CF725A4E12453C0FEE51E2 /* ProfileView.swift in Sources */,
 				09FB5615596633DBD5D66CB5 /* ProfileViewModel.swift in Sources */,
 				36C48C27188F959CE78BEBD1 /* RootView.swift in Sources */,

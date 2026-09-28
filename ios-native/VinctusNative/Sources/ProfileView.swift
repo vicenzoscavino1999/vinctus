@@ -46,6 +46,7 @@ struct ProfileView: View {
   }
 
   var body: some View {
+    ScrollViewReader { proxy in
     ScrollView {
       VStack(spacing: VinctusTokens.Spacing.lg) {
         if let profile = vm.profile {
@@ -70,6 +71,13 @@ struct ProfileView: View {
         }
       }
       .padding(VinctusTokens.Spacing.lg)
+    }
+    .task(id: vm.profile?.id) {
+      // Screenshot builds scroll to a section with `-VinctusScrollTo <id>`.
+      guard vm.profile != nil, let target = AppRepos.demoArgument("-VinctusScrollTo") else { return }
+      try? await Task.sleep(nanoseconds: 500_000_000)
+      proxy.scrollTo(target, anchor: .top)
+    }
     }
     .background(VinctusTokens.Color.background)
     .navigationTitle(isOwnProfile ? "Mi perfil" : (vm.profile?.displayName ?? "Perfil"))
@@ -329,9 +337,11 @@ struct ProfileView: View {
       ProfileReputationSection(reputation: profile.reputation, karma: profile.karmaByInterest)
       if isOwnProfile {
         ProfileCategoriesSection(repo: contentRepo)
+          .id("categories")
         ProfileSavedDebatesSection(repo: contentRepo)
       }
       ProfilePostsSection(repo: contentRepo, profileRepo: repo, userID: userID, reloadToken: reloadToken)
+        .id("posts")
       ProfileContributionsSection(repo: contentRepo, userID: userID, canEdit: isOwnProfile, reloadToken: reloadToken)
       details(profile)
     } else {

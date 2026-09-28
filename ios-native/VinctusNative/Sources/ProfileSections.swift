@@ -128,14 +128,8 @@ private struct ProfileChips: View {
   let items: [String]
 
   var body: some View {
-    ViewThatFits(in: .horizontal) {
-      HStack(spacing: 6) { chips }
-      VStack(alignment: .leading, spacing: 6) { chips }
-    }
-  }
-
-  private var chips: some View {
-    ForEach(items, id: \.self) { item in
+    FlowLayout(spacing: 6) {
+      ForEach(items, id: \.self) { item in
       Text(item)
         .font(.caption)
         .padding(.horizontal, 10)
@@ -143,7 +137,58 @@ private struct ProfileChips: View {
         .background(VinctusTokens.Color.surface2)
         .foregroundStyle(VinctusTokens.Color.textPrimary)
         .clipShape(Capsule())
+      }
     }
+  }
+}
+
+/// Places views left to right and wraps to a new line when the row is full.
+private struct FlowLayout: Layout {
+  var spacing: CGFloat
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let width = proposal.width ?? .infinity
+    let rows = arrange(subviews, width: width)
+    let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
+    let usedWidth = rows.map(\.width).max() ?? 0
+    return CGSize(width: proposal.width ?? usedWidth, height: height)
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    var y = bounds.minY
+    for row in arrange(subviews, width: bounds.width) {
+      var x = bounds.minX
+      for index in row.indices {
+        let size = subviews[index].sizeThatFits(.unspecified)
+        subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+        x += size.width + spacing
+      }
+      y += row.height + spacing
+    }
+  }
+
+  private struct Row {
+    var indices: [Int] = []
+    var width: CGFloat = 0
+    var height: CGFloat = 0
+  }
+
+  private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
+    var rows: [Row] = []
+    var current = Row()
+    for index in subviews.indices {
+      let size = subviews[index].sizeThatFits(.unspecified)
+      let extra = current.indices.isEmpty ? size.width : size.width + spacing
+      if !current.indices.isEmpty && current.width + extra > width {
+        rows.append(current)
+        current = Row()
+      }
+      current.width += current.indices.isEmpty ? size.width : size.width + spacing
+      current.height = max(current.height, size.height)
+      current.indices.append(index)
+    }
+    if !current.indices.isEmpty { rows.append(current) }
+    return rows
   }
 }
 

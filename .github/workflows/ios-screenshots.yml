@@ -94,6 +94,12 @@ jobs:
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab profile
           sleep 8
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/07-profile.png"
+          for section in categories posts; do
+            xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+            xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab profile -VinctusScrollTo "$section"
+            sleep 9
+            xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/08-profile-$section.png"
+          done
 
       - name: Push screenshots to the ios-screenshots branch
         working-directory: ${{ runner.temp }}/shots
