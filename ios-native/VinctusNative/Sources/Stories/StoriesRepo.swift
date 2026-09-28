@@ -141,12 +141,14 @@ final class FirebaseStoriesRepo: StoriesRepo {
     let name = FirestoreValue.string(profile["displayName"]) ?? FirestoreValue.string(user?.displayName)
     let photo = FirestoreValue.string(profile["photoURL"]) ?? user?.photoURL?.absoluteString
 
-    try await storyRef.setData([
+    // `isValidStoryOwnerSnapshot`: a name of up to 80 characters and a photo URL, or nulls.
+    var ownerSnapshot: [String: Any] = ["displayName": NSNull(), "photoURL": NSNull()]
+    if let name { ownerSnapshot["displayName"] = String(name.prefix(80)) }
+    if let photo { ownerSnapshot["photoURL"] = photo }
+    let expiresAt = Timestamp(date: Date().addingTimeInterval(Self.storyDuration))
+    let fields: [String: Any] = [
       "ownerId": uid,
-      "ownerSnapshot": [
-        "displayName": name.map { String($0.prefix(80)) } ?? NSNull(),
-        "photoURL": photo ?? NSNull(),
-      ],
+      "ownerSnapshot": ownerSnapshot,
       "mediaType": StoryMediaType.image.rawValue,
       "mediaUrl": url,
       "mediaPath": path,
@@ -154,8 +156,9 @@ final class FirebaseStoriesRepo: StoriesRepo {
       "thumbPath": NSNull(),
       "visibility": "friends",
       "createdAt": FieldValue.serverTimestamp(),
-      "expiresAt": Timestamp(date: Date().addingTimeInterval(Self.storyDuration)),
-    ])
+      "expiresAt": expiresAt,
+    ]
+    try await storyRef.setData(fields)
   }
 
   func deleteStory(_ story: Story) async throws {
