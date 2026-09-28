@@ -126,7 +126,7 @@ struct GroupView: View {
   }
 
   private var currentUserID: String? {
-    authVM.currentUserID ?? (AppRepos.isDemo ? "me" : nil)
+    authVM.currentUserID
   }
 
   @ViewBuilder

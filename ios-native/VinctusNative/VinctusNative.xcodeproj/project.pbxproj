@@ -14,6 +14,7 @@
 		172E6F17AFA31216AF8F4B1A /* PostCommentsRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2673DC1E8F61273FA967957 /* PostCommentsRepo.swift */; };
 		1BAC67BD621D13F0522D21D1 /* AgeAssurance.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB582285AF9DD60015B0F366 /* AgeAssurance.swift */; };
 		1FD745B241CC985DA29E71E4 /* VinctusNativeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32FBE102A72FA92BC6E78DE8 /* VinctusNativeTests.swift */; };
+		20F3CF42BD4E7B77973F3395 /* ChatRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54028D9F502CD602C62B9BE3 /* ChatRepo.swift */; };
 		21CF725A4E12453C0FEE51E2 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F9EE591DFED4E4354C5765A /* ProfileView.swift */; };
 		258B93107D59AE1D2710F3C7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0E6159A864B4EAEF43187E9D /* Assets.xcassets */; };
 		2872AB670EE624BE1113A7EF /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96CAF38CE6383118EC248A7B /* MainTabView.swift */; };
@@ -21,6 +22,7 @@
 		2A0895B2DE051B88C4A53475 /* EngagementRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A8093F838B72DDD00288C /* EngagementRepo.swift */; };
 		34FE30974A6A8E892C066E9C /* CreatePostRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8637752390EF81683C107A1B /* CreatePostRepo.swift */; };
 		36C48C27188F959CE78BEBD1 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D8A1159261082593EAD650 /* RootView.swift */; };
+		38D341E6017E6264329F846C /* ChatViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4DB59CED41ACC090DDE53FF /* ChatViews.swift */; };
 		3EECBC0FCA2D06D8DC9C8116 /* CreatePostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 738173928D7C851A8787675F /* CreatePostView.swift */; };
 		3FAC60234AB6902F6C4CB3B0 /* GroupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84356F9AFB0962D3BB8E5495 /* GroupView.swift */; };
 		5112777F595730C6B24455F9 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 94BC5A68B5818E1E2DCBF558 /* GoogleSignIn */; };
@@ -86,6 +88,7 @@
 		3B01A4BA80AFADDC5F9FC6C0 /* CreatePostViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostViewModel.swift; sourceTree = "<group>"; };
 		43987B024B88B7BCC5D0DB15 /* GroupsRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupsRepo.swift; sourceTree = "<group>"; };
 		4F9EE591DFED4E4354C5765A /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		54028D9F502CD602C62B9BE3 /* ChatRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRepo.swift; sourceTree = "<group>"; };
 		54F6683AF4E7CA5DBFEF9034 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		57528B806455FBABF83D1F54 /* DiscoverViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverViewModel.swift; sourceTree = "<group>"; };
 		5A86FFB513B46EC14B6D6E5E /* PostDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailViewModel.swift; sourceTree = "<group>"; };
@@ -121,6 +124,7 @@
 		C57F2C6BDB2BCBD884624112 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		C746389AA28E20A7435ECC38 /* Staging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Staging.xcconfig; sourceTree = "<group>"; };
 		D3490CF87CA7E820D155A69B /* AuthGateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthGateView.swift; sourceTree = "<group>"; };
+		F4DB59CED41ACC090DDE53FF /* ChatViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViews.swift; sourceTree = "<group>"; };
 		F530F8AF276B069F15B8D136 /* VinctusNativeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VinctusNativeApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -180,6 +184,8 @@
 				D3490CF87CA7E820D155A69B /* AuthGateView.swift */,
 				87E1E1F20B56DDF4BBA975CC /* AuthRepo.swift */,
 				AA9C1E82EF5046931A4836E1 /* AuthViewModel.swift */,
+				54028D9F502CD602C62B9BE3 /* ChatRepo.swift */,
+				F4DB59CED41ACC090DDE53FF /* ChatViews.swift */,
 				77DD360D19A75E29E48BE665 /* ConnectivityMonitor.swift */,
 				8637752390EF81683C107A1B /* CreatePostRepo.swift */,
 				738173928D7C851A8787675F /* CreatePostView.swift */,
@@ -351,6 +357,8 @@
 				DC9D3D7FCAFD3227F0940FFA /* AuthGateView.swift in Sources */,
 				762D0E675177D06AAED7085C /* AuthRepo.swift in Sources */,
 				02F41F5F99438C72D3C5C678 /* AuthViewModel.swift in Sources */,
+				20F3CF42BD4E7B77973F3395 /* ChatRepo.swift in Sources */,
+				38D341E6017E6264329F846C /* ChatViews.swift in Sources */,
 				EE0EE25FE375FF48E832A502 /* ConnectivityMonitor.swift in Sources */,
 				34FE30974A6A8E892C066E9C /* CreatePostRepo.swift in Sources */,
 				3EECBC0FCA2D06D8DC9C8116 /* CreatePostView.swift in Sources */,

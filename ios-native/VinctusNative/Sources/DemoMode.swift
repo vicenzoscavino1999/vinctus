@@ -13,6 +13,17 @@ enum AppRepos {
     #endif
   }
 
+  /// The signed-in user in demo mode (the sample chats use it for "my" messages).
+  static let demoUserID = "me"
+
+  /// Launch argument value after `name`, e.g. `-VinctusTab messages`. Screenshot builds only.
+  static func demoArgument(_ name: String) -> String? {
+    guard isDemo else { return nil }
+    let args = ProcessInfo.processInfo.arguments
+    guard let index = args.firstIndex(of: name), index + 1 < args.count else { return nil }
+    return args[index + 1]
+  }
+
   static func discover() -> DiscoverRepo {
     #if SCREENSHOTS
     if isDemo { return SampleDiscoverRepo() }

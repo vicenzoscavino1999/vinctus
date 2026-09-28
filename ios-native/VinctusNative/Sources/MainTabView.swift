@@ -42,8 +42,11 @@ struct MainTabView: View {
     UITabBar.appearance().unselectedItemTintColor = normalColor
   }
 
+  /// Screenshot builds open a tab with `-VinctusTab <name>`.
+  @State private var selectedTab = AppRepos.demoArgument("-VinctusTab") ?? "discover"
+
   var body: some View {
-    TabView {
+    TabView(selection: $selectedTab) {
       NavigationStack {
         DiscoverView(
           repo: discoverRepo,
@@ -54,6 +57,7 @@ struct MainTabView: View {
         )
       }
       .tabItem { Label("Descubrir", systemImage: "safari") }
+      .tag("discover")
 
       NavigationStack {
         ConnectionsSearchView(
@@ -63,21 +67,25 @@ struct MainTabView: View {
         )
       }
       .tabItem { Label("Buscar", systemImage: "magnifyingglass") }
+      .tag("search")
 
       NavigationStack {
         FeedView(repo: feedRepo, profileRepo: profileRepo)
       }
       .tabItem { Label("Comunidad", systemImage: "number") }
+      .tag("feed")
 
       NavigationStack {
         MessagesListView(repo: chatRepo, profileRepo: profileRepo)
       }
       .tabItem { Label("Mensajes", systemImage: "bubble.left.and.bubble.right") }
+      .tag("messages")
 
       NavigationStack {
         ProfileRootView(repo: profileRepo)
       }
       .tabItem { Label("Perfil", systemImage: "person.crop.circle") }
+      .tag("profile")
     }
     .tint(VinctusTokens.Color.accent)
     .background(VinctusTokens.Color.background.ignoresSafeArea())

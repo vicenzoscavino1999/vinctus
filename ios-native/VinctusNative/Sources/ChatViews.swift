@@ -45,6 +45,8 @@ struct MessagesListView: View {
 
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
   @StateObject private var vm: ConversationsViewModel
+  /// Screenshot builds open a conversation with `-VinctusOpenChat <id>`.
+  @State private var openedConversation: ChatConversation?
 
   init(repo: ChatRepo, profileRepo: ProfileRepo) {
     self.repo = repo
@@ -94,7 +96,21 @@ struct MessagesListView: View {
     .scrollContentBackground(.hidden)
     .background(VinctusTokens.Color.background)
     .navigationTitle("Mensajes")
-    .onAppear { vm.start() }
+    .navigationDestination(item: $openedConversation) { conversation in
+      ConversationView(
+        repo: repo,
+        profileRepo: profileRepo,
+        conversationID: conversation.id,
+        title: conversation.title,
+        otherUserID: conversation.otherUserID
+      )
+    }
+    .onAppear {
+      vm.start()
+      if let id = AppRepos.demoArgument("-VinctusOpenChat"), openedConversation == nil {
+        openedConversation = vm.conversations.first { $0.id == id }
+      }
+    }
     .refreshable {
       vm.stop()
       vm.start()

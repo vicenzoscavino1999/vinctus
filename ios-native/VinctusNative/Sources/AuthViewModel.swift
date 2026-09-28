@@ -13,7 +13,8 @@ final class AuthViewModel: ObservableObject {
   private let profileBootstrap: UserProfileBootstrapRepo
 
   var currentUserID: String? {
-    repo.currentUser?.uid
+    if AppRepos.isDemo { return AppRepos.demoUserID }
+    return repo.currentUser?.uid
   }
 
   /// Whether the account can sign in with Apple, so deleting it must also revoke the Apple tokens.
