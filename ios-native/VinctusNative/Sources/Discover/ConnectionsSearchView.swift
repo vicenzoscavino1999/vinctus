@@ -76,6 +76,7 @@ struct ConnectionsSearchView: View {
             GroupCard(group: group, repo: groupsRepo) {
               openedGroupID = group.id
             }
+            .textCase(nil)
             .listRowSeparator(.hidden)
           }
         }

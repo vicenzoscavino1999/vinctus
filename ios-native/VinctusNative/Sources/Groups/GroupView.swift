@@ -179,6 +179,8 @@ struct GroupView: View {
             Label("\(detail.memberCount.formatted()) miembros", systemImage: "person.2")
             Label("\(detail.postsPerWeek) posts/semana", systemImage: "bubble.left")
           }
+          .lineLimit(1)
+          .fixedSize(horizontal: true, vertical: false)
           .labelStyle(CompactLabelStyle())
           .font(.subheadline)
           .foregroundStyle(VinctusTokens.Color.textMuted)

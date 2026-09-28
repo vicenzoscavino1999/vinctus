@@ -157,7 +157,7 @@ struct DiscoverStoryChip: View {
         Circle()
           .stroke(
             LinearGradient(
-              colors: [VinctusTokens.Color.accent, VinctusTokens.Color.accentAlt],
+              colors: [VinctusTokens.Color.accent, VinctusTokens.Color.accentBright],
               startPoint: .topLeading,
               endPoint: .bottomTrailing
             ),
