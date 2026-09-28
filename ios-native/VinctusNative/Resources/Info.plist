@@ -8,6 +8,12 @@
 	<array>
 		<string>es</string>
 	</array>
+	<key>UIAppFonts</key>
+	<array>
+		<string>PlayfairDisplay-Regular.ttf</string>
+		<string>PlayfairDisplay-Medium.ttf</string>
+		<string>PlayfairDisplay-SemiBold.ttf</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Vinctus</string>
 	<key>CFBundleExecutable</key>

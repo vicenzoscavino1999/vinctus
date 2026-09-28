@@ -2,7 +2,6 @@ import SwiftUI
 import UIKit
 
 struct MainTabView: View {
-  private let createPostRepo = AppRepos.createPost()
   private let discoverRepo = AppRepos.discover()
   private let feedRepo = AppRepos.feed()
   private let profileRepo = AppRepos.profile()
@@ -11,39 +10,9 @@ struct MainTabView: View {
   private let chatRepo = AppRepos.chat()
   @StateObject private var blockedUsers = BlockedUsersStore(repo: AppRepos.moderation())
 
-  init() {
-    let appearance = UITabBarAppearance()
-    appearance.configureWithTransparentBackground()
-    appearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterialDark)
-    appearance.backgroundColor = UIColor(VinctusTokens.Color.background).withAlphaComponent(0.84)
-    appearance.shadowColor = .clear
-
-    let normalColor = UIColor(VinctusTokens.Color.textMuted)
-    let selectedColor = UIColor(VinctusTokens.Color.accent)
-    let hiddenTitleAttributes: [NSAttributedString.Key: Any] = [
-      .foregroundColor: UIColor.clear,
-    ]
-
-    for layout in [
-      appearance.stackedLayoutAppearance,
-      appearance.inlineLayoutAppearance,
-      appearance.compactInlineLayoutAppearance,
-    ] {
-      layout.normal.iconColor = normalColor
-      layout.normal.titleTextAttributes = hiddenTitleAttributes
-      layout.selected.iconColor = selectedColor
-      layout.selected.titleTextAttributes = hiddenTitleAttributes
-      layout.normal.titlePositionAdjustment = UIOffset(horizontal: 0, vertical: 20)
-      layout.selected.titlePositionAdjustment = UIOffset(horizontal: 0, vertical: 20)
-    }
-
-    UITabBar.appearance().standardAppearance = appearance
-    UITabBar.appearance().scrollEdgeAppearance = appearance
-    UITabBar.appearance().unselectedItemTintColor = normalColor
-  }
-
   /// Screenshot builds open a tab with `-VinctusTab <name>`.
   @State private var selectedTab = AppRepos.demoArgument("-VinctusTab") ?? "discover"
+  @State private var isKeyboardVisible = false
 
   var body: some View {
     TabView(selection: $selectedTab) {
@@ -52,11 +21,10 @@ struct MainTabView: View {
           repo: discoverRepo,
           profileRepo: profileRepo,
           groupsRepo: groupsRepo,
-          createPostRepo: createPostRepo,
           aiRepo: aiRepo
         )
       }
-      .tabItem { Label("Descubrir", systemImage: "safari") }
+      .toolbar(.hidden, for: .tabBar)
       .tag("discover")
 
       NavigationStack {
@@ -66,32 +34,94 @@ struct MainTabView: View {
           groupsRepo: groupsRepo
         )
       }
-      .tabItem { Label("Buscar", systemImage: "magnifyingglass") }
+      .toolbar(.hidden, for: .tabBar)
       .tag("search")
 
       NavigationStack {
         FeedView(repo: feedRepo, profileRepo: profileRepo)
       }
-      .tabItem { Label("Comunidad", systemImage: "number") }
+      .toolbar(.hidden, for: .tabBar)
       .tag("feed")
 
       NavigationStack {
         MessagesListView(repo: chatRepo, profileRepo: profileRepo)
       }
-      .tabItem { Label("Mensajes", systemImage: "bubble.left.and.bubble.right") }
+      .toolbar(.hidden, for: .tabBar)
       .tag("messages")
 
       NavigationStack {
         ProfileRootView(repo: profileRepo)
       }
-      .tabItem { Label("Perfil", systemImage: "person.crop.circle") }
+      .toolbar(.hidden, for: .tabBar)
       .tag("profile")
+    }
+    // The web's flat bottom bar instead of the system tab bar. It hides while typing, so it
+    // never sits above the keyboard (for example over the chat composer).
+    .safeAreaInset(edge: .bottom, spacing: 0) {
+      if !isKeyboardVisible {
+        FlatTabBar(selection: $selectedTab)
+      }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+      isKeyboardVisible = true
+    }
+    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+      isKeyboardVisible = false
     }
     .tint(VinctusTokens.Color.accent)
     .background(VinctusTokens.Color.background.ignoresSafeArea())
     .environmentObject(blockedUsers)
     .task {
       await blockedUsers.refresh()
+    }
+  }
+}
+
+/// Bottom navigation like the web's MobileNav (`src/app/routes/AppLayout.tsx`): thin icons,
+/// white when selected and gray otherwise, over a thin top border.
+private struct FlatTabBar: View {
+  @Binding var selection: String
+
+  private struct Item {
+    let tag: String
+    let icon: String
+    let title: String
+  }
+
+  private let items = [
+    Item(tag: "discover", icon: "safari", title: "Descubrir"),
+    Item(tag: "search", icon: "magnifyingglass", title: "Buscar"),
+    Item(tag: "feed", icon: "number", title: "Comunidad"),
+    Item(tag: "messages", icon: "bubble.left.and.bubble.right", title: "Mensajes"),
+    Item(tag: "profile", icon: "person", title: "Perfil"),
+  ]
+
+  var body: some View {
+    HStack(spacing: 0) {
+      ForEach(items, id: \.tag) { item in
+        let isSelected = selection == item.tag
+        Button {
+          selection = item.tag
+        } label: {
+          Image(systemName: item.icon)
+            .font(.system(size: 22, weight: .light))
+            .foregroundStyle(isSelected ? VinctusTokens.Color.textPrimary : SwiftUI.Color(white: 0.34))
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(item.title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+      }
+    }
+    .padding(.horizontal, 12)
+    .padding(.top, 4)
+    .background(VinctusTokens.Color.background.opacity(0.95))
+    .background(.ultraThinMaterial)
+    .overlay(alignment: .top) {
+      Rectangle()
+        .fill(SwiftUI.Color(white: 0.09))
+        .frame(height: 0.5)
     }
   }
 }

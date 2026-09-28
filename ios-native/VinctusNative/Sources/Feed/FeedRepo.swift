@@ -10,6 +10,35 @@ struct FeedItem: Identifiable, Hashable {
   let createdAt: Date?
   var likeCount: Int
   var commentCount: Int
+  /// First photo of the post, if any.
+  var imageURL: String? = nil
+  /// The post has a video; `videoThumbnailURL` is set for YouTube videos.
+  var hasVideo = false
+  var videoThumbnailURL: String? = nil
+  /// Name of the first attached file, when the post only has files.
+  var fileName: String? = nil
+
+  /// What the posts grid shows: the photo, or else the video's thumbnail.
+  var previewImageURL: String? { imageURL ?? videoThumbnailURL }
+
+  /// Reads the `media` array of a post (`PostMedia` in `src/shared/lib/firestore/posts.ts`).
+  mutating func applyMedia(_ value: Any?) {
+    guard let items = value as? [[String: Any]] else { return }
+    for item in items {
+      guard let url = FirestoreValue.string(item["url"]) else { continue }
+      switch item["type"] as? String {
+      case "image":
+        if imageURL == nil { imageURL = url }
+      case "video":
+        hasVideo = true
+        if videoThumbnailURL == nil { videoThumbnailURL = YouTubeLink.thumbnailURL(from: url) }
+      case "file":
+        if fileName == nil { fileName = FirestoreValue.string(item["fileName"]) ?? url }
+      default:
+        continue
+      }
+    }
+  }
 }
 
 struct FeedCursor {
@@ -108,7 +137,7 @@ final class FirebaseFeedRepo: FeedRepo {
       ?? (data["content"] as? String)
       ?? ""
 
-    return FeedItem(
+    var item = FeedItem(
       id: doc.documentID,
       authorID: FirestoreValue.string(data["authorId"]) ?? FirestoreValue.string(data["authorID"]),
       authorName: authorName,
@@ -117,5 +146,7 @@ final class FirebaseFeedRepo: FeedRepo {
       likeCount: max(0, FirestoreValue.int(data["likeCount"]) ?? FirestoreValue.int(data["likesCount"]) ?? 0),
       commentCount: max(0, FirestoreValue.int(data["commentCount"]) ?? FirestoreValue.int(data["commentsCount"]) ?? 0)
     )
+    item.applyMedia(data["media"])
+    return item
   }
 }

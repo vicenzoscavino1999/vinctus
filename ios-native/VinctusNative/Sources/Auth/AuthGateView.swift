@@ -102,7 +102,7 @@ struct AuthGateView: View {
         .accessibilityHidden(true)
 
       Text("Vinctus")
-        .font(.system(size: 44, weight: .semibold, design: .serif))
+        .font(VinctusTokens.Typography.serif(44, weight: .semibold))
         .tracking(1.5)
         .foregroundStyle(VinctusTokens.Color.textPrimary)
 

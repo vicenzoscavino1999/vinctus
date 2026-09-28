@@ -64,6 +64,18 @@ final class FakeGroupsRepo: GroupsRepo {
     if failsToUpdate { throw FakeError() }
     members.remove(uid)
   }
+
+  var requests: [String] = []
+
+  func membershipStatus(groupID: String, ownerID: String?, uid: String) async throws -> GroupMembershipStatus {
+    if ownerID == uid { return .owner }
+    if members.contains(uid) { return .member }
+    return requests.contains(uid) ? .pending : .none
+  }
+
+  func requestToJoin(groupID: String, groupName: String, ownerID: String, uid: String) async throws {
+    requests.append(uid)
+  }
 }
 
 final class FakeProfileRepo: ProfileRepo {

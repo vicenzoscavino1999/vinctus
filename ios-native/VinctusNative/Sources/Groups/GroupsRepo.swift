@@ -7,6 +7,7 @@ struct GroupSummary: Identifiable, Hashable {
   let name: String
   let description: String
   let categoryID: String?
+  var ownerID: String? = nil
   let visibility: ProfileAccountVisibility
   let iconURL: String?
   let memberCount: Int
@@ -53,6 +54,26 @@ struct GroupsPage {
   let isFromCache: Bool
 }
 
+/// Where the signed-in user stands with a group, for its join button (like the web's
+/// `getGroupActionLabel` in DiscoverPage).
+enum GroupMembershipStatus: Equatable {
+  case owner
+  case member
+  case pending
+  case none
+
+  func buttonTitle(isPrivate: Bool) -> String {
+    switch self {
+    case .owner: return "Tu grupo"
+    case .member: return "Unido"
+    case .pending: return "Pendiente"
+    case .none: return isPrivate ? "Solicitar" : "Unirme"
+    }
+  }
+
+  var isJoined: Bool { self == .owner || self == .member }
+}
+
 protocol GroupsRepo {
   func fetchGroups(limit: Int) async throws -> GroupsPage
   func fetchGroupDetail(groupID: String, recentPostLimit: Int, topMemberLimit: Int) async throws -> GroupDetail?
@@ -60,6 +81,9 @@ protocol GroupsRepo {
   /// Joins a public group, like the web's `joinPublicGroup`. Private groups need a request on the web.
   func joinGroup(groupID: String, uid: String) async throws
   func leaveGroup(groupID: String, uid: String) async throws
+  func membershipStatus(groupID: String, ownerID: String?, uid: String) async throws -> GroupMembershipStatus
+  /// Asks the owner of a private group to let the user in, like the web's `sendGroupJoinRequest`.
+  func requestToJoin(groupID: String, groupName: String, ownerID: String, uid: String) async throws
 }
 
 enum GroupsRepoError: LocalizedError {
@@ -74,7 +98,9 @@ enum GroupsRepoError: LocalizedError {
     case .missingSnapshot:
       return "No se pudo cargar grupos."
     case .privateGroup:
-      return "Este grupo es privado. Pide unirte desde la web."
+      return "Este grupo es privado: envía una solicitud para unirte."
+    case .requestAlreadySent:
+      return "Ya enviaste una solicitud para este grupo."
     }
   }
 }
@@ -260,6 +286,44 @@ final class FirebaseGroupsRepo: GroupsRepo {
     try await batch.commit()
   }
 
+  func membershipStatus(groupID: String, ownerID: String?, uid: String) async throws -> GroupMembershipStatus {
+    if ownerID == uid { return .owner }
+    if try await isMember(groupID: groupID, uid: uid) { return .member }
+    let db = self.db ?? Firestore.firestore()
+    let requests = try? await db.collection("group_requests")
+      .whereField("fromUid", isEqualTo: uid)
+      .whereField("groupId", isEqualTo: groupID)
+      .limit(to: 1)
+      .getDocuments()
+    if requests?.documents.first?.data()["status"] as? String == "pending" { return .pending }
+    return .none
+  }
+
+  /// Mirrors `sendGroupJoinRequest` in `src/shared/lib/firestore/groups.ts`.
+  func requestToJoin(groupID: String, groupName: String, ownerID: String, uid: String) async throws {
+    guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
+    let db = self.db ?? Firestore.firestore()
+    if try await membershipStatus(groupID: groupID, ownerID: ownerID, uid: uid) == .pending {
+      throw GroupsRepoError.requestAlreadySent
+    }
+    let profile = (try? await db.collection("users_public").document(uid).getDocument().data()) ?? [:]
+    var request: [String: Any] = [
+      "groupId": groupID,
+      "groupName": String(groupName.prefix(120)),
+      "fromUid": uid,
+      "toUid": ownerID,
+      "status": "pending",
+      "message": NSNull(),
+      "fromUserName": NSNull(),
+      "fromUserPhoto": NSNull(),
+      "createdAt": FieldValue.serverTimestamp(),
+      "updatedAt": FieldValue.serverTimestamp(),
+    ]
+    if let name = FirestoreValue.string(profile["displayName"]) { request["fromUserName"] = String(name.prefix(80)) }
+    if let photo = FirestoreValue.string(profile["photoURL"]) { request["fromUserPhoto"] = photo }
+    try await db.collection("group_requests").document().setData(request)
+  }
+
   private func fetchMemberProfiles(
     db: Firestore,
     memberDocs: [QueryDocumentSnapshot]
@@ -306,6 +370,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
       name: FirestoreValue.string(data["name"]) ?? "Grupo",
       description: FirestoreValue.string(data["description"]) ?? "",
       categoryID: FirestoreValue.string(data["categoryId"]),
+      ownerID: FirestoreValue.string(data["ownerId"]),
       visibility: visibility,
       iconURL: FirestoreValue.string(data["iconUrl"]),
       memberCount: FirestoreValue.int(data["memberCount"]) ?? 0,

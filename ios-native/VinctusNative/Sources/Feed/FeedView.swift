@@ -15,12 +15,6 @@ struct FeedView: View {
   var body: some View {
     List {
       Section {
-        FeedTopBar()
-      }
-      .listRowSeparator(.hidden)
-      .listRowBackground(SwiftUI.Color.clear)
-
-      Section {
         StoriesBar()
       }
       .listRowSeparator(.hidden)
@@ -147,7 +141,7 @@ struct FeedView: View {
       }
     }
     .listStyle(.plain)
-    .toolbar(.hidden, for: .navigationBar)
+    .vinctusTopBar()
     .scrollContentBackground(.hidden)
     .background(VinctusTokens.Color.background)
     .task {
@@ -223,6 +217,31 @@ private struct FeedCard: View {
             .foregroundStyle(VinctusTokens.Color.textPrimary)
         }
 
+        if let preview = item.previewImageURL, let url = URL(string: preview) {
+          SwiftUI.Color.clear
+            .aspectRatio(4 / 3, contentMode: .fit)
+            .overlay {
+              AsyncImage(url: url) { phase in
+                if case .success(let image) = phase {
+                  image.resizable().scaledToFill()
+                } else {
+                  VinctusTokens.Color.surface2
+                }
+              }
+            }
+            .overlay {
+              if item.hasVideo {
+                Image(systemName: "play.fill")
+                  .font(.title2)
+                  .foregroundStyle(.white)
+                  .frame(width: 56, height: 56)
+                  .background(SwiftUI.Color.black.opacity(0.5))
+                  .clipShape(Circle())
+              }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+
         HStack(spacing: 12) {
           LikeButton(postID: item.id, initialCount: item.likeCount)
             .font(.caption)
@@ -253,40 +272,3 @@ private struct FeedCard: View {
   }
 }
 
-private struct FeedTopBar: View {
-  var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      HStack {
-        Circle()
-          .fill(VinctusTokens.Color.accent)
-          .frame(width: 44, height: 44)
-          .overlay(
-            Image(systemName: "plus")
-              .font(.title3.weight(.semibold))
-              .foregroundStyle(.black)
-          )
-
-        Spacer()
-
-        Text("Vinctus")
-          .font(VinctusTokens.Typography.brandTitle(size: 36))
-          .foregroundStyle(VinctusTokens.Color.textPrimary)
-
-        Spacer()
-
-        HStack(spacing: 16) {
-          Image(systemName: "sparkles")
-          Image(systemName: "bell")
-        }
-        .foregroundStyle(VinctusTokens.Color.textMuted)
-      }
-
-      Text("Feed")
-        .font(VinctusTokens.Typography.sectionTitle(size: 16))
-        .foregroundStyle(VinctusTokens.Color.textMuted)
-        .tracking(3)
-    }
-    .padding(.top, 2)
-    .padding(.bottom, 6)
-  }
-}

@@ -15,24 +15,47 @@ enum VinctusTokens {
     static let lg: CGFloat = 18
   }
 
+  /// Same palette as the web (`src/index.css`, `tailwind.config.js`): neutral grays and brand gold.
   enum Color {
-    static let accent = SwiftUI.Color(red: 0.91, green: 0.73, blue: 0.20) // Vinctus gold
-    static let accentAlt = SwiftUI.Color(red: 0.07, green: 0.69, blue: 0.58)
-    static let background = SwiftUI.Color(red: 0.02, green: 0.03, blue: 0.04)
-    static let surface = SwiftUI.Color(red: 0.08, green: 0.09, blue: 0.11)
-    static let surface2 = SwiftUI.Color(red: 0.12, green: 0.13, blue: 0.16)
-    static let border = SwiftUI.Color(red: 0.23, green: 0.24, blue: 0.28)
-    static let textPrimary = SwiftUI.Color(red: 0.95, green: 0.95, blue: 0.93)
-    static let textMuted = SwiftUI.Color(red: 0.65, green: 0.66, blue: 0.69)
+    static let accent = SwiftUI.Color(red: 0.831, green: 0.686, blue: 0.216) // brand-gold #D4AF37
+    static let accentBright = SwiftUI.Color(red: 0.984, green: 0.749, blue: 0.141) // amber-400
+    static let accentAlt = SwiftUI.Color(red: 0.25, green: 0.75, blue: 0.87) // --accent-2
+    static let background = SwiftUI.Color(white: 0.04) // --bg
+    static let surface = SwiftUI.Color(white: 0.07) // --surface-1
+    static let surface2 = SwiftUI.Color(white: 0.10) // --surface-2
+    static let surface3 = SwiftUI.Color(white: 0.14) // --surface-3
+    static let border = SwiftUI.Color(white: 0.15) // neutral-800
+    static let textPrimary = SwiftUI.Color(white: 0.98) // --text-1
+    static let textSecondary = SwiftUI.Color(white: 0.64) // neutral-400
+    static let textMuted = SwiftUI.Color(white: 0.45) // neutral-500
   }
 
+  /// Playfair Display (bundled, like the web's `--font-serif`) for titles; the system font elsewhere.
   enum Typography {
     static func brandTitle(size: CGFloat = 42) -> Font {
-      .system(size: size, weight: .regular, design: .serif)
+      .custom("PlayfairDisplay-Regular", size: size)
     }
 
     static func sectionTitle(size: CGFloat = 18) -> Font {
-      .system(size: size, weight: .semibold, design: .serif)
+      .custom("PlayfairDisplay-Medium", size: size)
+    }
+
+    static func serif(_ size: CGFloat, weight: SerifWeight = .regular) -> Font {
+      .custom(weight.fontName, size: size)
+    }
+
+    enum SerifWeight {
+      case regular
+      case medium
+      case semibold
+
+      var fontName: String {
+        switch self {
+        case .regular: return "PlayfairDisplay-Regular"
+        case .medium: return "PlayfairDisplay-Medium"
+        case .semibold: return "PlayfairDisplay-SemiBold"
+        }
+      }
     }
   }
 }

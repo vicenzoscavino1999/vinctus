@@ -19,7 +19,9 @@ private enum Sample {
     ("g5", "Filosofía de bolsillo", "Grandes preguntas en conversaciones cortas.", "philosophy", 508),
   ].map {
     GroupSummary(
-      id: $0.0, name: $0.1, description: $0.2, categoryID: $0.3, visibility: .public,
+      id: $0.0, name: $0.1, description: $0.2, categoryID: $0.3,
+      ownerID: $0.0 == "g1" ? AppRepos.demoUserID : "u1",
+      visibility: $0.0 == "g3" ? .private : .public,
       iconURL: nil, memberCount: $0.4, updatedAt: Date()
     )
   }
@@ -60,6 +62,13 @@ struct SampleGroupsRepo: GroupsRepo {
   func isMember(groupID: String, uid: String) async throws -> Bool { groupID == "g2" }
   func joinGroup(groupID: String, uid: String) async throws {}
   func leaveGroup(groupID: String, uid: String) async throws {}
+
+  func membershipStatus(groupID: String, ownerID: String?, uid: String) async throws -> GroupMembershipStatus {
+    if ownerID == uid { return .owner }
+    return groupID == "g2" ? .member : .none
+  }
+
+  func requestToJoin(groupID: String, groupName: String, ownerID: String, uid: String) async throws {}
 }
 
 struct SampleProfileRepo: ProfileRepo {
@@ -82,7 +91,9 @@ struct SampleProfileContentRepo: ProfileContentRepo {
   func fetchPosts(uid: String, limit: Int, after cursor: ProfileListCursor?) async throws -> ProfileListPage<FeedItem> {
     ProfileListPage(items: [
       FeedItem(id: "p1", authorID: uid, authorName: "Lucía Fernández", text: "Hoy empecé un club de lectura de divulgación científica. ¿Qué libro recomiendan para el primer mes?", createdAt: Date().addingTimeInterval(-7200), likeCount: 24, commentCount: 9),
-      FeedItem(id: "p2", authorID: uid, authorName: "Lucía Fernández", text: "Grabé mi primera pieza de jazz al piano. ¡Gracias a todos por los consejos!", createdAt: Date().addingTimeInterval(-259_200), likeCount: 57, commentCount: 14),
+      FeedItem(id: "p2", authorID: uid, authorName: "Lucía Fernández", text: "Grabé mi primera pieza de jazz al piano. ¡Gracias a todos por los consejos!", createdAt: Date().addingTimeInterval(-259_200), likeCount: 57, commentCount: 14, hasVideo: true, videoThumbnailURL: YouTubeLink.thumbnailURL(from: "https://youtu.be/9bZkp7q19f0")),
+      FeedItem(id: "p3", authorID: uid, authorName: "Lucía Fernández", text: "hola, ¿cómo están?", createdAt: Date().addingTimeInterval(-400_000), likeCount: 3, commentCount: 1),
+      FeedItem(id: "p4", authorID: uid, authorName: "Lucía Fernández", text: "", createdAt: Date().addingTimeInterval(-500_000), likeCount: 0, commentCount: 0, fileName: "apuntes-cuantica.pdf"),
     ], next: nil)
   }
 
@@ -192,7 +203,13 @@ struct SampleStoriesRepo: StoriesRepo {
           expiresAt: now.addingTimeInterval(20 * 3600)
         )
       }
-    return StoryGroup.make(from: stories, currentUID: AppRepos.demoUserID)
+    let shorts = YouTubeShorts.stories(
+      from: YouTubeShorts.fallbackVideoIDs.prefix(6).map {
+        YouTubeShorts.Video(videoID: $0, channelTitle: nil, thumbnailURL: nil)
+      },
+      now: now
+    )
+    return StoryGroup.make(from: stories + shorts, currentUID: AppRepos.demoUserID)
   }
 
   func publishImageStory(jpegData: Data) async throws {}

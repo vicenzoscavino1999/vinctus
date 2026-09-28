@@ -6,6 +6,7 @@ struct ConnectionsSearchView: View {
   @StateObject private var vm: DiscoverViewModel
 
   @State private var groups: [GroupSummary] = []
+  @State private var openedGroupID: String?
   @State private var isLoadingGroups = false
   @State private var groupsError: String?
   @State private var isShowingCachedGroups = false
@@ -72,10 +73,10 @@ struct ConnectionsSearchView: View {
       } else if !filteredGroups.isEmpty {
         Section(vm.isSearchActive ? "Resultados de grupos" : "Grupos recientes") {
           ForEach(filteredGroups.prefix(10)) { group in
-            NavigationLink(destination: GroupView(repo: groupsRepo, groupID: group.id)) {
-              DiscoverGroupCard(group: group)
+            GroupCard(group: group, repo: groupsRepo) {
+              openedGroupID = group.id
             }
-            .buttonStyle(.plain)
+            .listRowSeparator(.hidden)
           }
         }
         .textCase(.uppercase)
@@ -141,6 +142,9 @@ struct ConnectionsSearchView: View {
       }
     }
     .listStyle(.plain)
+    .navigationDestination(item: $openedGroupID) { groupID in
+      GroupView(repo: groupsRepo, groupID: groupID)
+    }
     .toolbar(.hidden, for: .navigationBar)
     .scrollContentBackground(.hidden)
     .background(VinctusTokens.Color.background)

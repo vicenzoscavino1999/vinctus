@@ -85,31 +85,46 @@ final class GroupDetailViewModel: ObservableObject {
   }
 
   /// nil while unknown (not loaded yet or failed to load).
-  @Published private(set) var isMember: Bool?
+  @Published private(set) var membership: GroupMembershipStatus?
   @Published private(set) var isUpdatingMembership = false
   @Published private(set) var membershipError: String?
 
+  var isMember: Bool? { membership.map(\.isJoined) }
+
+  /// Needs the detail loaded first, to know the owner.
   func loadMembership(uid: String?) async {
     guard let uid else { return }
     do {
-      isMember = try await repo.isMember(groupID: groupID, uid: uid)
+      membership = try await repo.membershipStatus(groupID: groupID, ownerID: detail?.ownerID, uid: uid)
     } catch {
       AppLog.groups.error("groups.membership.failed errorType=\(AppLog.errorType(error), privacy: .public)")
     }
   }
 
-  func toggleMembership(uid: String?) async {
-    guard let uid, let isMember, !isUpdatingMembership else { return }
+  /// The group's main button: join a public group, ask to join a private one, or leave.
+  /// The owner can't leave their own group, and a pending request just waits.
+  func performMembershipAction(uid: String?) async {
+    guard let uid, let membership, !isUpdatingMembership else { return }
     isUpdatingMembership = true
     membershipError = nil
     defer { isUpdatingMembership = false }
     do {
-      if isMember {
+      switch membership {
+      case .member:
         try await repo.leaveGroup(groupID: groupID, uid: uid)
-      } else {
-        try await repo.joinGroup(groupID: groupID, uid: uid)
+        self.membership = GroupMembershipStatus.none
+      case .none:
+        if let detail, detail.visibility == .private {
+          guard let ownerID = detail.ownerID else { throw GroupsRepoError.privateGroup }
+          try await repo.requestToJoin(groupID: groupID, groupName: detail.name, ownerID: ownerID, uid: uid)
+          self.membership = .pending
+        } else {
+          try await repo.joinGroup(groupID: groupID, uid: uid)
+          self.membership = .member
+        }
+      case .owner, .pending:
+        break
       }
-      self.isMember = !isMember
     } catch {
       membershipError = error.localizedDescription
     }

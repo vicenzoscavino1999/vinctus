@@ -9,12 +9,14 @@ final class CreatePostViewModel: ObservableObject {
   @Published private(set) var pendingPostID: String?
 
   private let repo: CreatePostRepo
+  private let groupID: String?
   private var pendingDraftText: String?
   private var lastPublishedDraftText: String?
   private var lastPublishedAt: Date?
   private let duplicateWindow: TimeInterval = 25
 
-  init(repo: CreatePostRepo) {
+  init(repo: CreatePostRepo, groupID: String? = nil) {
+    self.groupID = groupID
     self.repo = repo
   }
 
@@ -95,7 +97,7 @@ final class CreatePostViewModel: ObservableObject {
 
     Task {
       do {
-        try await repo.publishTextPost(text: normalizedDraft, postID: postID)
+        try await repo.publishTextPost(text: normalizedDraft, postID: postID, groupID: groupID)
         AppLog.posts.info("createPost.submit.success postID=\(postID, privacy: .private)")
 
         pendingPostID = nil

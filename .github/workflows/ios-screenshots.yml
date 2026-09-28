@@ -104,6 +104,18 @@ jobs:
             sleep 9
             xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/08-profile-$section.png"
           done
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenGroup g1
+          sleep 9
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/10-group.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab search
+          sleep 9
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/11-search-groups.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab feed -VinctusOpenStory shorts
+          sleep 14
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/12-story-short.png"
 
       - name: Push screenshots to the ios-screenshots branch
         working-directory: ${{ runner.temp }}/shots

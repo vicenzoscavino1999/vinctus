@@ -17,42 +17,49 @@ struct ProfilePostsSection: View {
   private let commentsRepo: any PostCommentsRepo = AppRepos.postComments()
   private static let pageSize = 20
 
+  private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+
+  /// A two-column grid like the web's ProfilePostsGrid: photo or video thumbnail, the text at
+  /// the bottom, and a VIDEO badge.
   var body: some View {
-    ProfileSectionCard(title: "Publicaciones", icon: "square.text.square") {
+    VStack(alignment: .leading, spacing: 18) {
+      Text("PUBLICACIONES")
+        .font(VinctusTokens.Typography.serif(14))
+        .tracking(4)
+        .foregroundStyle(VinctusTokens.Color.textMuted)
+
       if isLoading {
         ProgressView()
+          .frame(maxWidth: .infinity)
       } else if let errorMessage {
         ProfileSectionMessage(text: errorMessage, isError: true)
       } else if posts.isEmpty {
-        ProfileSectionMessage(text: "Todavía no hay publicaciones.")
+        VStack(spacing: 10) {
+          Image(systemName: "photo")
+            .font(.title3)
+            .foregroundStyle(VinctusTokens.Color.textMuted)
+            .frame(width: 48, height: 48)
+            .background(VinctusTokens.Color.surface2)
+            .clipShape(Circle())
+          Text("Aún no hay publicaciones.")
+            .font(.subheadline)
+            .foregroundStyle(VinctusTokens.Color.textMuted)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 36)
+        .overlay(
+          RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .stroke(VinctusTokens.Color.border, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+        )
       } else {
-        ForEach(posts) { post in
-          NavigationLink {
-            PostDetailView(item: post, profileRepo: profileRepo, commentsRepo: commentsRepo)
-          } label: {
-            VStack(alignment: .leading, spacing: 6) {
-              Text(post.text.isEmpty ? "Publicación" : post.text)
-                .font(.subheadline)
-                .foregroundStyle(VinctusTokens.Color.textPrimary)
-                .lineLimit(4)
-                .multilineTextAlignment(.leading)
-              HStack(spacing: 12) {
-                Label("\(post.likeCount)", systemImage: "heart")
-                Label("\(post.commentCount)", systemImage: "text.bubble")
-                if let createdAt = post.createdAt {
-                  Spacer()
-                  Text(createdAt.formatted(date: .abbreviated, time: .omitted))
-                }
-              }
-              .font(.caption)
-              .foregroundStyle(VinctusTokens.Color.textMuted)
+        LazyVGrid(columns: columns, spacing: 12) {
+          ForEach(posts) { post in
+            NavigationLink {
+              PostDetailView(item: post, profileRepo: profileRepo, commentsRepo: commentsRepo)
+            } label: {
+              PostGridTile(post: post)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 6)
-          }
-          .buttonStyle(.plain)
-          if post.id != posts.last?.id {
-            Divider()
+            .buttonStyle(.plain)
           }
         }
         if nextPage != nil {
@@ -87,6 +94,84 @@ struct ProfilePostsSection: View {
     } catch {
       errorMessage = "No se pudieron cargar más publicaciones."
     }
+  }
+}
+
+/// One square tile of the posts grid.
+private struct PostGridTile: View {
+  let post: FeedItem
+
+  var body: some View {
+    SwiftUI.Color.clear
+      .aspectRatio(1, contentMode: .fit)
+      .overlay {
+        if let preview = post.previewImageURL, let url = URL(string: preview) {
+          AsyncImage(url: url) { phase in
+            if case .success(let image) = phase {
+              image.resizable().scaledToFill()
+            } else {
+              emptyBackground
+            }
+          }
+        } else {
+          emptyBackground
+        }
+      }
+      .overlay {
+        LinearGradient(
+          colors: [.black.opacity(0.7), .black.opacity(0.2), .clear],
+          startPoint: .bottom,
+          endPoint: .top
+        )
+        .opacity(0.8)
+      }
+      .overlay(alignment: .bottomLeading) {
+        caption
+          .padding(14)
+      }
+      .overlay(alignment: .topTrailing) {
+        if post.hasVideo {
+          Label("VIDEO", systemImage: "film")
+            .font(.system(size: 11))
+            .tracking(0.5)
+            .foregroundStyle(SwiftUI.Color(white: 0.9))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(SwiftUI.Color.black.opacity(0.5))
+            .clipShape(Capsule())
+            .padding(10)
+        }
+      }
+      .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+      .overlay(
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+          .stroke(VinctusTokens.Color.border, lineWidth: 1)
+      )
+      .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+  }
+
+  @ViewBuilder
+  private var caption: some View {
+    if let fileName = post.fileName, post.previewImageURL == nil, !post.hasVideo {
+      Label(fileName, systemImage: "doc.text")
+        .font(.caption)
+        .foregroundStyle(SwiftUI.Color(white: 0.9))
+        .lineLimit(1)
+    } else {
+      Text(post.text.isEmpty ? "Publicación" : post.text)
+        .font(.subheadline)
+        .foregroundStyle(post.text.isEmpty ? VinctusTokens.Color.textSecondary : SwiftUI.Color(white: 0.96))
+        .lineLimit(3)
+        .multilineTextAlignment(.leading)
+    }
+  }
+
+  private var emptyBackground: some View {
+    LinearGradient(
+      colors: [SwiftUI.Color(white: 0.09), SwiftUI.Color(white: 0.15), .black],
+      startPoint: .topLeading,
+      endPoint: .bottomTrailing
+    )
   }
 }
 

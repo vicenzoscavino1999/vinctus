@@ -54,11 +54,7 @@ struct DiscoverView: View {
   @StateObject private var vm: DiscoverViewModel
 
   @State private var discoverQuery = ""
-  @State private var isCreatePostPresented = false
-  @State private var lastDiscoverHeaderOffset: CGFloat = .zero
-  @State private var isFloatingHeaderVisible = false
-  @State private var discoverHeaderScrollAccumulator: CGFloat = .zero
-  @State private var discoverHeaderScrollDirection: CGFloat = .zero
+  @State private var openedGroupID: String?
   @State private var groups: [GroupSummary] = []
   @State private var isLoadingGroups = false
   @State private var groupsError: String?
@@ -66,39 +62,22 @@ struct DiscoverView: View {
 
   private let profileRepo: ProfileRepo
   private let groupsRepo: any GroupsRepo
-  private let createPostRepo: any CreatePostRepo
   private let aiRepo: AIRepo
 
   init(
     repo: DiscoverRepo,
     profileRepo: ProfileRepo,
     groupsRepo: any GroupsRepo,
-    createPostRepo: any CreatePostRepo,
     aiRepo: AIRepo
   ) {
     self.profileRepo = profileRepo
     self.groupsRepo = groupsRepo
-    self.createPostRepo = createPostRepo
     self.aiRepo = aiRepo
     _vm = StateObject(wrappedValue: DiscoverViewModel(repo: repo))
   }
 
   var body: some View {
     List {
-      DiscoverHeaderBar {
-        isCreatePostPresented = true
-      }
-      .background(
-        GeometryReader { proxy in
-          SwiftUI.Color.clear.preference(
-            key: DiscoverHeaderOffsetPreferenceKey.self,
-            value: proxy.frame(in: .named("DiscoverList")).minY
-          )
-        }
-      )
-      .listRowSeparator(.hidden)
-      .listRowBackground(SwiftUI.Color.clear)
-
       Section {
         DiscoverCurationHero(searchText: $discoverQuery)
       }
@@ -162,7 +141,9 @@ struct DiscoverView: View {
 
       Section {
         HStack(alignment: .firstTextBaseline) {
-          DiscoverSectionHeader(title: "Grupos recomendados")
+          (Text("Grupos ").foregroundStyle(VinctusTokens.Color.textSecondary)
+            + Text("recomendados").foregroundStyle(VinctusTokens.Color.textPrimary))
+            .font(VinctusTokens.Typography.serif(22))
           Spacer()
           NavigationLink(destination: GroupsListView(repo: groupsRepo)) {
             Text("Ver todos")
@@ -230,10 +211,9 @@ struct DiscoverView: View {
         } else {
           VStack(spacing: VinctusTokens.Spacing.sm) {
             ForEach(filteredGroups.prefix(6)) { group in
-              NavigationLink(destination: GroupView(repo: groupsRepo, groupID: group.id)) {
-                DiscoverGroupCard(group: group)
+              GroupCard(group: group, repo: groupsRepo) {
+                openedGroupID = group.id
               }
-              .buttonStyle(.plain)
             }
           }
           .padding(.top, 2)
@@ -242,69 +222,18 @@ struct DiscoverView: View {
       .listRowSeparator(.hidden)
       .listRowBackground(SwiftUI.Color.clear)
     }
-    .coordinateSpace(name: "DiscoverList")
     .listStyle(.plain)
-    .toolbar(.hidden, for: .navigationBar)
     .scrollContentBackground(.hidden)
     .background(VinctusTokens.Color.background)
-    .overlay(alignment: .top) {
-      DiscoverTopSafeAreaBackground()
+    .vinctusTopBar()
+    .navigationDestination(item: $openedGroupID) { groupID in
+      GroupView(repo: groupsRepo, groupID: groupID)
     }
-    .overlay(alignment: .top) {
-      DiscoverFloatingHeaderOverlay(
-        isVisible: isFloatingHeaderVisible,
-        onTapCreatePost: { isCreatePostPresented = true }
-      )
-    }
-    .onPreferenceChange(DiscoverHeaderOffsetPreferenceKey.self) { offset in
-      let delta = offset - lastDiscoverHeaderOffset
-      lastDiscoverHeaderOffset = offset
-      let isNearTop = offset > -8
-
-      if isNearTop {
-        discoverHeaderScrollAccumulator = .zero
-        discoverHeaderScrollDirection = .zero
-        if isFloatingHeaderVisible {
-          withAnimation(.easeInOut(duration: 0.2)) {
-            isFloatingHeaderVisible = false
-          }
-        }
-        return
+    .onAppear {
+      // Screenshot builds open a group with `-VinctusOpenGroup <id>`.
+      if openedGroupID == nil, let groupID = AppRepos.demoArgument("-VinctusOpenGroup") {
+        openedGroupID = groupID
       }
-
-      // Filter tiny jitter and accumulate directional travel for stable UX.
-      guard abs(delta) > 0.3 else { return }
-
-      let direction: CGFloat = delta > 0 ? 1 : -1
-      if direction != discoverHeaderScrollDirection {
-        discoverHeaderScrollDirection = direction
-        discoverHeaderScrollAccumulator = .zero
-      }
-      discoverHeaderScrollAccumulator += delta
-
-      let revealDistance: CGFloat = 16
-      let hideDistance: CGFloat = 10
-
-      if discoverHeaderScrollDirection > 0,
-        discoverHeaderScrollAccumulator >= revealDistance,
-        !isFloatingHeaderVisible
-      {
-        discoverHeaderScrollAccumulator = .zero
-        withAnimation(.easeInOut(duration: 0.2)) {
-          isFloatingHeaderVisible = true
-        }
-      } else if discoverHeaderScrollDirection < 0,
-        discoverHeaderScrollAccumulator <= -hideDistance,
-        isFloatingHeaderVisible
-      {
-        discoverHeaderScrollAccumulator = .zero
-        withAnimation(.easeInOut(duration: 0.2)) {
-          isFloatingHeaderVisible = false
-        }
-      }
-    }
-    .navigationDestination(isPresented: $isCreatePostPresented) {
-      CreatePostView(repo: createPostRepo)
     }
     .task(id: authVM.currentUserID) {
       await refreshDiscoverData()

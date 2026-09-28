@@ -3,54 +3,73 @@ import XCTest
 
 @MainActor
 final class GroupMembershipTests: XCTestCase {
+  private func loadedViewModel(_ repo: FakeGroupsRepo) async -> GroupDetailViewModel {
+    let vm = GroupDetailViewModel(repo: repo, groupID: "g1")
+    await vm.loadMembership(uid: "me")
+    return vm
+  }
+
   func testMembershipIsLoaded() async {
     let repo = FakeGroupsRepo()
     repo.members = ["me"]
-    let vm = GroupDetailViewModel(repo: repo, groupID: "g1")
 
-    XCTAssertNil(vm.isMember)
-    await vm.loadMembership(uid: "me")
+    let vm = await loadedViewModel(repo)
 
+    XCTAssertEqual(vm.membership, .member)
     XCTAssertEqual(vm.isMember, true)
   }
 
-  func testJoinAndLeave() async {
+  func testJoinAndLeaveAPublicGroup() async {
     let repo = FakeGroupsRepo()
-    let vm = GroupDetailViewModel(repo: repo, groupID: "g1")
-    await vm.loadMembership(uid: "me")
-    XCTAssertEqual(vm.isMember, false)
+    let vm = await loadedViewModel(repo)
+    XCTAssertEqual(vm.membership, GroupMembershipStatus.none)
 
-    await vm.toggleMembership(uid: "me")
-    XCTAssertEqual(vm.isMember, true)
+    await vm.performMembershipAction(uid: "me")
+    XCTAssertEqual(vm.membership, .member)
     XCTAssertEqual(repo.joinCalls, 1)
 
-    await vm.toggleMembership(uid: "me")
-    XCTAssertEqual(vm.isMember, false)
+    await vm.performMembershipAction(uid: "me")
+    XCTAssertEqual(vm.membership, GroupMembershipStatus.none)
     XCTAssertEqual(repo.leaveCalls, 1)
     XCTAssertFalse(vm.isUpdatingMembership)
   }
 
-  func testPrivateGroupCanNotBeJoinedFromTheApp() async {
+  func testAFailedJoinShowsTheError() async {
     let repo = FakeGroupsRepo()
     repo.failsToUpdate = true
-    let vm = GroupDetailViewModel(repo: repo, groupID: "g1")
-    await vm.loadMembership(uid: "me")
+    let vm = await loadedViewModel(repo)
 
-    await vm.toggleMembership(uid: "me")
+    await vm.performMembershipAction(uid: "me")
 
-    XCTAssertEqual(vm.isMember, false)
-    XCTAssertEqual(vm.membershipError, "Este grupo es privado. Pide unirte desde la web.")
+    XCTAssertEqual(vm.membership, GroupMembershipStatus.none)
+    XCTAssertEqual(vm.membershipError, GroupsRepoError.privateGroup.errorDescription)
   }
 
   func testNothingHappensWithoutASignedInUserOrBeforeLoading() async {
     let repo = FakeGroupsRepo()
     let vm = GroupDetailViewModel(repo: repo, groupID: "g1")
 
-    await vm.toggleMembership(uid: "me")
+    await vm.performMembershipAction(uid: "me")
     await vm.loadMembership(uid: nil)
-    await vm.toggleMembership(uid: nil)
+    await vm.performMembershipAction(uid: nil)
 
-    XCTAssertNil(vm.isMember)
+    XCTAssertNil(vm.membership)
     XCTAssertEqual(repo.joinCalls, 0)
+  }
+
+  func testButtonTitlesMatchTheWeb() {
+    XCTAssertEqual(GroupMembershipStatus.owner.buttonTitle(isPrivate: false), "Tu grupo")
+    XCTAssertEqual(GroupMembershipStatus.member.buttonTitle(isPrivate: true), "Unido")
+    XCTAssertEqual(GroupMembershipStatus.pending.buttonTitle(isPrivate: true), "Pendiente")
+    XCTAssertEqual(GroupMembershipStatus.none.buttonTitle(isPrivate: false), "Unirme")
+    XCTAssertEqual(GroupMembershipStatus.none.buttonTitle(isPrivate: true), "Solicitar")
+    XCTAssertTrue(GroupMembershipStatus.owner.isJoined)
+    XCTAssertFalse(GroupMembershipStatus.pending.isJoined)
+  }
+
+  func testMemberRoles() {
+    XCTAssertEqual(GroupView.roleTitle("admin"), "ADMIN")
+    XCTAssertEqual(GroupView.roleTitle("moderator"), "MODERADOR")
+    XCTAssertEqual(GroupView.roleTitle("member"), "MIEMBRO")
   }
 }

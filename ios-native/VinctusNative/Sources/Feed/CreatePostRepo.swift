@@ -10,7 +10,8 @@ private struct CreatePostAuthorSnapshot {
 
 protocol CreatePostRepo {
   func makePostID() throws -> String
-  func publishTextPost(text: String, postID: String) async throws
+  /// `groupID` publishes the post inside that group (the web's `groupId`).
+  func publishTextPost(text: String, postID: String, groupID: String?) async throws
 }
 
 enum CreatePostRepoError: LocalizedError {
@@ -63,7 +64,7 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
     return postID
   }
 
-  func publishTextPost(text: String, postID: String) async throws {
+  func publishTextPost(text: String, postID: String, groupID: String?) async throws {
     guard FirebaseApp.app() != nil else { throw CreatePostRepoError.firebaseNotConfigured }
 
     let normalizedPostID = postID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -107,7 +108,7 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
         "content": normalizedText,
         "status": "uploading",
         "media": [],
-        "groupId": NSNull(),
+        "groupId": groupID ?? NSNull(),
         "categoryId": NSNull(),
         "likeCount": 0,
         "commentCount": 0,

@@ -1,7 +1,9 @@
 import SwiftUI
 
+/// All groups, as web-style cards.
 struct GroupsListView: View {
   @StateObject private var vm: GroupsListViewModel
+  @State private var openedGroupID: String?
 
   private let repo: any GroupsRepo
 
@@ -11,102 +13,70 @@ struct GroupsListView: View {
   }
 
   var body: some View {
-    List {
-      if vm.isShowingCachedData {
-        VCard {
-          HStack(spacing: 8) {
-            Image(systemName: "externaldrive.badge.clock")
-              .foregroundStyle(.orange)
-            Text("Mostrando grupos desde cache local.")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-          }
-        }
-        .listRowSeparator(.hidden)
-      }
+    ScrollView {
+      LazyVStack(alignment: .leading, spacing: 16) {
+        (Text("Todos los ").foregroundStyle(VinctusTokens.Color.textSecondary)
+          + Text("grupos").foregroundStyle(VinctusTokens.Color.textPrimary))
+          .font(VinctusTokens.Typography.serif(26))
+          .padding(.top, 8)
 
-      if vm.isLoading, vm.groups.isEmpty {
-        skeletonRows
-      } else if vm.groups.isEmpty, let error = vm.errorMessage {
-        VCard {
-          VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
-            Text("No se pudo cargar grupos")
-              .font(.headline)
+        if vm.isShowingCachedData {
+          Label("Mostrando grupos guardados en el teléfono.", systemImage: "externaldrive.badge.clock")
+            .font(.footnote)
+            .foregroundStyle(VinctusTokens.Color.textMuted)
+        }
+
+        if vm.isLoading, vm.groups.isEmpty {
+          ProgressView()
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 40)
+        } else if vm.groups.isEmpty, let error = vm.errorMessage {
+          VStack(alignment: .leading, spacing: 10) {
             Text(error)
               .font(.footnote)
-              .foregroundStyle(.secondary)
-
+              .foregroundStyle(.red)
             VButton("Reintentar", variant: .secondary) {
-              Task {
-                await vm.refresh()
-              }
+              Task { await vm.refresh() }
             }
           }
-        }
-        .listRowSeparator(.hidden)
-      } else if vm.groups.isEmpty {
-        VCard {
-          VStack(alignment: .leading, spacing: 6) {
-            Text("Aún no hay grupos")
-              .font(.headline)
-            Text("Cuando existan grupos disponibles aparecerán aquí.")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-          }
-        }
-        .listRowSeparator(.hidden)
-      } else {
-        Section("Grupos") {
+        } else if vm.groups.isEmpty {
+          Text("Aún no hay grupos disponibles.")
+            .foregroundStyle(VinctusTokens.Color.textMuted)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 40)
+        } else {
           ForEach(vm.groups) { group in
-            NavigationLink(destination: GroupView(repo: repo, groupID: group.id)) {
-              GroupSummaryRow(group: group)
+            GroupCard(group: group, repo: repo) {
+              openedGroupID = group.id
             }
           }
         }
       }
+      .padding(.horizontal, 16)
+      .padding(.bottom, 24)
     }
-    .listStyle(.insetGrouped)
+    .background(VinctusTokens.Color.background)
     .navigationTitle("Grupos")
-    .task {
-      await vm.refresh()
+    .navigationBarTitleDisplayMode(.inline)
+    .navigationDestination(item: $openedGroupID) { groupID in
+      GroupView(repo: repo, groupID: groupID)
     }
-    .refreshable {
-      await vm.refresh()
-    }
-  }
-
-  @ViewBuilder
-  private var skeletonRows: some View {
-    ForEach(0..<5, id: \.self) { _ in
-      HStack(spacing: VinctusTokens.Spacing.md) {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .fill(SwiftUI.Color.gray.opacity(0.2))
-          .frame(width: 46, height: 46)
-
-        VStack(alignment: .leading, spacing: 6) {
-          RoundedRectangle(cornerRadius: 4, style: .continuous)
-            .fill(SwiftUI.Color.gray.opacity(0.2))
-            .frame(width: 170, height: 14)
-          RoundedRectangle(cornerRadius: 4, style: .continuous)
-            .fill(SwiftUI.Color.gray.opacity(0.16))
-            .frame(width: 230, height: 12)
-        }
-
-        Spacer()
-      }
-      .redacted(reason: .placeholder)
-      .listRowSeparator(.hidden)
-    }
+    .task { await vm.refresh() }
+    .refreshable { await vm.refresh() }
   }
 }
 
+/// A group, laid out like the web's GroupDetailView (`src/features/groups/components`).
 struct GroupView: View {
   @StateObject private var vm: GroupDetailViewModel
   @StateObject private var connectivity = ConnectivityMonitor()
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
   @EnvironmentObject private var authVM: AuthViewModel
   @State private var openedConversationID: String?
+  @State private var openedProfileID: String?
   @State private var isOpeningChat = false
+  @State private var isComposing = false
+  @State private var isConfirmingLeave = false
   @State private var chatError: String?
 
   private let groupID: String
@@ -125,221 +95,39 @@ struct GroupView: View {
     self.profileRepo = profileRepo
   }
 
-  private var currentUserID: String? {
-    authVM.currentUserID
-  }
-
-  @ViewBuilder
-  private func membershipSection(_ detail: GroupDetail) -> some View {
-    Section {
-      VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
-        if let isMember = vm.isMember {
-          if isMember {
-            VButton(isOpeningChat ? "Abriendo…" : "Abrir chat del grupo") {
-              openGroupChat()
-            }
-            .disabled(isOpeningChat)
-
-            VButton(vm.isUpdatingMembership ? "Saliendo…" : "Salir del grupo", variant: .secondary) {
-              Task { await vm.toggleMembership(uid: currentUserID) }
-            }
-            .disabled(vm.isUpdatingMembership)
-          } else if detail.visibility == .private {
-            Text("Este grupo es privado. Puedes pedir unirte desde la web.")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-          } else {
-            VButton(vm.isUpdatingMembership ? "Uniéndote…" : "Unirme al grupo") {
-              Task { await vm.toggleMembership(uid: currentUserID) }
-            }
-            .disabled(vm.isUpdatingMembership)
-          }
-        } else {
-          ProgressView()
-            .frame(maxWidth: .infinity)
-        }
-
-        if let error = vm.membershipError ?? chatError {
-          Text(error)
-            .font(.footnote)
-            .foregroundStyle(.red)
-        }
-      }
-    }
-    .listRowSeparator(.hidden)
-  }
-
-  private func openGroupChat() {
-    isOpeningChat = true
-    chatError = nil
-    Task {
-      do {
-        openedConversationID = try await chatRepo.openGroupConversation(groupID: groupID)
-      } catch {
-        chatError = (error as? LocalizedError)?.errorDescription ?? "No se pudo abrir el chat del grupo."
-      }
-      isOpeningChat = false
-    }
-  }
+  private var currentUserID: String? { authVM.currentUserID }
+  private var isJoined: Bool { vm.membership?.isJoined == true }
 
   var body: some View {
-    List {
-      Section {
-        HStack(spacing: 14) {
-          VInlineStatus(title: vm.isOnline ? "Conexion: online" : "Conexion: offline", isGood: vm.isOnline)
-
-          if vm.isShowingCachedData {
-            Text("cache")
-              .font(.caption)
-              .padding(.horizontal, 8)
-              .padding(.vertical, 4)
-              .background(SwiftUI.Color.orange.opacity(0.15))
-              .foregroundStyle(.orange)
-              .clipShape(Capsule())
-          }
-        }
-      }
-
-      if vm.isLoading, vm.detail == nil {
-        detailSkeleton
-      }
-
-      if let detail = vm.detail {
-        Section {
-          VCard {
-            VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
-              HStack(alignment: .center, spacing: VinctusTokens.Spacing.md) {
-                GroupIconView(name: detail.name, iconURL: detail.iconURL, size: 54)
-
-                VStack(alignment: .leading, spacing: 4) {
-                  Text(detail.name)
-                    .font(.title3)
-                    .bold()
-
-                  Text(detail.visibility == .private ? "Grupo privado" : "Grupo público")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-              }
-
-              if !detail.description.isEmpty {
-                Text(detail.description)
-                  .font(.body)
-                  .foregroundStyle(.primary)
-              }
-            }
-          }
-        }
-        .listRowSeparator(.hidden)
-
-        membershipSection(detail)
-
-        Section("Actividad") {
-          LabeledContent("Miembros") { Text("\(detail.memberCount)") }
-          LabeledContent("Posts (7 dias)") { Text("\(detail.postsPerWeek)") }
-
-          if let updatedAt = detail.updatedAt {
-            LabeledContent("Actualizado") {
-              Text(updatedAt.formatted(date: .abbreviated, time: .shortened))
-            }
-          }
+    ScrollView {
+      VStack(alignment: .leading, spacing: 32) {
+        if let detail = vm.detail {
+          header(detail)
+          postsSection(detail)
+          membersSection(detail)
+        } else if vm.isLoading {
+          ProgressView()
+            .frame(maxWidth: .infinity)
+            .padding(.top, 80)
         }
 
-        Section("Publicaciones recientes") {
-          if detail.recentPosts.isEmpty {
-            Text("Aún no hay publicaciones en este grupo.")
+        if let error = vm.errorMessage {
+          VStack(alignment: .leading, spacing: 10) {
+            Text(error)
               .font(.footnote)
-              .foregroundStyle(.secondary)
-          } else {
-            ForEach(detail.recentPosts.filter { !blockedUsers.isBlocked($0.authorID) }) { post in
-              HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                  Text(post.title)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-
-                  HStack(spacing: 8) {
-                    Text(post.authorName)
-                      .font(.caption)
-                      .foregroundStyle(.secondary)
-
-                    if let createdAt = post.createdAt {
-                      Text(createdAt, style: .relative)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
-                  }
-                }
-
-                Spacer()
-
-                ModerationMenu(
-                  target: .post(postID: post.id, authorID: post.authorID),
-                  authorID: post.authorID,
-                  authorName: post.authorName
-                )
-              }
-              .padding(.vertical, 2)
-            }
-          }
-        }
-
-        Section("Miembros destacados") {
-          if detail.topMembers.isEmpty {
-            Text("Sin miembros destacados por ahora.")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-          } else {
-            ForEach(detail.topMembers) { member in
-              HStack(spacing: VinctusTokens.Spacing.md) {
-                GroupMemberAvatar(name: member.name, photoURL: member.photoURL, size: 38)
-
-                VStack(alignment: .leading, spacing: 2) {
-                  Text(member.name)
-                    .font(.subheadline)
-
-                  Text(member.role.capitalized)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                if let joinedAt = member.joinedAt {
-                  Text(joinedAt, style: .relative)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                }
-              }
+              .foregroundStyle(.red)
+            VButton("Reintentar", variant: .secondary) {
+              Task { await vm.refresh() }
             }
           }
         }
       }
-
-      if let error = vm.errorMessage {
-        Section {
-          VCard {
-            VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
-              Text(error)
-                .font(.footnote)
-                .foregroundStyle(.red)
-
-              VButton("Reintentar", variant: .secondary) {
-                Task {
-                  await vm.refresh()
-                }
-              }
-            }
-          }
-        }
-        .listRowSeparator(.hidden)
-      }
+      .padding(.horizontal, 16)
+      .padding(.top, 8)
+      .padding(.bottom, 24)
     }
-    .listStyle(.insetGrouped)
-    .navigationTitle(vm.detail?.name ?? "Grupo")
+    .background(VinctusTokens.Color.background)
+    .navigationTitle("")
     .navigationBarTitleDisplayMode(.inline)
     .task {
       vm.handleConnectivityChange(connectivity.isOnline)
@@ -355,141 +143,344 @@ struct GroupView: View {
         otherUserID: nil
       )
     }
+    .navigationDestination(item: $openedProfileID) { userID in
+      ProfileView(repo: profileRepo, userID: userID)
+    }
+    .navigationDestination(isPresented: $isComposing) {
+      CreatePostView(repo: AppRepos.createPost(), groupID: groupID)
+    }
+    .confirmationDialog("¿Salir del grupo?", isPresented: $isConfirmingLeave, titleVisibility: .visible) {
+      Button("Salir", role: .destructive) {
+        Task { await vm.performMembershipAction(uid: currentUserID) }
+      }
+    }
     .onChange(of: connectivity.isOnline) { _, newValue in
       vm.handleConnectivityChange(newValue)
     }
     .refreshable {
       await vm.refresh()
+      await vm.loadMembership(uid: currentUserID)
+    }
+  }
+
+  // MARK: Header
+
+  private func header(_ detail: GroupDetail) -> some View {
+    VStack(alignment: .leading, spacing: 16) {
+      HStack(alignment: .top, spacing: 16) {
+        GroupSquareIcon(name: detail.name, iconURL: detail.iconURL, size: 64)
+
+        VStack(alignment: .leading, spacing: 8) {
+          Text(detail.name)
+            .font(VinctusTokens.Typography.serif(32))
+            .foregroundStyle(VinctusTokens.Color.textPrimary)
+            .fixedSize(horizontal: false, vertical: true)
+          HStack(spacing: 14) {
+            Label("\(detail.memberCount.formatted()) miembros", systemImage: "person.2")
+            Label("\(detail.postsPerWeek) posts/semana", systemImage: "bubble.left")
+          }
+          .labelStyle(CompactLabelStyle())
+          .font(.subheadline)
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+        }
+      }
+
+      if !detail.description.isEmpty {
+        Text(detail.description)
+          .font(.body)
+          .foregroundStyle(VinctusTokens.Color.textSecondary)
+      }
+
+      actions(detail)
+
+      if let error = vm.membershipError ?? chatError {
+        Text(error)
+          .font(.footnote)
+          .foregroundStyle(.red)
+      }
     }
   }
 
   @ViewBuilder
-  private var detailSkeleton: some View {
-    VStack(alignment: .leading, spacing: VinctusTokens.Spacing.md) {
-      RoundedRectangle(cornerRadius: 8, style: .continuous)
-        .fill(SwiftUI.Color.gray.opacity(0.2))
-        .frame(width: 240, height: 22)
-
-      RoundedRectangle(cornerRadius: 8, style: .continuous)
-        .fill(SwiftUI.Color.gray.opacity(0.16))
-        .frame(height: 14)
-
-      RoundedRectangle(cornerRadius: 8, style: .continuous)
-        .fill(SwiftUI.Color.gray.opacity(0.14))
-        .frame(height: 14)
-    }
-    .redacted(reason: .placeholder)
-    .listRowSeparator(.hidden)
-  }
-}
-
-private struct GroupSummaryRow: View {
-  let group: GroupSummary
-
-  var body: some View {
-    HStack(spacing: VinctusTokens.Spacing.md) {
-      GroupIconView(name: group.name, iconURL: group.iconURL, size: 44)
-
-      VStack(alignment: .leading, spacing: 3) {
-        Text(group.name)
-          .font(.headline)
-
-        if !group.description.isEmpty {
-          Text(group.description)
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
+  private func actions(_ detail: GroupDetail) -> some View {
+    let isPrivate = detail.visibility == .private
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 10) {
+        if let membership = vm.membership, membership != .owner {
+          if membership == .member {
+            GroupActionButton(title: "Unido", systemImage: "checkmark", style: .gold) {}
+              .disabled(true)
+          } else {
+            GroupActionButton(
+              title: vm.isUpdatingMembership ? "Procesando..." : membership.buttonTitle(isPrivate: isPrivate).uppercased(),
+              style: membership == .pending ? .muted : .neutral
+            ) {
+              Task { await vm.performMembershipAction(uid: currentUserID) }
+            }
+            .disabled(vm.isUpdatingMembership || membership == .pending)
+          }
         }
 
-        Text("\(group.memberCount) miembros")
-          .font(.caption)
-          .foregroundStyle(.secondary)
+        GroupActionButton(title: isOpeningChat ? "Abriendo..." : "Chat", systemImage: "bubble.left", style: .neutral) {
+          openGroupChat()
+        }
+        .disabled(!isJoined || isOpeningChat)
+
+        if vm.membership == .member {
+          GroupActionButton(title: "Salir", style: .danger) {
+            isConfirmingLeave = true
+          }
+          .disabled(vm.isUpdatingMembership)
+        }
+      }
+      .padding(.vertical, 1)
+    }
+  }
+
+  // MARK: Posts
+
+  private func postsSection(_ detail: GroupDetail) -> some View {
+    VStack(alignment: .leading, spacing: 14) {
+      HStack {
+        Text("Publicaciones recientes")
+          .font(VinctusTokens.Typography.serif(24))
+          .foregroundStyle(VinctusTokens.Color.textPrimary)
+        Spacer()
+        if isJoined {
+          Button {
+            isComposing = true
+          } label: {
+            Text("PUBLICAR")
+              .font(.caption.weight(.medium))
+              .tracking(1)
+              .foregroundStyle(.black)
+              .padding(.horizontal, 16)
+              .padding(.vertical, 9)
+              .background(VinctusTokens.Color.accent)
+              .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+          }
+          .buttonStyle(.plain)
+        }
       }
 
-      Spacer()
+      let posts = detail.recentPosts.filter { !blockedUsers.isBlocked($0.authorID) }
+      if posts.isEmpty {
+        Text("Aún no hay publicaciones en este grupo.")
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 20)
+      } else {
+        ForEach(posts) { post in
+          HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+              Text(post.title)
+                .font(.body.weight(.medium))
+                .foregroundStyle(VinctusTokens.Color.textPrimary)
+                .lineLimit(2)
+              HStack(spacing: 6) {
+                Text(post.authorName)
+                if let createdAt = post.createdAt {
+                  Text("·")
+                  Text(createdAt, style: .relative)
+                }
+              }
+              .font(.subheadline)
+              .foregroundStyle(VinctusTokens.Color.textMuted)
+            }
+            Spacer()
+            ModerationMenu(
+              target: .post(postID: post.id, authorID: post.authorID),
+              authorID: post.authorID,
+              authorName: post.authorName
+            )
+          }
+          .padding(16)
+          .background(VinctusTokens.Color.surface2)
+          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+          .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+              .stroke(VinctusTokens.Color.border.opacity(0.5), lineWidth: 1)
+          )
+        }
+      }
     }
-    .padding(.vertical, 2)
+  }
+
+  // MARK: Members
+
+  private func membersSection(_ detail: GroupDetail) -> some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Text("Miembros destacados")
+        .font(VinctusTokens.Typography.serif(24))
+        .foregroundStyle(VinctusTokens.Color.textPrimary)
+
+      if detail.topMembers.isEmpty {
+        Text("Sin miembros destacados por ahora.")
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 20)
+      } else {
+        ForEach(detail.topMembers.filter { !blockedUsers.isBlocked($0.uid) }) { member in
+          Button {
+            openedProfileID = member.uid
+          } label: {
+            VStack(spacing: 6) {
+              AvatarView(name: member.name, photoURLString: member.photoURL, size: 48)
+                .padding(.bottom, 6)
+              Text(member.name)
+                .font(.body.weight(.medium))
+                .foregroundStyle(VinctusTokens.Color.textPrimary)
+              Text(Self.roleTitle(member.role))
+                .font(.caption)
+                .tracking(1)
+                .foregroundStyle(VinctusTokens.Color.accent)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(16)
+            .background(VinctusTokens.Color.surface2)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+              RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(VinctusTokens.Color.border.opacity(0.5), lineWidth: 1)
+            )
+          }
+          .buttonStyle(.plain)
+        }
+      }
+    }
+  }
+
+  static func roleTitle(_ role: String) -> String {
+    switch role {
+    case "admin": return "ADMIN"
+    case "moderator": return "MODERADOR"
+    default: return "MIEMBRO"
+    }
+  }
+
+  private func openGroupChat() {
+    isOpeningChat = true
+    chatError = nil
+    Task {
+      do {
+        openedConversationID = try await chatRepo.openGroupConversation(groupID: groupID)
+      } catch {
+        chatError = (error as? LocalizedError)?.errorDescription ?? "No se pudo abrir el chat del grupo."
+      }
+      isOpeningChat = false
+    }
   }
 }
 
-private struct GroupIconView: View {
+// MARK: - Pieces
+
+private struct CompactLabelStyle: LabelStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    HStack(spacing: 4) {
+      configuration.icon
+      configuration.title
+    }
+  }
+}
+
+/// Buttons of the group header, like the web's rounded-button row.
+private struct GroupActionButton: View {
+  enum Style {
+    case gold
+    case neutral
+    case muted
+    case danger
+  }
+
+  let title: String
+  var systemImage: String?
+  let style: Style
+  let action: () -> Void
+
+  @Environment(\.isEnabled) private var isEnabled
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 6) {
+        if let systemImage {
+          Image(systemName: systemImage)
+        }
+        Text(title)
+      }
+      .font(.subheadline.weight(.medium))
+      .foregroundStyle(foreground)
+      .padding(.horizontal, 18)
+      .padding(.vertical, 12)
+      .background(background)
+      .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+      .overlay(
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+          .stroke(border, lineWidth: 1)
+      )
+      .opacity(isEnabled || style == .gold ? 1 : 0.5)
+    }
+    .buttonStyle(.plain)
+  }
+
+  private var foreground: SwiftUI.Color {
+    switch style {
+    case .gold: return .black
+    case .neutral: return VinctusTokens.Color.textPrimary
+    case .muted: return VinctusTokens.Color.textMuted
+    case .danger: return SwiftUI.Color(red: 0.99, green: 0.65, blue: 0.65)
+    }
+  }
+
+  private var background: SwiftUI.Color {
+    switch style {
+    case .gold: return VinctusTokens.Color.accent
+    case .neutral, .muted: return VinctusTokens.Color.surface3
+    case .danger: return SwiftUI.Color.red.opacity(0.1)
+    }
+  }
+
+  private var border: SwiftUI.Color {
+    switch style {
+    case .gold: return .clear
+    case .neutral, .muted: return SwiftUI.Color(white: 0.25)
+    case .danger: return SwiftUI.Color.red.opacity(0.3)
+    }
+  }
+}
+
+/// Rounded-square group icon with the photo or the name's initial (web's detail header).
+private struct GroupSquareIcon: View {
   let name: String
   let iconURL: String?
   let size: CGFloat
 
   var body: some View {
     ZStack {
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .fill(VinctusTokens.Color.surface2)
-
+      RoundedRectangle(cornerRadius: 16, style: .continuous)
+        .fill(VinctusTokens.Color.surface3)
       if let iconURL, let url = URL(string: iconURL) {
         AsyncImage(url: url) { phase in
-          switch phase {
-          case .empty:
-            ProgressView()
-              .controlSize(.small)
-          case .success(let image):
-            image
-              .resizable()
-              .scaledToFill()
-          case .failure:
-            initials
-          @unknown default:
-            initials
+          if case .success(let image) = phase {
+            image.resizable().scaledToFill()
+          } else {
+            initial
           }
         }
       } else {
-        initials
+        initial
       }
     }
     .frame(width: size, height: size)
-    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: 16, style: .continuous)
+        .stroke(SwiftUI.Color(white: 0.25), lineWidth: 1)
+    )
   }
 
-  private var initials: some View {
+  private var initial: some View {
     Text(String(name.prefix(1)).uppercased())
-      .font(.headline)
-      .foregroundStyle(.secondary)
-  }
-}
-
-private struct GroupMemberAvatar: View {
-  let name: String
-  let photoURL: String?
-  let size: CGFloat
-
-  var body: some View {
-    ZStack {
-      Circle()
-        .fill(VinctusTokens.Color.surface2)
-
-      if let photoURL, let url = URL(string: photoURL) {
-        AsyncImage(url: url) { phase in
-          switch phase {
-          case .empty:
-            ProgressView()
-              .controlSize(.small)
-          case .success(let image):
-            image
-              .resizable()
-              .scaledToFill()
-          case .failure:
-            initials
-          @unknown default:
-            initials
-          }
-        }
-      } else {
-        initials
-      }
-    }
-    .frame(width: size, height: size)
-    .clipShape(Circle())
-  }
-
-  private var initials: some View {
-    Text(String(name.prefix(1)).uppercased())
-      .font(.caption)
-      .foregroundStyle(.secondary)
+      .font(.title2)
+      .foregroundStyle(VinctusTokens.Color.textPrimary.opacity(0.85))
   }
 }

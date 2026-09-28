@@ -3,8 +3,8 @@ import SwiftUI
 struct CreatePostView: View {
   @StateObject private var vm: CreatePostViewModel
 
-  init(repo: CreatePostRepo) {
-    _vm = StateObject(wrappedValue: CreatePostViewModel(repo: repo))
+  init(repo: CreatePostRepo, groupID: String? = nil) {
+    _vm = StateObject(wrappedValue: CreatePostViewModel(repo: repo, groupID: groupID))
   }
 
   var body: some View {

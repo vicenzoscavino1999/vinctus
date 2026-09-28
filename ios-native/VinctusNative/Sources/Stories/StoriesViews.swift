@@ -98,8 +98,8 @@ struct StoriesBar: View {
     VStack(alignment: .leading, spacing: 10) {
       HStack {
         Text("HISTORIAS")
-          .font(.caption.weight(.semibold))
-          .tracking(1.6)
+          .font(VinctusTokens.Typography.serif(14))
+          .tracking(4)
           .foregroundStyle(VinctusTokens.Color.textMuted)
         Spacer()
         if let error = vm.errorMessage {
@@ -127,7 +127,9 @@ struct StoriesBar: View {
               StoryCircle(
                 name: group.ownerName,
                 photoURL: group.ownerPhotoURL,
-                label: group.ownerName.components(separatedBy: " ").first ?? group.ownerName,
+                label: group.isYouTubeShorts
+                  ? group.ownerName
+                  : (group.ownerName.components(separatedBy: " ").first ?? group.ownerName),
                 isUnseen: !vm.isSeen(group)
               )
             }
@@ -137,7 +139,15 @@ struct StoriesBar: View {
         .padding(.vertical, 2)
       }
     }
-    .task { await vm.load() }
+    .task {
+      await vm.load()
+      // Screenshot builds open the first story of a kind with `-VinctusOpenStory shorts|people`.
+      if let kind = AppRepos.demoArgument("-VinctusOpenStory"),
+        let group = otherGroups.first(where: { $0.isYouTubeShorts == (kind == "shorts") })
+      {
+        open(group)
+      }
+    }
     .onChange(of: photoItem) { _, item in
       guard let item else { return }
       Task {
@@ -183,7 +193,7 @@ struct StoriesBar: View {
       }
       .disabled(vm.isPublishing)
       .accessibilityLabel("Agregar historia")
-      .offset(x: 2, y: -18)
+      .offset(x: 2, y: -24)
     }
   }
 
@@ -193,6 +203,8 @@ struct StoriesBar: View {
   }
 }
 
+/// A story bubble like the web's StoriesWidget: photo in a circle with an amber ring while
+/// there is something new to watch, a gray one once seen.
 private struct StoryCircle: View {
   let name: String
   let photoURL: String?
@@ -200,26 +212,18 @@ private struct StoryCircle: View {
   let isUnseen: Bool
 
   var body: some View {
-    VStack(spacing: 6) {
-      AvatarView(name: name, photoURLString: photoURL, size: 60)
-        .padding(3)
+    VStack(spacing: 8) {
+      AvatarView(name: name, photoURLString: photoURL, size: 64)
         .overlay(
           Circle()
-            .stroke(
-              isUnseen
-                ? AnyShapeStyle(LinearGradient(
-                  colors: [VinctusTokens.Color.accent, VinctusTokens.Color.accentAlt],
-                  startPoint: .topLeading, endPoint: .bottomTrailing
-                ))
-                : AnyShapeStyle(VinctusTokens.Color.border),
-              lineWidth: 2
-            )
+            .stroke(isUnseen ? VinctusTokens.Color.accentBright : SwiftUI.Color(white: 0.25), lineWidth: 2)
         )
       Text(label)
         .font(.caption)
-        .foregroundStyle(VinctusTokens.Color.textPrimary)
+        .foregroundStyle(SwiftUI.Color(white: 0.83))
         .lineLimit(1)
-        .frame(maxWidth: 72)
+        .truncationMode(.tail)
+        .frame(width: 80)
     }
   }
 }
@@ -275,8 +279,9 @@ struct StoryViewerStart: Identifiable {
   var id: Int { groupIndex }
 }
 
-/// Full-screen story player: tap right for the next story, left for the previous one, swipe
-/// down to close. Photos stay 5 seconds; videos play to the end.
+/// Story player shown as a card over the screen, like the web's StoryViewerModal: tap the right
+/// side for the next story and the left side for the previous one, swipe down or ✕ to close.
+/// Photos stay 5 seconds, videos play to the end, and YouTube Shorts wait for the person.
 private struct StoryViewer: View {
   let groups: [StoryGroup]
   @ObservedObject var vm: StoriesViewModel
@@ -310,31 +315,44 @@ private struct StoryViewer: View {
 
   var body: some View {
     ZStack {
-      SwiftUI.Color.black.ignoresSafeArea()
+      SwiftUI.Color.black.opacity(0.85)
+        .ignoresSafeArea()
+        .onTapGesture { dismiss() }
 
       if let story {
-        media(story)
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .ignoresSafeArea()
-
-        HStack(spacing: 0) {
-          SwiftUI.Color.clear
-            .contentShape(Rectangle())
-            .onTapGesture { previous() }
-          SwiftUI.Color.clear
-            .contentShape(Rectangle())
-            .onTapGesture { next() }
-        }
-
-        VStack(spacing: 10) {
+        VStack(spacing: 0) {
           progressBars
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
           header(story)
-          Spacer()
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+          Rectangle()
+            .fill(VinctusTokens.Color.border)
+            .frame(height: 0.5)
+          ZStack {
+            SwiftUI.Color.black
+            media(story)
+            if !story.isYouTubeShort {
+              tapZones
+            }
+          }
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          if story.isYouTubeShort {
+            navigationRow
+          }
         }
-        .padding(.horizontal, VinctusTokens.Spacing.md)
-        .padding(.top, 8)
+        .background(VinctusTokens.Color.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay(
+          RoundedRectangle(cornerRadius: 28, style: .continuous)
+            .stroke(VinctusTokens.Color.border, lineWidth: 1)
+        )
+        .padding(.horizontal, 14)
+        .padding(.vertical, 24)
       }
     }
+    .presentationBackground(.clear)
     .gesture(
       DragGesture(minimumDistance: 30).onEnded { value in
         if value.translation.height > 80 { dismiss() }
@@ -352,32 +370,67 @@ private struct StoryViewer: View {
     .onChange(of: isConfirmingDelete) { _, showing in isPaused = showing }
     .task(id: story?.id) { await play() }
     .onDisappear { player?.pause() }
-    .statusBarHidden()
   }
 
   @ViewBuilder
   private func media(_ story: Story) -> some View {
-    switch story.mediaType {
-    case .image:
-      AsyncImage(url: URL(string: story.mediaURL)) { phase in
-        switch phase {
-        case .success(let image):
-          image.resizable().scaledToFit()
-        case .failure:
-          Label("No se pudo cargar la historia", systemImage: "exclamationmark.triangle")
-            .foregroundStyle(.white)
-        default:
+    if let videoID = story.youtubeVideoID {
+      YouTubeEmbedView(videoID: videoID)
+    } else {
+      switch story.mediaType {
+      case .image:
+        AsyncImage(url: URL(string: story.mediaURL)) { phase in
+          switch phase {
+          case .success(let image):
+            image.resizable().scaledToFit()
+          case .failure:
+            Label("No se pudo cargar la historia", systemImage: "exclamationmark.triangle")
+              .foregroundStyle(.white)
+          default:
+            ProgressView().tint(.white)
+          }
+        }
+      case .video:
+        if let player {
+          VideoPlayer(player: player)
+            .disabled(true)
+        } else {
           ProgressView().tint(.white)
         }
       }
-    case .video:
-      if let player {
-        VideoPlayer(player: player)
-          .disabled(true)
-      } else {
-        ProgressView().tint(.white)
-      }
     }
+  }
+
+  private var tapZones: some View {
+    HStack(spacing: 0) {
+      SwiftUI.Color.clear
+        .contentShape(Rectangle())
+        .onTapGesture { previous() }
+      SwiftUI.Color.clear
+        .contentShape(Rectangle())
+        .onTapGesture { next() }
+    }
+  }
+
+  /// YouTube handles taps itself, so Shorts get arrows under the video instead of tap zones.
+  private var navigationRow: some View {
+    HStack {
+      Button(action: previous) {
+        Image(systemName: "chevron.left")
+          .frame(width: 44, height: 44)
+      }
+      .accessibilityLabel("Historia anterior")
+      Spacer()
+      Button(action: next) {
+        Image(systemName: "chevron.right")
+          .frame(width: 44, height: 44)
+      }
+      .accessibilityLabel("Historia siguiente")
+    }
+    .font(.headline)
+    .foregroundStyle(VinctusTokens.Color.textPrimary)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 4)
   }
 
   private var progressBars: some View {
@@ -385,9 +438,9 @@ private struct StoryViewer: View {
       ForEach(Array((group?.stories ?? []).enumerated()), id: \.element.id) { index, _ in
         GeometryReader { proxy in
           ZStack(alignment: .leading) {
-            Capsule().fill(SwiftUI.Color.white.opacity(0.3))
+            Capsule().fill(SwiftUI.Color.white.opacity(0.2))
             Capsule()
-              .fill(SwiftUI.Color.white)
+              .fill(SwiftUI.Color.white.opacity(0.85))
               .frame(width: proxy.size.width * fill(for: index))
           }
         }
@@ -403,55 +456,66 @@ private struct StoryViewer: View {
   }
 
   private func header(_ story: Story) -> some View {
-    HStack(spacing: 10) {
-      AvatarView(name: group?.ownerName ?? "", photoURLString: group?.ownerPhotoURL, size: 34)
-      VStack(alignment: .leading, spacing: 1) {
+    HStack(spacing: 12) {
+      AvatarView(name: group?.ownerName ?? "", photoURLString: group?.ownerPhotoURL, size: 40)
+      VStack(alignment: .leading, spacing: 2) {
         Text(isOwnStory ? "Tu historia" : (group?.ownerName ?? "Usuario"))
-          .font(.subheadline.weight(.semibold))
-        Text(story.createdAt, style: .relative)
+          .font(.subheadline.weight(.medium))
+          .foregroundStyle(VinctusTokens.Color.textPrimary)
+          .lineLimit(1)
+        Text(Self.relativeTime(story.createdAt))
           .font(.caption)
-          .opacity(0.8)
+          .foregroundStyle(VinctusTokens.Color.textMuted)
       }
-      .foregroundStyle(.white)
       Spacer()
       if isOwnStory {
         Button {
           isConfirmingDelete = true
         } label: {
           Image(systemName: "trash")
-            .foregroundStyle(.white)
-            .padding(8)
+            .foregroundStyle(VinctusTokens.Color.textSecondary)
+            .frame(width: 36, height: 36)
         }
         .accessibilityLabel("Eliminar historia")
-      } else {
+      } else if !story.isYouTubeShort {
         ModerationMenu(
           target: .story(storyID: story.id, ownerID: story.ownerID),
           authorID: story.ownerID,
           authorName: group?.ownerName ?? "esta persona",
           onBlocked: { dismiss() }
         )
-        .foregroundStyle(.white)
+        .foregroundStyle(VinctusTokens.Color.textSecondary)
         .simultaneousGesture(TapGesture().onEnded { isPaused = true })
       }
       Button {
         dismiss()
       } label: {
         Image(systemName: "xmark")
-          .font(.headline)
-          .foregroundStyle(.white)
-          .padding(8)
+          .font(.system(size: 17, weight: .light))
+          .foregroundStyle(VinctusTokens.Color.textPrimary)
+          .frame(width: 36, height: 36)
       }
       .accessibilityLabel("Cerrar")
     }
   }
 
-  /// Advances the progress bar; photos last `photoDuration`, videos their own length.
+  /// "Hace 2 h", like the web viewer.
+  static func relativeTime(_ date: Date, now: Date = Date()) -> String {
+    let minutes = max(Int(now.timeIntervalSince(date) / 60), 0)
+    if minutes < 1 { return "Ahora" }
+    if minutes < 60 { return "Hace \(minutes) min" }
+    return "Hace \(minutes / 60) h"
+  }
+
+  /// Advances the progress bar; photos last `photoDuration`, videos their own length. YouTube
+  /// Shorts don't advance on their own: the person is watching or controlling the video.
   private func play() async {
     guard let story else { return }
     vm.markSeen(story)
     progress = 0
     player?.pause()
     player = nil
+    if story.isYouTubeShort { return }
 
     var duration = Self.photoDuration
     if story.mediaType == .video, let url = URL(string: story.mediaURL) {
