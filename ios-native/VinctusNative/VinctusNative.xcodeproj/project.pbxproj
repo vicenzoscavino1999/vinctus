@@ -18,6 +18,7 @@
 		258B93107D59AE1D2710F3C7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0E6159A864B4EAEF43187E9D /* Assets.xcassets */; };
 		2872AB670EE624BE1113A7EF /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96CAF38CE6383118EC248A7B /* MainTabView.swift */; };
 		28D59DB474B7E4271177ED8F /* ModerationRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2619FF522552A7B09CCF96E /* ModerationRepo.swift */; };
+		2A0895B2DE051B88C4A53475 /* EngagementRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A8093F838B72DDD00288C /* EngagementRepo.swift */; };
 		34FE30974A6A8E892C066E9C /* CreatePostRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8637752390EF81683C107A1B /* CreatePostRepo.swift */; };
 		36C48C27188F959CE78BEBD1 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D8A1159261082593EAD650 /* RootView.swift */; };
 		3EECBC0FCA2D06D8DC9C8116 /* CreatePostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 738173928D7C851A8787675F /* CreatePostView.swift */; };
@@ -41,6 +42,7 @@
 		A672645BF02654F4B697F75F /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DCD1A9CBE839EEC2FBB8C2 /* DesignSystem.swift */; };
 		AAA82ED739E25ABB8C4BB215 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 1DFC0389A2A3A8827925595D /* FirebaseAuth */; };
 		B8EF3A748A80DC812138B894 /* GroupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26FE52B28F2FC44604BA6243 /* GroupViewModel.swift */; };
+		BF2E55BB8E5C01062253F9B6 /* EngagementViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6725F3C0A28FAE4B1F343FA0 /* EngagementViews.swift */; };
 		CDC9D7CBCC3AF1F3D9FC8224 /* GroupsRepo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43987B024B88B7BCC5D0DB15 /* GroupsRepo.swift */; };
 		CED347EFDC5DA085E7D07226 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 044E1F95CB1FA517D5923FCC /* FirebaseFunctions */; };
 		CEE76351CF20E4D879BB5F0F /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 215BFDEA7DFD70B3F014FF94 /* FirebaseStorage */; };
@@ -69,6 +71,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		001A8093F838B72DDD00288C /* EngagementRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngagementRepo.swift; sourceTree = "<group>"; };
 		0027CD1B5879117991A482E1 /* ProfileRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileRepo.swift; sourceTree = "<group>"; };
 		07714AE151DA08BF000A14ED /* Dev.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Dev.xcconfig; sourceTree = "<group>"; };
 		0B22A4DAC5EE2AAB608DB50D /* VinctusNativeTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VinctusNativeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -88,6 +91,7 @@
 		5A86FFB513B46EC14B6D6E5E /* PostDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailViewModel.swift; sourceTree = "<group>"; };
 		5FB7C98DFC400FC410886829 /* FeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
 		60DB300F1649A8258629249E /* Prod.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Prod.xcconfig; sourceTree = "<group>"; };
+		6725F3C0A28FAE4B1F343FA0 /* EngagementViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngagementViews.swift; sourceTree = "<group>"; };
 		6B32C3DB5EBF834956DBF4AB /* DemoMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoMode.swift; sourceTree = "<group>"; };
 		6D9DF1499FD92B5FAB4F8DDC /* AIConsentRepo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConsentRepo.swift; sourceTree = "<group>"; };
 		738173928D7C851A8787675F /* CreatePostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostView.swift; sourceTree = "<group>"; };
@@ -186,6 +190,8 @@
 				87150562DCD542A9C566CFE9 /* DiscoverRepo.swift */,
 				2BF88070E3E7255C4689EAEE /* DiscoverView.swift */,
 				57528B806455FBABF83D1F54 /* DiscoverViewModel.swift */,
+				001A8093F838B72DDD00288C /* EngagementRepo.swift */,
+				6725F3C0A28FAE4B1F343FA0 /* EngagementViews.swift */,
 				B97C2ED97BA8671BCE68D4D2 /* FeedRepo.swift */,
 				9704ADBE4A84D079E0A04D1C /* FeedView.swift */,
 				5FB7C98DFC400FC410886829 /* FeedViewModel.swift */,
@@ -355,6 +361,8 @@
 				E5A6C52BEA78FB216E2C1F65 /* DiscoverRepo.swift in Sources */,
 				F82863C928F8BDECC89E28E0 /* DiscoverView.swift in Sources */,
 				702960F28BCE439F6C9EA39C /* DiscoverViewModel.swift in Sources */,
+				2A0895B2DE051B88C4A53475 /* EngagementRepo.swift in Sources */,
+				BF2E55BB8E5C01062253F9B6 /* EngagementViews.swift in Sources */,
 				FF33F35D2B8DCCFF45DA458C /* FeedRepo.swift in Sources */,
 				912F15F4581F1B37A3B1EDFB /* FeedView.swift in Sources */,
 				75912EA3A40807C55950D224 /* FeedViewModel.swift in Sources */,

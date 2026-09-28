@@ -67,7 +67,8 @@ En Xcode, abre el target **VinctusNative** y la pestaña **Signing & Capabilitie
 2. Revisa que funcione:
    - [ ] La casilla **"Acepto los Terminos..."** activa los botones de inicio de sesion.
    - [ ] Iniciar sesion con Google, con Apple y con email.
-   - [ ] Ver el feed, abrir una publicacion y comentar.
+   - [ ] Ver el feed, dar **me gusta**, abrir una publicacion y comentar.
+   - [ ] **Seguir / dejar de seguir** desde el perfil de otra persona.
    - [ ] **Denunciar**: el menu **···** de una publicacion, de un comentario o de un perfil permite enviar una denuncia.
    - [ ] **Bloquear**: desde el mismo menu. Las publicaciones, comentarios y sugerencias de esa persona desaparecen.
    - [ ] **Desbloquear**: en **Perfil > Ajustes > Usuarios bloqueados**.
