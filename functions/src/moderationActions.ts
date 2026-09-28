@@ -1,7 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
-import { parseReportedContentTarget } from './moderation';
+import { parseReportedContentTarget, parseReportedMessageTarget } from './moderation';
 
 export type ModerationEnforcementAction = 'remove_content' | 'suspend_user' | 'restore_user';
 
@@ -23,6 +23,35 @@ const NON_USER_IDS = new Set(['system_moderation', 'unknown_user', 'ai_assistant
 const fail = (code: functions.https.FunctionsErrorCode, message: string): never => {
   throw new functions.https.HttpsError(code, message);
 };
+
+export const REMOVED_MESSAGE_PREVIEW = 'Mensaje eliminado';
+
+/**
+ * Conversation lists show `lastMessage.text`, so a removed message must not live on there.
+ * `lastMessage` carries no message id, so it is matched by sender and text.
+ */
+export async function clearLastMessagePreview(
+  db: admin.firestore.Firestore,
+  conversationId: string,
+  message: Record<string, unknown> | undefined,
+): Promise<void> {
+  const senderId = message?.senderId;
+  const text = typeof message?.text === 'string' ? message.text.trim() : '';
+  if (typeof senderId !== 'string' || !text) {
+    return;
+  }
+  const conversationRef = db.doc(`conversations/${conversationId}`);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(conversationRef);
+    const lastMessage = snap.data()?.lastMessage as Record<string, unknown> | null | undefined;
+    if (!lastMessage || lastMessage.senderId !== senderId || lastMessage.text !== text) {
+      return;
+    }
+    tx.update(conversationRef, {
+      'lastMessage.text': REMOVED_MESSAGE_PREVIEW,
+    });
+  });
+}
 
 /**
  * Lets Trust & Safety admins act on a moderation queue item: remove the reported post or
@@ -64,18 +93,27 @@ export const moderationTakeAction = functions.https.onCall(
 
     if (action === 'remove_content') {
       const content = parseReportedContentTarget(item.conversationId);
-      if (!content) {
+      const message = content ? null : parseReportedMessageTarget(item.conversationId);
+      if (content) {
+        target = content.commentId
+          ? `posts/${content.postId}/comments/${content.commentId}`
+          : `posts/${content.postId}`;
+        reviewAction = content.commentId ? 'comment_removed' : 'post_removed';
+      } else if (message) {
+        target = `conversations/${message.conversationId}/messages/${message.messageId}`;
+        reviewAction = 'message_removed';
+      } else {
         return fail(
           'failed-precondition',
-          'Este caso no apunta a una publicacion o un comentario.',
+          'Este caso no apunta a una publicacion, un comentario o un mensaje.',
         );
       }
-      target = content.commentId
-        ? `posts/${content.postId}/comments/${content.commentId}`
-        : `posts/${content.postId}`;
+      const messageData = message ? (await db.doc(target).get()).data() : undefined;
       // Deleting a document that is already gone is a no-op, so repeating the action is safe.
       await db.doc(target).delete();
-      reviewAction = content.commentId ? 'comment_removed' : 'post_removed';
+      if (message) {
+        await clearLastMessagePreview(db, message.conversationId, messageData);
+      }
     } else {
       const reportedUid = typeof item.reportedUid === 'string' ? item.reportedUid : '';
       if (!reportedUid || NON_USER_IDS.has(reportedUid) || reportedUid === adminUid) {

@@ -56,11 +56,16 @@ struct GroupsPage {
 protocol GroupsRepo {
   func fetchGroups(limit: Int) async throws -> GroupsPage
   func fetchGroupDetail(groupID: String, recentPostLimit: Int, topMemberLimit: Int) async throws -> GroupDetail?
+  func isMember(groupID: String, uid: String) async throws -> Bool
+  /// Joins a public group, like the web's `joinPublicGroup`. Private groups need a request on the web.
+  func joinGroup(groupID: String, uid: String) async throws
+  func leaveGroup(groupID: String, uid: String) async throws
 }
 
 enum GroupsRepoError: LocalizedError {
   case firebaseNotConfigured
   case missingSnapshot
+  case privateGroup
 
   var errorDescription: String? {
     switch self {
@@ -68,6 +73,8 @@ enum GroupsRepoError: LocalizedError {
       return "Firebase no está configurado."
     case .missingSnapshot:
       return "No se pudo cargar grupos."
+    case .privateGroup:
+      return "Este grupo es privado. Pide unirte desde la web."
     }
   }
 }
@@ -203,6 +210,54 @@ final class FirebaseGroupsRepo: GroupsRepo {
       topMembers: topMembers,
       isFromCache: isFromCache
     )
+  }
+
+  func isMember(groupID: String, uid: String) async throws -> Bool {
+    guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
+    let db = self.db ?? Firestore.firestore()
+    let ref = db.collection("groups").document(groupID).collection("members").document(uid)
+    return try await getDocument(ref, source: .server).exists
+  }
+
+  /// Mirrors `joinPublicGroup` / `joinGroupWithSync` in `src/shared/lib/firestore/groups.ts`.
+  func joinGroup(groupID: String, uid: String) async throws {
+    guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
+    let db = self.db ?? Firestore.firestore()
+    let groupRef = db.collection("groups").document(groupID)
+    let groupDoc = try await getDocument(groupRef, source: .server)
+    guard let data = groupDoc.data() else { throw GroupsRepoError.missingSnapshot }
+    if (data["visibility"] as? String) == ProfileAccountVisibility.private.rawValue {
+      throw GroupsRepoError.privateGroup
+    }
+
+    let batch = db.batch()
+    batch.setData(
+      [
+        "uid": uid,
+        "groupId": groupID,
+        "role": "member",
+        "joinedAt": FieldValue.serverTimestamp(),
+      ],
+      forDocument: groupRef.collection("members").document(uid)
+    )
+    batch.setData(
+      [
+        "groupId": groupID,
+        "joinedAt": FieldValue.serverTimestamp(),
+      ],
+      forDocument: db.collection("users").document(uid).collection("memberships").document(groupID)
+    )
+    try await batch.commit()
+  }
+
+  /// Mirrors `leaveGroupWithSync` in `src/shared/lib/firestore/groups.ts`.
+  func leaveGroup(groupID: String, uid: String) async throws {
+    guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
+    let db = self.db ?? Firestore.firestore()
+    let batch = db.batch()
+    batch.deleteDocument(db.collection("groups").document(groupID).collection("members").document(uid))
+    batch.deleteDocument(db.collection("users").document(uid).collection("memberships").document(groupID))
+    try await batch.commit()
   }
 
   private func fetchMemberProfiles(

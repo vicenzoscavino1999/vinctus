@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { moderateUserText, parseReportedContentTarget } from './moderation';
+import {
+  messageReportKey,
+  moderateUserText,
+  parseReportedContentTarget,
+  parseReportedMessageTarget,
+} from './moderation';
 
 const blocked = (text: string) => moderateUserText([text]).blocked;
 
@@ -61,5 +66,26 @@ describe('parseReportedContentTarget', () => {
     expect(parseReportedContentTarget('post_a/b')).toBeNull();
     expect(parseReportedContentTarget(null)).toBeNull();
     expect(parseReportedContentTarget('')).toBeNull();
+  });
+});
+
+describe('parseReportedMessageTarget', () => {
+  it('reads direct and group message reports', () => {
+    expect(parseReportedMessageTarget('msg|dm_a_b|a_1700_x1')).toEqual({
+      conversationId: 'dm_a_b',
+      messageId: 'a_1700_x1',
+    });
+    expect(parseReportedMessageTarget(messageReportKey('grp_g1', 'm9'))).toEqual({
+      conversationId: 'grp_g1',
+      messageId: 'm9',
+    });
+  });
+
+  it('rejects anything else', () => {
+    expect(parseReportedMessageTarget('post_abc')).toBeNull();
+    expect(parseReportedMessageTarget('msg|other_x|m1')).toBeNull();
+    expect(parseReportedMessageTarget('msg|dm_a/b|m1')).toBeNull();
+    expect(parseReportedMessageTarget('msg|dm_a_b|')).toBeNull();
+    expect(parseReportedMessageTarget(null)).toBeNull();
   });
 });

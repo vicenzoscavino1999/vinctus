@@ -134,7 +134,7 @@ Completa la ficha en App Store Connect:
 - **Descripcion**, palabras clave y categoria (por ejemplo, Redes sociales).
 - **URL de soporte**: `https://vinctus.vercel.app/support.html`
 - **Politica de privacidad**: `https://vinctus.vercel.app/privacy.html`
-- **Privacidad de la app** (etiquetas de privacidad): declara **correo electronico**, **nombre**, **contenido del usuario** (publicaciones, comentarios, perfil) e **ID de usuario**, todos vinculados a la cuenta, usados para el **funcionamiento de la app** y **sin rastreo**. Declara tambien que el **contenido del usuario** que se escribe en Chat con IA y Arena IA se comparte con terceros (Google Gemini y NVIDIA) para el funcionamiento de la app, solo con el permiso del usuario.
+- **Privacidad de la app** (etiquetas de privacidad): declara **correo electronico**, **nombre**, **contenido del usuario** (publicaciones, comentarios, perfil), **otros contenidos del usuario / mensajes** (chat) e **ID de usuario**, todos vinculados a la cuenta, usados para el **funcionamiento de la app** y **sin rastreo**. Declara tambien que el **contenido del usuario** que se escribe en Chat con IA y Arena IA se comparte con terceros (Google Gemini y NVIDIA) para el funcionamiento de la app, solo con el permiso del usuario.
 - **Clasificacion por edad**: responde el cuestionario completo, que desde septiembre de 2026 es obligatorio e incluye preguntas de **redes sociales**. Vinctus tiene un feed de contenido de usuarios, asi que responde que **si tiene capacidades de red social** y **contenido generado por usuarios**. El resultado sera 13+ como minimo.
 - **Paises**: Australia prohibe las redes sociales a menores de 16 años. Lo mas simple es no publicar alli por ahora (**Precios y disponibilidad**). Si la publicas en la Union Europea, completa el estado de **comerciante (DSA)** en **Negocios**.
 - **Informacion para la revision**:
@@ -142,26 +142,27 @@ Completa la ficha en App Store Connect:
   - Crea tambien **publicaciones y comentarios desde otra cuenta**, para que el revisor pueda denunciar y bloquear a alguien.
   - En las notas, explica donde estan las funciones que Apple revisa en apps sociales:
     - Terminos: se aceptan con una casilla en la pantalla de inicio de sesion, antes de cualquier opcion para entrar.
-    - Filtro: un filtro automatico en el servidor retira publicaciones y comentarios con contenido ofensivo, y marca perfiles y grupos para revision.
-    - Denunciar: menu ··· en publicaciones, comentarios y perfiles. Las denuncias llegan a un panel de moderacion donde el equipo elimina el contenido y suspende al autor en menos de 24 horas.
-    - Bloquear: el mismo menu. El contenido del usuario bloqueado desaparece al instante. Desbloquear: Ajustes > Usuarios bloqueados.
+    - Filtro: un filtro automatico en el servidor retira publicaciones, comentarios y mensajes de chat con contenido ofensivo, y marca perfiles y grupos para revision.
+    - Denunciar: menu ··· en publicaciones, comentarios y perfiles. En el chat, manten pulsado un mensaje > Denunciar mensaje. Las denuncias llegan a un panel de moderacion donde el equipo elimina el contenido y suspende al autor en menos de 24 horas.
+    - Bloquear: el mismo menu, o manten pulsado un mensaje > Bloquear. El contenido del usuario bloqueado desaparece al instante y ya no puede enviarte mensajes. Desbloquear: Ajustes > Usuarios bloqueados.
+    - Mensajes: pestaña Mensajes. Solo se puede escribir a quien sigues o te sigue. Para probarlo, haz que la cuenta de prueba siga a la otra cuenta.
     - Eliminar cuenta: Ajustes > Zona de riesgo. En cuentas de Apple, tambien se revoca el acceso a Apple.
     - IA: Descubrir > Inteligencia artificial (Chat con IA y Arena IA). Antes del primer uso, la app explica que los mensajes se envian a Google Gemini y NVIDIA y pide permiso. El permiso se retira en Ajustes > IA.
 
 ## Lo que Apple revisa y como lo cubre la app
 
-| Regla                        | Que pide                                             | Estado                                                                                                         |
-| ---------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| 1.2 Contenido de usuarios    | Filtrar contenido ofensivo                           | ✅ Filtro en el servidor para publicaciones y comentarios (se eliminan) y para perfiles y grupos (se marcan).  |
-| 1.2 Contenido de usuarios    | Denunciar contenido                                  | ✅ Menu ··· en publicaciones, comentarios y perfiles. Las denuncias llegan a la cola de moderacion.            |
-| 1.2 Contenido de usuarios    | Actuar en 24 horas: borrar contenido y expulsar      | ✅ Panel `/moderation`: eliminar contenido y suspender usuario. ⚠️ Alguien del equipo debe revisarlo cada dia. |
-| 1.2 Contenido de usuarios    | Bloquear usuarios                                    | ✅ Menu ···, y lista de bloqueados en Ajustes. Tambien se ocultan en Descubrir y Buscar.                       |
-| 1.2 Contenido de usuarios    | Aceptar terminos sin tolerancia a contenido ofensivo | ✅ Casilla obligatoria en la pantalla de inicio de sesion. Los terminos lo dicen de forma explicita.           |
-| 1.2 Contenido de usuarios    | Contacto publicado                                   | ✅ Ajustes > Legal y soporte. ⚠️ Comprueba que `support@vinctus.app` y `security@vinctus.app` reciban correos. |
-| 2.1 App completa             | Nada de textos o pantallas de prueba                 | ✅ Las opciones de prueba solo aparecen en builds Debug.                                                       |
-| 2.1 App completa             | Icono                                                | ✅ `Resources/Assets.xcassets/AppIcon.appiconset`.                                                             |
-| 2.3.6 Clasificacion por edad | Responder el cuestionario (incluye redes sociales)   | ⚠️ Se hace en App Store Connect (paso 10).                                                                     |
-| 4.8 Iniciar sesion con Apple | Obligatorio si hay Google                            | ✅                                                                                                             |
-| 5.1.1(i) Privacidad          | Politica completa, enlazada en la app y en la ficha  | ✅ `public/privacy.html`: datos, terceros, retencion y como retirar el consentimiento.                         |
-| 5.1.1(v) Eliminar cuenta     | Desde la app, y revocar el token de Apple            | ✅ Ajustes > Zona de riesgo. ⚠️ La revocacion necesita el paso 6.                                              |
-| 5.1.2(i) IA de terceros      | Avisar y pedir permiso antes de enviar datos a IA    | ✅ Pantalla de permiso antes del primer uso de Chat con IA o Arena IA. Se retira en Ajustes > IA.              |
+| Regla                        | Que pide                                             | Estado                                                                                                             |
+| ---------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| 1.2 Contenido de usuarios    | Filtrar contenido ofensivo                           | ✅ Filtro en el servidor para publicaciones, comentarios y mensajes (se eliminan) y perfiles y grupos (se marcan). |
+| 1.2 Contenido de usuarios    | Denunciar contenido                                  | ✅ Menu ··· en publicaciones, comentarios y perfiles, y en cada mensaje del chat. Llegan a la cola de moderacion.  |
+| 1.2 Contenido de usuarios    | Actuar en 24 horas: borrar contenido y expulsar      | ✅ Panel `/moderation`: eliminar contenido y suspender usuario. ⚠️ Alguien del equipo debe revisarlo cada dia.     |
+| 1.2 Contenido de usuarios    | Bloquear usuarios                                    | ✅ Menu ···, y lista de bloqueados en Ajustes. Tambien se ocultan en Descubrir y Buscar.                           |
+| 1.2 Contenido de usuarios    | Aceptar terminos sin tolerancia a contenido ofensivo | ✅ Casilla obligatoria en la pantalla de inicio de sesion. Los terminos lo dicen de forma explicita.               |
+| 1.2 Contenido de usuarios    | Contacto publicado                                   | ✅ Ajustes > Legal y soporte. ⚠️ Comprueba que `support@vinctus.app` y `security@vinctus.app` reciban correos.     |
+| 2.1 App completa             | Nada de textos o pantallas de prueba                 | ✅ Las opciones de prueba solo aparecen en builds Debug.                                                           |
+| 2.1 App completa             | Icono                                                | ✅ `Resources/Assets.xcassets/AppIcon.appiconset`.                                                                 |
+| 2.3.6 Clasificacion por edad | Responder el cuestionario (incluye redes sociales)   | ⚠️ Se hace en App Store Connect (paso 10).                                                                         |
+| 4.8 Iniciar sesion con Apple | Obligatorio si hay Google                            | ✅                                                                                                                 |
+| 5.1.1(i) Privacidad          | Politica completa, enlazada en la app y en la ficha  | ✅ `public/privacy.html`: datos, terceros, retencion y como retirar el consentimiento.                             |
+| 5.1.1(v) Eliminar cuenta     | Desde la app, y revocar el token de Apple            | ✅ Ajustes > Zona de riesgo. ⚠️ La revocacion necesita el paso 6.                                                  |
+| 5.1.2(i) IA de terceros      | Avisar y pedir permiso antes de enviar datos a IA    | ✅ Pantalla de permiso antes del primer uso de Chat con IA o Arena IA. Se retira en Ajustes > IA.                  |

@@ -104,9 +104,82 @@ struct GroupView: View {
   @StateObject private var vm: GroupDetailViewModel
   @StateObject private var connectivity = ConnectivityMonitor()
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
+  @EnvironmentObject private var authVM: AuthViewModel
+  @State private var openedConversationID: String?
+  @State private var isOpeningChat = false
+  @State private var chatError: String?
 
-  init(repo: any GroupsRepo, groupID: String) {
+  private let groupID: String
+  private let chatRepo: ChatRepo
+  private let profileRepo: ProfileRepo
+
+  init(
+    repo: any GroupsRepo,
+    groupID: String,
+    chatRepo: ChatRepo = AppRepos.chat(),
+    profileRepo: ProfileRepo = AppRepos.profile()
+  ) {
     _vm = StateObject(wrappedValue: GroupDetailViewModel(repo: repo, groupID: groupID))
+    self.groupID = groupID
+    self.chatRepo = chatRepo
+    self.profileRepo = profileRepo
+  }
+
+  private var currentUserID: String? {
+    authVM.currentUserID ?? (AppRepos.isDemo ? "me" : nil)
+  }
+
+  @ViewBuilder
+  private func membershipSection(_ detail: GroupDetail) -> some View {
+    Section {
+      VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
+        if let isMember = vm.isMember {
+          if isMember {
+            VButton(isOpeningChat ? "Abriendo…" : "Abrir chat del grupo") {
+              openGroupChat()
+            }
+            .disabled(isOpeningChat)
+
+            VButton(vm.isUpdatingMembership ? "Saliendo…" : "Salir del grupo", variant: .secondary) {
+              Task { await vm.toggleMembership(uid: currentUserID) }
+            }
+            .disabled(vm.isUpdatingMembership)
+          } else if detail.visibility == .private {
+            Text("Este grupo es privado. Puedes pedir unirte desde la web.")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+          } else {
+            VButton(vm.isUpdatingMembership ? "Uniéndote…" : "Unirme al grupo") {
+              Task { await vm.toggleMembership(uid: currentUserID) }
+            }
+            .disabled(vm.isUpdatingMembership)
+          }
+        } else {
+          ProgressView()
+            .frame(maxWidth: .infinity)
+        }
+
+        if let error = vm.membershipError ?? chatError {
+          Text(error)
+            .font(.footnote)
+            .foregroundStyle(.red)
+        }
+      }
+    }
+    .listRowSeparator(.hidden)
+  }
+
+  private func openGroupChat() {
+    isOpeningChat = true
+    chatError = nil
+    Task {
+      do {
+        openedConversationID = try await chatRepo.openGroupConversation(groupID: groupID)
+      } catch {
+        chatError = (error as? LocalizedError)?.errorDescription ?? "No se pudo abrir el chat del grupo."
+      }
+      isOpeningChat = false
+    }
   }
 
   var body: some View {
@@ -160,6 +233,8 @@ struct GroupView: View {
           }
         }
         .listRowSeparator(.hidden)
+
+        membershipSection(detail)
 
         Section("Actividad") {
           LabeledContent("Miembros") { Text("\(detail.memberCount)") }
@@ -269,6 +344,16 @@ struct GroupView: View {
     .task {
       vm.handleConnectivityChange(connectivity.isOnline)
       await vm.refresh()
+      await vm.loadMembership(uid: currentUserID)
+    }
+    .navigationDestination(item: $openedConversationID) { conversationID in
+      ConversationView(
+        repo: chatRepo,
+        profileRepo: profileRepo,
+        conversationID: conversationID,
+        title: vm.detail?.name ?? "Grupo",
+        otherUserID: nil
+      )
     }
     .onChange(of: connectivity.isOnline) { _, newValue in
       vm.handleConnectivityChange(newValue)

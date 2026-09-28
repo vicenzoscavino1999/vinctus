@@ -1586,6 +1586,15 @@ service cloud.firestore {
         || exists(/databases/$(database)/documents/users/$(uidB)/blockedUsers/$(uidA));
     }
 
+    // A block (in either direction) stops new messages in an existing direct conversation.
+    function isDirectConversationBlocked(conversationId) {
+      let conv = get(/databases/$(database)/documents/conversations/$(conversationId)).data;
+      return conv.get('type', '') == 'direct'
+        && conv.get('memberIds', []) is list
+        && conv.get('memberIds', []).size() == 2
+        && isConversationBlocked(conv.memberIds[0], conv.memberIds[1]);
+    }
+
     function canStartDirectConversation(uidA, uidB) {
       return uidA is string
         && uidB is string
@@ -1709,6 +1718,7 @@ service cloud.firestore {
         allow read: if isAuthenticated() && canAccessConversation(conversationId);
         allow create: if isAuthenticated() 
           && canAccessConversation(conversationId)
+          && !isDirectConversationBlocked(conversationId)
           && isValidMessageCreate(messageId);
       }
       

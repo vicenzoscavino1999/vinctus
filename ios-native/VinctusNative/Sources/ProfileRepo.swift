@@ -27,6 +27,9 @@ struct UserProfile: Identifiable, Hashable {
 
 protocol ProfileRepo {
   func fetchUserProfile(uid: String) async throws -> UserProfile?
+  /// Saves the editable fields of the signed-in user's profile, like the web's
+  /// `updateUserProfile` (`users/{uid}` plus the public name in `users_public/{uid}`).
+  func updateProfile(uid: String, displayName: String, bio: String?, location: String?) async throws
 }
 
 enum ProfileRepoError: LocalizedError {
@@ -113,6 +116,35 @@ final class FirebaseProfileRepo: ProfileRepo {
     )
 
     return profile
+  }
+
+  func updateProfile(uid: String, displayName: String, bio: String?, location: String?) async throws {
+    guard FirebaseApp.app() != nil else { throw ProfileRepoError.firebaseNotConfigured }
+    let db = self.db ?? Firestore.firestore()
+    let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    let batch = db.batch()
+    batch.setData(
+      [
+        "displayName": name,
+        "displayNameLowercase": name.lowercased(),
+        "bio": bio ?? NSNull(),
+        "location": location ?? NSNull(),
+        "updatedAt": FieldValue.serverTimestamp(),
+      ],
+      forDocument: db.collection("users").document(uid),
+      merge: true
+    )
+    batch.setData(
+      [
+        "displayName": name,
+        "displayNameLowercase": name.lowercased(),
+        "updatedAt": FieldValue.serverTimestamp(),
+      ],
+      forDocument: db.collection("users_public").document(uid),
+      merge: true
+    )
+    try await batch.commit()
   }
 
   private func getDocumentData(

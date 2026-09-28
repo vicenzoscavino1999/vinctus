@@ -14,7 +14,8 @@
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
-import { moderateUserText } from './moderation';
+import { messageReportKey, moderateUserText } from './moderation';
+import { clearLastMessagePreview } from './moderationActions';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -85,7 +86,7 @@ async function claimModerationEvent(eventId: string): Promise<boolean> {
 }
 
 async function upsertAutoModerationReport(input: {
-  source: 'post' | 'comment' | 'profile' | 'group';
+  source: 'post' | 'comment' | 'profile' | 'group' | 'message';
   sourceId: string;
   postId: string | null;
   authorId: string;
@@ -1429,12 +1430,58 @@ export const onGroupWrittenModeration = functions.firestore
     }
   });
 
+/**
+ * Remove chat messages that use blocked terms, like posts and comments, and open a report.
+ * Trigger: onCreate conversations/{conversationId}/messages/{messageId}
+ */
+export const onMessageCreatedModeration = functions.firestore
+  .document('conversations/{conversationId}/messages/{messageId}')
+  .onCreate(async (snap, context) => {
+    const { conversationId, messageId } = context.params;
+    const data = snap.data() || {};
+    const moderation = moderateUserText(stringFields(data, ['text']));
+    if (!moderation.blocked) {
+      return;
+    }
+
+    try {
+      const claimed = await claimModerationEvent(context.eventId);
+      if (!claimed) {
+        return;
+      }
+
+      await upsertAutoModerationReport({
+        source: 'message',
+        sourceId: `${conversationId}_${messageId}`,
+        postId: null,
+        authorId: typeof data.senderId === 'string' ? data.senderId : 'unknown_user',
+        matchedTerms: moderation.matchedTerms,
+        conversationId: messageReportKey(conversationId, messageId),
+      });
+
+      await snap.ref.delete();
+      await clearLastMessagePreview(db, conversationId, data);
+
+      functions.logger.warn('Message removed by auto moderation', {
+        conversationId,
+        messageId,
+        matchedTerms: moderation.matchedTerms,
+      });
+    } catch (error) {
+      functions.logger.error('Failed to moderate message', {
+        conversationId,
+        messageId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
 // ==========================================================
 // TRUST & SAFETY - REPORT QUEUE
 // ==========================================================
 
 type ReportQueuePriority = 'low' | 'medium' | 'high';
-type ReportQueueTargetType = 'user' | 'group' | 'post' | 'comment' | 'unknown';
+type ReportQueueTargetType = 'user' | 'group' | 'post' | 'comment' | 'message' | 'unknown';
 
 function inferQueuePriority(reason: unknown): ReportQueuePriority {
   if (reason === 'abuse' || reason === 'harassment') return 'high';
@@ -1445,6 +1492,9 @@ function inferQueuePriority(reason: unknown): ReportQueuePriority {
 function inferReportTargetType(conversationId: unknown): ReportQueueTargetType {
   if (typeof conversationId !== 'string' || conversationId.length === 0) {
     return 'unknown';
+  }
+  if (conversationId.startsWith('msg|')) {
+    return 'message';
   }
   if (conversationId.startsWith('post_') && conversationId.includes('_comment_')) {
     return 'comment';

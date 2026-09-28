@@ -19,7 +19,13 @@ const DEFAULT_LIMIT = 25;
 
 export type ModerationQueueStatus = 'pending' | 'in_review' | 'resolved' | 'dismissed';
 export type ModerationQueuePriority = 'low' | 'medium' | 'high';
-export type ModerationQueueTargetType = 'user' | 'group' | 'post' | 'comment' | 'unknown';
+export type ModerationQueueTargetType =
+  | 'user'
+  | 'group'
+  | 'post'
+  | 'comment'
+  | 'message'
+  | 'unknown';
 
 export interface ModerationQueueItemRead {
   id: string;
@@ -73,7 +79,13 @@ const parseStatus = (value: unknown): ModerationQueueStatus => {
 };
 
 const parseTargetType = (value: unknown): ModerationQueueTargetType => {
-  if (value === 'user' || value === 'group' || value === 'post' || value === 'comment')
+  if (
+    value === 'user' ||
+    value === 'group' ||
+    value === 'post' ||
+    value === 'comment' ||
+    value === 'message'
+  )
     return value;
   return 'unknown';
 };

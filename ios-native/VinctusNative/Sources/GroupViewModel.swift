@@ -84,6 +84,37 @@ final class GroupDetailViewModel: ObservableObject {
     }
   }
 
+  /// nil while unknown (not loaded yet or failed to load).
+  @Published private(set) var isMember: Bool?
+  @Published private(set) var isUpdatingMembership = false
+  @Published private(set) var membershipError: String?
+
+  func loadMembership(uid: String?) async {
+    guard let uid else { return }
+    do {
+      isMember = try await repo.isMember(groupID: groupID, uid: uid)
+    } catch {
+      AppLog.groups.error("groups.membership.failed errorType=\(AppLog.errorType(error), privacy: .public)")
+    }
+  }
+
+  func toggleMembership(uid: String?) async {
+    guard let uid, let isMember, !isUpdatingMembership else { return }
+    isUpdatingMembership = true
+    membershipError = nil
+    defer { isUpdatingMembership = false }
+    do {
+      if isMember {
+        try await repo.leaveGroup(groupID: groupID, uid: uid)
+      } else {
+        try await repo.joinGroup(groupID: groupID, uid: uid)
+      }
+      self.isMember = !isMember
+    } catch {
+      membershipError = error.localizedDescription
+    }
+  }
+
   func handleConnectivityChange(_ online: Bool) {
     let wasOnline = isOnline
     isOnline = online

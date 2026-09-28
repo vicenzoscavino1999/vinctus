@@ -8,6 +8,7 @@ struct MainTabView: View {
   private let profileRepo = AppRepos.profile()
   private let groupsRepo = AppRepos.groups()
   private let aiRepo = FirebaseAIRepo()
+  private let chatRepo = AppRepos.chat()
   @StateObject private var blockedUsers = BlockedUsersStore(repo: FirebaseModerationRepo())
 
   init() {
@@ -69,9 +70,9 @@ struct MainTabView: View {
       .tabItem { Label("Comunidad", systemImage: "number") }
 
       NavigationStack {
-        GroupsListView(repo: groupsRepo)
+        MessagesListView(repo: chatRepo, profileRepo: profileRepo)
       }
-      .tabItem { Label("Conexiones", systemImage: "briefcase") }
+      .tabItem { Label("Mensajes", systemImage: "bubble.left.and.bubble.right") }
 
       NavigationStack {
         ProfileRootView(repo: profileRepo)

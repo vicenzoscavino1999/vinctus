@@ -205,3 +205,21 @@ export const parseReportedContentTarget = (
 
   return null;
 };
+
+export interface ReportedMessageTarget {
+  conversationId: string;
+  messageId: string;
+}
+
+/**
+ * Chat message a report points at, from `msg|<conversationId>|<messageId>`
+ * (ReportFields in ios-native/VinctusNative/Sources/ModerationRepo.swift).
+ */
+export const parseReportedMessageTarget = (value: unknown): ReportedMessageTarget | null => {
+  if (typeof value !== 'string') return null;
+  const match = /^msg\|((?:dm|grp)_[^/|]+)\|([^/|]+)$/.exec(value);
+  return match ? { conversationId: match[1], messageId: match[2] } : null;
+};
+
+export const messageReportKey = (conversationId: string, messageId: string): string =>
+  `msg|${conversationId}|${messageId}`;
