@@ -47,6 +47,8 @@ struct FollowButton: View {
   let targetUID: String
   let isPrivate: Bool
   var repo: EngagementRepo = FirebaseEngagementRepo()
+  /// Called with the loaded status and after every change.
+  var onStatusChange: ((FollowStatus) -> Void)? = nil
 
   @State private var status: FollowStatus?
   @State private var isSaving = false
@@ -80,6 +82,9 @@ struct FollowButton: View {
     }
     .task(id: targetUID) {
       status = (try? await repo.followStatus(targetUID: targetUID)) ?? FollowStatus.none
+    }
+    .onChange(of: status) { _, newValue in
+      if let newValue { onStatusChange?(newValue) }
     }
   }
 

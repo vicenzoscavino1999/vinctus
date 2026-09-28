@@ -52,6 +52,13 @@ enum AppRepos {
     return FirebaseFeedRepo()
   }
 
+  static func profileContent() -> ProfileContentRepo {
+    #if SCREENSHOTS
+    if isDemo { return SampleProfileContentRepo() }
+    #endif
+    return FirebaseProfileContentRepo()
+  }
+
   static func chat() -> ChatRepo {
     #if SCREENSHOTS
     if isDemo { return SampleChatRepo() }
@@ -126,11 +133,52 @@ struct SampleProfileRepo: ProfileRepo {
       id: uid, displayName: name, photoURL: nil, username: "lucia", email: nil,
       bio: "Curiosa por la ciencia y la música.", role: nil, location: "Lima, Perú",
       reputation: 128, followersCount: 342, followingCount: 180, postsCount: 27,
-      accountVisibility: .public, createdAt: Date(), updatedAt: Date()
+      accountVisibility: .public, createdAt: Date(), updatedAt: Date(),
+      karmaByInterest: ["science": 64, "music": 38, "literature": 12]
     )
   }
 
-  func updateProfile(uid: String, displayName: String, bio: String?, location: String?) async throws {}
+  func updateProfile(uid: String, _ update: ProfileUpdate) async throws {}
+  func uploadProfilePhoto(uid: String, jpegData: Data) async throws -> String { "" }
+}
+
+struct SampleProfileContentRepo: ProfileContentRepo {
+  func fetchPosts(uid: String, limit: Int) async throws -> [FeedItem] {
+    [
+      FeedItem(id: "p1", authorID: uid, authorName: "Lucía Fernández", text: "Hoy empecé un club de lectura de divulgación científica. ¿Qué libro recomiendan para el primer mes?", createdAt: Date().addingTimeInterval(-7200), likeCount: 24, commentCount: 9),
+      FeedItem(id: "p2", authorID: uid, authorName: "Lucía Fernández", text: "Grabé mi primera pieza de jazz al piano. ¡Gracias a todos por los consejos!", createdAt: Date().addingTimeInterval(-259_200), likeCount: 57, commentCount: 14),
+    ]
+  }
+
+  func fetchFollowList(uid: String, kind: FollowListKind, limit: Int) async throws -> [ProfileUserSummary] {
+    Sample.users.prefix(5).map { ProfileUserSummary(id: $0.uid, name: $0.displayName, photoURL: nil, username: nil) }
+  }
+
+  func fetchIncomingFollowRequests() async throws -> [IncomingFollowRequest] {
+    [IncomingFollowRequest(id: "u6_me", from: ProfileUserSummary(id: "u6", name: "Andrés Vega", photoURL: nil, username: "andres"))]
+  }
+
+  func hasPendingFollowRequest(from fromUID: String) async throws -> Bool { false }
+  func answerFollowRequest(from fromUID: String, accept: Bool) async throws {}
+
+  func fetchContributions(uid: String) async throws -> [Contribution] {
+    [
+      Contribution(id: "c1", type: .project, title: "Telescopio casero con Arduino", description: "Montura motorizada que sigue estrellas automáticamente.", link: "https://example.com", fileURL: nil, fileName: nil, categoryID: "science", createdAt: Date()),
+      Contribution(id: "c2", type: .certificate, title: "Certificado de armonía de jazz", description: nil, link: nil, fileURL: nil, fileName: nil, categoryID: "music", createdAt: Date()),
+    ]
+  }
+
+  func createContribution(_ contribution: NewContribution) async throws {}
+  func deleteContribution(id: String) async throws {}
+  func fetchFollowedCategories() async throws -> [String] { ["science", "music"] }
+  func setCategoryFollowed(_ followed: Bool, categoryID: String) async throws {}
+
+  func fetchSavedDebates() async throws -> [SavedDebate] {
+    [SavedDebate(id: "d1", topic: "¿Debería la IA tener derechos?", personaA: "philosopher", personaB: "scientist", summary: "Un debate sobre conciencia, responsabilidad y los límites de las máquinas.", winner: "A", createdAt: Date())]
+  }
+
+  func saveDebate(_ debate: SavedDebate) async throws {}
+  func removeSavedDebate(id: String) async throws {}
 }
 
 struct SampleFeedRepo: FeedRepo {

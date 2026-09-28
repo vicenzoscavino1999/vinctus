@@ -1,4 +1,6 @@
+import PhotosUI
 import SwiftUI
+import UIKit
 
 struct ProfileView: View {
   let userID: String
@@ -10,18 +12,38 @@ struct ProfileView: View {
   @State private var openedConversationID: String?
   @State private var isOpeningConversation = false
   @State private var messageError: String?
+  @State private var followStatus: FollowStatus?
+  @State private var followList: FollowListKind?
+  /// The person on this profile asked to follow the signed-in user.
+  @State private var hasIncomingRequest = false
+  @State private var isAnsweringRequest = false
+  /// Pending follow requests to the signed-in user, shown on their own profile.
+  @State private var incomingRequestCount = 0
+  @State private var reloadToken = 0
 
   private let repo: ProfileRepo
   private let chatRepo: ChatRepo
+  private let contentRepo: ProfileContentRepo
 
-  init(repo: ProfileRepo, userID: String, chatRepo: ChatRepo = AppRepos.chat()) {
+  init(
+    repo: ProfileRepo,
+    userID: String,
+    chatRepo: ChatRepo = AppRepos.chat(),
+    contentRepo: ProfileContentRepo = AppRepos.profileContent()
+  ) {
     self.userID = userID
     self.repo = repo
     self.chatRepo = chatRepo
+    self.contentRepo = contentRepo
     _vm = StateObject(wrappedValue: ProfileViewModel(repo: repo))
   }
 
   private var isOwnProfile: Bool { userID == authVM.currentUserID }
+
+  /// Same rule as `canViewPrivateContent` in the web's UserProfilePage.
+  private func canViewContent(_ profile: UserProfile) -> Bool {
+    isOwnProfile || profile.accountVisibility == .public || followStatus == .following
+  }
 
   var body: some View {
     ScrollView {
@@ -30,7 +52,7 @@ struct ProfileView: View {
           header(profile)
           stats(profile)
           actions(profile)
-          details(profile)
+          content(profile)
         } else if vm.isLoading {
           ProgressView()
             .padding(.top, 80)
@@ -72,22 +94,41 @@ struct ProfileView: View {
         otherUserID: userID
       )
     }
+    .navigationDestination(item: $followList) { kind in
+      FollowListView(
+        repo: contentRepo,
+        profileRepo: repo,
+        userID: userID,
+        initialKind: kind,
+        showsRequests: isOwnProfile
+      )
+    }
     .sheet(isPresented: $isEditing) {
       if let profile = vm.profile {
         EditProfileSheet(profile: profile, repo: repo) {
-          Task { await vm.load(userID: userID) }
+          Task { await reload() }
         }
       }
     }
     .task(id: userID) {
-      await vm.load(userID: userID)
+      await reload()
     }
     .refreshable {
-      await vm.load(userID: userID)
+      await reload()
     }
   }
 
-  // MARK: Sections
+  private func reload() async {
+    await vm.load(userID: userID)
+    reloadToken += 1
+    if isOwnProfile {
+      incomingRequestCount = (try? await contentRepo.fetchIncomingFollowRequests().count) ?? 0
+    } else {
+      hasIncomingRequest = (try? await contentRepo.hasPendingFollowRequest(from: userID)) ?? false
+    }
+  }
+
+  // MARK: Header
 
   private func header(_ profile: UserProfile) -> some View {
     VStack(spacing: 10) {
@@ -111,6 +152,10 @@ struct ProfileView: View {
         .foregroundStyle(VinctusTokens.Color.textPrimary)
         .multilineTextAlignment(.center)
 
+      Text(profile.role ?? "Nuevo miembro")
+        .font(.subheadline)
+        .foregroundStyle(VinctusTokens.Color.textMuted)
+
       HStack(spacing: 8) {
         if let username = profile.username {
           Text("@\(username)")
@@ -128,30 +173,28 @@ struct ProfileView: View {
         .clipShape(Capsule())
       }
       .font(.subheadline)
-
-      if let bio = profile.bio, !bio.isEmpty {
-        Text(bio)
-          .font(.body)
-          .foregroundStyle(VinctusTokens.Color.textPrimary)
-          .multilineTextAlignment(.center)
-          .padding(.top, 2)
-      } else if isOwnProfile {
-        Text("Agrega una biografía para que la gente sepa quién eres.")
-          .font(.footnote)
-          .foregroundStyle(VinctusTokens.Color.textMuted)
-          .multilineTextAlignment(.center)
-      }
     }
     .frame(maxWidth: .infinity)
   }
 
+  // MARK: Stats
+
   private func stats(_ profile: UserProfile) -> some View {
-    HStack(spacing: 0) {
+    let canOpenLists = canViewContent(profile)
+    return HStack(spacing: 0) {
       stat(value: profile.postsCount, label: "Publicaciones")
       divider
-      stat(value: profile.followersCount, label: "Seguidores")
+      Button { followList = .followers } label: {
+        stat(value: profile.followersCount, label: "Seguidores")
+      }
+      .buttonStyle(.plain)
+      .disabled(!canOpenLists)
       divider
-      stat(value: profile.followingCount, label: "Siguiendo")
+      Button { followList = .following } label: {
+        stat(value: profile.followingCount, label: "Siguiendo")
+      }
+      .buttonStyle(.plain)
+      .disabled(!canOpenLists)
       divider
       stat(value: profile.reputation, label: "Reputación")
     }
@@ -182,18 +225,48 @@ struct ProfileView: View {
         .minimumScaleFactor(0.8)
     }
     .frame(maxWidth: .infinity)
+    .contentShape(Rectangle())
   }
+
+  // MARK: Actions
 
   @ViewBuilder
   private func actions(_ profile: UserProfile) -> some View {
     if isOwnProfile {
-      VButton("Editar perfil", variant: .secondary) {
-        isEditing = true
+      VStack(spacing: VinctusTokens.Spacing.sm) {
+        VButton("Editar perfil", variant: .secondary) {
+          isEditing = true
+        }
+        if incomingRequestCount > 0 {
+          Button { followList = .followers } label: {
+            Label(
+              incomingRequestCount == 1
+                ? "1 solicitud de seguimiento"
+                : "\(incomingRequestCount) solicitudes de seguimiento",
+              systemImage: "person.badge.clock"
+            )
+            .font(.subheadline.weight(.semibold))
+            .frame(maxWidth: .infinity)
+            .frame(height: 40)
+            .foregroundStyle(SwiftUI.Color.black)
+            .background(VinctusTokens.Color.accent)
+            .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.sm, style: .continuous))
+          }
+          .buttonStyle(.plain)
+        }
       }
     } else if !blockedUsers.isBlocked(userID) {
       VStack(alignment: .leading, spacing: 6) {
+        if hasIncomingRequest {
+          incomingRequestBanner(profile)
+        }
+
         HStack(spacing: VinctusTokens.Spacing.sm) {
-          FollowButton(targetUID: userID, isPrivate: profile.accountVisibility == .private)
+          FollowButton(
+            targetUID: userID,
+            isPrivate: profile.accountVisibility == .private,
+            onStatusChange: { followStatus = $0 }
+          )
 
           Button(action: openConversation) {
             HStack(spacing: 6) {
@@ -230,6 +303,56 @@ struct ProfileView: View {
     }
   }
 
+  private func incomingRequestBanner(_ profile: UserProfile) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("\(profile.displayName) quiere seguirte")
+        .font(.subheadline.weight(.semibold))
+      HStack(spacing: VinctusTokens.Spacing.sm) {
+        VButton("Aceptar") { answerRequest(accept: true) }
+        VButton("Rechazar", variant: .secondary) { answerRequest(accept: false) }
+      }
+      .disabled(isAnsweringRequest)
+    }
+    .padding(VinctusTokens.Spacing.md)
+    .background(VinctusTokens.Color.surface)
+    .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous))
+  }
+
+  // MARK: Content
+
+  @ViewBuilder
+  private func content(_ profile: UserProfile) -> some View {
+    if !isOwnProfile && blockedUsers.isBlocked(userID) {
+      EmptyView()
+    } else if canViewContent(profile) {
+      ProfileAboutSection(profile: profile, isOwnProfile: isOwnProfile) { isEditing = true }
+      ProfileReputationSection(reputation: profile.reputation, karma: profile.karmaByInterest)
+      if isOwnProfile {
+        ProfileCategoriesSection(repo: contentRepo)
+        ProfileSavedDebatesSection(repo: contentRepo)
+      }
+      ProfilePostsSection(repo: contentRepo, profileRepo: repo, userID: userID, reloadToken: reloadToken)
+      ProfileContributionsSection(repo: contentRepo, userID: userID, canEdit: isOwnProfile, reloadToken: reloadToken)
+      details(profile)
+    } else {
+      VStack(spacing: 8) {
+        Image(systemName: "lock.fill")
+          .font(.system(size: 28))
+          .foregroundStyle(VinctusTokens.Color.accent)
+        Text("Cuenta privada")
+          .font(.headline)
+        Text("Sigue a esta persona para ver sus publicaciones, aportes y seguidores.")
+          .font(.footnote)
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+          .multilineTextAlignment(.center)
+      }
+      .frame(maxWidth: .infinity)
+      .padding(VinctusTokens.Spacing.xl)
+      .background(VinctusTokens.Color.surface)
+      .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous))
+    }
+  }
+
   private struct DetailRow: Hashable {
     let icon: String
     let text: String
@@ -237,11 +360,11 @@ struct ProfileView: View {
 
   private func detailRows(_ profile: UserProfile) -> [DetailRow] {
     var rows: [DetailRow] = []
-    if let role = profile.role {
-      rows.append(DetailRow(icon: "briefcase", text: role))
-    }
     if let location = profile.location {
       rows.append(DetailRow(icon: "mappin.and.ellipse", text: location))
+    }
+    if isOwnProfile, let email = profile.email {
+      rows.append(DetailRow(icon: "envelope", text: email))
     }
     rows.append(
       DetailRow(
@@ -253,18 +376,18 @@ struct ProfileView: View {
   }
 
   private func details(_ profile: UserProfile) -> some View {
-    VStack(alignment: .leading, spacing: 10) {
-      ForEach(detailRows(profile), id: \.self) { row in
-        Label(row.text, systemImage: row.icon)
-          .font(.subheadline)
-          .foregroundStyle(VinctusTokens.Color.textMuted)
+    ProfileSectionCard(title: isOwnProfile ? "Contacto" : "Detalles", icon: "info.circle") {
+      VStack(alignment: .leading, spacing: 10) {
+        ForEach(detailRows(profile), id: \.self) { row in
+          Label(row.text, systemImage: row.icon)
+            .font(.subheadline)
+            .foregroundStyle(VinctusTokens.Color.textMuted)
+        }
       }
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(VinctusTokens.Spacing.md)
-    .background(VinctusTokens.Color.surface)
-    .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous))
   }
+
+  // MARK: Actions
 
   private func openConversation() {
     isOpeningConversation = true
@@ -278,9 +401,22 @@ struct ProfileView: View {
       isOpeningConversation = false
     }
   }
+
+  private func answerRequest(accept: Bool) {
+    isAnsweringRequest = true
+    Task {
+      do {
+        try await contentRepo.answerFollowRequest(from: userID, accept: accept)
+        hasIncomingRequest = false
+      } catch {
+        messageError = "No se pudo responder la solicitud."
+      }
+      isAnsweringRequest = false
+    }
+  }
 }
 
-/// Edits the signed-in user's name, bio and location.
+/// Edits the signed-in user's photo, name, role, bio and location, like the web's EditProfileModal.
 private struct EditProfileSheet: View {
   let profile: UserProfile
   let repo: ProfileRepo
@@ -288,19 +424,27 @@ private struct EditProfileSheet: View {
 
   @Environment(\.dismiss) private var dismiss
   @State private var displayName: String
+  @State private var role: String
   @State private var bio: String
   @State private var location: String
+  @State private var photoItem: PhotosPickerItem?
+  @State private var newPhoto: UIImage?
+  @State private var removesPhoto = false
   @State private var isSaving = false
   @State private var errorMessage: String?
 
-  private static let nameLimit = 60
-  private static let bioLimit = 300
+  // Limits of `userProfileUpdateSchema` in src/features/profile/api/types.ts.
+  private static let nameLimit = 120
+  private static let roleLimit = 120
+  private static let bioLimit = 500
+  private static let locationLimit = 120
 
   init(profile: UserProfile, repo: ProfileRepo, onSaved: @escaping () -> Void) {
     self.profile = profile
     self.repo = repo
     self.onSaved = onSaved
     _displayName = State(initialValue: profile.displayName)
+    _role = State(initialValue: profile.role ?? "")
     _bio = State(initialValue: profile.bio ?? "")
     _location = State(initialValue: profile.location ?? "")
   }
@@ -308,15 +452,40 @@ private struct EditProfileSheet: View {
   private var trimmedName: String { displayName.trimmingCharacters(in: .whitespacesAndNewlines) }
 
   private var canSave: Bool {
-    !isSaving && !trimmedName.isEmpty && trimmedName.count <= Self.nameLimit && bio.count <= Self.bioLimit
+    !isSaving && !trimmedName.isEmpty && trimmedName.count <= Self.nameLimit
+      && role.count <= Self.roleLimit && bio.count <= Self.bioLimit && location.count <= Self.locationLimit
   }
 
   var body: some View {
     NavigationStack {
       Form {
+        Section {
+          HStack(spacing: VinctusTokens.Spacing.md) {
+            photoPreview
+              .frame(width: 72, height: 72)
+              .clipShape(Circle())
+            VStack(alignment: .leading, spacing: 8) {
+              PhotosPicker(selection: $photoItem, matching: .images) {
+                Label("Cambiar foto", systemImage: "photo")
+              }
+              if newPhoto != nil || (profile.photoURL != nil && !removesPhoto) {
+                Button("Quitar foto", role: .destructive) {
+                  newPhoto = nil
+                  photoItem = nil
+                  removesPhoto = true
+                }
+              }
+            }
+          }
+        } header: {
+          Text("Foto de perfil")
+        }
         Section("Nombre") {
           TextField("Tu nombre", text: $displayName)
             .textContentType(.name)
+        }
+        Section("Rol") {
+          TextField("Ej. Estudiante de física, músico…", text: $role)
         }
         Section {
           TextField("Cuéntale a la comunidad sobre ti", text: $bio, axis: .vertical)
@@ -349,22 +518,54 @@ private struct EditProfileSheet: View {
         }
       }
       .vinctusLoading(isSaving)
+      .onChange(of: photoItem) { _, item in
+        guard let item else { return }
+        Task {
+          if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+            newPhoto = image
+            removesPhoto = false
+          } else {
+            errorMessage = "No se pudo leer la imagen."
+          }
+        }
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var photoPreview: some View {
+    if let newPhoto {
+      Image(uiImage: newPhoto)
+        .resizable()
+        .scaledToFill()
+    } else {
+      AvatarView(name: trimmedName.isEmpty ? profile.displayName : trimmedName,
+                 photoURLString: removesPhoto ? nil : profile.photoURL, size: 72)
     }
   }
 
   private func save() {
     isSaving = true
     errorMessage = nil
-    let bioValue = bio.trimmingCharacters(in: .whitespacesAndNewlines)
-    let locationValue = location.trimmingCharacters(in: .whitespacesAndNewlines)
+    func optional(_ value: String) -> String? {
+      let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+      return trimmed.isEmpty ? nil : trimmed
+    }
+    var update = ProfileUpdate(
+      displayName: trimmedName,
+      bio: optional(bio),
+      role: optional(role),
+      location: optional(location)
+    )
+    let photo = newPhoto
     Task {
       do {
-        try await repo.updateProfile(
-          uid: profile.id,
-          displayName: trimmedName,
-          bio: bioValue.isEmpty ? nil : bioValue,
-          location: locationValue.isEmpty ? nil : locationValue
-        )
+        if let photo, let data = Self.jpegData(photo) {
+          update.photo = .set(try await repo.uploadProfilePhoto(uid: profile.id, jpegData: data))
+        } else if removesPhoto {
+          update.photo = .remove
+        }
+        try await repo.updateProfile(uid: profile.id, update)
         onSaved()
         dismiss()
       } catch {
@@ -372,6 +573,19 @@ private struct EditProfileSheet: View {
       }
       isSaving = false
     }
+  }
+
+  /// Scales the photo down to 1024 px (storage.rules allows up to 10 MB) and encodes it as JPEG.
+  private static func jpegData(_ image: UIImage) -> Data? {
+    let maxSide: CGFloat = 1024
+    let scale = min(1, maxSide / max(image.size.width, image.size.height))
+    let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = 1
+    let resized = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+      image.draw(in: CGRect(origin: .zero, size: size))
+    }
+    return resized.jpegData(compressionQuality: 0.85)
   }
 }
 

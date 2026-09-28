@@ -78,45 +78,7 @@ final class FirebaseFeedRepo: FeedRepo {
     let pageDocs = Array(docs.prefix(pageSize))
     let hasMore = docs.count > pageSize
 
-    let items = pageDocs.map { doc in
-      let data = doc.data()
-
-      let authorName: String = {
-        if
-          let authorSnapshot = data["authorSnapshot"] as? [String: Any],
-          let displayName = authorSnapshot["displayName"] as? String,
-          !displayName.isEmpty
-        {
-          return displayName
-        }
-
-        if let authorName = data["authorName"] as? String, !authorName.isEmpty { return authorName }
-        if let authorId = data["authorId"] as? String, !authorId.isEmpty { return authorId }
-        return "Usuario"
-      }()
-
-      let text: String = {
-        if let text = data["text"] as? String, !text.isEmpty { return text }
-        if let content = data["content"] as? String, !content.isEmpty { return content }
-        return ""
-      }()
-
-      let createdAt = (data["createdAt"] as? Timestamp)?.dateValue()
-      let authorID = nonEmptyString(data["authorId"]) ?? nonEmptyString(data["authorID"])
-
-      let likeCount = intValue(data["likeCount"]) ?? intValue(data["likesCount"]) ?? 0
-      let commentCount = intValue(data["commentCount"]) ?? intValue(data["commentsCount"]) ?? 0
-
-      return FeedItem(
-        id: doc.documentID,
-        authorID: authorID,
-        authorName: authorName,
-        text: text,
-        createdAt: createdAt,
-        likeCount: max(0, likeCount),
-        commentCount: max(0, commentCount)
-      )
-    }
+    let items = pageDocs.map(Self.feedItem(from:))
 
     let nextCursor: FeedCursor?
     if hasMore, let lastVisible = pageDocs.last {
@@ -133,17 +95,42 @@ final class FirebaseFeedRepo: FeedRepo {
     )
   }
 
-  private func intValue(_ value: Any?) -> Int? {
-    if let intValue = value as? Int { return intValue }
-    if let number = value as? NSNumber { return number.intValue }
-    if let string = value as? String, let parsed = Int(string) { return parsed }
-    return nil
-  }
+  /// A post document as a feed item. Also used for a user's posts on their profile.
+  static func feedItem(from doc: QueryDocumentSnapshot) -> FeedItem {
+    let data = doc.data()
 
-  private func nonEmptyString(_ value: Any?) -> String? {
-    guard let stringValue = value as? String else { return nil }
-    let trimmed = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
+    func nonEmpty(_ value: Any?) -> String? {
+      guard let string = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !string.isEmpty else {
+        return nil
+      }
+      return string
+    }
+
+    func int(_ value: Any?) -> Int? {
+      if let intValue = value as? Int { return intValue }
+      if let number = value as? NSNumber { return number.intValue }
+      if let string = value as? String, let parsed = Int(string) { return parsed }
+      return nil
+    }
+
+    let authorSnapshot = data["authorSnapshot"] as? [String: Any]
+    let authorName = nonEmpty(authorSnapshot?["displayName"])
+      ?? nonEmpty(data["authorName"])
+      ?? nonEmpty(data["authorId"])
+      ?? "Usuario"
+    let text = (data["text"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+      ?? (data["content"] as? String)
+      ?? ""
+
+    return FeedItem(
+      id: doc.documentID,
+      authorID: nonEmpty(data["authorId"]) ?? nonEmpty(data["authorID"]),
+      authorName: authorName,
+      text: text,
+      createdAt: (data["createdAt"] as? Timestamp)?.dateValue(),
+      likeCount: max(0, int(data["likeCount"]) ?? int(data["likesCount"]) ?? 0),
+      commentCount: max(0, int(data["commentCount"]) ?? int(data["commentsCount"]) ?? 0)
+    )
   }
 
   private func getDocuments(_ query: Query, source: FirestoreSource = .default) async throws -> QuerySnapshot {

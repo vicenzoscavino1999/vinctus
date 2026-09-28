@@ -60,6 +60,8 @@ protocol AIRepo {
   func fetchArenaPersonas() async throws -> [ArenaPersona]
   func fetchArenaUsage() async throws -> ArenaUsage
   func createDebate(topic: String, personaA: String, personaB: String) async throws -> ArenaDebateResult
+  /// Turns of a debate, for saved debates shown on the profile.
+  func fetchDebateTurns(debateID: String) async throws -> [ArenaTurn]
 }
 
 enum AIRepoError: LocalizedError {
@@ -171,6 +173,11 @@ final class FirebaseAIRepo: AIRepo {
       remaining: Self.int(data["remaining"]),
       turns: (try? await fetchTurns(debateID: debateID)) ?? []
     )
+  }
+
+  func fetchDebateTurns(debateID: String) async throws -> [ArenaTurn] {
+    guard FirebaseApp.app() != nil else { throw AIRepoError.firebaseNotConfigured }
+    return try await fetchTurns(debateID: debateID)
   }
 
   private func fetchTurns(debateID: String) async throws -> [ArenaTurn] {

@@ -319,6 +319,10 @@ final class ArenaViewModel: ObservableObject {
   @Published private(set) var result: ArenaDebateResult?
   /// Names of the two sides of `result`, fixed when it was created.
   @Published private(set) var resultNames: [String: String] = [:]
+  /// The debate that `result` answers, to save it on the profile.
+  @Published private(set) var resultDebate: SavedDebate?
+  @Published private(set) var isResultSaved = false
+  @Published private(set) var isSavingResult = false
   @Published var errorMessage: String?
 
   private let repo: AIRepo
@@ -352,6 +356,21 @@ final class ArenaViewModel: ObservableObject {
     }
   }
 
+  /// Saves the last debate to the profile, like "Guardar debate" on the web.
+  func saveResult(repo: ProfileContentRepo = AppRepos.profileContent()) {
+    guard let resultDebate, !isResultSaved, !isSavingResult else { return }
+    isSavingResult = true
+    Task {
+      do {
+        try await repo.saveDebate(resultDebate)
+        isResultSaved = true
+      } catch {
+        errorMessage = "No se pudo guardar el debate."
+      }
+      isSavingResult = false
+    }
+  }
+
   func create() {
     guard canCreate else { return }
     let text = topic.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -363,6 +382,11 @@ final class ArenaViewModel: ObservableObject {
       do {
         let debate = try await repo.createDebate(topic: text, personaA: personaA, personaB: personaB)
         result = debate
+        resultDebate = SavedDebate(
+          id: debate.debateID, topic: text, personaA: personaA, personaB: personaB,
+          summary: debate.summary.isEmpty ? nil : debate.summary, winner: debate.winner, createdAt: nil
+        )
+        isResultSaved = false
         resultNames = [
           "A": persona(personaA)?.name ?? "Participante A",
           "B": persona(personaB)?.name ?? "Participante B",
@@ -472,6 +496,16 @@ struct ArenaView: View {
                   .joined(separator: " / ")
               )
             )
+
+            Button {
+              vm.saveResult()
+            } label: {
+              Label(
+                vm.isResultSaved ? "Guardado en tu perfil" : "Guardar debate",
+                systemImage: vm.isResultSaved ? "bookmark.fill" : "bookmark"
+              )
+            }
+            .disabled(vm.isResultSaved || vm.isSavingResult)
           } header: {
             Text("Resumen y veredicto")
           } footer: {
