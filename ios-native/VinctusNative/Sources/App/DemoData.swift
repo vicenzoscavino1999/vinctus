@@ -46,7 +46,7 @@ struct SampleGroupsRepo: GroupsRepo {
     guard let group = Sample.groups.first(where: { $0.id == groupID }) else { return nil }
     return GroupDetail(
       id: group.id, name: group.name, description: group.description, categoryID: group.categoryID,
-      ownerID: "u1", visibility: .public, iconURL: nil, memberCount: group.memberCount,
+      ownerID: group.ownerID, visibility: group.visibility, iconURL: nil, memberCount: group.memberCount,
       postsPerWeek: 24, createdAt: Date(), updatedAt: Date(),
       recentPosts: [
         GroupPostPreview(id: "p1", title: "¿Qué libro recomiendan para empezar?", authorID: "u2", authorName: "Mateo Rojas", createdAt: Date()),

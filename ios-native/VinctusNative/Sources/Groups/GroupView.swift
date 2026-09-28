@@ -165,6 +165,12 @@ struct GroupView: View {
 
   // MARK: Header
 
+  @ViewBuilder
+  private func stats(_ detail: GroupDetail) -> some View {
+    Label("\(detail.memberCount.formatted()) miembros", systemImage: "person.2")
+    Label("\(detail.postsPerWeek) posts/semana", systemImage: "bubble.left")
+  }
+
   private func header(_ detail: GroupDetail) -> some View {
     VStack(alignment: .leading, spacing: 16) {
       HStack(alignment: .top, spacing: 16) {
@@ -175,12 +181,12 @@ struct GroupView: View {
             .font(VinctusTokens.Typography.serif(32))
             .foregroundStyle(VinctusTokens.Color.textPrimary)
             .fixedSize(horizontal: false, vertical: true)
-          HStack(spacing: 14) {
-            Label("\(detail.memberCount.formatted()) miembros", systemImage: "person.2")
-            Label("\(detail.postsPerWeek) posts/semana", systemImage: "bubble.left")
+          // Side by side when they fit, stacked on narrow screens.
+          ViewThatFits(in: .horizontal) {
+            HStack(spacing: 14) { stats(detail) }
+            VStack(alignment: .leading, spacing: 4) { stats(detail) }
           }
           .lineLimit(1)
-          .fixedSize(horizontal: true, vertical: false)
           .labelStyle(CompactLabelStyle())
           .font(.subheadline)
           .foregroundStyle(VinctusTokens.Color.textMuted)
