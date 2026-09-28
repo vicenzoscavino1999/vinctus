@@ -90,6 +90,7 @@ enum GroupsRepoError: LocalizedError {
   case firebaseNotConfigured
   case missingSnapshot
   case privateGroup
+  case requestAlreadySent
 
   var errorDescription: String? {
     switch self {
