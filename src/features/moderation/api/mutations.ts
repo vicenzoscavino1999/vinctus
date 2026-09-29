@@ -1,13 +1,18 @@
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '@/shared/lib/firebase';
 import { updateModerationQueueItem as updateModerationQueueItemRaw } from '@/shared/lib/firestore';
 import { toAppError } from '@/shared/lib/errors';
 import { withRetry, withTimeout } from '@/shared/lib/firebase-helpers';
 import { validate } from '@/shared/lib/validators';
 import {
+  moderationEnforcementActionSchema,
   moderationQueueItemIdSchema,
   moderationQueueStatusSchema,
   moderationReviewActionSchema,
   moderationReviewNoteSchema,
   uidSchema,
+  type ModerationEnforcementAction,
+  type ModerationEnforcementResult,
   type ModerationQueueStatus,
 } from '@/features/moderation/api/types';
 
@@ -58,4 +63,38 @@ export const updateModerationQueueStatus = async (input: {
       reviewedBy: safeReviewedBy,
     }),
   );
+};
+
+/**
+ * Removes the reported post/comment or suspends/restores the reported user. Runs in the
+ * `moderationTakeAction` callable, which checks the caller is an app admin.
+ */
+export const applyModerationAction = async (input: {
+  itemId: string;
+  action: ModerationEnforcementAction;
+  reviewNote?: string | null;
+}): Promise<ModerationEnforcementResult> => {
+  const safeItemId = validate(moderationQueueItemIdSchema, input.itemId, { field: 'itemId' });
+  const safeAction = validate(moderationEnforcementActionSchema, input.action, {
+    field: 'action',
+  });
+  const safeReviewNote = validate(moderationReviewNoteSchema, input.reviewNote, {
+    field: 'reviewNote',
+  });
+
+  const takeAction = httpsCallable<
+    { itemId: string; action: ModerationEnforcementAction; note: string | null },
+    ModerationEnforcementResult
+  >(functions, 'moderationTakeAction');
+
+  try {
+    const result = await takeAction({
+      itemId: safeItemId,
+      action: safeAction,
+      note: safeReviewNote ?? null,
+    });
+    return result.data;
+  } catch (error) {
+    throw toAppError(error, { operation: 'moderation.applyModerationAction' });
+  }
 };

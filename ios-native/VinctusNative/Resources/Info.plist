@@ -3,9 +3,19 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<string>es</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>es</string>
+	</array>
+	<key>UIAppFonts</key>
+	<array>
+		<string>PlayfairDisplay-Regular.ttf</string>
+		<string>PlayfairDisplay-Medium.ttf</string>
+		<string>PlayfairDisplay-SemiBold.ttf</string>
+	</array>
 	<key>CFBundleDisplayName</key>
-	<string>VinctusNative</string>
+	<string>Vinctus</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -33,6 +43,8 @@
   </array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchScreen</key>
@@ -41,6 +53,8 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
+	<key>VINCTUS_API_BASE_URL</key>
+	<string>https://vinctus.vercel.app</string>
 	<key>VINCTUS_ENV</key>
 	<string>$(VINCTUS_ENV)</string>
 	<key>VINCTUS_PRIVACY_URL</key>

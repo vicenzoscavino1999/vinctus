@@ -19,4 +19,15 @@ export const moderationQueueStatusSchema = z.enum([
 ]);
 export const moderationReviewActionSchema = z.string().trim().min(1).max(80);
 export const moderationReviewNoteSchema = z.string().trim().max(2000).nullable().optional();
+export const moderationEnforcementActionSchema = z.enum([
+  'remove_content',
+  'suspend_user',
+  'restore_user',
+]);
+export type ModerationEnforcementAction = z.infer<typeof moderationEnforcementActionSchema>;
+
+export interface ModerationEnforcementResult {
+  status: ModerationQueueStatus;
+  reviewAction: string;
+}
 export const uidSchema = idSchema;
