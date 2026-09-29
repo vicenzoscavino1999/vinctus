@@ -1,5 +1,6 @@
 import FirebaseCore
 import FirebaseFirestore
+import FirebaseStorage
 import Foundation
 
 struct GroupSummary: Identifiable, Hashable {
@@ -74,6 +75,31 @@ enum GroupMembershipStatus: Equatable {
   var isJoined: Bool { self == .owner || self == .member }
 }
 
+/// The fields the owner can change, like the web's `updateGroup` (GroupEditPage).
+struct GroupUpdate: Equatable {
+  // Limits of `isValidGroupUpdate` in firestore.rules.
+  static let nameLimit = 80
+  static let descriptionLimit = 600
+
+  var name: String
+  var description: String
+  var categoryID: String?
+  var visibility: ProfileAccountVisibility
+  var iconURL: String?
+
+  /// Trims the text and returns nil when the rules would reject it.
+  func validated() -> GroupUpdate? {
+    var copy = self
+    copy.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    copy.description = description.trimmingCharacters(in: .whitespacesAndNewlines)
+    copy.categoryID = categoryID.flatMap { $0.isEmpty ? nil : $0 }
+    guard !copy.name.isEmpty, copy.name.count <= Self.nameLimit,
+          !copy.description.isEmpty, copy.description.count <= Self.descriptionLimit
+    else { return nil }
+    return copy
+  }
+}
+
 protocol GroupsRepo {
   func fetchGroups(limit: Int) async throws -> GroupsPage
   func fetchGroupDetail(groupID: String, recentPostLimit: Int, topMemberLimit: Int) async throws -> GroupDetail?
@@ -84,6 +110,10 @@ protocol GroupsRepo {
   func membershipStatus(groupID: String, ownerID: String?, uid: String) async throws -> GroupMembershipStatus
   /// Asks the owner of a private group to let the user in, like the web's `sendGroupJoinRequest`.
   func requestToJoin(groupID: String, groupName: String, ownerID: String, uid: String) async throws
+  /// Only the owner can update the group (firestore.rules).
+  func updateGroup(groupID: String, _ update: GroupUpdate) async throws
+  /// Uploads a new icon to `groups/{ownerId}/{groupId}/icon/`, like the web's `uploadGroupIcon`.
+  func uploadGroupIcon(ownerID: String, groupID: String, jpegData: Data) async throws -> String
 }
 
 enum GroupsRepoError: LocalizedError {
@@ -91,6 +121,7 @@ enum GroupsRepoError: LocalizedError {
   case missingSnapshot
   case privateGroup
   case requestAlreadySent
+  case invalidUpdate
 
   var errorDescription: String? {
     switch self {
@@ -102,6 +133,8 @@ enum GroupsRepoError: LocalizedError {
       return "Este grupo es privado: envía una solicitud para unirte."
     case .requestAlreadySent:
       return "Ya enviaste una solicitud para este grupo."
+    case .invalidUpdate:
+      return "Completa el nombre y la descripción."
     }
   }
 }
@@ -323,6 +356,32 @@ final class FirebaseGroupsRepo: GroupsRepo {
     if let name = FirestoreValue.string(profile["displayName"]) { request["fromUserName"] = String(name.prefix(80)) }
     if let photo = FirestoreValue.string(profile["photoURL"]) { request["fromUserPhoto"] = photo }
     try await db.collection("group_requests").document().setData(request)
+  }
+
+  /// Mirrors `updateGroup` in `src/shared/lib/firestore/groups.ts`.
+  func updateGroup(groupID: String, _ update: GroupUpdate) async throws {
+    guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
+    guard let update = update.validated() else { throw GroupsRepoError.invalidUpdate }
+    let db = self.db ?? Firestore.firestore()
+    var fields: [String: Any] = [
+      "name": update.name,
+      "description": update.description,
+      "visibility": update.visibility.rawValue,
+      "updatedAt": FieldValue.serverTimestamp(),
+    ]
+    fields["categoryId"] = update.categoryID ?? NSNull()
+    fields["iconUrl"] = update.iconURL ?? NSNull()
+    try await db.collection("groups").document(groupID).updateData(fields)
+  }
+
+  func uploadGroupIcon(ownerID: String, groupID: String, jpegData: Data) async throws -> String {
+    guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
+    let millis = Int64(Date().timeIntervalSince1970 * 1000)
+    let ref = Storage.storage().reference(withPath: "groups/\(ownerID)/\(groupID)/icon/\(millis).jpg")
+    let metadata = StorageMetadata()
+    metadata.contentType = "image/jpeg"
+    _ = try await ref.putDataAsync(jpegData, metadata: metadata)
+    return try await ref.downloadURL().absoluteString
   }
 
   private func fetchMemberProfiles(

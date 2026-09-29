@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import VinctusNative
 
 @MainActor
@@ -71,5 +72,71 @@ final class GroupMembershipTests: XCTestCase {
     XCTAssertEqual(GroupView.roleTitle("admin"), "ADMIN")
     XCTAssertEqual(GroupView.roleTitle("moderator"), "MODERADOR")
     XCTAssertEqual(GroupView.roleTitle("member"), "MIEMBRO")
+  }
+}
+
+@MainActor
+final class EditGroupTests: XCTestCase {
+  private let detail = GroupDetail(
+    id: "g1", name: "Física", description: "Charlas", categoryID: "science", ownerID: "me",
+    visibility: .public, iconURL: "https://example.com/old.jpg", memberCount: 3, postsPerWeek: 0,
+    createdAt: nil, updatedAt: nil, recentPosts: [], topMembers: [], isFromCache: false
+  )
+
+  func testValidationTrimsAndEnforcesTheRuleLimits() {
+    let update = GroupUpdate(name: "  Física  ", description: " Charlas ", categoryID: "",
+                             visibility: .private, iconURL: nil)
+    XCTAssertEqual(update.validated()?.name, "Física")
+    XCTAssertEqual(update.validated()?.description, "Charlas")
+    XCTAssertNil(update.validated()?.categoryID)
+
+    var empty = update
+    empty.name = "   "
+    XCTAssertNil(empty.validated())
+
+    var tooLong = update
+    tooLong.description = String(repeating: "a", count: GroupUpdate.descriptionLimit + 1)
+    XCTAssertNil(tooLong.validated())
+  }
+
+  func testSavingKeepsTheCurrentIconWhenNoneWasPicked() async {
+    let repo = FakeGroupsRepo()
+    let vm = EditGroupViewModel(detail: detail, repo: repo)
+    vm.name = "Física cuántica"
+    vm.visibility = .private
+
+    let saved = await vm.save(ownerID: "me")
+
+    XCTAssertTrue(saved)
+    XCTAssertEqual(repo.uploadedIcons, 0)
+    XCTAssertEqual(repo.updates.first?.name, "Física cuántica")
+    XCTAssertEqual(repo.updates.first?.visibility, .private)
+    XCTAssertEqual(repo.updates.first?.iconURL, "https://example.com/old.jpg")
+  }
+
+  func testANewIconIsUploadedBeforeSaving() async {
+    let repo = FakeGroupsRepo()
+    let vm = EditGroupViewModel(detail: detail, repo: repo)
+    vm.newIcon = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4)).image { context in
+      UIColor.red.setFill()
+      context.fill(CGRect(x: 0, y: 0, width: 4, height: 4))
+    }
+
+    _ = await vm.save(ownerID: "me")
+
+    XCTAssertEqual(repo.uploadedIcons, 1)
+    XCTAssertEqual(repo.updates.first?.iconURL, "https://example.com/groups/me/g1/icon.jpg")
+  }
+
+  func testAFailedSaveShowsAnError() async {
+    let repo = FakeGroupsRepo()
+    repo.failsToUpdate = true
+    let vm = EditGroupViewModel(detail: detail, repo: repo)
+
+    let saved = await vm.save(ownerID: "me")
+
+    XCTAssertFalse(saved)
+    XCTAssertEqual(vm.errorMessage, "No se pudo actualizar el grupo.")
+    XCTAssertFalse(vm.isSaving)
   }
 }

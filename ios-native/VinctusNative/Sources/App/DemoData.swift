@@ -69,6 +69,8 @@ struct SampleGroupsRepo: GroupsRepo {
   }
 
   func requestToJoin(groupID: String, groupName: String, ownerID: String, uid: String) async throws {}
+  func updateGroup(groupID: String, _ update: GroupUpdate) async throws {}
+  func uploadGroupIcon(ownerID: String, groupID: String, jpegData: Data) async throws -> String { "" }
 }
 
 struct SampleProfileRepo: ProfileRepo {

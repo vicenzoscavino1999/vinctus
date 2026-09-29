@@ -78,8 +78,10 @@ struct GroupView: View {
   @State private var isComposing = false
   @State private var isConfirmingLeave = false
   @State private var chatError: String?
+  @State private var isEditing = false
 
   private let groupID: String
+  private let repo: any GroupsRepo
   private let chatRepo: ChatRepo
   private let profileRepo: ProfileRepo
 
@@ -91,6 +93,7 @@ struct GroupView: View {
   ) {
     _vm = StateObject(wrappedValue: GroupDetailViewModel(repo: repo, groupID: groupID))
     self.groupID = groupID
+    self.repo = repo
     self.chatRepo = chatRepo
     self.profileRepo = profileRepo
   }
@@ -133,6 +136,17 @@ struct GroupView: View {
       vm.handleConnectivityChange(connectivity.isOnline)
       await vm.refresh()
       await vm.loadMembership(uid: currentUserID)
+      // Screenshot builds open the editor with `-VinctusEditGroup 1`.
+      if vm.membership == .owner, AppRepos.demoArgument("-VinctusEditGroup") != nil {
+        isEditing = true
+      }
+    }
+    .sheet(isPresented: $isEditing) {
+      if let detail = vm.detail {
+        EditGroupSheet(detail: detail, repo: repo, ownerID: currentUserID) {
+          Task { await vm.refresh() }
+        }
+      }
     }
     .navigationDestination(item: $openedConversationID) { conversationID in
       ConversationView(
@@ -226,6 +240,12 @@ struct GroupView: View {
               Task { await vm.performMembershipAction(uid: currentUserID) }
             }
             .disabled(vm.isUpdatingMembership || membership == .pending)
+          }
+        }
+
+        if vm.membership == .owner {
+          GroupActionButton(title: "Editar grupo", systemImage: "pencil", style: .gold) {
+            isEditing = true
           }
         }
 
@@ -457,7 +477,7 @@ private struct GroupActionButton: View {
 }
 
 /// Rounded-square group icon with the photo or the name's initial (web's detail header).
-private struct GroupSquareIcon: View {
+struct GroupSquareIcon: View {
   let name: String
   let iconURL: String?
   let size: CGFloat

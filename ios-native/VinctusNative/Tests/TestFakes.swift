@@ -76,6 +76,19 @@ final class FakeGroupsRepo: GroupsRepo {
   func requestToJoin(groupID: String, groupName: String, ownerID: String, uid: String) async throws {
     requests.append(uid)
   }
+
+  var updates: [GroupUpdate] = []
+  var uploadedIcons = 0
+
+  func updateGroup(groupID: String, _ update: GroupUpdate) async throws {
+    if failsToUpdate { throw FakeError() }
+    updates.append(update)
+  }
+
+  func uploadGroupIcon(ownerID: String, groupID: String, jpegData: Data) async throws -> String {
+    uploadedIcons += 1
+    return "https://example.com/groups/\(ownerID)/\(groupID)/icon.jpg"
+  }
 }
 
 final class FakeProfileRepo: ProfileRepo {
