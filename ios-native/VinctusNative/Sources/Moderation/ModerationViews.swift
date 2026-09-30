@@ -266,3 +266,23 @@ struct BlockedUsersView: View {
     }
   }
 }
+
+/// Lets sheets present a report target with `.sheet(item:)`.
+extension ReportTarget: Identifiable {
+  var id: String {
+    switch self {
+    case let .post(postID, _):
+      return "post_\(postID)"
+    case let .comment(postID, commentID, _):
+      return "comment_\(postID)_\(commentID)"
+    case let .user(userID):
+      return "user_\(userID)"
+    case let .aiResponse(contextID, excerpt):
+      return "ai_\(contextID)_\(excerpt.hashValue)"
+    case let .message(conversationID, messageID, _, _):
+      return "msg_\(conversationID)_\(messageID)"
+    case let .story(storyID, _):
+      return "story_\(storyID)"
+    }
+  }
+}
