@@ -9,11 +9,18 @@ on:
       - 'ios-native/**'
       - '!ios-native/**/*.md'
       - '.github/workflows/ios-native.yml'
+      # The integration job checks the app's writes against these rules.
+      - 'firestore.rules'
+      - 'storage.rules'
+      - 'firebase.json'
   pull_request:
     paths:
       - 'ios-native/**'
       - '!ios-native/**/*.md'
       - '.github/workflows/ios-native.yml'
+      - 'firestore.rules'
+      - 'storage.rules'
+      - 'firebase.json'
   workflow_dispatch:
 
 concurrency:
@@ -77,3 +84,61 @@ jobs:
             -clonedSourcePackagesDirPath .spm \
             CODE_SIGNING_ALLOWED=NO \
             -quiet
+
+  # Runs the app's Firebase repos (ios-native/VinctusNative/IntegrationTests) against the Auth,
+  # Firestore and Storage emulators loaded with this repo's firestore.rules and storage.rules, so
+  # a write the rules reject fails here instead of in production.
+  integration:
+    name: ios-native-integration
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install the Firebase CLI
+        run: npm install -g firebase-tools@15
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-15
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios-native/VinctusNative
+        run: xcodegen generate
+
+      - uses: actions/cache@v4
+        with:
+          path: ios-native/VinctusNative/.spm
+          key: spm-${{ runner.os }}-${{ hashFiles('ios-native/VinctusNative/VinctusNative.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Integration tests (Firebase emulators)
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          print(next(d["udid"] for runtime, ds in devices.items() if "iOS" in runtime for d in ds if d["name"].startswith("iPhone")))
+          ')
+          firebase emulators:exec --project vinctus-dev --only auth,firestore,storage \
+            "xcodebuild test \
+              -project ios-native/VinctusNative/VinctusNative.xcodeproj \
+              -scheme VinctusNative-Integration \
+              -destination id=$DEVICE_ID \
+              -clonedSourcePackagesDirPath ios-native/VinctusNative/.spm \
+              -test-timeouts-enabled YES \
+              -default-test-execution-time-allowance 180 \
+              CODE_SIGNING_ALLOWED=NO \
+              -quiet"

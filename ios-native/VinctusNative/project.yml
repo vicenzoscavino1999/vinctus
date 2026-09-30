@@ -87,6 +87,16 @@ targets:
     dependencies:
       - target: VinctusNative
 
+  # Runs the Firebase repos against the local emulators (Auth, Firestore, Storage) and the repo's
+  # firestore.rules / storage.rules. Needs `firebase emulators:exec`; see IntegrationTests/.
+  VinctusNativeIntegrationTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: IntegrationTests
+    dependencies:
+      - target: VinctusNative
+
 schemes:
   VinctusNative-Dev:
     build:
@@ -120,3 +130,12 @@ schemes:
       config: DebugProd
       targets:
         - VinctusNativeTests
+
+  VinctusNative-Integration:
+    build:
+      targets:
+        VinctusNative: all
+    test:
+      config: DebugDev
+      targets:
+        - VinctusNativeIntegrationTests
