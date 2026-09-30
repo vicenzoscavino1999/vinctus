@@ -32,6 +32,10 @@ View  →  ViewModel (screen state, @MainActor)  →  Repo protocol  →  Fireba
 ```
 
 - **Views never call Firebase.** They get data through a repo protocol.
+- **Views don't call repos either.** Anything that loads or saves goes through a view model, also
+  in small pieces like a button, a profile section or a sheet (`LikeButton` → `LikeViewModel`).
+  The view creates it with `@StateObject` in its `init`. When the view needs something from the
+  environment (the signed-in user, `BlockedUsersStore`), it passes it to the view model's method.
 - **Repos are created in one place: `App/AppRepos.swift`.** Views and view models take a repo in
   their initializer, with an `AppRepos.x()` default. Don't write `FirebaseXRepo()` anywhere else.
 - **Demo mode:** screenshot builds (`SCREENSHOTS` flag, `-VinctusDemo` launch argument) get the

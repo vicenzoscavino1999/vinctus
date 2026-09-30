@@ -52,13 +52,10 @@ struct DiscoverView: View {
   @EnvironmentObject private var authVM: AuthViewModel
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
   @StateObject private var vm: DiscoverViewModel
+  @StateObject private var suggestedGroups: GroupSuggestionsViewModel
 
   @State private var discoverQuery = ""
   @State private var openedGroupID: String?
-  @State private var groups: [GroupSummary] = []
-  @State private var isLoadingGroups = false
-  @State private var groupsError: String?
-  @State private var isShowingCachedGroups = false
 
   private let profileRepo: ProfileRepo
   private let groupsRepo: any GroupsRepo
@@ -74,6 +71,7 @@ struct DiscoverView: View {
     self.groupsRepo = groupsRepo
     self.aiRepo = aiRepo
     _vm = StateObject(wrappedValue: DiscoverViewModel(repo: repo))
+    _suggestedGroups = StateObject(wrappedValue: GroupSuggestionsViewModel(repo: groupsRepo, limit: 12))
   }
 
   var body: some View {
@@ -153,7 +151,7 @@ struct DiscoverView: View {
           .buttonStyle(.plain)
         }
 
-        if isShowingCachedGroups {
+        if suggestedGroups.isShowingCachedData {
           HStack(spacing: 8) {
             Image(systemName: "externaldrive.badge.clock")
               .foregroundStyle(VinctusTokens.Color.accent)
@@ -164,7 +162,7 @@ struct DiscoverView: View {
           .padding(.top, 4)
         }
 
-        if isLoadingGroups, groups.isEmpty {
+        if suggestedGroups.isLoading, suggestedGroups.groups.isEmpty {
           VStack(spacing: VinctusTokens.Spacing.sm) {
             ForEach(0..<2, id: \.self) { _ in
               VCard {
@@ -187,7 +185,7 @@ struct DiscoverView: View {
             }
           }
           .padding(.top, 2)
-        } else if let groupsError {
+        } else if let groupsError = suggestedGroups.errorMessage {
           VCard {
             VStack(alignment: .leading, spacing: 10) {
               Text(groupsError)
@@ -195,7 +193,7 @@ struct DiscoverView: View {
                 .foregroundStyle(.red)
               VButton("Reintentar", variant: .secondary) {
                 Task {
-                  await refreshGroups()
+                  await suggestedGroups.refresh()
                 }
               }
             }
@@ -257,12 +255,7 @@ struct DiscoverView: View {
   }
 
   private var filteredGroups: [GroupSummary] {
-    guard !normalizedDiscoverQuery.isEmpty else { return groups }
-    return groups.filter { group in
-      group.name.lowercased().contains(normalizedDiscoverQuery)
-        || group.description.lowercased().contains(normalizedDiscoverQuery)
-        || (group.categoryID?.lowercased().contains(normalizedDiscoverQuery) ?? false)
-    }
+    suggestedGroups.filtered(by: discoverQuery)
   }
 
   private var visibleSuggestedUsers: [DiscoverUser] {
@@ -273,22 +266,6 @@ struct DiscoverView: View {
   private func refreshDiscoverData() async {
     vm.currentUserID = authVM.currentUserID
     await vm.refreshSuggestedUsers()
-    await refreshGroups()
-  }
-
-  @MainActor
-  private func refreshGroups() async {
-    guard !isLoadingGroups else { return }
-    isLoadingGroups = true
-    groupsError = nil
-    defer { isLoadingGroups = false }
-
-    do {
-      let page = try await groupsRepo.fetchGroups(limit: 12)
-      groups = page.items
-      isShowingCachedGroups = page.isFromCache
-    } catch {
-      groupsError = error.localizedDescription
-    }
+    await suggestedGroups.refresh()
   }
 }

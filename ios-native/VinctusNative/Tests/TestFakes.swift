@@ -30,9 +30,19 @@ final class FakeChatRepo: ChatRepo {
     sentTexts.append(text)
   }
 
+  var failsToOpen = false
+
   func markRead(conversationID: String) async {}
-  func openDirectConversation(with otherUserID: String) async throws -> String { "dm_\(otherUserID)" }
-  func openGroupConversation(groupID: String) async throws -> String { "grp_\(groupID)" }
+
+  func openDirectConversation(with otherUserID: String) async throws -> String {
+    if failsToOpen { throw FakeError() }
+    return "dm_\(otherUserID)"
+  }
+
+  func openGroupConversation(groupID: String) async throws -> String {
+    if failsToOpen { throw FakeError() }
+    return "grp_\(groupID)"
+  }
 }
 
 final class FakeGroupsRepo: GroupsRepo {
@@ -40,9 +50,14 @@ final class FakeGroupsRepo: GroupsRepo {
   var failsToUpdate = false
   var joinCalls = 0
   var leaveCalls = 0
+  var listedGroups: [GroupSummary] = []
+  var failsToList = false
+  var requestedLimits: [Int] = []
 
   func fetchGroups(limit: Int) async throws -> GroupsPage {
-    GroupsPage(items: [], isFromCache: false)
+    requestedLimits.append(limit)
+    if failsToList { throw FakeError() }
+    return GroupsPage(items: listedGroups, isFromCache: false)
   }
 
   func fetchGroupDetail(groupID: String, recentPostLimit: Int, topMemberLimit: Int) async throws -> GroupDetail? {
@@ -333,5 +348,22 @@ final class RecordingCollectionsRepo: CollectionsRepo {
 
   static func item(_ id: String) -> CollectionItem {
     CollectionItem(id: id, type: .link, title: "Enlace \(id)", url: "https://example.com/\(id)", text: nil, fileName: nil, createdAt: Date())
+  }
+}
+
+final class FakeAIConsentRepo: AIConsentRepo {
+  var state = AIConsentState.default
+  var failsToLoad = false
+  var failsToSave = false
+  var savedSources: [AIConsentSource] = []
+
+  func getConsent(uid: String) async throws -> AIConsentState {
+    if failsToLoad { throw FakeError() }
+    return state
+  }
+
+  func setConsent(uid: String, granted: Bool, source: AIConsentSource) async throws {
+    if failsToSave { throw FakeError() }
+    savedSources.append(source)
   }
 }

@@ -69,15 +69,13 @@ struct GroupsListView: View {
 /// A group, laid out like the web's GroupDetailView (`src/features/groups/components`).
 struct GroupView: View {
   @StateObject private var vm: GroupDetailViewModel
+  @StateObject private var groupChat: GroupChatViewModel
   @StateObject private var connectivity = ConnectivityMonitor()
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
   @EnvironmentObject private var authVM: AuthViewModel
-  @State private var openedConversationID: String?
   @State private var openedProfileID: String?
-  @State private var isOpeningChat = false
   @State private var isComposing = false
   @State private var isConfirmingLeave = false
-  @State private var chatError: String?
   @State private var isEditing = false
 
   private let groupID: String
@@ -92,6 +90,7 @@ struct GroupView: View {
     profileRepo: ProfileRepo = AppRepos.profile()
   ) {
     _vm = StateObject(wrappedValue: GroupDetailViewModel(repo: repo, groupID: groupID))
+    _groupChat = StateObject(wrappedValue: GroupChatViewModel(groupID: groupID, chatRepo: chatRepo))
     self.groupID = groupID
     self.repo = repo
     self.chatRepo = chatRepo
@@ -148,7 +147,7 @@ struct GroupView: View {
         }
       }
     }
-    .navigationDestination(item: $openedConversationID) { conversationID in
+    .navigationDestination(item: $groupChat.openedConversationID) { conversationID in
       ConversationView(
         repo: chatRepo,
         profileRepo: profileRepo,
@@ -215,7 +214,7 @@ struct GroupView: View {
 
       actions(detail)
 
-      if let error = vm.membershipError ?? chatError {
+      if let error = vm.membershipError ?? groupChat.errorMessage {
         Text(error)
           .font(.footnote)
           .foregroundStyle(.red)
@@ -249,10 +248,10 @@ struct GroupView: View {
           }
         }
 
-        GroupActionButton(title: isOpeningChat ? "Abriendo..." : "Chat", systemImage: "bubble.left", style: .neutral) {
-          openGroupChat()
+        GroupActionButton(title: groupChat.isOpening ? "Abriendo..." : "Chat", systemImage: "bubble.left", style: .neutral) {
+          Task { await groupChat.open() }
         }
-        .disabled(!isJoined || isOpeningChat)
+        .disabled(!isJoined || groupChat.isOpening)
 
         if vm.membership == .member {
           GroupActionButton(title: "Salir", style: .danger) {
@@ -383,19 +382,6 @@ struct GroupView: View {
     case "admin": return "ADMIN"
     case "moderator": return "MODERADOR"
     default: return "MIEMBRO"
-    }
-  }
-
-  private func openGroupChat() {
-    isOpeningChat = true
-    chatError = nil
-    Task {
-      do {
-        openedConversationID = try await chatRepo.openGroupConversation(groupID: groupID)
-      } catch {
-        chatError = (error as? LocalizedError)?.errorDescription ?? "No se pudo abrir el chat del grupo."
-      }
-      isOpeningChat = false
     }
   }
 }

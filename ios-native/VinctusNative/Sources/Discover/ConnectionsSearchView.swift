@@ -4,12 +4,9 @@ struct ConnectionsSearchView: View {
   @EnvironmentObject private var authVM: AuthViewModel
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
   @StateObject private var vm: DiscoverViewModel
+  @StateObject private var suggestedGroups: GroupSuggestionsViewModel
 
-  @State private var groups: [GroupSummary] = []
   @State private var openedGroupID: String?
-  @State private var isLoadingGroups = false
-  @State private var groupsError: String?
-  @State private var isShowingCachedGroups = false
 
   private let profileRepo: ProfileRepo
   private let groupsRepo: any GroupsRepo
@@ -18,6 +15,7 @@ struct ConnectionsSearchView: View {
     self.profileRepo = profileRepo
     self.groupsRepo = groupsRepo
     _vm = StateObject(wrappedValue: DiscoverViewModel(repo: repo))
+    _suggestedGroups = StateObject(wrappedValue: GroupSuggestionsViewModel(repo: groupsRepo, limit: 20))
   }
 
   var body: some View {
@@ -32,7 +30,7 @@ struct ConnectionsSearchView: View {
       .listRowSeparator(.hidden)
       .listRowBackground(SwiftUI.Color.clear)
 
-      if isShowingCachedGroups {
+      if suggestedGroups.isShowingCachedData {
         HStack(spacing: 8) {
           Image(systemName: "externaldrive.badge.clock")
             .foregroundStyle(VinctusTokens.Color.accent)
@@ -44,9 +42,9 @@ struct ConnectionsSearchView: View {
         .listRowBackground(SwiftUI.Color.clear)
       }
 
-      if isLoadingGroups, groups.isEmpty {
+      if suggestedGroups.isLoading, suggestedGroups.groups.isEmpty {
         groupSkeletonRows
-      } else if let groupsError {
+      } else if let groupsError = suggestedGroups.errorMessage {
         VCard {
           VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
             Text(groupsError)
@@ -163,17 +161,9 @@ struct ConnectionsSearchView: View {
     }
   }
 
-  private var normalizedSearchQuery: String {
-    vm.searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-  }
-
+  /// Short queries (under two letters) show every group, like the people search.
   private var filteredGroups: [GroupSummary] {
-    guard vm.isSearchActive else { return groups }
-    return groups.filter { group in
-      group.name.lowercased().contains(normalizedSearchQuery)
-        || group.description.lowercased().contains(normalizedSearchQuery)
-        || (group.categoryID?.lowercased().contains(normalizedSearchQuery) ?? false)
-    }
+    suggestedGroups.filtered(by: vm.isSearchActive ? vm.searchText : "")
   }
 
   @ViewBuilder
@@ -231,23 +221,7 @@ struct ConnectionsSearchView: View {
   private func refreshData() async {
     vm.currentUserID = authVM.currentUserID
     await vm.refreshSuggestedUsers()
-    await refreshGroups()
-  }
-
-  @MainActor
-  private func refreshGroups() async {
-    guard !isLoadingGroups else { return }
-    isLoadingGroups = true
-    groupsError = nil
-    defer { isLoadingGroups = false }
-
-    do {
-      let page = try await groupsRepo.fetchGroups(limit: 20)
-      groups = page.items
-      isShowingCachedGroups = page.isFromCache
-    } catch {
-      groupsError = error.localizedDescription
-    }
+    await suggestedGroups.refresh()
   }
 }
 

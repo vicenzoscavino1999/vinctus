@@ -33,6 +33,79 @@ final class GroupsListViewModel: ObservableObject {
   }
 }
 
+/// A short list of groups to discover, shown by Descubrir and the search screen. A failed
+/// refresh keeps the groups already shown.
+@MainActor
+final class GroupSuggestionsViewModel: ObservableObject {
+  @Published private(set) var groups: [GroupSummary] = []
+  @Published private(set) var isLoading = false
+  @Published private(set) var errorMessage: String?
+  @Published private(set) var isShowingCachedData = false
+
+  private let repo: GroupsRepo
+  private let limit: Int
+
+  init(repo: GroupsRepo, limit: Int) {
+    self.repo = repo
+    self.limit = limit
+  }
+
+  func refresh() async {
+    guard !isLoading else { return }
+    isLoading = true
+    errorMessage = nil
+    defer { isLoading = false }
+    do {
+      let page = try await repo.fetchGroups(limit: limit)
+      groups = page.items
+      isShowingCachedData = page.isFromCache
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
+  /// Groups whose name, description or category contains `query`, ignoring case and spaces
+  /// around it. An empty query returns every group.
+  func filtered(by query: String) -> [GroupSummary] {
+    let query = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard !query.isEmpty else { return groups }
+    return groups.filter { group in
+      group.name.lowercased().contains(query)
+        || group.description.lowercased().contains(query)
+        || (group.categoryID?.lowercased().contains(query) ?? false)
+    }
+  }
+}
+
+/// The Chat button of a group: opens (or creates) the group's conversation.
+@MainActor
+final class GroupChatViewModel: ObservableObject {
+  /// Set when the conversation is ready; the view navigates to it and clears it on the way back.
+  @Published var openedConversationID: String?
+  @Published private(set) var isOpening = false
+  @Published private(set) var errorMessage: String?
+
+  private let groupID: String
+  private let chatRepo: ChatRepo
+
+  init(groupID: String, chatRepo: ChatRepo) {
+    self.groupID = groupID
+    self.chatRepo = chatRepo
+  }
+
+  func open() async {
+    guard !isOpening else { return }
+    isOpening = true
+    errorMessage = nil
+    defer { isOpening = false }
+    do {
+      openedConversationID = try await chatRepo.openGroupConversation(groupID: groupID)
+    } catch {
+      errorMessage = (error as? LocalizedError)?.errorDescription ?? "No se pudo abrir el chat del grupo."
+    }
+  }
+}
+
 extension GroupsRepo {
   /// Joins a public group or asks the owner of a private one, like the web's `handleGroupAction`.
   /// Returns the new status: `.member` or `.pending`.

@@ -6,21 +6,25 @@ import SwiftUI
 /// providers (App Review Guideline 5.1.2(i)). The choice is saved on the user profile, like on
 /// the web, and can be withdrawn from Settings.
 struct AIConsentGate<Content: View>: View {
-  let source: AIConsentSource
-  @ViewBuilder let content: () -> Content
+  let content: () -> Content
 
   @EnvironmentObject private var authVM: AuthViewModel
-  @State private var consent: AIConsentState?
-  @State private var isSaving = false
-  @State private var errorMessage: String?
+  @StateObject private var vm: AIConsentViewModel
 
-  private let repo: AIConsentRepo = AppRepos.aiConsent()
+  init(
+    source: AIConsentSource,
+    repo: AIConsentRepo = AppRepos.aiConsent(),
+    @ViewBuilder content: @escaping () -> Content
+  ) {
+    self.content = content
+    _vm = StateObject(wrappedValue: AIConsentViewModel(source: source, repo: repo))
+  }
 
   var body: some View {
     Group {
-      if consent?.granted == true {
+      if vm.isGranted {
         content()
-      } else if consent == nil && errorMessage == nil {
+      } else if vm.isLoading {
         ProgressView()
           .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
@@ -28,7 +32,7 @@ struct AIConsentGate<Content: View>: View {
       }
     }
     .task(id: authVM.currentUserID) {
-      await load()
+      await vm.load(uid: authVM.currentUserID)
     }
   }
 
@@ -52,45 +56,21 @@ struct AIConsentGate<Content: View>: View {
             .font(.footnote)
             .foregroundStyle(VinctusTokens.Color.accent)
 
-          if let errorMessage {
+          if let errorMessage = vm.errorMessage {
             Text(errorMessage)
               .font(.footnote)
               .foregroundStyle(.red)
           }
 
           VButton("Acepto enviar mis mensajes a la IA") {
-            Task { await grant() }
+            Task { await vm.grant(uid: authVM.currentUserID) }
           }
-          .disabled(isSaving || authVM.currentUserID == nil)
+          .disabled(vm.isSaving || authVM.currentUserID == nil)
         }
       }
       .padding(VinctusTokens.Spacing.lg)
     }
-    .vinctusLoading(isSaving)
-  }
-
-  private func load() async {
-    guard let uid = authVM.currentUserID else { return }
-    do {
-      consent = try await repo.getConsent(uid: uid)
-      errorMessage = nil
-    } catch {
-      consent = .default
-      errorMessage = "No se pudo cargar tu consentimiento de IA."
-    }
-  }
-
-  private func grant() async {
-    guard let uid = authVM.currentUserID else { return }
-    isSaving = true
-    defer { isSaving = false }
-    do {
-      try await repo.setConsent(uid: uid, granted: true, source: source)
-      consent = AIConsentState(granted: true, recorded: true, source: source, updatedAt: Date())
-      errorMessage = nil
-    } catch {
-      errorMessage = "No se pudo guardar tu consentimiento. Intenta de nuevo."
-    }
+    .vinctusLoading(vm.isSaving)
   }
 }
 
