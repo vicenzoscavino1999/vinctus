@@ -5,32 +5,25 @@ import SwiftUI
 /// Followers and following lists, plus pending follow requests on your own profile, like the
 /// web's FollowListPage.
 struct FollowListView: View {
-  let repo: ProfileContentRepo
   let profileRepo: ProfileRepo
-  let userID: String
-  let showsRequests: Bool
 
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
-  @State private var kind: FollowListKind
-  @State private var users: [ProfileUserSummary] = []
-  @State private var nextPage: ProfileListCursor?
-  @State private var isLoadingMore = false
-  @State private var requests: [IncomingFollowRequest] = []
-  @State private var isLoading = true
-  @State private var errorMessage: String?
+  @StateObject private var vm: FollowListViewModel
 
   init(repo: ProfileContentRepo, profileRepo: ProfileRepo, userID: String, initialKind: FollowListKind, showsRequests: Bool) {
-    self.repo = repo
     self.profileRepo = profileRepo
-    self.userID = userID
-    self.showsRequests = showsRequests
-    _kind = State(initialValue: initialKind)
+    _vm = StateObject(wrappedValue: FollowListViewModel(
+      repo: repo,
+      userID: userID,
+      initialKind: initialKind,
+      showsRequests: showsRequests
+    ))
   }
 
   var body: some View {
     List {
       Section {
-        Picker("Lista", selection: $kind) {
+        Picker("Lista", selection: $vm.kind) {
           ForEach(FollowListKind.allCases) { kind in
             Text(kind.title).tag(kind)
           }
@@ -39,14 +32,14 @@ struct FollowListView: View {
         .listRowBackground(SwiftUI.Color.clear)
       }
 
-      if showsRequests && !requests.isEmpty {
+      if vm.showsRequests && !vm.requests.isEmpty {
         Section("Solicitudes de seguimiento") {
-          ForEach(requests) { request in
+          ForEach(vm.requests) { request in
             HStack {
               userRow(request.from)
               Spacer()
               Button {
-                answer(request, accept: true)
+                Task { await vm.answer(request, accept: true) }
               } label: {
                 Image(systemName: "checkmark.circle.fill")
                   .font(.title2)
@@ -55,7 +48,7 @@ struct FollowListView: View {
               .buttonStyle(.plain)
               .accessibilityLabel("Aceptar")
               Button {
-                answer(request, accept: false)
+                Task { await vm.answer(request, accept: false) }
               } label: {
                 Image(systemName: "xmark.circle.fill")
                   .font(.title2)
@@ -69,13 +62,13 @@ struct FollowListView: View {
       }
 
       Section {
-        if isLoading {
+        if vm.isLoading {
           ProgressView()
-        } else if let errorMessage {
+        } else if let errorMessage = vm.errorMessage {
           Text(errorMessage)
             .foregroundStyle(.red)
         } else if visibleUsers.isEmpty {
-          Text(kind == .followers ? "Todavía no hay seguidores." : "Todavía no sigue a nadie.")
+          Text(vm.kind == .followers ? "Todavía no hay seguidores." : "Todavía no sigue a nadie.")
             .foregroundStyle(VinctusTokens.Color.textMuted)
         } else {
           ForEach(visibleUsers) { user in
@@ -85,27 +78,23 @@ struct FollowListView: View {
               userRow(user)
             }
           }
-          if nextPage != nil {
-            LoadMoreButton(isLoading: isLoadingMore) {
-              Task { await loadMore() }
+          if vm.hasMore {
+            LoadMoreButton(isLoading: vm.isLoadingMore) {
+              Task { await vm.loadMore() }
             }
           }
         }
       }
     }
-    .navigationTitle(kind.title)
+    .navigationTitle(vm.kind.title)
     .navigationBarTitleDisplayMode(.inline)
-    .task(id: kind) { await load() }
-    .task {
-      if showsRequests {
-        requests = (try? await repo.fetchIncomingFollowRequests()) ?? []
-      }
-    }
-    .refreshable { await load() }
+    .task(id: vm.kind) { await vm.load() }
+    .task { await vm.loadRequests() }
+    .refreshable { await vm.load() }
   }
 
   private var visibleUsers: [ProfileUserSummary] {
-    users.filter { !blockedUsers.isBlocked($0.id) }
+    vm.users.filter { !blockedUsers.isBlocked($0.id) }
   }
 
   private func userRow(_ user: ProfileUserSummary) -> some View {
@@ -119,48 +108,6 @@ struct FollowListView: View {
             .font(.caption)
             .foregroundStyle(VinctusTokens.Color.textMuted)
         }
-      }
-    }
-  }
-
-  private static let pageSize = 30
-
-  private func load() async {
-    isLoading = true
-    do {
-      let page = try await repo.fetchFollowList(uid: userID, kind: kind, limit: Self.pageSize, after: nil)
-      users = page.items
-      nextPage = page.next
-      errorMessage = nil
-    } catch {
-      errorMessage = "No se pudo cargar la lista."
-    }
-    isLoading = false
-  }
-
-  private func loadMore() async {
-    guard let cursor = nextPage, !isLoadingMore else { return }
-    let listKind = kind
-    isLoadingMore = true
-    defer { isLoadingMore = false }
-    do {
-      let page = try await repo.fetchFollowList(uid: userID, kind: listKind, limit: Self.pageSize, after: cursor)
-      // The user may have switched lists while this page was loading.
-      guard listKind == kind else { return }
-      let known = Set(users.map(\.id))
-      users += page.items.filter { !known.contains($0.id) }
-      nextPage = page.next
-    } catch {
-      errorMessage = "No se pudo cargar más."
-    }
-  }
-
-  private func answer(_ request: IncomingFollowRequest, accept: Bool) {
-    requests.removeAll { $0.id == request.id }
-    Task {
-      try? await repo.answerFollowRequest(from: request.from.id, accept: accept)
-      if accept, kind == .followers {
-        await load()
       }
     }
   }

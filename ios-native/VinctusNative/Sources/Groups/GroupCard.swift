@@ -4,14 +4,17 @@ import SwiftUI
 /// round icon, name, description, the join button, and members, posts and visibility underneath.
 struct GroupCard: View {
   let group: GroupSummary
-  var repo: any GroupsRepo = AppRepos.groups()
   /// Opens the group; the join button keeps its own action.
   let onOpen: () -> Void
 
   @EnvironmentObject private var authVM: AuthViewModel
-  @State private var status: GroupMembershipStatus?
-  @State private var isWorking = false
-  @State private var errorMessage: String?
+  @StateObject private var vm: GroupCardViewModel
+
+  init(group: GroupSummary, repo: any GroupsRepo = AppRepos.groups(), onOpen: @escaping () -> Void) {
+    self.group = group
+    self.onOpen = onOpen
+    _vm = StateObject(wrappedValue: GroupCardViewModel(group: group, repo: repo))
+  }
 
   private var isPrivate: Bool { group.visibility == .private }
 
@@ -36,7 +39,7 @@ struct GroupCard: View {
         actionButton
       }
 
-      if let errorMessage {
+      if let errorMessage = vm.errorMessage {
         Text(errorMessage)
           .font(.caption)
           .foregroundStyle(.red)
@@ -70,15 +73,17 @@ struct GroupCard: View {
     .contentShape(Rectangle())
     .onTapGesture(perform: onOpen)
     .accessibilityAddTraits(.isButton)
-    .task(id: authVM.currentUserID) { await loadStatus() }
+    .task(id: authVM.currentUserID) { await vm.loadStatus(uid: authVM.currentUserID) }
   }
 
   @ViewBuilder
   private var actionButton: some View {
-    if let status {
+    if let status = vm.status {
       let joined = status.isJoined
-      Button(action: act) {
-        Text(isWorking ? "Procesando..." : status.buttonTitle(isPrivate: isPrivate))
+      Button {
+        Task { await vm.join(uid: authVM.currentUserID) }
+      } label: {
+        Text(vm.isWorking ? "Procesando..." : status.buttonTitle(isPrivate: isPrivate))
           .font(.caption)
           .padding(.horizontal, 12)
           .padding(.vertical, 7)
@@ -87,34 +92,7 @@ struct GroupCard: View {
           .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
       }
       .buttonStyle(.borderless)
-      .disabled(isWorking || joined || status == .pending)
-    }
-  }
-
-  private func loadStatus() async {
-    guard let uid = authVM.currentUserID else { return }
-    status = try? await repo.membershipStatus(groupID: group.id, ownerID: group.ownerID, uid: uid)
-  }
-
-  /// Joins a public group or asks to join a private one, like the web's `handleGroupAction`.
-  private func act() {
-    guard let uid = authVM.currentUserID, status == GroupMembershipStatus.none else { return }
-    isWorking = true
-    errorMessage = nil
-    Task {
-      do {
-        if isPrivate {
-          guard let ownerID = group.ownerID else { throw GroupsRepoError.privateGroup }
-          try await repo.requestToJoin(groupID: group.id, groupName: group.name, ownerID: ownerID, uid: uid)
-          status = .pending
-        } else {
-          try await repo.joinGroup(groupID: group.id, uid: uid)
-          status = .member
-        }
-      } catch {
-        errorMessage = error.localizedDescription
-      }
-      isWorking = false
+      .disabled(vm.isWorking || joined || status == .pending)
     }
   }
 }

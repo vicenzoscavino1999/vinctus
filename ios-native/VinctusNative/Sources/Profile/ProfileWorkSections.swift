@@ -3,19 +3,18 @@ import SwiftUI
 // MARK: - Posts
 
 struct ProfilePostsSection: View {
-  let repo: ProfileContentRepo
   let profileRepo: ProfileRepo
-  let userID: String
   let reloadToken: Int
 
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
-  @State private var posts: [FeedItem] = []
-  @State private var nextPage: ProfileListCursor?
-  @State private var isLoading = true
-  @State private var isLoadingMore = false
-  @State private var errorMessage: String?
+  @StateObject private var vm: ProfilePostsViewModel
   private let commentsRepo: any PostCommentsRepo = AppRepos.postComments()
-  private static let pageSize = 20
+
+  init(repo: ProfileContentRepo, profileRepo: ProfileRepo, userID: String, reloadToken: Int) {
+    self.profileRepo = profileRepo
+    self.reloadToken = reloadToken
+    _vm = StateObject(wrappedValue: ProfilePostsViewModel(repo: repo, userID: userID))
+  }
 
   private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
 
@@ -28,12 +27,12 @@ struct ProfilePostsSection: View {
         .tracking(4)
         .foregroundStyle(VinctusTokens.Color.textMuted)
 
-      if isLoading {
+      if vm.isLoading {
         ProgressView()
           .frame(maxWidth: .infinity)
-      } else if let errorMessage {
+      } else if let errorMessage = vm.errorMessage {
         ProfileSectionMessage(text: errorMessage, isError: true)
-      } else if posts.isEmpty {
+      } else if vm.posts.isEmpty {
         VStack(spacing: 10) {
           Image(systemName: "photo")
             .font(.title3)
@@ -53,7 +52,7 @@ struct ProfilePostsSection: View {
         )
       } else {
         LazyVGrid(columns: columns, spacing: 12) {
-          ForEach(posts) { post in
+          ForEach(vm.posts) { post in
             NavigationLink {
               PostDetailView(item: post, profileRepo: profileRepo, commentsRepo: commentsRepo)
             } label: {
@@ -62,38 +61,14 @@ struct ProfilePostsSection: View {
             .buttonStyle(.plain)
           }
         }
-        if nextPage != nil {
-          LoadMoreButton(isLoading: isLoadingMore) {
-            Task { await loadMore() }
+        if vm.hasMore {
+          LoadMoreButton(isLoading: vm.isLoadingMore) {
+            Task { await vm.loadMore() }
           }
         }
       }
     }
-    .task(id: reloadToken) {
-      do {
-        let page = try await repo.fetchPosts(uid: userID, limit: Self.pageSize, after: nil)
-        posts = page.items
-        nextPage = page.next
-        errorMessage = nil
-      } catch {
-        errorMessage = "No se pudieron cargar las publicaciones."
-      }
-      isLoading = false
-    }
-  }
-
-  private func loadMore() async {
-    guard let cursor = nextPage, !isLoadingMore else { return }
-    isLoadingMore = true
-    defer { isLoadingMore = false }
-    do {
-      let page = try await repo.fetchPosts(uid: userID, limit: Self.pageSize, after: cursor)
-      let known = Set(posts.map(\.id))
-      posts += page.items.filter { !known.contains($0.id) }
-      nextPage = page.next
-    } catch {
-      errorMessage = "No se pudieron cargar más publicaciones."
-    }
+    .task(id: reloadToken) { await vm.load() }
   }
 }
 
@@ -179,15 +154,19 @@ private struct PostGridTile: View {
 
 struct ProfileContributionsSection: View {
   let repo: ProfileContentRepo
-  let userID: String
   let canEdit: Bool
   let reloadToken: Int
 
   @Environment(\.openURL) private var openURL
-  @State private var contributions: [Contribution] = []
-  @State private var isLoading = true
-  @State private var errorMessage: String?
+  @StateObject private var vm: ContributionsViewModel
   @State private var isAdding = false
+
+  init(repo: ProfileContentRepo, userID: String, canEdit: Bool, reloadToken: Int) {
+    self.repo = repo
+    self.canEdit = canEdit
+    self.reloadToken = reloadToken
+    _vm = StateObject(wrappedValue: ContributionsViewModel(repo: repo, userID: userID))
+  }
 
   var body: some View {
     ProfileSectionCard(title: "Aportes", icon: "shippingbox") {
@@ -201,18 +180,18 @@ struct ProfileContributionsSection: View {
         .accessibilityLabel("Añadir aporte")
       }
     } content: {
-      if isLoading {
+      if vm.isLoading {
         ProgressView()
-      } else if let errorMessage {
+      } else if let errorMessage = vm.errorMessage {
         ProfileSectionMessage(text: errorMessage, isError: true)
-      } else if contributions.isEmpty {
+      } else if vm.contributions.isEmpty {
         ProfileSectionMessage(text: canEdit
           ? "Comparte tus proyectos, papers, certificaciones o tu CV. Toca + para añadir uno."
           : "Todavía no hay aportes.")
       } else {
-        ForEach(contributions) { item in
+        ForEach(vm.contributions) { item in
           row(item)
-          if item.id != contributions.last?.id {
+          if item.id != vm.contributions.last?.id {
             Divider()
           }
         }
@@ -220,10 +199,10 @@ struct ProfileContributionsSection: View {
     }
     .sheet(isPresented: $isAdding) {
       NewContributionSheet(repo: repo) {
-        Task { await load() }
+        Task { await vm.load() }
       }
     }
-    .task(id: reloadToken) { await load() }
+    .task(id: reloadToken) { await vm.load() }
   }
 
   private func row(_ item: Contribution) -> some View {
@@ -253,7 +232,9 @@ struct ProfileContributionsSection: View {
               .lineLimit(1)
           }
           if canEdit {
-            Button("Eliminar", role: .destructive) { delete(item) }
+            Button("Eliminar", role: .destructive) {
+              Task { await vm.delete(item) }
+            }
           }
         }
         .font(.caption.weight(.semibold))
@@ -261,63 +242,38 @@ struct ProfileContributionsSection: View {
     }
     .padding(.vertical, 6)
   }
-
-  private func load() async {
-    do {
-      contributions = try await repo.fetchContributions(uid: userID)
-      errorMessage = nil
-    } catch {
-      errorMessage = "No se pudieron cargar los aportes."
-    }
-    isLoading = false
-  }
-
-  private func delete(_ item: Contribution) {
-    let previous = contributions
-    contributions.removeAll { $0.id == item.id }
-    Task {
-      do {
-        try await repo.deleteContribution(id: item.id)
-      } catch {
-        contributions = previous
-        errorMessage = "No se pudo eliminar el aporte."
-      }
-    }
-  }
 }
 
 private struct NewContributionSheet: View {
-  let repo: ProfileContentRepo
   let onSaved: () -> Void
 
   @Environment(\.dismiss) private var dismiss
-  @State private var draft = NewContribution()
-  @State private var isSaving = false
-  @State private var errorMessage: String?
+  @StateObject private var vm: NewContributionViewModel
 
-  private var canSave: Bool {
-    !isSaving && !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  init(repo: ProfileContentRepo, onSaved: @escaping () -> Void) {
+    self.onSaved = onSaved
+    _vm = StateObject(wrappedValue: NewContributionViewModel(repo: repo))
   }
 
   var body: some View {
     NavigationStack {
       Form {
         Section("Tipo") {
-          Picker("Tipo", selection: $draft.type) {
+          Picker("Tipo", selection: $vm.draft.type) {
             ForEach(ContributionType.allCases) { type in
               Label(type.title, systemImage: type.icon).tag(type)
             }
           }
         }
         Section("Título") {
-          TextField("Nombre del proyecto, paper…", text: $draft.title)
+          TextField("Nombre del proyecto, paper…", text: $vm.draft.title)
         }
         Section("Descripción (opcional)") {
-          TextField("¿De qué trata?", text: $draft.description, axis: .vertical)
+          TextField("¿De qué trata?", text: $vm.draft.description, axis: .vertical)
             .lineLimit(3...6)
         }
         Section {
-          TextField("https://", text: $draft.link)
+          TextField("https://", text: $vm.draft.link)
             .keyboardType(.URL)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
@@ -327,14 +283,14 @@ private struct NewContributionSheet: View {
           Text("Para subir un archivo (PDF, CV…), usa la versión web.")
         }
         Section("Categoría (opcional)") {
-          Picker("Categoría", selection: $draft.categoryID) {
+          Picker("Categoría", selection: $vm.draft.categoryID) {
             Text("Ninguna").tag(String?.none)
             ForEach(InterestCategory.all) { category in
               Text(category.title).tag(String?.some(category.id))
             }
           }
         }
-        if let errorMessage {
+        if let errorMessage = vm.errorMessage {
           Section {
             Text(errorMessage)
               .foregroundStyle(.red)
@@ -348,26 +304,18 @@ private struct NewContributionSheet: View {
           Button("Cancelar") { dismiss() }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Guardar", action: save)
-            .disabled(!canSave)
+          Button("Guardar") {
+            Task {
+              if await vm.save() {
+                onSaved()
+                dismiss()
+              }
+            }
+          }
+          .disabled(!vm.canSave)
         }
       }
-      .vinctusLoading(isSaving)
-    }
-  }
-
-  private func save() {
-    isSaving = true
-    errorMessage = nil
-    Task {
-      do {
-        try await repo.createContribution(draft)
-        onSaved()
-        dismiss()
-      } catch {
-        errorMessage = (error as? LocalizedError)?.errorDescription ?? "No se pudo guardar el aporte."
-      }
-      isSaving = false
+      .vinctusLoading(vm.isSaving)
     }
   }
 }

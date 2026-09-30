@@ -3,18 +3,18 @@ import SwiftUI
 // MARK: - Followed categories
 
 struct ProfileCategoriesSection: View {
-  let repo: ProfileContentRepo
+  @StateObject private var vm: FollowedCategoriesViewModel
 
-  @State private var followed: [String] = []
-  @State private var isLoading = true
-  @State private var errorMessage: String?
+  init(repo: ProfileContentRepo) {
+    _vm = StateObject(wrappedValue: FollowedCategoriesViewModel(repo: repo))
+  }
 
   var body: some View {
     ProfileSectionCard(title: "Categorías seguidas", icon: "square.grid.2x2") {
       Menu {
-        ForEach(InterestCategory.all.filter { !followed.contains($0.id) }) { category in
+        ForEach(vm.notFollowed) { category in
           Button {
-            set(true, category.id)
+            Task { await vm.setFollowed(true, categoryID: category.id) }
           } label: {
             Label(category.title, systemImage: category.icon)
           }
@@ -23,74 +23,56 @@ struct ProfileCategoriesSection: View {
         Image(systemName: "plus.circle.fill")
           .foregroundStyle(VinctusTokens.Color.accent)
       }
-      .disabled(followed.count == InterestCategory.all.count)
+      .disabled(vm.followsEverything)
       .accessibilityLabel("Seguir una categoría")
     } content: {
-      if isLoading {
+      if vm.isLoading {
         ProgressView()
-      } else if let errorMessage {
+      } else if let errorMessage = vm.errorMessage {
         ProfileSectionMessage(text: errorMessage, isError: true)
-      } else if followed.isEmpty {
+      } else if vm.followed.isEmpty {
         ProfileSectionMessage(text: "Aún no sigues categorías. Toca + para elegir las que te interesan.")
       } else {
-        ForEach(followed, id: \.self) { id in
+        ForEach(vm.followed, id: \.self) { id in
           let category = InterestCategory.all.first { $0.id == id }
           HStack {
             Label(category?.title ?? id, systemImage: category?.icon ?? "tag")
               .font(.subheadline)
               .foregroundStyle(VinctusTokens.Color.textPrimary)
             Spacer()
-            Button("Dejar") { set(false, id) }
-              .font(.caption.weight(.semibold))
-              .foregroundStyle(VinctusTokens.Color.textMuted)
+            Button("Dejar") {
+              Task { await vm.setFollowed(false, categoryID: id) }
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(VinctusTokens.Color.textMuted)
           }
           .padding(.vertical, 4)
         }
       }
     }
-    .task {
-      do {
-        followed = try await repo.fetchFollowedCategories()
-      } catch {
-        errorMessage = "No se pudieron cargar tus categorías."
-      }
-      isLoading = false
-    }
-  }
-
-  private func set(_ follow: Bool, _ id: String) {
-    let previous = followed
-    followed = follow ? followed + [id] : followed.filter { $0 != id }
-    Task {
-      do {
-        try await repo.setCategoryFollowed(follow, categoryID: id)
-      } catch {
-        followed = previous
-        errorMessage = "No se pudo actualizar la categoría."
-      }
-    }
+    .task { await vm.load() }
   }
 }
 
 // MARK: - Saved Arena debates
 
 struct ProfileSavedDebatesSection: View {
-  let repo: ProfileContentRepo
+  @StateObject private var vm: SavedDebatesViewModel
 
-  @State private var debates: [SavedDebate] = []
-  @State private var isLoading = true
-  @State private var errorMessage: String?
+  init(repo: ProfileContentRepo) {
+    _vm = StateObject(wrappedValue: SavedDebatesViewModel(repo: repo))
+  }
 
   var body: some View {
     ProfileSectionCard(title: "Debates guardados", icon: "bookmark") {
-      if isLoading {
+      if vm.isLoading {
         ProgressView()
-      } else if let errorMessage {
+      } else if let errorMessage = vm.errorMessage {
         ProfileSectionMessage(text: errorMessage, isError: true)
-      } else if debates.isEmpty {
+      } else if vm.debates.isEmpty {
         ProfileSectionMessage(text: "Aún no tienes debates guardados. Desde Arena IA puedes guardarlos.")
       } else {
-        ForEach(debates) { debate in
+        ForEach(vm.debates) { debate in
           VStack(alignment: .leading, spacing: 6) {
             Text(debate.topic)
               .font(.subheadline.weight(.semibold))
@@ -108,25 +90,20 @@ struct ProfileSavedDebatesSection: View {
               NavigationLink("Ver debate") {
                 SavedDebateView(debate: debate)
               }
-              Button("Quitar", role: .destructive) { remove(debate) }
+              Button("Quitar", role: .destructive) {
+                Task { await vm.remove(debate) }
+              }
             }
             .font(.caption.weight(.semibold))
           }
           .padding(.vertical, 6)
-          if debate.id != debates.last?.id {
+          if debate.id != vm.debates.last?.id {
             Divider()
           }
         }
       }
     }
-    .task {
-      do {
-        debates = try await repo.fetchSavedDebates()
-      } catch {
-        errorMessage = "No se pudieron cargar tus debates guardados."
-      }
-      isLoading = false
-    }
+    .task { await vm.load() }
   }
 
   private func subtitle(_ debate: SavedDebate) -> String {
@@ -134,29 +111,18 @@ struct ProfileSavedDebatesSection: View {
     guard let date = debate.createdAt else { return names }
     return "\(names) · \(date.formatted(date: .abbreviated, time: .omitted))"
   }
-
-  private func remove(_ debate: SavedDebate) {
-    let previous = debates
-    debates.removeAll { $0.id == debate.id }
-    Task {
-      do {
-        try await repo.removeSavedDebate(id: debate.id)
-      } catch {
-        debates = previous
-        errorMessage = "No se pudo quitar el debate."
-      }
-    }
-  }
 }
 
 /// A saved debate with its turns, read from `arenaDebates/{id}/turns`.
 private struct SavedDebateView: View {
   let debate: SavedDebate
-  var aiRepo: AIRepo = AppRepos.ai()
 
-  @State private var turns: [ArenaTurn] = []
-  @State private var isLoading = true
-  @State private var errorMessage: String?
+  @StateObject private var vm: DebateTurnsViewModel
+
+  init(debate: SavedDebate, aiRepo: AIRepo = AppRepos.ai()) {
+    self.debate = debate
+    _vm = StateObject(wrappedValue: DebateTurnsViewModel(debateID: debate.id, repo: aiRepo))
+  }
 
   var body: some View {
     List {
@@ -167,13 +133,13 @@ private struct SavedDebateView: View {
           .foregroundStyle(VinctusTokens.Color.textMuted)
       }
       Section("Debate") {
-        if isLoading {
+        if vm.isLoading {
           ProgressView()
-        } else if let errorMessage {
+        } else if let errorMessage = vm.errorMessage {
           Text(errorMessage)
             .foregroundStyle(.red)
         } else {
-          ForEach(turns) { turn in
+          ForEach(vm.turns) { turn in
             VStack(alignment: .leading, spacing: 4) {
               Text(SavedDebate.personaName(turn.speaker == "A" ? debate.personaA : debate.personaB))
                 .font(.caption.weight(.semibold))
@@ -199,14 +165,7 @@ private struct SavedDebateView: View {
     }
     .navigationTitle("Debate")
     .navigationBarTitleDisplayMode(.inline)
-    .task {
-      do {
-        turns = try await aiRepo.fetchDebateTurns(debateID: debate.id)
-      } catch {
-        errorMessage = "No se pudo cargar el debate."
-      }
-      isLoading = false
-    }
+    .task { await vm.load() }
   }
 
   private func winnerName(_ winner: String) -> String {

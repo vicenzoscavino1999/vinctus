@@ -2,119 +2,80 @@ import SwiftUI
 
 /// Heart button with the like count. Updates right away and rolls back if the write fails.
 struct LikeButton: View {
-  let postID: String
   let initialCount: Int
-  var repo: EngagementRepo = AppRepos.engagement()
 
-  @State private var isLiked = false
-  @State private var count: Int?
-  @State private var isSaving = false
+  @StateObject private var vm: LikeViewModel
+
+  init(postID: String, initialCount: Int, repo: EngagementRepo = AppRepos.engagement()) {
+    self.initialCount = initialCount
+    _vm = StateObject(wrappedValue: LikeViewModel(postID: postID, repo: repo))
+  }
 
   var body: some View {
-    Button(action: toggle) {
-      Label("\(max(0, count ?? initialCount))", systemImage: isLiked ? "heart.fill" : "heart")
-        .foregroundStyle(isLiked ? SwiftUI.Color.red : VinctusTokens.Color.textMuted)
+    Button {
+      Task { await vm.toggle(initialCount: initialCount) }
+    } label: {
+      Label("\(vm.displayedCount(initialCount: initialCount))", systemImage: vm.isLiked ? "heart.fill" : "heart")
+        .foregroundStyle(vm.isLiked ? SwiftUI.Color.red : VinctusTokens.Color.textMuted)
         .contentTransition(.symbolEffect(.replace))
     }
     .buttonStyle(.borderless)
-    .disabled(isSaving)
-    .accessibilityLabel(isLiked ? "Quitar me gusta" : "Me gusta")
-    .task(id: postID) {
-      isLiked = (try? await repo.isPostLiked(postID: postID)) ?? false
-    }
-  }
-
-  private func toggle() {
-    let wasLiked = isLiked
-    let previousCount = count ?? initialCount
-    isLiked.toggle()
-    count = previousCount + (isLiked ? 1 : -1)
-    isSaving = true
-    Task {
-      do {
-        try await repo.setPostLiked(isLiked, postID: postID)
-      } catch {
-        isLiked = wasLiked
-        count = previousCount
-      }
-      isSaving = false
-    }
+    .disabled(vm.isSaving)
+    .accessibilityLabel(vm.isLiked ? "Quitar me gusta" : "Me gusta")
+    .task { await vm.load() }
   }
 }
 
 /// Follow / unfollow button for another user's profile. Private accounts get a follow request.
 struct FollowButton: View {
-  let targetUID: String
   let isPrivate: Bool
-  var repo: EngagementRepo = AppRepos.engagement()
   /// Called with the loaded status and after every change.
-  var onStatusChange: ((FollowStatus) -> Void)? = nil
+  let onStatusChange: ((FollowStatus) -> Void)?
 
-  @State private var status: FollowStatus?
-  @State private var isSaving = false
-  @State private var errorMessage: String?
+  @StateObject private var vm: FollowViewModel
+
+  init(
+    targetUID: String,
+    isPrivate: Bool,
+    repo: EngagementRepo = AppRepos.engagement(),
+    onStatusChange: ((FollowStatus) -> Void)? = nil
+  ) {
+    self.isPrivate = isPrivate
+    self.onStatusChange = onStatusChange
+    _vm = StateObject(wrappedValue: FollowViewModel(targetUID: targetUID, repo: repo))
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      Button(action: toggle) {
+      Button {
+        Task { await vm.toggle(isPrivate: isPrivate) }
+      } label: {
         HStack(spacing: 6) {
-          if isSaving {
+          if vm.isSaving {
             ProgressView()
               .controlSize(.small)
           }
-          Text(title)
+          Text(vm.title)
             .font(.subheadline.weight(.semibold))
         }
         .frame(maxWidth: .infinity)
         .frame(height: 40)
-        .foregroundStyle(status == FollowStatus.none ? SwiftUI.Color.black : VinctusTokens.Color.textPrimary)
-        .background(status == FollowStatus.none ? VinctusTokens.Color.accent : VinctusTokens.Color.surface2)
+        .foregroundStyle(vm.status == FollowStatus.none ? SwiftUI.Color.black : VinctusTokens.Color.textPrimary)
+        .background(vm.status == FollowStatus.none ? VinctusTokens.Color.accent : VinctusTokens.Color.surface2)
         .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.sm, style: .continuous))
       }
       .buttonStyle(.plain)
-      .disabled(status == nil || isSaving)
+      .disabled(vm.status == nil || vm.isSaving)
 
-      if let errorMessage {
+      if let errorMessage = vm.errorMessage {
         Text(errorMessage)
           .font(.caption)
           .foregroundStyle(.red)
       }
     }
-    .task(id: targetUID) {
-      status = (try? await repo.followStatus(targetUID: targetUID)) ?? FollowStatus.none
-    }
-    .onChange(of: status) { _, newValue in
+    .task { await vm.load() }
+    .onChange(of: vm.status) { _, newValue in
       if let newValue { onStatusChange?(newValue) }
-    }
-  }
-
-  private var title: String {
-    switch status {
-    case .some(.following):
-      return "Siguiendo"
-    case .some(.requested):
-      return "Solicitud enviada"
-    default:
-      return "Seguir"
-    }
-  }
-
-  private func toggle() {
-    guard let current = status else { return }
-    isSaving = true
-    errorMessage = nil
-    Task {
-      do {
-        if current == FollowStatus.none {
-          status = try await repo.follow(targetUID: targetUID, isPrivate: isPrivate)
-        } else {
-          try await repo.unfollow(targetUID: targetUID, status: current)
-          status = FollowStatus.none
-        }
-      } catch {
-        errorMessage = "No se pudo actualizar. Intenta de nuevo."
-      }
-      isSaving = false
     }
   }
 }

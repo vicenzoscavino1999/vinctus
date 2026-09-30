@@ -33,6 +33,67 @@ final class GroupsListViewModel: ObservableObject {
   }
 }
 
+extension GroupsRepo {
+  /// Joins a public group or asks the owner of a private one, like the web's `handleGroupAction`.
+  /// Returns the new status: `.member` or `.pending`.
+  func joinOrRequest(
+    groupID: String,
+    groupName: String,
+    ownerID: String?,
+    isPrivate: Bool,
+    uid: String
+  ) async throws -> GroupMembershipStatus {
+    if isPrivate {
+      guard let ownerID else { throw GroupsRepoError.privateGroup }
+      try await requestToJoin(groupID: groupID, groupName: groupName, ownerID: ownerID, uid: uid)
+      return .pending
+    }
+    try await joinGroup(groupID: groupID, uid: uid)
+    return .member
+  }
+}
+
+/// The join button of a group card (Discover, search and the groups list).
+@MainActor
+final class GroupCardViewModel: ObservableObject {
+  /// nil while unknown (not loaded yet, signed out, or failed to load).
+  @Published private(set) var status: GroupMembershipStatus?
+  @Published private(set) var isWorking = false
+  @Published private(set) var errorMessage: String?
+
+  private let group: GroupSummary
+  private let repo: GroupsRepo
+
+  init(group: GroupSummary, repo: GroupsRepo) {
+    self.group = group
+    self.repo = repo
+  }
+
+  func loadStatus(uid: String?) async {
+    guard let uid else { return }
+    status = try? await repo.membershipStatus(groupID: group.id, ownerID: group.ownerID, uid: uid)
+  }
+
+  /// Only acts when the user is not in the group yet; leaving happens on the group's screen.
+  func join(uid: String?) async {
+    guard let uid, status == GroupMembershipStatus.none, !isWorking else { return }
+    isWorking = true
+    errorMessage = nil
+    defer { isWorking = false }
+    do {
+      status = try await repo.joinOrRequest(
+        groupID: group.id,
+        groupName: group.name,
+        ownerID: group.ownerID,
+        isPrivate: group.visibility == .private,
+        uid: uid
+      )
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+}
+
 @MainActor
 final class GroupDetailViewModel: ObservableObject {
   @Published private(set) var detail: GroupDetail?
@@ -114,14 +175,13 @@ final class GroupDetailViewModel: ObservableObject {
         try await repo.leaveGroup(groupID: groupID, uid: uid)
         self.membership = GroupMembershipStatus.none
       case .none:
-        if let detail, detail.visibility == .private {
-          guard let ownerID = detail.ownerID else { throw GroupsRepoError.privateGroup }
-          try await repo.requestToJoin(groupID: groupID, groupName: detail.name, ownerID: ownerID, uid: uid)
-          self.membership = .pending
-        } else {
-          try await repo.joinGroup(groupID: groupID, uid: uid)
-          self.membership = .member
-        }
+        self.membership = try await repo.joinOrRequest(
+          groupID: groupID,
+          groupName: detail?.name ?? "",
+          ownerID: detail?.ownerID,
+          isPrivate: detail?.visibility == .private,
+          uid: uid
+        )
       case .owner, .pending:
         break
       }
