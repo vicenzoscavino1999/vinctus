@@ -171,38 +171,24 @@ enum CollectionEditorTarget: Identifiable {
 }
 
 private struct CollectionEditorSheet: View {
-  let target: CollectionEditorTarget
-  let repo: CollectionsRepo
   let onSaved: () -> Void
 
   @Environment(\.dismiss) private var dismiss
-  @State private var name: String
-  @State private var icon: CollectionIcon
-  @State private var isSaving = false
-  @State private var errorMessage: String?
+  @StateObject private var vm: CollectionEditorViewModel
 
   init(target: CollectionEditorTarget, repo: CollectionsRepo, onSaved: @escaping () -> Void) {
-    self.target = target
-    self.repo = repo
     self.onSaved = onSaved
-    switch target {
-    case .new:
-      _name = State(initialValue: "")
-      _icon = State(initialValue: .folder)
-    case let .existing(collection):
-      _name = State(initialValue: collection.name)
-      _icon = State(initialValue: collection.icon)
-    }
+    _vm = StateObject(wrappedValue: CollectionEditorViewModel(target: target, repo: repo))
   }
 
   var body: some View {
     NavigationStack {
       Form {
         Section("Nombre") {
-          TextField("Ej. Libros por leer", text: $name)
+          TextField("Ej. Libros por leer", text: $vm.name)
         }
         Section("Icono") {
-          Picker("Icono", selection: $icon) {
+          Picker("Icono", selection: $vm.icon) {
             ForEach(CollectionIcon.allCases) { icon in
               Label(icon.title, systemImage: icon.systemImage).tag(icon)
             }
@@ -210,45 +196,32 @@ private struct CollectionEditorSheet: View {
           .pickerStyle(.inline)
           .labelsHidden()
         }
-        if let errorMessage {
+        if let errorMessage = vm.errorMessage {
           Section {
             Text(errorMessage)
               .foregroundStyle(.red)
           }
         }
       }
-      .navigationTitle({ if case .new = target { return "Nueva colección" } else { return "Editar colección" } }())
+      .navigationTitle(vm.title)
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancelar") { dismiss() }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Guardar", action: save)
-            .disabled(isSaving || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          Button("Guardar") {
+            Task {
+              if await vm.save() {
+                onSaved()
+                dismiss()
+              }
+            }
+          }
+          .disabled(!vm.canSave)
         }
       }
-      .vinctusLoading(isSaving)
-    }
-  }
-
-  private func save() {
-    isSaving = true
-    errorMessage = nil
-    Task {
-      do {
-        switch target {
-        case .new:
-          try await repo.createCollection(name: name, icon: icon)
-        case let .existing(collection):
-          try await repo.updateCollection(id: collection.id, name: name, icon: icon)
-        }
-        onSaved()
-        dismiss()
-      } catch {
-        errorMessage = (error as? LocalizedError)?.errorDescription ?? "No se pudo guardar."
-      }
-      isSaving = false
+      .vinctusLoading(vm.isSaving)
     }
   }
 }
@@ -261,18 +234,23 @@ struct CollectionDetailView: View {
   let onChange: () -> Void
 
   @Environment(\.openURL) private var openURL
-  @State private var items: [CollectionItem] = []
-  @State private var isLoading = true
-  @State private var errorMessage: String?
+  @StateObject private var vm: CollectionDetailViewModel
   @State private var isAdding = false
   @State private var openedNote: CollectionItem?
 
+  init(collection: UserCollection, repo: CollectionsRepo, onChange: @escaping () -> Void) {
+    self.collection = collection
+    self.repo = repo
+    self.onChange = onChange
+    _vm = StateObject(wrappedValue: CollectionDetailViewModel(collection: collection, repo: repo))
+  }
+
   var body: some View {
     List {
-      if isLoading {
+      if vm.isLoading {
         ProgressView()
           .frame(maxWidth: .infinity)
-      } else if items.isEmpty {
+      } else if vm.items.isEmpty {
         VStack(spacing: 8) {
           Image(systemName: collection.icon.systemImage)
             .font(.system(size: 30))
@@ -287,7 +265,7 @@ struct CollectionDetailView: View {
         .padding(.vertical, 24)
         .listRowBackground(SwiftUI.Color.clear)
       } else {
-        ForEach(items) { item in
+        ForEach(vm.items) { item in
           Button {
             open(item)
           } label: {
@@ -295,11 +273,15 @@ struct CollectionDetailView: View {
           }
           .buttonStyle(.plain)
           .swipeActions {
-            Button("Eliminar", role: .destructive) { delete(item) }
+            Button("Eliminar", role: .destructive) {
+              Task {
+                if await vm.delete(item) { onChange() }
+              }
+            }
           }
         }
       }
-      if let errorMessage {
+      if let errorMessage = vm.errorMessage {
         Text(errorMessage)
           .font(.footnote)
           .foregroundStyle(.red)
@@ -319,7 +301,7 @@ struct CollectionDetailView: View {
     }
     .sheet(isPresented: $isAdding) {
       NewCollectionItemSheet(collection: collection, repo: repo) {
-        Task { await load() }
+        Task { await vm.load() }
         onChange()
       }
     }
@@ -336,8 +318,8 @@ struct CollectionDetailView: View {
       }
       .presentationDetents([.medium, .large])
     }
-    .task { await load() }
-    .refreshable { await load() }
+    .task { await vm.load() }
+    .refreshable { await vm.load() }
   }
 
   private func itemRow(_ item: CollectionItem) -> some View {
@@ -378,46 +360,24 @@ struct CollectionDetailView: View {
     }
   }
 
-  private func load() async {
-    do {
-      items = try await repo.fetchItems(collectionID: collection.id)
-      errorMessage = nil
-    } catch {
-      errorMessage = "No se pudo cargar la colección."
-    }
-    isLoading = false
-  }
-
-  private func delete(_ item: CollectionItem) {
-    let previous = items
-    items.removeAll { $0.id == item.id }
-    Task {
-      do {
-        try await repo.deleteItem(id: item.id, from: collection.id)
-        onChange()
-      } catch {
-        items = previous
-        errorMessage = "No se pudo eliminar."
-      }
-    }
-  }
 }
 
 private struct NewCollectionItemSheet: View {
-  let collection: UserCollection
-  let repo: CollectionsRepo
   let onSaved: () -> Void
 
   @Environment(\.dismiss) private var dismiss
-  @State private var draft = NewCollectionItem()
-  @State private var isSaving = false
-  @State private var errorMessage: String?
+  @StateObject private var vm: NewCollectionItemViewModel
+
+  init(collection: UserCollection, repo: CollectionsRepo, onSaved: @escaping () -> Void) {
+    self.onSaved = onSaved
+    _vm = StateObject(wrappedValue: NewCollectionItemViewModel(collection: collection, repo: repo))
+  }
 
   var body: some View {
     NavigationStack {
       Form {
         Section {
-          Picker("Tipo", selection: $draft.kind) {
+          Picker("Tipo", selection: $vm.draft.kind) {
             ForEach(NewCollectionItem.Kind.allCases) { kind in
               Text(kind.title).tag(kind)
             }
@@ -425,12 +385,12 @@ private struct NewCollectionItemSheet: View {
           .pickerStyle(.segmented)
         }
         Section("Título") {
-          TextField("¿Qué es?", text: $draft.title)
+          TextField("¿Qué es?", text: $vm.draft.title)
         }
-        switch draft.kind {
+        switch vm.draft.kind {
         case .link:
           Section {
-            TextField("https://", text: $draft.url)
+            TextField("https://", text: $vm.draft.url)
               .keyboardType(.URL)
               .textInputAutocapitalization(.never)
               .autocorrectionDisabled()
@@ -441,44 +401,36 @@ private struct NewCollectionItemSheet: View {
           }
         case .note:
           Section("Nota") {
-            TextField("Escribe tu nota", text: $draft.text, axis: .vertical)
+            TextField("Escribe tu nota", text: $vm.draft.text, axis: .vertical)
               .lineLimit(4...10)
           }
         }
-        if let errorMessage {
+        if let errorMessage = vm.errorMessage {
           Section {
             Text(errorMessage)
               .foregroundStyle(.red)
           }
         }
       }
-      .navigationTitle("Añadir a \(collection.name)")
+      .navigationTitle("Añadir a \(vm.collection.name)")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancelar") { dismiss() }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Guardar", action: save)
-            .disabled(isSaving)
+          Button("Guardar") {
+            Task {
+              if await vm.save() {
+                onSaved()
+                dismiss()
+              }
+            }
+          }
+          .disabled(vm.isSaving)
         }
       }
-      .vinctusLoading(isSaving)
-    }
-  }
-
-  private func save() {
-    isSaving = true
-    errorMessage = nil
-    Task {
-      do {
-        try await repo.addItem(draft, to: collection)
-        onSaved()
-        dismiss()
-      } catch {
-        errorMessage = (error as? LocalizedError)?.errorDescription ?? "No se pudo guardar."
-      }
-      isSaving = false
+      .vinctusLoading(vm.isSaving)
     }
   }
 }

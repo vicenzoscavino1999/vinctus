@@ -91,7 +91,7 @@ final class ProfileDataTests: XCTestCase {
       context.fill(CGRect(x: 0, y: 0, width: 3000, height: 1500))
     }
 
-    let data = try XCTUnwrap(EditProfileSheet.jpegData(big))
+    let data = try XCTUnwrap(EditProfileViewModel.jpegData(big))
     let image = try XCTUnwrap(UIImage(data: data))
 
     XCTAssertEqual(image.size.width * image.scale, 1024, accuracy: 1)

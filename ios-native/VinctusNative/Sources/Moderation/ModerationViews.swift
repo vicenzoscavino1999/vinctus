@@ -155,21 +155,19 @@ struct ModerationMenu: View {
 @MainActor
 struct ReportSheet: View {
   let target: ReportTarget
-  let repo: ModerationRepo
 
   @Environment(\.dismiss) private var dismiss
-  @State private var reason: ReportReason = .spam
-  @State private var details = ""
-  @State private var isSubmitting = false
-  @State private var didSubmit = false
-  @State private var errorMessage: String?
+  @StateObject private var vm: ReportViewModel
 
-  private let detailsLimit = 1000
+  init(target: ReportTarget, repo: ModerationRepo) {
+    self.target = target
+    _vm = StateObject(wrappedValue: ReportViewModel(target: target, repo: repo))
+  }
 
   var body: some View {
     NavigationStack {
       Form {
-        if didSubmit {
+        if vm.didSubmit {
           Section {
             Label("Gracias. Revisaremos tu denuncia.", systemImage: "checkmark.shield")
           } footer: {
@@ -177,7 +175,7 @@ struct ReportSheet: View {
           }
         } else {
           Section("Motivo") {
-            Picker("Motivo", selection: $reason) {
+            Picker("Motivo", selection: $vm.reason) {
               ForEach(ReportReason.allCases) { reason in
                 Text(reason.title).tag(reason)
               }
@@ -187,14 +185,14 @@ struct ReportSheet: View {
           }
 
           Section {
-            TextField("Detalles (opcional)", text: $details, axis: .vertical)
+            TextField("Detalles (opcional)", text: $vm.details, axis: .vertical)
               .lineLimit(3...6)
           } footer: {
-            Text("\(detailsLimit - details.count) caracteres restantes")
-              .foregroundStyle(details.count > detailsLimit ? .red : .secondary)
+            Text("\(vm.detailsCharactersLeft) caracteres restantes")
+              .foregroundStyle(vm.detailsCharactersLeft < 0 ? .red : .secondary)
           }
 
-          if let errorMessage {
+          if let errorMessage = vm.errorMessage {
             Section {
               Text(errorMessage)
                 .font(.footnote)
@@ -207,34 +205,20 @@ struct ReportSheet: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button(didSubmit ? "Cerrar" : "Cancelar") {
+          Button(vm.didSubmit ? "Cerrar" : "Cancelar") {
             dismiss()
           }
         }
         ToolbarItem(placement: .confirmationAction) {
-          if !didSubmit {
+          if !vm.didSubmit {
             Button("Enviar") {
-              submit()
+              Task { await vm.submit() }
             }
-            .disabled(isSubmitting || details.count > detailsLimit)
+            .disabled(!vm.canSubmit)
           }
         }
       }
-      .vinctusLoading(isSubmitting)
-    }
-  }
-
-  private func submit() {
-    isSubmitting = true
-    errorMessage = nil
-    Task {
-      do {
-        try await repo.report(target, reason: reason, details: details)
-        didSubmit = true
-      } catch {
-        errorMessage = error.localizedDescription
-      }
-      isSubmitting = false
+      .vinctusLoading(vm.isSubmitting)
     }
   }
 }
@@ -242,14 +226,10 @@ struct ReportSheet: View {
 @MainActor
 struct BlockedUsersView: View {
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
-  @State private var displayNames: [String: String] = [:]
-  @State private var pendingUserID: String?
-  @State private var errorMessage: String?
-
-  private let profileRepo: ProfileRepo
+  @StateObject private var vm: BlockedUsersViewModel
 
   init(profileRepo: ProfileRepo = AppRepos.profile()) {
-    self.profileRepo = profileRepo
+    _vm = StateObject(wrappedValue: BlockedUsersViewModel(profileRepo: profileRepo))
   }
 
   var body: some View {
@@ -260,18 +240,18 @@ struct BlockedUsersView: View {
       } else {
         ForEach(blockedUsers.blockedUserIDs.sorted(), id: \.self) { userID in
           HStack {
-            Text(displayNames[userID] ?? "Usuario")
+            Text(vm.displayName(for: userID))
             Spacer()
             Button("Desbloquear") {
-              unblock(userID)
+              Task { await vm.unblock(userID, in: blockedUsers) }
             }
             .buttonStyle(.borderless)
-            .disabled(pendingUserID != nil)
+            .disabled(vm.pendingUserID != nil)
           }
         }
       }
 
-      if let errorMessage {
+      if let errorMessage = vm.errorMessage {
         Text(errorMessage)
           .font(.footnote)
           .foregroundStyle(.red)
@@ -279,32 +259,10 @@ struct BlockedUsersView: View {
     }
     .navigationTitle("Usuarios bloqueados")
     .task {
-      await reload()
+      await vm.reload(blockedUsers)
     }
     .refreshable {
-      await reload()
-    }
-  }
-
-  private func reload() async {
-    await blockedUsers.refresh()
-    for userID in blockedUsers.blockedUserIDs where displayNames[userID] == nil {
-      if let profile = try? await profileRepo.fetchUserProfile(uid: userID) {
-        displayNames[userID] = profile.displayName
-      }
-    }
-  }
-
-  private func unblock(_ userID: String) {
-    pendingUserID = userID
-    errorMessage = nil
-    Task {
-      do {
-        try await blockedUsers.unblock(userID)
-      } catch {
-        errorMessage = error.localizedDescription
-      }
-      pendingUserID = nil
+      await vm.reload(blockedUsers)
     }
   }
 }

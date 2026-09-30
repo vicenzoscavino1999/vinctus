@@ -6,17 +6,10 @@ struct ProfileView: View {
   @StateObject private var vm: ProfileViewModel
   @EnvironmentObject private var authVM: AuthViewModel
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
+  @StateObject private var connection: ProfileConnectionViewModel
   @State private var isEditing = false
-  @State private var openedConversationID: String?
-  @State private var isOpeningConversation = false
-  @State private var messageError: String?
   @State private var followStatus: FollowStatus?
   @State private var followList: FollowListKind?
-  /// The person on this profile asked to follow the signed-in user.
-  @State private var hasIncomingRequest = false
-  @State private var isAnsweringRequest = false
-  /// Pending follow requests to the signed-in user, shown on their own profile.
-  @State private var incomingRequestCount = 0
   @State private var reloadToken = 0
 
   private let repo: ProfileRepo
@@ -34,6 +27,11 @@ struct ProfileView: View {
     self.chatRepo = chatRepo
     self.contentRepo = contentRepo
     _vm = StateObject(wrappedValue: ProfileViewModel(repo: repo))
+    _connection = StateObject(wrappedValue: ProfileConnectionViewModel(
+      userID: userID,
+      chatRepo: chatRepo,
+      contentRepo: contentRepo
+    ))
   }
 
   private var isOwnProfile: Bool { userID == authVM.currentUserID }
@@ -91,7 +89,7 @@ struct ProfileView: View {
         }
       }
     }
-    .navigationDestination(item: $openedConversationID) { conversationID in
+    .navigationDestination(item: $connection.openedConversationID) { conversationID in
       ConversationView(
         repo: chatRepo,
         profileRepo: repo,
@@ -127,11 +125,7 @@ struct ProfileView: View {
   private func reload() async {
     await vm.load(userID: userID)
     reloadToken += 1
-    if isOwnProfile {
-      incomingRequestCount = (try? await contentRepo.fetchIncomingFollowRequests().count) ?? 0
-    } else {
-      hasIncomingRequest = (try? await contentRepo.hasPendingFollowRequest(from: userID)) ?? false
-    }
+    await connection.loadRequests(isOwnProfile: isOwnProfile)
   }
 
   // MARK: Header
@@ -243,12 +237,12 @@ struct ProfileView: View {
         VButton("Editar perfil", variant: .secondary) {
           isEditing = true
         }
-        if incomingRequestCount > 0 {
+        if connection.incomingRequestCount > 0 {
           Button { followList = .followers } label: {
             Label(
-              incomingRequestCount == 1
+              connection.incomingRequestCount == 1
                 ? "1 solicitud de seguimiento"
-                : "\(incomingRequestCount) solicitudes de seguimiento",
+                : "\(connection.incomingRequestCount) solicitudes de seguimiento",
               systemImage: "person.badge.clock"
             )
             .font(.subheadline.weight(.semibold))
@@ -263,7 +257,7 @@ struct ProfileView: View {
       }
     } else if !blockedUsers.isBlocked(userID) {
       VStack(alignment: .leading, spacing: 6) {
-        if hasIncomingRequest {
+        if connection.hasIncomingRequest {
           incomingRequestBanner(profile)
         }
 
@@ -274,9 +268,11 @@ struct ProfileView: View {
             onStatusChange: { followStatus = $0 }
           )
 
-          Button(action: openConversation) {
+          Button {
+            Task { await connection.openConversation() }
+          } label: {
             HStack(spacing: 6) {
-              if isOpeningConversation {
+              if connection.isOpeningConversation {
                 ProgressView()
                   .controlSize(.small)
               } else {
@@ -292,10 +288,10 @@ struct ProfileView: View {
             .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.sm, style: .continuous))
           }
           .buttonStyle(.plain)
-          .disabled(isOpeningConversation)
+          .disabled(connection.isOpeningConversation)
         }
 
-        if let messageError {
+        if let messageError = connection.messageError {
           Text(messageError)
             .font(.caption)
             .foregroundStyle(.red)
@@ -314,10 +310,14 @@ struct ProfileView: View {
       Text("\(profile.displayName) quiere seguirte")
         .font(.subheadline.weight(.semibold))
       HStack(spacing: VinctusTokens.Spacing.sm) {
-        VButton("Aceptar") { answerRequest(accept: true) }
-        VButton("Rechazar", variant: .secondary) { answerRequest(accept: false) }
+        VButton("Aceptar") {
+          Task { await connection.answerRequest(accept: true) }
+        }
+        VButton("Rechazar", variant: .secondary) {
+          Task { await connection.answerRequest(accept: false) }
+        }
       }
-      .disabled(isAnsweringRequest)
+      .disabled(connection.isAnsweringRequest)
     }
     .padding(VinctusTokens.Spacing.md)
     .background(VinctusTokens.Color.surface)
@@ -417,34 +417,6 @@ struct ProfileView: View {
             .foregroundStyle(VinctusTokens.Color.textMuted)
         }
       }
-    }
-  }
-
-  // MARK: Actions
-
-  private func openConversation() {
-    isOpeningConversation = true
-    messageError = nil
-    Task {
-      do {
-        openedConversationID = try await chatRepo.openDirectConversation(with: userID)
-      } catch {
-        messageError = (error as? LocalizedError)?.errorDescription ?? "No se pudo abrir la conversación."
-      }
-      isOpeningConversation = false
-    }
-  }
-
-  private func answerRequest(accept: Bool) {
-    isAnsweringRequest = true
-    Task {
-      do {
-        try await contentRepo.answerFollowRequest(from: userID, accept: accept)
-        hasIncomingRequest = false
-      } catch {
-        messageError = "No se pudo responder la solicitud."
-      }
-      isAnsweringRequest = false
     }
   }
 }
