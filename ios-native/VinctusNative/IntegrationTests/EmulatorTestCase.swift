@@ -36,6 +36,31 @@ enum Emulator {
 
     Storage.storage().useEmulator(withHost: "127.0.0.1", port: 9199)
   }
+
+  private static var isFirestoreReady = false
+  /// `FirestoreErrorCode.unavailable`: the SDK couldn't reach the emulator ("client is offline").
+  private static let unavailableCode = 14
+
+  /// The Firestore emulator starts cold, and a first read that arrives too early fails with
+  /// "client is offline". Waits until it answers, once per run. Any answer counts, including the
+  /// rules denying the probe, which is what happens: nothing may read `emulatorProbe`.
+  static func waitForFirestore() async throws {
+    guard !isFirestoreReady else { return }
+    let probe = Firestore.firestore().collection("emulatorProbe").document("probe")
+    for _ in 0..<30 {
+      do {
+        _ = try await probe.getDocument(source: .server)
+        isFirestoreReady = true
+        return
+      } catch let error as NSError where error.domain == FirestoreErrorDomain && error.code == unavailableCode {
+        try await Task.sleep(nanoseconds: 2_000_000_000)
+      } catch {
+        isFirestoreReady = true
+        return
+      }
+    }
+    XCTFail("The Firestore emulator didn't answer in 60 seconds")
+  }
 }
 
 struct TestUser {
@@ -54,6 +79,7 @@ class EmulatorTestCase: XCTestCase {
     try await super.setUp()
     Emulator.configure()
     try Auth.auth().signOut()
+    try await Emulator.waitForFirestore()
   }
 
   override func tearDown() async throws {
