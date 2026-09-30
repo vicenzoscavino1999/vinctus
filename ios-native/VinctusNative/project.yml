@@ -94,6 +94,10 @@ targets:
     platform: iOS
     sources:
       - path: IntegrationTests
+    settings:
+      base:
+        # CI signs this bundle (the keychain needs it), and signing needs an Info.plist.
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: VinctusNative
 
