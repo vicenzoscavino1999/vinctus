@@ -149,9 +149,9 @@ jobs:
               PROVISIONING_PROFILE_SPECIFIER= \
               -quiet"
 
-      # `-quiet` hides why a test failed; the result bundle has it.
-      - name: Show integration test failures
-        if: failure()
+      # `-quiet` hides the test results and why a test failed; the result bundle has them.
+      - name: Integration test results
+        if: always()
         run: |
           xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/integration.xcresult" --compact \
             | python3 -c '
