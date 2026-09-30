@@ -1,3 +1,4 @@
+import FirebaseAuth
 import XCTest
 @testable import VinctusNative
 
@@ -63,5 +64,72 @@ final class ReportFieldsTests: XCTestCase {
 
     XCTAssertTrue(fits.fitsRules)
     XCTAssertFalse(tooLong.fitsRules)
+  }
+}
+
+final class AIReportFieldsTests: XCTestCase {
+  func testAIReportsPointAtTheAssistantAndFitTheRules() {
+    let fields = ReportFields(
+      target: .aiResponse(contextID: "chat", excerpt: String(repeating: "x", count: 5000)),
+      details: "ofensivo"
+    )
+
+    XCTAssertEqual(fields.reportedUID, ReportTarget.aiReportedUID)
+    XCTAssertEqual(fields.conversationID, "ai_chat")
+    XCTAssertTrue(fields.details?.hasSuffix("| Motivo: ofensivo") ?? false)
+    XCTAssertTrue(fields.fitsRules)
+  }
+}
+
+/// The chat API rejects histories over 20 messages or 12,000 characters.
+final class AIChatHistoryTests: XCTestCase {
+  private func message(_ role: String, _ text: String) -> AIChatMessage {
+    AIChatMessage(role: role, parts: [.init(text: text)])
+  }
+
+  func testKeepsTheNewestTwentyMessagesStartingWithTheUser() {
+    let history = (0..<25).map { index in
+      message(index.isMultiple(of: 2) ? "user" : "model", "m\(index)")
+    }
+
+    let trimmed = FirebaseAIRepo.trimmedHistory(history)
+
+    XCTAssertLessThanOrEqual(trimmed.count, 20)
+    XCTAssertEqual(trimmed.first?.role, "user")
+    XCTAssertEqual(trimmed.last?.text, "m24")
+  }
+
+  func testDropsOldMessagesOverTheCharacterLimit() {
+    let long = String(repeating: "a", count: 5000)
+    let history = [
+      message("user", long), message("model", long), message("user", long), message("model", "ok"),
+    ]
+
+    let trimmed = FirebaseAIRepo.trimmedHistory(history)
+
+    XCTAssertLessThanOrEqual(trimmed.reduce(0) { $0 + $1.text.count }, 12_000)
+    XCTAssertEqual(trimmed.first?.role, "user")
+    XCTAssertEqual(trimmed.last?.text, "ok")
+  }
+}
+
+@MainActor
+final class PasswordResetTests: XCTestCase {
+  func testEmailCheck() {
+    XCTAssertTrue(AuthViewModel.looksLikeEmail("ana@vinctus.app"))
+    XCTAssertFalse(AuthViewModel.looksLikeEmail(""))
+    XCTAssertFalse(AuthViewModel.looksLikeEmail("ana"))
+    XCTAssertFalse(AuthViewModel.looksLikeEmail("ana@vinctus"))
+    XCTAssertFalse(AuthViewModel.looksLikeEmail("ana @vinctus.app"))
+  }
+
+  func testFirebaseErrorsAreShownInSpanish() {
+    func error(_ code: AuthErrorCode) -> NSError {
+      NSError(domain: AuthErrorDomain, code: code.rawValue)
+    }
+
+    XCTAssertEqual(AuthViewModel.message(for: error(.invalidEmail)), "Escribe un email válido.")
+    XCTAssertEqual(AuthViewModel.message(for: error(.wrongPassword)), "Email o contraseña incorrectos.")
+    XCTAssertTrue(AuthViewModel.message(for: error(.userDisabled)).hasPrefix("Tu cuenta fue suspendida"))
   }
 }

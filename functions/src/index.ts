@@ -14,7 +14,8 @@
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
-import { moderateUserText } from './moderation';
+import { messageReportKey, moderateUserText } from './moderation';
+import { clearLastMessagePreview } from './moderationActions';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -85,13 +86,15 @@ async function claimModerationEvent(eventId: string): Promise<boolean> {
 }
 
 async function upsertAutoModerationReport(input: {
-  source: 'post' | 'comment';
+  source: 'post' | 'comment' | 'profile' | 'group' | 'message';
   sourceId: string;
-  postId: string;
+  postId: string | null;
   authorId: string;
   matchedTerms: string[];
+  conversationId?: string | null;
+  reportId?: string;
 }): Promise<void> {
-  const reportId = `auto_${input.source}_${input.sourceId}`;
+  const reportId = input.reportId ?? `auto_${input.source}_${input.sourceId}`;
   const details = `Auto moderation flagged blocked terms: ${input.matchedTerms.join(', ')}`;
 
   await db.doc(`reports/${reportId}`).set(
@@ -100,7 +103,7 @@ async function upsertAutoModerationReport(input: {
       reportedUid: input.authorId || 'unknown_user',
       reason: 'other',
       details,
-      conversationId: null,
+      conversationId: input.conversationId ?? null,
       status: 'open',
       source: input.source,
       sourceId: input.sourceId,
@@ -192,6 +195,58 @@ async function moderateCommentContent(input: {
     postId,
     commentId,
     authorId,
+    matchedTerms: moderation.matchedTerms,
+  });
+}
+
+const stringFields = (data: Record<string, unknown>, fields: readonly string[]) =>
+  fields.map((field) => (typeof data[field] === 'string' ? (data[field] as string) : null));
+
+const fieldsChanged = (
+  before: Record<string, unknown> | null,
+  after: Record<string, unknown>,
+  fields: readonly string[],
+) => !before || fields.some((field) => before[field] !== after[field]);
+
+const PROFILE_MODERATED_FIELDS = ['displayName', 'username', 'bio'] as const;
+const GROUP_MODERATED_FIELDS = ['name', 'description'] as const;
+
+/**
+ * Profiles and groups can't be removed automatically like posts, so blocked terms in their
+ * texts open a report for moderators instead. Each offending edit gets its own report, so a
+ * repeat after a moderator closed the previous one reaches the queue again.
+ */
+async function flagProfileOrGroupText(input: {
+  source: 'profile' | 'group';
+  sourceId: string;
+  ownerId: string;
+  texts: Array<string | null>;
+  conversationId: string | null;
+  eventId: string;
+}): Promise<void> {
+  const moderation = moderateUserText(input.texts);
+  if (!moderation.blocked) {
+    return;
+  }
+
+  const claimed = await claimModerationEvent(input.eventId);
+  if (!claimed) {
+    return;
+  }
+
+  await upsertAutoModerationReport({
+    source: input.source,
+    sourceId: input.sourceId,
+    postId: null,
+    authorId: input.ownerId,
+    matchedTerms: moderation.matchedTerms,
+    conversationId: input.conversationId,
+    reportId: `auto_${input.source}_${input.sourceId}_${input.eventId}`,
+  });
+
+  functions.logger.warn('Profile or group text flagged by auto moderation', {
+    source: input.source,
+    sourceId: input.sourceId,
     matchedTerms: moderation.matchedTerms,
   });
 }
@@ -1307,12 +1362,133 @@ export const onPostCommentCreatedModeration = functions.firestore
     }
   });
 
+/**
+ * Flag profile names and bios that use blocked terms.
+ * Trigger: onWrite users/{uid}
+ */
+export const onUserProfileWrittenModeration = functions.firestore
+  .document('users/{uid}')
+  .onWrite(async (change, context) => {
+    if (!change.after.exists) {
+      return;
+    }
+    const { uid } = context.params;
+    const before = change.before.exists ? change.before.data() || {} : null;
+    const after = change.after.data() || {};
+    if (!fieldsChanged(before, after, PROFILE_MODERATED_FIELDS)) {
+      return;
+    }
+
+    try {
+      await flagProfileOrGroupText({
+        source: 'profile',
+        sourceId: uid,
+        ownerId: uid,
+        texts: stringFields(after, PROFILE_MODERATED_FIELDS),
+        conversationId: null,
+        eventId: context.eventId,
+      });
+    } catch (error) {
+      functions.logger.error('Failed to moderate profile text', {
+        uid,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+/**
+ * Flag group names and descriptions that use blocked terms.
+ * Trigger: onWrite groups/{groupId}
+ */
+export const onGroupWrittenModeration = functions.firestore
+  .document('groups/{groupId}')
+  .onWrite(async (change, context) => {
+    if (!change.after.exists) {
+      return;
+    }
+    const { groupId } = context.params;
+    const before = change.before.exists ? change.before.data() || {} : null;
+    const after = change.after.data() || {};
+    if (!fieldsChanged(before, after, GROUP_MODERATED_FIELDS)) {
+      return;
+    }
+
+    try {
+      await flagProfileOrGroupText({
+        source: 'group',
+        sourceId: groupId,
+        ownerId: typeof after.ownerId === 'string' ? after.ownerId : 'unknown_user',
+        texts: stringFields(after, GROUP_MODERATED_FIELDS),
+        conversationId: `grp_${groupId}`,
+        eventId: context.eventId,
+      });
+    } catch (error) {
+      functions.logger.error('Failed to moderate group text', {
+        groupId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+/**
+ * Remove chat messages that use blocked terms, like posts and comments, and open a report.
+ * Trigger: onCreate conversations/{conversationId}/messages/{messageId}
+ */
+export const onMessageCreatedModeration = functions.firestore
+  .document('conversations/{conversationId}/messages/{messageId}')
+  .onCreate(async (snap, context) => {
+    const { conversationId, messageId } = context.params;
+    const data = snap.data() || {};
+    const moderation = moderateUserText(stringFields(data, ['text']));
+    if (!moderation.blocked) {
+      return;
+    }
+
+    try {
+      const claimed = await claimModerationEvent(context.eventId);
+      if (!claimed) {
+        return;
+      }
+
+      await upsertAutoModerationReport({
+        source: 'message',
+        sourceId: `${conversationId}_${messageId}`,
+        postId: null,
+        authorId: typeof data.senderId === 'string' ? data.senderId : 'unknown_user',
+        matchedTerms: moderation.matchedTerms,
+        conversationId: messageReportKey(conversationId, messageId),
+      });
+
+      await snap.ref.delete();
+      await clearLastMessagePreview(db, conversationId, data);
+
+      functions.logger.warn('Message removed by auto moderation', {
+        conversationId,
+        messageId,
+        matchedTerms: moderation.matchedTerms,
+      });
+    } catch (error) {
+      functions.logger.error('Failed to moderate message', {
+        conversationId,
+        messageId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
 // ==========================================================
 // TRUST & SAFETY - REPORT QUEUE
 // ==========================================================
 
 type ReportQueuePriority = 'low' | 'medium' | 'high';
-type ReportQueueTargetType = 'user' | 'group' | 'post' | 'comment' | 'unknown';
+type ReportQueueTargetType =
+  | 'user'
+  | 'group'
+  | 'post'
+  | 'comment'
+  | 'message'
+  | 'story'
+  | 'unknown';
 
 function inferQueuePriority(reason: unknown): ReportQueuePriority {
   if (reason === 'abuse' || reason === 'harassment') return 'high';
@@ -1323,6 +1499,12 @@ function inferQueuePriority(reason: unknown): ReportQueuePriority {
 function inferReportTargetType(conversationId: unknown): ReportQueueTargetType {
   if (typeof conversationId !== 'string' || conversationId.length === 0) {
     return 'unknown';
+  }
+  if (conversationId.startsWith('msg|')) {
+    return 'message';
+  }
+  if (conversationId.startsWith('story_')) {
+    return 'story';
   }
   if (conversationId.startsWith('post_') && conversationId.includes('_comment_')) {
     return 'comment';
@@ -1351,7 +1533,8 @@ export const onReportCreatedQueue = functions.firestore
     const details = typeof data.details === 'string' ? data.details : null;
     const conversationId = typeof data.conversationId === 'string' ? data.conversationId : null;
     const status = typeof data.status === 'string' ? data.status : 'open';
-    const targetType = inferReportTargetType(conversationId);
+    const targetType: ReportQueueTargetType =
+      data.source === 'profile' ? 'user' : inferReportTargetType(conversationId);
     const priority = inferQueuePriority(reason);
 
     try {
@@ -1699,6 +1882,12 @@ export const revokeUserSessions = functions.https.onCall(async (_data, context) 
   await admin.auth().revokeRefreshTokens(uid);
   return { ok: true };
 });
+
+// ==========================================================
+// TRUST & SAFETY - MODERATOR ACTIONS (Callable)
+// ==========================================================
+
+export { moderationTakeAction } from './moderationActions';
 
 // ==========================================================
 // ARENA AI (Callable)

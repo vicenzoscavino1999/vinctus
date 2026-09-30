@@ -1,0 +1,133 @@
+name: iOS screenshots
+
+# Runs the native app in an iPhone simulator on a GitHub-hosted Mac and pushes screenshots to the
+# `ios-screenshots` branch, so the UI can be checked without a local Mac.
+
+on:
+  push:
+    paths:
+      - 'ios-native/**'
+      - '!ios-native/**/*.md'
+      - '.github/workflows/ios-screenshots.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ios-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  screenshots:
+    name: ios-screenshots
+    runs-on: macos-26
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: ios-native/VinctusNative
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - uses: actions/cache@v4
+        with:
+          path: ios-native/VinctusNative/.spm
+          key: spm-${{ runner.os }}-${{ hashFiles('ios-native/VinctusNative/VinctusNative.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Build for the simulator
+        run: |
+          xcodebuild build \
+            -project VinctusNative.xcodeproj \
+            -scheme VinctusNative-Prod \
+            -configuration ReleaseProd \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
+            -clonedSourcePackagesDirPath .spm \
+            CODE_SIGNING_ALLOWED=NO \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) SCREENSHOTS' \
+            -quiet
+
+      - name: Take screenshots
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          print(next(d["udid"] for runtime, ds in devices.items() if "iOS" in runtime for d in ds if d["name"].startswith("iPhone")))
+          ')
+          xcrun simctl boot "$DEVICE_ID"
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcrun simctl status_bar "$DEVICE_ID" override --time 9:41 --batteryLevel 100 --cellularBars 4
+          xcrun simctl install "$DEVICE_ID" build/Build/Products/ReleaseProd-iphonesimulator/VinctusNative.app
+          mkdir -p "$RUNNER_TEMP/shots"
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social
+          sleep 8
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/01-login.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusShowTerms
+          sleep 8
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/02-terms.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusShowPasswordReset
+          sleep 8
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/03-password-reset.png"
+          # Signed-in screens with sample data (App/DemoData.swift).
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo
+          sleep 10
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/04-discover.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab messages
+          sleep 8
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/05-messages.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab messages -VinctusOpenChat dm_me_u2
+          sleep 8
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/06-chat.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab profile
+          sleep 8
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/07-profile.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab feed
+          sleep 8
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/09-feed-stories.png"
+          for section in collections categories posts; do
+            xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+            xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab profile -VinctusScrollTo "$section"
+            sleep 9
+            xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/08-profile-$section.png"
+          done
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenGroup g1
+          sleep 9
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/10-group.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab search
+          sleep 9
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/11-search-groups.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab feed -VinctusOpenStory shorts
+          sleep 14
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/12-story-short.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenGroup g1 -VinctusEditGroup 1
+          sleep 10
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/13-group-edit.png"
+
+      - name: Push screenshots to the ios-screenshots branch
+        working-directory: ${{ runner.temp }}/shots
+        run: |
+          git init -q -b ios-screenshots
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          echo "Screenshots of ${GITHUB_SHA} (${GITHUB_REF_NAME})" > README.md
+          git add -A
+          git commit -q -m "Screenshots of ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" ios-screenshots

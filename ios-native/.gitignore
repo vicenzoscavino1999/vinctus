@@ -12,3 +12,6 @@ xcuserdata
 
 # Firebase config (iOS)
 GoogleService-Info*.plist
+
+# SwiftPM checkouts used by CI (-clonedSourcePackagesDirPath)
+.spm

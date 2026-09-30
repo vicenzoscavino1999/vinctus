@@ -1,0 +1,79 @@
+name: iOS native
+
+# Builds and tests the SwiftUI app (ios-native/VinctusNative) on a GitHub-hosted Mac,
+# so Swift changes are compiled even when no local Mac is available.
+
+on:
+  push:
+    paths:
+      - 'ios-native/**'
+      - '!ios-native/**/*.md'
+      - '.github/workflows/ios-native.yml'
+  pull_request:
+    paths:
+      - 'ios-native/**'
+      - '!ios-native/**/*.md'
+      - '.github/workflows/ios-native.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ios-native-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ios-native
+    runs-on: macos-26
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: ios-native/VinctusNative
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: |
+          xcodegen generate
+          # Drift between project.yml and the committed project. It is harmless (every setup runs
+          # `xcodegen generate` first, see GUIA_APP_STORE.md); the stat shows when to refresh it.
+          # Not committed back automatically: bot commits leave a PR's checks waiting for approval.
+          git diff --stat -- VinctusNative.xcodeproj
+
+      - uses: actions/cache@v4
+        with:
+          path: ios-native/VinctusNative/.spm
+          key: spm-${{ runner.os }}-${{ hashFiles('ios-native/VinctusNative/VinctusNative.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      # Same configuration as the App Store archive (ReleaseProd), so DEBUG-only code is excluded.
+      - name: Build (ReleaseProd)
+        run: |
+          xcodebuild build \
+            -project VinctusNative.xcodeproj \
+            -scheme VinctusNative-Prod \
+            -configuration ReleaseProd \
+            -destination 'generic/platform=iOS Simulator' \
+            -clonedSourcePackagesDirPath .spm \
+            CODE_SIGNING_ALLOWED=NO \
+            -quiet
+
+      - name: Unit tests
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          print(next(d["udid"] for runtime, ds in devices.items() if "iOS" in runtime for d in ds if d["name"].startswith("iPhone")))
+          ')
+          xcodebuild test \
+            -project VinctusNative.xcodeproj \
+            -scheme VinctusNative-Dev \
+            -destination "id=$DEVICE_ID" \
+            -clonedSourcePackagesDirPath .spm \
+            CODE_SIGNING_ALLOWED=NO \
+            -quiet

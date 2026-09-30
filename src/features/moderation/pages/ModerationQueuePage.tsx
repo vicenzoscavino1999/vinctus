@@ -3,9 +3,11 @@ import { AlertTriangle, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
 import {
+  applyModerationAction,
   getModerationQueue,
   isCurrentUserAppAdmin,
   updateModerationQueueStatus,
+  type ModerationEnforcementAction,
   type ModerationQueueItemRead,
   type ModerationQueueStatus,
   type PaginatedResultModel,
@@ -23,6 +25,21 @@ const priorityClass: Record<string, string> = {
   high: 'border-red-500/50 text-red-200',
   medium: 'border-amber-500/40 text-amber-200',
   low: 'border-sky-500/40 text-sky-200',
+};
+
+// Report targets that aren't accounts (auto-moderation, AI replies), so there's no one to suspend.
+const NON_USER_IDS = new Set(['system_moderation', 'unknown_user', 'ai_assistant']);
+
+const enforcementConfirm: Record<ModerationEnforcementAction, string> = {
+  remove_content: 'Eliminar el contenido denunciado? Esta accion no se puede deshacer.',
+  suspend_user: 'Suspender la cuenta denunciada? No podra volver a iniciar sesion.',
+  restore_user: 'Reactivar la cuenta suspendida?',
+};
+
+const enforcementToast: Record<ModerationEnforcementAction, string> = {
+  remove_content: 'Contenido eliminado.',
+  suspend_user: 'Cuenta suspendida.',
+  restore_user: 'Cuenta reactivada.',
 };
 
 const statusClass: Record<ModerationQueueStatus, string> = {
@@ -157,6 +174,45 @@ const ModerationQueuePage = () => {
     }
   };
 
+  const handleEnforcement = async (
+    item: ModerationQueueItemRead,
+    action: ModerationEnforcementAction,
+  ) => {
+    if (!user) return;
+    if (!window.confirm(enforcementConfirm[action])) return;
+    setUpdatingItemId(item.id);
+    try {
+      const note = reviewNotes[item.id]?.trim() || null;
+      const result = await applyModerationAction({ itemId: item.id, action, reviewNote: note });
+
+      setItems((prev) =>
+        prev.map((entry) =>
+          entry.id === item.id
+            ? {
+                ...entry,
+                status: result.status,
+                reviewAction: result.reviewAction,
+                reviewNote: note,
+                reviewedBy: user.uid,
+                reviewedAt: new Date(),
+                updatedAt: new Date(),
+              }
+            : entry,
+        ),
+      );
+      showToast(enforcementToast[action], 'success');
+    } catch (actionError) {
+      console.error('Error applying moderation action:', actionError);
+      const message =
+        actionError instanceof Error && actionError.message
+          ? actionError.message
+          : 'No se pudo aplicar la accion.';
+      showToast(message, 'error');
+    } finally {
+      setUpdatingItemId(null);
+    }
+  };
+
   if (!user) {
     return (
       <div className="max-w-4xl mx-auto pt-10 text-center text-neutral-500">
@@ -251,6 +307,9 @@ const ModerationQueuePage = () => {
                     Reportado {createdAtLabel} · reportId: {item.reportId}
                   </p>
                   {item.details && <p className="text-sm text-neutral-300">{item.details}</p>}
+                  {item.reviewAction && (
+                    <p className="text-xs text-neutral-500">Ultima accion: {item.reviewAction}</p>
+                  )}
                 </div>
 
                 <textarea
@@ -300,6 +359,43 @@ const ModerationQueuePage = () => {
                       Guardando...
                     </span>
                   )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {(item.targetType === 'post' ||
+                    item.targetType === 'comment' ||
+                    item.targetType === 'message' ||
+                    item.targetType === 'story') && (
+                    <button
+                      type="button"
+                      onClick={() => void handleEnforcement(item, 'remove_content')}
+                      disabled={isUpdating}
+                      className="px-3 py-1.5 rounded-full text-xs uppercase tracking-widest border border-red-500/50 text-red-200 hover:text-white hover:border-red-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      Eliminar contenido
+                    </button>
+                  )}
+                  {item.reportedUid &&
+                    !NON_USER_IDS.has(item.reportedUid) &&
+                    (item.reviewAction === 'user_suspended' ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleEnforcement(item, 'restore_user')}
+                        disabled={isUpdating}
+                        className="px-3 py-1.5 rounded-full text-xs uppercase tracking-widest border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        Reactivar usuario
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void handleEnforcement(item, 'suspend_user')}
+                        disabled={isUpdating}
+                        className="px-3 py-1.5 rounded-full text-xs uppercase tracking-widest border border-red-500/50 text-red-200 hover:text-white hover:border-red-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        Suspender usuario
+                      </button>
+                    ))}
                 </div>
 
                 {item.status === 'pending' && (
