@@ -88,6 +88,8 @@ jobs:
   # Runs the app's Firebase repos (ios-native/VinctusNative/IntegrationTests) against the Auth,
   # Firestore and Storage emulators loaded with this repo's firestore.rules and storage.rules, so
   # a write the rules reject fails here instead of in production.
+  # Unlike the build job, the app is signed ("Sign to Run Locally", no team): Firebase Auth keeps
+  # the signed-in user in the keychain, and an unsigned app gets errSecMissingEntitlement (-34018).
   integration:
     name: ios-native-integration
     runs-on: macos-26
@@ -141,7 +143,10 @@ jobs:
               -test-timeouts-enabled YES \
               -default-test-execution-time-allowance 180 \
               -resultBundlePath $RUNNER_TEMP/integration.xcresult \
-              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGN_STYLE=Manual \
+              CODE_SIGN_IDENTITY=- \
+              DEVELOPMENT_TEAM= \
+              PROVISIONING_PROFILE_SPECIFIER= \
               -quiet"
 
       # `-quiet` hides why a test failed; the result bundle has it.
