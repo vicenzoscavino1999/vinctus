@@ -1,10 +1,7 @@
 import AuthenticationServices
-import CryptoKit
 import FirebaseCore
 import Foundation
-import Security
 import SwiftUI
-import UIKit
 
 struct AuthGateView: View {
   @EnvironmentObject private var authVM: AuthViewModel
@@ -317,44 +314,21 @@ struct AuthGateView: View {
 
   private func signInWithGoogle() {
     AppLog.auth.info("signIn.google.tap")
-    guard let presentingViewController = topViewControllerForGoogleSignIn() else {
+    guard let presentingViewController = SignInPresenter.topViewController() else {
       authVM.errorMessage = "No se pudo abrir el inicio de sesión con Google. Intenta de nuevo."
       return
     }
     authVM.signInWithGoogle(presentingViewController: presentingViewController)
   }
 
-  private func topViewControllerForGoogleSignIn() -> UIViewController? {
-    let scenes = UIApplication.shared.connectedScenes
-      .compactMap { $0 as? UIWindowScene }
-      .filter { $0.activationState == .foregroundActive }
-
-    for scene in scenes {
-      guard let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
-        continue
-      }
-      return topMostPresentedViewController(from: root)
-    }
-
-    return nil
-  }
-
-  private func topMostPresentedViewController(from root: UIViewController) -> UIViewController {
-    var current = root
-    while let presented = current.presentedViewController {
-      current = presented
-    }
-    return current
-  }
-
   private func configureAppleSignInRequest(_ request: ASAuthorizationAppleIDRequest) {
     authVM.errorMessage = nil
     authVM.infoMessage = nil
     AppLog.auth.info("signIn.apple.request.start")
-    let nonce = randomNonceString()
+    let nonce = AppleSignInNonce.random()
     appleRawNonce = nonce
     request.requestedScopes = [.fullName, .email]
-    request.nonce = sha256(nonce)
+    request.nonce = AppleSignInNonce.sha256(nonce)
   }
 
   private func handleAppleSignInCompletion(_ result: Result<ASAuthorization, Error>) {
@@ -393,221 +367,6 @@ struct AuthGateView: View {
       }
       AppLog.auth.error("signIn.apple.failed errorType=\(AppLog.errorType(error), privacy: .public)")
       authVM.errorMessage = error.localizedDescription
-    }
-  }
-
-  private func randomNonceString(length: Int = 32) -> String {
-    precondition(length > 0)
-
-    let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
-    var result = ""
-    var remainingLength = length
-
-    while remainingLength > 0 {
-      var randoms = [UInt8](repeating: 0, count: 16)
-      let errorCode = SecRandomCopyBytes(kSecRandomDefault, randoms.count, &randoms)
-      if errorCode != errSecSuccess {
-        let fallback = UUID().uuidString.replacingOccurrences(of: "-", with: "")
-        return String(fallback.prefix(length))
-      }
-
-      randoms.forEach { random in
-        if remainingLength == 0 { return }
-        if Int(random) < charset.count {
-          result.append(charset[Int(random)])
-          remainingLength -= 1
-        }
-      }
-    }
-
-    return result
-  }
-
-  private func sha256(_ input: String) -> String {
-    let digest = SHA256.hash(data: Data(input.utf8))
-    return digest.map { String(format: "%02x", $0) }.joined()
-  }
-}
-
-/// Asks to agree to the terms, which rule out objectionable content and abusive users
-/// (App Review Guideline 1.2), before the first sign-in on this device.
-private struct TermsAcceptanceSheet: View {
-  let onAccept: () -> Void
-  @Environment(\.dismiss) private var dismiss
-
-  var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: VinctusTokens.Spacing.lg) {
-        Image(systemName: "checkmark.shield.fill")
-          .font(.system(size: 40))
-          .foregroundStyle(VinctusTokens.Color.accent)
-
-        Text("Antes de continuar")
-          .font(.title2.bold())
-
-        Text(
-          "Vinctus es una comunidad segura. Al usarla aceptas los Términos de servicio y las Normas de la comunidad:"
-        )
-        .foregroundStyle(VinctusTokens.Color.textMuted)
-
-        VStack(alignment: .leading, spacing: 10) {
-          rule("No se tolera el contenido ofensivo ni los usuarios abusivos.")
-          rule("Ese contenido se elimina y sus autores son expulsados.")
-          rule("Puedes denunciar y bloquear a cualquier usuario desde el menú ···.")
-        }
-
-        HStack(spacing: 16) {
-          Link("Términos de servicio", destination: LegalConfig.termsOfServiceURL)
-          Link("Normas de la comunidad", destination: LegalConfig.communityGuidelinesURL)
-        }
-        .font(.footnote)
-        .foregroundStyle(VinctusTokens.Color.accent)
-
-        VButton("Acepto y continuar", variant: .primary, action: onAccept)
-
-        Button("Cancelar") {
-          dismiss()
-        }
-        .frame(maxWidth: .infinity)
-        .foregroundStyle(VinctusTokens.Color.textMuted)
-      }
-      .padding(VinctusTokens.Spacing.xl)
-    }
-    .background(VinctusTokens.Color.surface.ignoresSafeArea())
-  }
-
-  private func rule(_ text: String) -> some View {
-    HStack(alignment: .top, spacing: 10) {
-      Image(systemName: "checkmark.circle.fill")
-        .foregroundStyle(VinctusTokens.Color.accent)
-      Text(text)
-    }
-  }
-}
-
-private struct AuthField<Content: View>: View {
-  let systemImage: String
-  @ViewBuilder let content: () -> Content
-
-  var body: some View {
-    HStack(spacing: 12) {
-      Image(systemName: systemImage)
-        .foregroundStyle(VinctusTokens.Color.textMuted)
-        .frame(width: 20)
-      content()
-    }
-    .padding(.horizontal, 14)
-    .frame(height: 52)
-    .background(VinctusTokens.Color.surface2)
-    .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.md, style: .continuous))
-    .overlay(
-      RoundedRectangle(cornerRadius: VinctusTokens.Radius.md, style: .continuous)
-        .stroke(VinctusTokens.Color.border.opacity(0.6), lineWidth: 1)
-    )
-  }
-}
-
-private struct AuthBanner: View {
-  let text: String
-  let systemImage: String
-  let tint: SwiftUI.Color
-
-  var body: some View {
-    HStack(alignment: .top, spacing: 10) {
-      Image(systemName: systemImage)
-        .foregroundStyle(tint)
-      Text(text)
-        .font(.footnote)
-        .foregroundStyle(VinctusTokens.Color.textPrimary)
-      Spacer(minLength: 0)
-    }
-    .padding(12)
-    .background(tint.opacity(0.12))
-    .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.sm, style: .continuous))
-  }
-}
-
-/// Asks for the account email and sends Firebase's password reset link to it.
-private struct PasswordResetSheet: View {
-  @EnvironmentObject private var authVM: AuthViewModel
-  @Environment(\.dismiss) private var dismiss
-  @State private var email: String
-  @State private var isSending = false
-  @State private var errorMessage: String?
-  @State private var sentTo: String?
-
-  init(initialEmail: String) {
-    _email = State(initialValue: initialEmail)
-  }
-
-  var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: VinctusTokens.Spacing.lg) {
-        Image(systemName: sentTo == nil ? "key.fill" : "envelope.badge.fill")
-          .font(.system(size: 36))
-          .foregroundStyle(VinctusTokens.Color.accent)
-
-        if let sentTo {
-          Text("Revisa tu correo")
-            .font(.title2.bold())
-          Text(
-            "Si existe una cuenta con \(sentTo), te enviamos un enlace para crear una contraseña nueva. Revisa también la carpeta de spam."
-          )
-          .foregroundStyle(VinctusTokens.Color.textMuted)
-          Text("Si entras con Apple o Google, no necesitas contraseña: usa ese botón para entrar.")
-            .font(.footnote)
-            .foregroundStyle(VinctusTokens.Color.textMuted)
-
-          VButton("Volver a iniciar sesión", variant: .primary) {
-            dismiss()
-          }
-        } else {
-          Text("Recuperar contraseña")
-            .font(.title2.bold())
-          Text("Escribe el email de tu cuenta y te enviaremos un enlace para crear una contraseña nueva.")
-            .foregroundStyle(VinctusTokens.Color.textMuted)
-
-          AuthField(systemImage: "envelope") {
-            TextField("Email", text: $email)
-              .textInputAutocapitalization(.never)
-              .keyboardType(.emailAddress)
-              .autocorrectionDisabled()
-              .textContentType(.username)
-              .submitLabel(.send)
-              .onSubmit(send)
-          }
-
-          if let errorMessage {
-            AuthBanner(text: errorMessage, systemImage: "exclamationmark.triangle.fill", tint: .red)
-          }
-
-          VButton(isSending ? "Enviando..." : "Enviar enlace", variant: .primary, action: send)
-            .disabled(isSending)
-
-          Button("Cancelar") {
-            dismiss()
-          }
-          .frame(maxWidth: .infinity)
-          .foregroundStyle(VinctusTokens.Color.textMuted)
-        }
-      }
-      .padding(VinctusTokens.Spacing.xl)
-    }
-    .background(VinctusTokens.Color.surface.ignoresSafeArea())
-  }
-
-  private func send() {
-    guard !isSending else { return }
-    isSending = true
-    errorMessage = nil
-    Task {
-      let target = email.trimmingCharacters(in: .whitespacesAndNewlines)
-      if let error = await authVM.requestPasswordReset(email: target) {
-        errorMessage = error
-      } else {
-        sentTo = target
-      }
-      isSending = false
     }
   }
 }
