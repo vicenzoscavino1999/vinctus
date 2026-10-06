@@ -32,6 +32,20 @@ final class AuthViewModel: ObservableObject {
     if isSignedIn {
       ensureUserProfile()
     }
+    // Firebase can end the session without the app asking: an account suspended or deleted by a
+    // moderator, or its tokens revoked. Leave the signed-in screens instead of failing every read.
+    repo.observeSession { [weak self] signedIn in
+      Task { @MainActor in
+        self?.sessionChanged(signedIn: signedIn)
+      }
+    }
+  }
+
+  private func sessionChanged(signedIn: Bool) {
+    guard !signedIn, isSignedIn else { return }
+    AppLog.auth.info("session.endedByFirebase")
+    isSignedIn = false
+    infoMessage = "Tu sesión se cerró. Vuelve a iniciar sesión."
   }
 
   func signIn(email: String, password: String) {

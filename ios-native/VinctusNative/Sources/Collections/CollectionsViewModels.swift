@@ -1,5 +1,48 @@
 import Foundation
 
+/// Your collections, with the same search as the web's CollectionsPanel.
+@MainActor
+final class CollectionsViewModel: ObservableObject {
+  @Published private(set) var collections: [UserCollection] = []
+  @Published private(set) var isLoading = true
+  @Published var errorMessage: String?
+  @Published var searchText = ""
+
+  let repo: CollectionsRepo
+
+  init(repo: CollectionsRepo) {
+    self.repo = repo
+  }
+
+  /// Same search as the web's CollectionsPanel: by name, ignoring case.
+  var visibleCollections: [UserCollection] {
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !query.isEmpty else { return collections }
+    return collections.filter { $0.name.localizedCaseInsensitiveContains(query) }
+  }
+
+  func load() async {
+    do {
+      collections = try await repo.fetchCollections()
+      errorMessage = nil
+    } catch {
+      errorMessage = "No se pudieron cargar tus colecciones."
+    }
+    isLoading = false
+  }
+
+  func delete(_ collection: UserCollection) async {
+    let previous = collections
+    collections.removeAll { $0.id == collection.id }
+    do {
+      try await repo.deleteCollection(id: collection.id)
+    } catch {
+      collections = previous
+      errorMessage = "No se pudo eliminar la colección."
+    }
+  }
+}
+
 /// Creating a collection or renaming one and changing its icon.
 @MainActor
 final class CollectionEditorViewModel: ObservableObject {

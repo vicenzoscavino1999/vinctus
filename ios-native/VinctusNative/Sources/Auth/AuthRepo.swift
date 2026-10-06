@@ -18,6 +18,10 @@ protocol AuthRepo {
   ) async throws
   func sendPasswordReset(email: String) async throws
   func signOut() throws
+  /// Calls `onChange` with whether someone is signed in each time Firebase's session changes,
+  /// including when Firebase ends it on its own (account disabled, deleted or tokens revoked).
+  /// The observation lasts as long as the app (AuthViewModel lives for the whole app).
+  func observeSession(_ onChange: @escaping (Bool) -> Void)
 }
 
 enum AuthRepoError: LocalizedError {
@@ -132,6 +136,13 @@ final class FirebaseAuthRepo: AuthRepo {
   func signOut() throws {
     guard FirebaseApp.app() != nil else { throw AuthRepoError.firebaseNotConfigured }
     try Auth.auth().signOut()
+  }
+
+  func observeSession(_ onChange: @escaping (Bool) -> Void) {
+    guard FirebaseApp.app() != nil else { return }
+    _ = Auth.auth().addStateDidChangeListener { _, user in
+      onChange(user != nil)
+    }
   }
 
   private func hasURLScheme(_ scheme: String) -> Bool {

@@ -324,13 +324,15 @@ final class FirebaseGroupsRepo: GroupsRepo {
     if ownerID == uid { return .owner }
     if try await isMember(groupID: groupID, uid: uid) { return .member }
     let db = self.db ?? Firestore.firestore()
+    // Only pending requests, like the web's `getGroupJoinStatus`: an older rejected request
+    // must not hide a newer pending one.
     let requests = try? await db.collection("group_requests")
       .whereField("fromUid", isEqualTo: uid)
       .whereField("groupId", isEqualTo: groupID)
+      .whereField("status", isEqualTo: "pending")
       .limit(to: 1)
       .getDocuments()
-    if requests?.documents.first?.data()["status"] as? String == "pending" { return .pending }
-    return .none
+    return requests?.documents.isEmpty == false ? .pending : .none
   }
 
   /// Mirrors `sendGroupJoinRequest` in `src/shared/lib/firestore/groups.ts`.
