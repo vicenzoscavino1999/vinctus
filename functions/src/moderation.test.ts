@@ -2,50 +2,88 @@ import { describe, expect, it } from 'vitest';
 import {
   messageReportKey,
   moderateUserText,
+  newlyMatchedTerms,
   parseReportedContentTarget,
   parseReportedMessageTarget,
   parseReportedStoryTarget,
 } from './moderation';
 
 const blocked = (text: string) => moderateUserText([text]).blocked;
+const flagged = (text: string) => moderateUserText([text]).flagged;
 
 describe('moderateUserText', () => {
-  it('blocks threats, hate speech, sexual content and direct insults', () => {
+  it('removes threats, hate speech, self-harm and sexual solicitation', () => {
     expect(blocked('Te voy a matar mañana')).toBe(true);
     expect(blocked('eres un maricón')).toBe(true);
-    expect(blocked('F*ck... no: fuck you')).toBe(true);
-    expect(blocked('Hijo de PUTA')).toBe(true);
     expect(blocked('send nudes')).toBe(true);
     expect(blocked('kys')).toBe(true);
   });
 
+  it('only flags profanity for review, without removing it', () => {
+    for (const text of [
+      'F*ck... no: fuck you',
+      'Hijo de PUTA',
+      'jaja qué pendejo',
+      'mira este porno',
+    ]) {
+      expect(blocked(text)).toBe(false);
+      expect(flagged(text)).toBe(true);
+    }
+  });
+
   it('matches plurals and ignores accents and punctuation', () => {
-    expect(blocked('putas')).toBe(true);
+    expect(flagged('putas')).toBe(true);
     expect(blocked('maricones')).toBe(true);
     expect(blocked('¡Mátate!')).toBe(true);
     expect(blocked("I'll kill you")).toBe(true);
   });
 
-  it('does not block ordinary words that contain a blocked term', () => {
-    expect(blocked('Una disputa sobre computadoras')).toBe(false);
-    expect(blocked('Me encantan las spices y el pan negro')).toBe(false);
-    expect(blocked('La vergüenza de perder')).toBe(false);
-    expect(blocked('Kike y yo fuimos a ver un mono al zoo')).toBe(false);
-    expect(blocked('Me mato de risa con este meme')).toBe(false);
+  it('does not flag ordinary words that contain a blocked term', () => {
+    expect(flagged('Una disputa sobre computadoras')).toBe(false);
+    expect(flagged('Me encantan las spices y el pan negro')).toBe(false);
+    expect(flagged('La vergüenza de perder')).toBe(false);
+    expect(flagged('Kike y yo fuimos a ver un mono al zoo')).toBe(false);
+    expect(flagged('Me mato de risa con este meme')).toBe(false);
+  });
+
+  it('leaves out slang used between friends and words with another meaning', () => {
+    expect(flagged('qué más marica, todo bien?')).toBe(false);
+    expect(flagged('a la verga, qué golazo')).toBe(false);
+    expect(flagged('je suis en retard')).toBe(false);
   });
 
   it('reports every matched term and merges all inputs', () => {
-    const result = moderateUserText(['Hola', null, 'eres una puta', undefined, 'fuck']);
+    const result = moderateUserText(['Hola', null, 'eres una puta', undefined, 'te voy a matar']);
     expect(result.blocked).toBe(true);
-    expect(result.matchedTerms).toEqual(expect.arrayContaining(['puta', 'fuck']));
+    expect(result.flagged).toBe(true);
+    expect(result.matchedTerms).toEqual(expect.arrayContaining(['puta', 'te voy a matar']));
   });
 
   it('allows empty input', () => {
     expect(moderateUserText([null, '   ', undefined])).toEqual({
       blocked: false,
+      flagged: false,
       matchedTerms: [],
       normalizedText: '',
     });
+  });
+});
+
+describe('newlyMatchedTerms', () => {
+  it('returns every term for a new text', () => {
+    expect(newlyMatchedTerms(moderateUserText(['puta']), null)).toEqual(['puta']);
+  });
+
+  it('ignores an edit that keeps the same terms', () => {
+    const before = moderateUserText(['Ana', 'bio con puta']);
+    const after = moderateUserText(['Ana María', 'bio con puta']);
+    expect(newlyMatchedTerms(after, before)).toEqual([]);
+  });
+
+  it('returns only the terms the edit added', () => {
+    const before = moderateUserText(['bio con puta']);
+    const after = moderateUserText(['bio con puta y pendejo']);
+    expect(newlyMatchedTerms(after, before)).toEqual(['pendejo']);
   });
 });
 
