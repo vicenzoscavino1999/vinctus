@@ -1,3 +1,4 @@
+import FirebaseFirestore
 import XCTest
 @testable import VinctusNative
 
@@ -33,6 +34,40 @@ final class GroupsIntegrationTests: EmulatorTestCase {
     let status = try await groups.membershipStatus(groupID: groupID, ownerID: bruno.uid, uid: ana.uid)
 
     XCTAssertEqual(status, .pending)
+  }
+
+  func testAskingAgainAfterARejectionShowsTheNewPendingRequest() async throws {
+    let bruno = try await makeUser("Bruno")
+    let groupID = try await makeGroup(name: "Club privado", visibility: .private)
+    let ana = try await makeUser("Ana")
+    let groups = FirebaseGroupsRepo()
+
+    try await groups.requestToJoin(groupID: groupID, groupName: "Club privado", ownerID: bruno.uid, uid: ana.uid)
+
+    try await signIn(bruno)
+    let firstRequest = try await Firestore.firestore().collection("group_requests")
+      .whereField("toUid", isEqualTo: bruno.uid)
+      .whereField("groupId", isEqualTo: groupID)
+      .getDocuments()
+    try await XCTUnwrap(firstRequest.documents.first).reference.updateData([
+      "status": "rejected",
+      "updatedAt": FieldValue.serverTimestamp(),
+    ])
+
+    try await signIn(ana)
+    let afterRejection = try await groups.membershipStatus(groupID: groupID, ownerID: bruno.uid, uid: ana.uid)
+    XCTAssertEqual(afterRejection, .none)
+
+    try await groups.requestToJoin(groupID: groupID, groupName: "Club privado", ownerID: bruno.uid, uid: ana.uid)
+    let afterNewRequest = try await groups.membershipStatus(groupID: groupID, ownerID: bruno.uid, uid: ana.uid)
+    XCTAssertEqual(afterNewRequest, .pending)
+
+    do {
+      try await groups.requestToJoin(groupID: groupID, groupName: "Club privado", ownerID: bruno.uid, uid: ana.uid)
+      XCTFail("A second pending request for the same group should be refused")
+    } catch GroupsRepoError.requestAlreadySent {
+      // Expected.
+    }
   }
 
   func testThePublicJoinIsRejectedForAPrivateGroup() async throws {
