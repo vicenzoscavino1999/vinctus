@@ -14,7 +14,7 @@ configs:
 settings:
   base:
     CURRENT_PROJECT_VERSION: 1
-    MARKETING_VERSION: 0.1.0
+    MARKETING_VERSION: 1.0.0
     SWIFT_VERSION: 5.0
 
 packages:
@@ -46,6 +46,9 @@ targets:
         # Keep bundle id aligned with the existing Capacitor app so this can
         # eventually ship as an update under the same App Store listing.
         PRODUCT_BUNDLE_IDENTIFIER: app.vinctus.social
+        # iPhone only: the UI is portrait-only and not designed for iPad (iPad would also need
+        # every orientation for multitasking and its own App Store screenshots).
+        TARGETED_DEVICE_FAMILY: '1'
         CODE_SIGN_ENTITLEMENTS: Resources/VinctusNative.entitlements
         INFOPLIST_FILE: Resources/Info.plist
       configs:
@@ -84,6 +87,20 @@ targets:
     dependencies:
       - target: VinctusNative
 
+  # Runs the Firebase repos against the local emulators (Auth, Firestore, Storage) and the repo's
+  # firestore.rules / storage.rules. Needs `firebase emulators:exec`; see IntegrationTests/.
+  VinctusNativeIntegrationTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: IntegrationTests
+    settings:
+      base:
+        # CI signs this bundle (the keychain needs it), and signing needs an Info.plist.
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: VinctusNative
+
 schemes:
   VinctusNative-Dev:
     build:
@@ -117,3 +134,12 @@ schemes:
       config: DebugProd
       targets:
         - VinctusNativeTests
+
+  VinctusNative-Integration:
+    build:
+      targets:
+        VinctusNative: all
+    test:
+      config: DebugDev
+      targets:
+        - VinctusNativeIntegrationTests

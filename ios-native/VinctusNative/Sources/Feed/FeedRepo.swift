@@ -1,0 +1,152 @@
+import FirebaseCore
+import FirebaseFirestore
+import Foundation
+
+struct FeedItem: Identifiable, Hashable {
+  let id: String
+  let authorID: String?
+  let authorName: String
+  let text: String
+  let createdAt: Date?
+  var likeCount: Int
+  var commentCount: Int
+  /// First photo of the post, if any.
+  var imageURL: String? = nil
+  /// The post has a video; `videoThumbnailURL` is set for YouTube videos.
+  var hasVideo = false
+  var videoThumbnailURL: String? = nil
+  /// Name of the first attached file, when the post only has files.
+  var fileName: String? = nil
+
+  /// What the posts grid shows: the photo, or else the video's thumbnail.
+  var previewImageURL: String? { imageURL ?? videoThumbnailURL }
+
+  /// Reads the `media` array of a post (`PostMedia` in `src/shared/lib/firestore/posts.ts`).
+  mutating func applyMedia(_ value: Any?) {
+    guard let items = value as? [[String: Any]] else { return }
+    for item in items {
+      guard let url = FirestoreValue.string(item["url"]) else { continue }
+      switch item["type"] as? String {
+      case "image":
+        if imageURL == nil { imageURL = url }
+      case "video":
+        hasVideo = true
+        if videoThumbnailURL == nil { videoThumbnailURL = YouTubeLink.thumbnailURL(from: url) }
+      case "file":
+        if fileName == nil { fileName = FirestoreValue.string(item["fileName"]) ?? url }
+      default:
+        continue
+      }
+    }
+  }
+}
+
+struct FeedCursor {
+  fileprivate let lastDocument: QueryDocumentSnapshot
+}
+
+struct FeedPage {
+  let items: [FeedItem]
+  let nextCursor: FeedCursor?
+  let hasMore: Bool
+  let isFromCache: Bool
+}
+
+protocol FeedRepo {
+  func fetchFeedPage(limit: Int, after cursor: FeedCursor?) async throws -> FeedPage
+}
+
+enum FeedRepoError: LocalizedError {
+  case firebaseNotConfigured
+  case missingSnapshot
+
+  var errorDescription: String? {
+    switch self {
+    case .firebaseNotConfigured:
+      return "Firebase no está configurado."
+    case .missingSnapshot:
+      return "No se pudo cargar el feed."
+    }
+  }
+}
+
+final class FirebaseFeedRepo: FeedRepo {
+  private let db: Firestore?
+
+  init(db: Firestore? = nil) {
+    self.db = db
+  }
+
+  func fetchFeedPage(limit: Int, after cursor: FeedCursor?) async throws -> FeedPage {
+    guard FirebaseApp.app() != nil else { throw FeedRepoError.firebaseNotConfigured }
+
+    let db = self.db ?? Firestore.firestore()
+    let pageSize = max(1, min(30, limit))
+
+    var query = db.collection("posts")
+      .order(by: "createdAt", descending: true)
+      .limit(to: pageSize + 1)
+
+    if let cursor {
+      query = query.start(afterDocument: cursor.lastDocument)
+    }
+
+    do {
+      let snapshot = try await query.getDocuments()
+      return buildPage(snapshot: snapshot, pageSize: pageSize)
+    } catch {
+      // Only first page tries cache fallback. Paginated requests should fail fast.
+      guard cursor == nil else { throw error }
+      let cacheSnapshot = try await query.getDocuments(source: .cache)
+      return buildPage(snapshot: cacheSnapshot, pageSize: pageSize)
+    }
+  }
+
+  private func buildPage(snapshot: QuerySnapshot, pageSize: Int) -> FeedPage {
+    let docs = snapshot.documents
+    let pageDocs = Array(docs.prefix(pageSize))
+    let hasMore = docs.count > pageSize
+
+    let items = pageDocs.map(Self.feedItem(from:))
+
+    let nextCursor: FeedCursor?
+    if hasMore, let lastVisible = pageDocs.last {
+      nextCursor = FeedCursor(lastDocument: lastVisible)
+    } else {
+      nextCursor = nil
+    }
+
+    return FeedPage(
+      items: items,
+      nextCursor: nextCursor,
+      hasMore: hasMore,
+      isFromCache: snapshot.metadata.isFromCache
+    )
+  }
+
+  /// A post document as a feed item. Also used for a user's posts on their profile.
+  static func feedItem(from doc: QueryDocumentSnapshot) -> FeedItem {
+    let data = doc.data()
+
+    let authorSnapshot = data["authorSnapshot"] as? [String: Any]
+    let authorName = FirestoreValue.string(authorSnapshot?["displayName"])
+      ?? FirestoreValue.string(data["authorName"])
+      ?? FirestoreValue.string(data["authorId"])
+      ?? "Usuario"
+    let text = (data["text"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+      ?? (data["content"] as? String)
+      ?? ""
+
+    var item = FeedItem(
+      id: doc.documentID,
+      authorID: FirestoreValue.string(data["authorId"]) ?? FirestoreValue.string(data["authorID"]),
+      authorName: authorName,
+      text: text,
+      createdAt: (data["createdAt"] as? Timestamp)?.dateValue(),
+      likeCount: max(0, FirestoreValue.int(data["likeCount"]) ?? FirestoreValue.int(data["likesCount"]) ?? 0),
+      commentCount: max(0, FirestoreValue.int(data["commentCount"]) ?? FirestoreValue.int(data["commentsCount"]) ?? 0)
+    )
+    item.applyMedia(data["media"])
+    return item
+  }
+}

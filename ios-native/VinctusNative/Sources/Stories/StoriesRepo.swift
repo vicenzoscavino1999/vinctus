@@ -1,0 +1,298 @@
+import FirebaseAuth
+import FirebaseCore
+import FirebaseFirestore
+import FirebaseStorage
+import Foundation
+
+enum StoryMediaType: String {
+  case image
+  case video
+}
+
+struct Story: Identifiable, Hashable {
+  let id: String
+  let ownerID: String
+  let ownerName: String?
+  let ownerPhotoURL: String?
+  let mediaType: StoryMediaType
+  let mediaURL: String
+  let mediaPath: String
+  let createdAt: Date
+  let expiresAt: Date
+  /// Set for the YouTube Shorts the web mixes into stories; they play in a YouTube embed and
+  /// are not user content (nothing to report or delete).
+  var youtubeVideoID: String? = nil
+
+  var isYouTubeShort: Bool { youtubeVideoID != nil }
+}
+
+/// All the live stories of one person, oldest first (the order they are watched in).
+struct StoryGroup: Identifiable, Hashable {
+  let ownerID: String
+  let ownerName: String
+  let ownerPhotoURL: String?
+  var stories: [Story]
+
+  var id: String { ownerID }
+  var isYouTubeShorts: Bool { stories.first?.isYouTubeShort == true }
+
+  /// Groups stories by owner. The signed-in user's group goes first, then the most recent.
+  static func make(from stories: [Story], currentUID: String?) -> [StoryGroup] {
+    let byOwner = Dictionary(grouping: stories, by: \.ownerID)
+    let groups = byOwner.map { ownerID, items -> StoryGroup in
+      let sorted = items.sorted { $0.createdAt < $1.createdAt }
+      let latest = sorted.last
+      return StoryGroup(
+        ownerID: ownerID,
+        ownerName: latest?.ownerName ?? "Usuario",
+        ownerPhotoURL: latest?.ownerPhotoURL,
+        stories: sorted
+      )
+    }
+    // Mine first, then people (most recent first), then YouTube Shorts, like the web.
+    return groups.sorted { lhs, rhs in
+      if lhs.ownerID == currentUID { return true }
+      if rhs.ownerID == currentUID { return false }
+      if lhs.isYouTubeShorts != rhs.isYouTubeShorts { return rhs.isYouTubeShorts }
+      return (lhs.stories.last?.createdAt ?? .distantPast) > (rhs.stories.last?.createdAt ?? .distantPast)
+    }
+  }
+}
+
+/// Stories over the same data as the web (`src/shared/lib/firestore/stories.ts`): a
+/// `stories/{id}` document per photo or video, visible for 24 hours to friends and followers.
+protocol StoriesRepo {
+  /// Live stories of the signed-in user, their friends and the people they follow.
+  func fetchStoryGroups() async throws -> [StoryGroup]
+  /// Publishes a photo story (JPEG). Videos are published from the web.
+  func publishImageStory(jpegData: Data) async throws
+  func deleteStory(_ story: Story) async throws
+}
+
+enum StoriesRepoError: LocalizedError {
+  case firebaseNotConfigured
+  case userNotAuthenticated
+
+  var errorDescription: String? {
+    switch self {
+    case .firebaseNotConfigured:
+      return "Firebase no está configurado."
+    case .userNotAuthenticated:
+      return "Debes iniciar sesión."
+    }
+  }
+}
+
+final class FirebaseStoriesRepo: StoriesRepo {
+  /// `STORY_DURATION_MS` in `src/shared/lib/storyConstants.ts`.
+  static let storyDuration: TimeInterval = 24 * 60 * 60
+  /// Firestore allows at most 10 values in an `in` filter.
+  private static let ownersPerQuery = 10
+
+  private func context() throws -> (Firestore, String) {
+    guard FirebaseApp.app() != nil else { throw StoriesRepoError.firebaseNotConfigured }
+    guard let uid = Auth.auth().currentUser?.uid else { throw StoriesRepoError.userNotAuthenticated }
+    return (Firestore.firestore(), uid)
+  }
+
+  /// Mirrors `useStories`: own stories plus those of friends and followed users.
+  func fetchStoryGroups() async throws -> [StoryGroup] {
+    let (db, uid) = try context()
+    let users = db.collection("users").document(uid)
+    async let friends = ids(users.collection("friends").limit(to: 200))
+    async let following = ids(users.collection("following").limit(to: 1000))
+    let others = Set(await friends + following).subtracting([uid])
+
+    var owners = [uid] + Array(others)
+    var stories: [Story] = []
+    while !owners.isEmpty {
+      let chunk = Array(owners.prefix(Self.ownersPerQuery))
+      owners.removeFirst(chunk.count)
+      // One failing chunk (for example a permission change) shouldn't hide the others.
+      if let found = try? await storiesOf(chunk, db: db) {
+        stories += found
+      }
+    }
+    stories += await YouTubeShorts.todaysStories()
+    return StoryGroup.make(from: stories, currentUID: uid)
+  }
+
+  /// Mirrors `getStoriesForOwners` (same filters, so it uses the same index).
+  private func storiesOf(_ ownerIDs: [String], db: Firestore) async throws -> [Story] {
+    let snapshot = try await db.collection("stories")
+      .whereField("ownerId", in: ownerIDs)
+      .whereField("visibility", isEqualTo: "friends")
+      .whereField("expiresAt", isGreaterThan: Timestamp(date: Date()))
+      .order(by: "expiresAt", descending: true)
+      .getDocuments()
+    return snapshot.documents.compactMap { Self.story(id: $0.documentID, data: $0.data()) }
+  }
+
+  private func ids(_ query: Query) async -> [String] {
+    ((try? await query.getDocuments())?.documents ?? []).map(\.documentID)
+  }
+
+  /// Mirrors `uploadStoryImage` + `createStory` (paths and fields checked by storage.rules and
+  /// `isValidStoryCreate` in firestore.rules).
+  func publishImageStory(jpegData: Data) async throws {
+    let (db, uid) = try context()
+    let storyRef = db.collection("stories").document()
+    let millis = Int64(Date().timeIntervalSince1970 * 1000)
+    let path = "stories/\(uid)/\(storyRef.documentID)/original/\(millis)_story.jpg"
+    let mediaRef = Storage.storage().reference(withPath: path)
+    let metadata = StorageMetadata()
+    metadata.contentType = "image/jpeg"
+    _ = try await mediaRef.putDataAsync(jpegData, metadata: metadata)
+    let url = try await mediaRef.downloadURL().absoluteString
+
+    let profile = (try? await db.collection("users_public").document(uid).getDocument().data()) ?? [:]
+    let user = Auth.auth().currentUser
+    let name = FirestoreValue.string(profile["displayName"]) ?? FirestoreValue.string(user?.displayName)
+    let photo = FirestoreValue.string(profile["photoURL"]) ?? user?.photoURL?.absoluteString
+
+    // `isValidStoryOwnerSnapshot`: a name of up to 80 characters and a photo URL, or nulls.
+    var ownerSnapshot: [String: Any] = ["displayName": NSNull(), "photoURL": NSNull()]
+    if let name { ownerSnapshot["displayName"] = String(name.prefix(80)) }
+    if let photo { ownerSnapshot["photoURL"] = photo }
+    let expiresAt = Timestamp(date: Date().addingTimeInterval(Self.storyDuration))
+    let fields: [String: Any] = [
+      "ownerId": uid,
+      "ownerSnapshot": ownerSnapshot,
+      "mediaType": StoryMediaType.image.rawValue,
+      "mediaUrl": url,
+      "mediaPath": path,
+      "thumbUrl": NSNull(),
+      "thumbPath": NSNull(),
+      "visibility": "friends",
+      "createdAt": FieldValue.serverTimestamp(),
+      "expiresAt": expiresAt,
+    ]
+    try await storyRef.setData(fields)
+  }
+
+  func deleteStory(_ story: Story) async throws {
+    let (db, _) = try context()
+    try await db.collection("stories").document(story.id).delete()
+    // The file goes too; if that fails the story is already gone for everyone.
+    try? await Storage.storage().reference(withPath: story.mediaPath).delete()
+  }
+
+  static func story(id: String, data: [String: Any]) -> Story? {
+    guard
+      let ownerID = FirestoreValue.string(data["ownerId"]),
+      let mediaURL = FirestoreValue.string(data["mediaUrl"])
+    else { return nil }
+    let owner = data["ownerSnapshot"] as? [String: Any]
+    return Story(
+      id: id,
+      ownerID: ownerID,
+      ownerName: FirestoreValue.string(owner?["displayName"]),
+      ownerPhotoURL: FirestoreValue.string(owner?["photoURL"]),
+      mediaType: StoryMediaType(rawValue: data["mediaType"] as? String ?? "") ?? .image,
+      mediaURL: mediaURL,
+      mediaPath: FirestoreValue.string(data["mediaPath"]) ?? "",
+      createdAt: FirestoreValue.date(data["createdAt"]) ?? Date(),
+      expiresAt: FirestoreValue.date(data["expiresAt"]) ?? Date()
+    )
+  }
+}
+
+/// The YouTube Shorts the web adds to stories (`useStories` in src/features/posts/hooks): the
+/// same 20 videos a day for everyone, picked and timed with the same hash as the web.
+enum YouTubeShorts {
+  static let query = "shorts ciencia tecnologia musica historia naturaleza filosofia"
+  static let fetchLimit = 50
+  static let dailyCount = 20
+  static let spreadWindow: TimeInterval = 20 * 60 * 60
+  static let ownerPrefix = "yt-short-owner-"
+  /// `FALLBACK_SHORT_VIDEO_IDS` of the web, used when the service can't be reached.
+  static let fallbackVideoIDs = [
+    "jNQXAC9IVRw", "dQw4w9WgXcQ", "9bZkp7q19f0", "3JZ_D3ELwOQ", "fRh_vgS2dFE",
+    "kXYiU_JCYtU", "uelHwf8o7_U", "RgKAFK5djSk", "JGwWNGJdvx8", "CevxZvSJLk8",
+    "YQHsXMglC9A", "OPf0YbXqDm0", "2Vv-BfVoq4g", "hT_nvWreIhg", "pRpeEdMmmQ0",
+    "e-ORhEE9VVg", "ktvTqknDobU", "60ItHLz5WEA", "09R8_2nJtjg", "hLQl3WQQoQ0",
+  ]
+
+  struct Video: Equatable {
+    let videoID: String
+    let channelTitle: String?
+    let thumbnailURL: String?
+  }
+
+  static func todaysStories(now: Date = Date()) async -> [Story] {
+    let videos = (try? await fetchVideos()) ?? []
+    return stories(from: videos.isEmpty ? fallbackVideoIDs.map { Video(videoID: $0, channelTitle: nil, thumbnailURL: nil) } : videos, now: now)
+  }
+
+  private static func fetchVideos() async throws -> [Video] {
+    var components = URLComponents(
+      url: LegalConfig.apiBaseURL.appendingPathComponent("api/youtube-shorts"),
+      resolvingAgainstBaseURL: false
+    )
+    components?.queryItems = [
+      URLQueryItem(name: "limit", value: String(fetchLimit)),
+      URLQueryItem(name: "q", value: query),
+    ]
+    guard let url = components?.url else { return [] }
+    var request = URLRequest(url: url, timeoutInterval: 10)
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+    let (data, response) = try await URLSession.shared.data(for: request)
+    guard (response as? HTTPURLResponse)?.statusCode == 200,
+      let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let items = json["items"] as? [[String: Any]]
+    else { return [] }
+    return items.compactMap { item in
+      guard let id = FirestoreValue.string(item["videoId"]) else { return nil }
+      return Video(
+        videoID: id,
+        channelTitle: FirestoreValue.string(item["channelTitle"]),
+        thumbnailURL: FirestoreValue.string(item["thumbnailUrl"])
+      )
+    }
+  }
+
+  /// `buildRotatingShortItems` of the web.
+  static func stories(from videos: [Video], now: Date) -> [Story] {
+    let dayKey = dayKey(for: now)
+    let selected = videos
+      .map { (score: hash("\(dayKey):pick:\($0.videoID)"), video: $0) }
+      .sorted { $0.score < $1.score }
+      .prefix(dailyCount)
+      .map(\.video)
+    let windowMillis = Int(spreadWindow * 1000)
+    return selected.enumerated().map { index, video in
+      let offsetMillis = hash("\(dayKey):time:\(video.videoID):\(index)") % windowMillis
+      let createdAt = now.addingTimeInterval(-Double(offsetMillis) / 1000)
+      let thumbnail = video.thumbnailURL ?? "https://i.ytimg.com/vi/\(video.videoID)/hqdefault.jpg"
+      return Story(
+        id: "yt-short-\(video.videoID)",
+        ownerID: ownerPrefix + video.videoID,
+        ownerName: video.channelTitle ?? "YouTube Shorts",
+        ownerPhotoURL: thumbnail,
+        mediaType: .video,
+        mediaURL: "https://www.youtube.com/watch?v=\(video.videoID)",
+        mediaPath: "youtube:\(video.videoID)",
+        createdAt: createdAt,
+        expiresAt: createdAt.addingTimeInterval(FirebaseStoriesRepo.storyDuration),
+        youtubeVideoID: video.videoID
+      )
+    }
+  }
+
+  /// The web's `hashString` (djb2 with JavaScript's 32-bit XOR), so both pick the same videos.
+  static func hash(_ value: String) -> Int {
+    var hash: Int64 = 5381
+    for unit in value.utf16 {
+      hash = Int64(Int32(truncatingIfNeeded: hash &* 33) ^ Int32(unit))
+    }
+    return Int(hash.magnitude)
+  }
+
+  /// `new Date().toISOString().slice(0, 10)`: the UTC day.
+  static func dayKey(for date: Date) -> String {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC")!
+    let parts = calendar.dateComponents([.year, .month, .day], from: date)
+    return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+  }
+}
