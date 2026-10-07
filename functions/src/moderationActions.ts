@@ -22,6 +22,7 @@ const ACTIONS: readonly ModerationEnforcementAction[] = [
 
 // reportedUid values that are not real accounts: auto-moderation (upsertAutoModerationReport in
 // index.ts) and reports on AI replies from the iOS app (ReportTarget.aiReportedUID).
+// The web's moderation queue (ModerationQueuePage.tsx) hides "suspend" for the same list.
 const NON_USER_IDS = new Set(['system_moderation', 'unknown_user', 'ai_assistant']);
 
 const fail = (code: functions.https.FunctionsErrorCode, message: string): never => {

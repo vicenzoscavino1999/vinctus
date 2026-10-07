@@ -35,11 +35,14 @@ final class StoriesTests: XCTestCase {
       "mediaType": "video",
       "mediaUrl": "https://example.com/v.mp4",
       "mediaPath": "stories/u1/s1/original/v.mp4",
+      "thumbPath": "stories/u1/s1/thumb/v.jpg",
     ])
 
     XCTAssertEqual(parsed?.ownerName, "Lucía")
     XCTAssertNil(parsed?.ownerPhotoURL)
     XCTAssertEqual(parsed?.mediaType, .video)
+    // Deleting the story removes the thumbnail too.
+    XCTAssertEqual(parsed?.thumbPath, "stories/u1/s1/thumb/v.jpg")
     XCTAssertNil(FirebaseStoriesRepo.story(id: "s2", data: ["ownerId": "u1"]))
   }
 

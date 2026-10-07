@@ -28,6 +28,7 @@ const priorityClass: Record<string, string> = {
 };
 
 // Report targets that aren't accounts (auto-moderation, AI replies), so there's no one to suspend.
+// Keep in sync with NON_USER_IDS in functions/src/moderationActions.ts, which enforces it.
 const NON_USER_IDS = new Set(['system_moderation', 'unknown_user', 'ai_assistant']);
 
 const enforcementConfirm: Record<ModerationEnforcementAction, string> = {
