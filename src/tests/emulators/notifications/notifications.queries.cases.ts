@@ -93,7 +93,7 @@ describe('Notifications API (emulator) - queries', () => {
     expect(first.hasMore).toBe(true);
     expect(first.lastDoc?.id).toBe('notif_b');
 
-    const second = await getUserActivity(uid, 2, first.lastDoc);
+    const second = await getUserActivity(uid, 2, first.lastDoc ?? undefined);
     expect(second.items.map((n) => n.id)).toEqual(['notif_c']);
     expect(second.hasMore).toBe(false);
   });

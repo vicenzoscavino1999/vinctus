@@ -5,9 +5,7 @@ import { signInAnonymously, signOut } from 'firebase/auth';
 import {
   createCollection,
   createCollectionItem,
-  deleteCollection,
   deleteCollectionItem,
-  updateCollection,
 } from '@/features/collections/api';
 import { isAppError } from '@/shared/lib/errors';
 import { auth } from '@/shared/lib/firebase';
@@ -44,7 +42,7 @@ describe('Collections API (emulator) - mutations', () => {
     await cleanupRulesTestEnv();
   });
 
-  it('creates and updates a collection', async () => {
+  it('creates a collection', async () => {
     const cred = await signInAnonymously(auth);
     const uid = cred.user.uid;
 
@@ -57,15 +55,7 @@ describe('Collections API (emulator) - mutations', () => {
     expect(created).not.toBeNull();
     expect(created?.name).toBe('Lecturas');
     expect(created?.itemCount).toBe(0);
-
-    await updateCollection(uid, collectionId, {
-      name: 'Lecturas 2026',
-      icon: 'star',
-    });
-
-    const updated = await readDoc(`users/${uid}/collections/${collectionId}`);
-    expect(updated?.name).toBe('Lecturas 2026');
-    expect(updated?.icon).toBe('star');
+    expect(created?.icon).toBe('book');
   });
 
   it('creates and deletes collection items while syncing itemCount', async () => {
@@ -103,19 +93,6 @@ describe('Collections API (emulator) - mutations', () => {
 
     const collectionAfterDelete = await readDoc(`users/${uid}/collections/${collectionId}`);
     expect(collectionAfterDelete?.itemCount).toBe(0);
-  });
-
-  it('deletes a collection document', async () => {
-    const cred = await signInAnonymously(auth);
-    const uid = cred.user.uid;
-
-    const collectionId = await createCollection(uid, {
-      name: 'Temporal',
-      icon: null,
-    });
-
-    await deleteCollection(uid, collectionId);
-    await expect(readDoc(`users/${uid}/collections/${collectionId}`)).resolves.toBeNull();
   });
 
   it('validates collection item file input', async () => {

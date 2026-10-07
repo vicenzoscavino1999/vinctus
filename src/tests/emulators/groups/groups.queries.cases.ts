@@ -8,8 +8,8 @@ import {
   getGroupMemberCount,
   getGroupMembersPage,
   getGroupPostsWeekCount,
-  getGroupsByCategoryPage,
-  getGroupsPage,
+  getGroups,
+  getGroupsByCategory,
   getPostsByGroup,
 } from '@/features/groups/api/queries';
 import { auth } from '@/shared/lib/firebase';
@@ -43,50 +43,23 @@ describe('Groups API (emulator) - queries', () => {
     await cleanupRulesTestEnv();
   });
 
-  it('paginates groups ordered by memberCount desc', async () => {
-    await seedDoc('groups/group_a', {
-      name: 'A',
-      memberCount: 10,
-      createdAt: new Date('2026-01-01T00:00:00Z'),
-      updatedAt: new Date('2026-01-01T00:00:00Z'),
-    });
-    await seedDoc('groups/group_b', {
-      name: 'B',
-      memberCount: 5,
-      createdAt: new Date('2026-01-01T00:00:00Z'),
-      updatedAt: new Date('2026-01-01T00:00:00Z'),
-    });
-    await seedDoc('groups/group_c', {
-      name: 'C',
-      memberCount: 12,
-      createdAt: new Date('2026-01-01T00:00:00Z'),
-      updatedAt: new Date('2026-01-01T00:00:00Z'),
-    });
+  it('lists groups', async () => {
+    await seedDoc('groups/group_a', { name: 'A', memberCount: 10 });
+    await seedDoc('groups/group_b', { name: 'B', memberCount: 5 });
+    await seedDoc('groups/group_c', { name: 'C', memberCount: 12 });
 
-    const first = await getGroupsPage(2);
-    expect(first.items.map((g) => g.id)).toEqual(['group_c', 'group_a']);
-    expect(first.hasMore).toBe(true);
-    expect(first.lastDoc?.id).toBe('group_a');
-
-    const second = await getGroupsPage(2, first.lastDoc);
-    expect(second.items.map((g) => g.id)).toEqual(['group_b']);
-    expect(second.hasMore).toBe(false);
+    const groups = await getGroups();
+    expect(groups.map((group) => group.id).sort()).toEqual(['group_a', 'group_b', 'group_c']);
+    expect(groups.find((group) => group.id === 'group_c')?.memberCount).toBe(12);
   });
 
-  it('paginates groups by category', async () => {
+  it('lists only the groups of a category', async () => {
     await seedDoc('groups/aaa', { name: 'AAA', categoryId: 'cat_1', memberCount: 1 });
     await seedDoc('groups/aab', { name: 'AAB', categoryId: 'cat_1', memberCount: 1 });
-    await seedDoc('groups/aac', { name: 'AAC', categoryId: 'cat_1', memberCount: 1 });
     await seedDoc('groups/bbb', { name: 'BBB', categoryId: 'cat_2', memberCount: 1 });
 
-    const first = await getGroupsByCategoryPage('cat_1', 2);
-    expect(first.items.map((g) => g.id)).toEqual(['aaa', 'aab']);
-    expect(first.hasMore).toBe(true);
-    expect(first.lastDoc?.id).toBe('aab');
-
-    const second = await getGroupsByCategoryPage('cat_1', 2, first.lastDoc);
-    expect(second.items.map((g) => g.id)).toEqual(['aac']);
-    expect(second.hasMore).toBe(false);
+    const groups = await getGroupsByCategory('cat_1');
+    expect(groups.map((group) => group.id).sort()).toEqual(['aaa', 'aab']);
   });
 
   it('returns group data or null', async () => {
@@ -173,7 +146,7 @@ describe('Groups API (emulator) - queries', () => {
     expect(first.items.map((m) => m.uid)).toEqual([`${uid}_new`, `${uid}_mid`]);
     expect(first.hasMore).toBe(true);
 
-    const second = await getGroupMembersPage(groupId, 2, first.lastDoc);
+    const second = await getGroupMembersPage(groupId, 2, first.lastDoc ?? undefined);
     expect(second.items.map((m) => m.uid)).toEqual([`${uid}_old`]);
     expect(second.hasMore).toBe(false);
   });
@@ -243,13 +216,13 @@ describe('Groups API (emulator) - queries', () => {
     expect(first.items.map((p) => p.id)).toEqual(['post_new', 'post_mid']);
     expect(first.hasMore).toBe(true);
 
-    const second = await getPostsByGroup(groupId, 2, first.lastDoc);
+    const second = await getPostsByGroup(groupId, 2, first.lastDoc ?? undefined);
     expect(second.items.map((p) => p.id)).toEqual(['post_old']);
     expect(second.hasMore).toBe(false);
   });
 
   it('validates inputs with AppError', async () => {
-    await expect(getGroupsPage(0)).rejects.toSatisfy(isAppError);
+    await expect(getGroupsByCategory('')).rejects.toSatisfy(isAppError);
 
     try {
       await getGroup('');

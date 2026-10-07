@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import 'firebase/compat/firestore';
 
-import { getFeedPostById, getFeedPostsPage } from '@/features/posts/api/queries';
+import { getGlobalFeed, getPost } from '@/features/posts/api/queries';
 import { isAppError } from '@/shared/lib/errors';
 import { cleanupRulesTestEnv, clearRulesTestData, getRulesTestEnv } from '@/tests/rules/testEnv';
 
@@ -28,7 +28,7 @@ describe('Posts API (emulator) - queries', () => {
     await cleanupRulesTestEnv();
   });
 
-  it('paginates feed posts ordered by createdAt desc', async () => {
+  it('paginates the global feed newest first', async () => {
     await seedPost('post_newest', {
       authorId: 'user_a',
       authorSnapshot: { displayName: 'Alice', photoURL: null },
@@ -68,17 +68,20 @@ describe('Posts API (emulator) - queries', () => {
       commentCount: 0,
     });
 
-    const first = await getFeedPostsPage(2);
-    expect(first.items.map((p) => p.postId)).toEqual(['post_newest', 'post_middle']);
+    const first = await getGlobalFeed(2);
+    expect(first.items.map((post) => post.postId)).toEqual(['post_newest', 'post_middle']);
     expect(first.hasMore).toBe(true);
     expect(first.lastDoc?.id).toBe('post_middle');
 
-    const second = await getFeedPostsPage(2, first.lastDoc);
-    expect(second.items).toEqual([]);
+    // The feed returns posts still uploading with their status; FeedPage hides them.
+    const second = await getGlobalFeed(2, first.lastDoc ?? undefined);
+    expect(second.items.map((post) => [post.postId, post.status])).toEqual([
+      ['post_hidden', 'uploading'],
+    ]);
     expect(second.hasMore).toBe(false);
   });
 
-  it('returns null for missing post or non-ready status', async () => {
+  it('returns null for a missing post and the status of one still uploading', async () => {
     await seedPost('post_uploading', {
       authorId: 'user_a',
       authorSnapshot: { displayName: 'Alice', photoURL: null },
@@ -91,8 +94,8 @@ describe('Posts API (emulator) - queries', () => {
       commentCount: 0,
     });
 
-    await expect(getFeedPostById('missing_post')).resolves.toBeNull();
-    await expect(getFeedPostById('post_uploading')).resolves.toBeNull();
+    await expect(getPost('missing_post')).resolves.toBeNull();
+    await expect(getPost('post_uploading')).resolves.toMatchObject({ status: 'uploading' });
   });
 
   it('returns a ready post with normalized legacy fields', async () => {
@@ -108,7 +111,7 @@ describe('Posts API (emulator) - queries', () => {
       commentsCount: 1,
     });
 
-    const post = await getFeedPostById('post_ready');
+    const post = await getPost('post_ready');
     expect(post).not.toBeNull();
     expect(post?.postId).toBe('post_ready');
     expect(post?.authorName).toBe('Bob');
@@ -118,11 +121,9 @@ describe('Posts API (emulator) - queries', () => {
   });
 
   it('validates inputs with AppError', async () => {
-    await expect(getFeedPostsPage(0)).rejects.toSatisfy(isAppError);
-
     try {
-      await getFeedPostById('');
-      throw new Error('Expected getFeedPostById to throw');
+      await getPost('');
+      throw new Error('Expected getPost to throw');
     } catch (error) {
       expect(isAppError(error)).toBe(true);
       if (isAppError(error)) {

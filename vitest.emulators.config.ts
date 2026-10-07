@@ -1,6 +1,8 @@
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath, URL } from 'node:url';
 
+// Feature API tests that run the web's queries and mutations against the Firebase emulators
+// (Auth, Firestore, Storage and Functions) with the repo's own rules: `npm run test:emulators`.
 export default defineConfig({
   resolve: {
     alias: {
@@ -14,20 +16,5 @@ export default defineConfig({
     include: ['src/tests/emulators/**/*.cases.ts'],
     testTimeout: 60_000,
     hookTimeout: 60_000,
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json-summary', 'html'],
-      reportsDirectory: 'coverage/emulators',
-      all: true,
-      include: [
-        'src/features/posts/api/**/*.{ts,tsx}',
-        'src/features/chat/api/**/*.{ts,tsx}',
-        'src/features/groups/api/**/*.{ts,tsx}',
-        'src/features/notifications/api/**/*.{ts,tsx}',
-        'src/features/profile/api/queries.ts',
-        'src/features/profile/api/types.ts',
-      ],
-      exclude: ['src/**/*.d.ts', 'src/**/__mocks__/**'],
-    },
   },
 });
