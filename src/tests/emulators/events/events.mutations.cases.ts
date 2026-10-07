@@ -149,16 +149,10 @@ describe('Events API (emulator) - mutations', () => {
       coverUrl: null,
     });
 
+    // The API refuses before writing (the rules would deny it too), with a message for the user.
     await expect(joinEvent(eventId, uid)).rejects.toSatisfy(isAppError);
-    try {
-      await joinEvent(eventId, uid);
-      throw new Error('Expected joinEvent to throw');
-    } catch (error) {
-      expect(isAppError(error)).toBe(true);
-      if (isAppError(error)) {
-        expect(error.code).toBe('PERMISSION_DENIED');
-      }
-    }
+    await expect(joinEvent(eventId, uid)).rejects.toThrow('Este evento es privado');
+    await expect(readDoc(`events/${eventId}/attendees/${uid}`)).resolves.toBeNull();
   });
 
   it('deletes event by owner', async () => {

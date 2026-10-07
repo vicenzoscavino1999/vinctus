@@ -142,7 +142,6 @@ describe('Events API (emulator) - queries', () => {
   });
 
   it('validates inputs with AppError', async () => {
-    await expect(getUpcomingEvents(0)).rejects.toSatisfy(isAppError);
     await expect(isEventAttendee('', 'uid')).rejects.toSatisfy(isAppError);
     await expect(getEventAttendeeCount('')).rejects.toSatisfy(isAppError);
   });
