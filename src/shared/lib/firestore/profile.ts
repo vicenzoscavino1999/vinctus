@@ -14,6 +14,9 @@ import {
   trackFirestoreWrite,
 } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
+// The same defaults the web (AuthContext) and iOS write on sign-up, so a missing field reads
+// back as what new accounts get.
+import { DEFAULT_NOTIFICATION_SETTINGS, DEFAULT_PRIVACY_SETTINGS } from './sharedTypes';
 
 type AccountVisibility = 'public' | 'private';
 
@@ -68,23 +71,6 @@ interface UserSettingsReadModel {
   notifications: NotificationSettingsInput;
   privacy: PrivacySettingsInput;
 }
-
-const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettingsInput = {
-  pushEnabled: true,
-  emailEnabled: false,
-  mentionsOnly: false,
-  weeklyDigest: true,
-  productUpdates: false,
-};
-
-const DEFAULT_PRIVACY_SETTINGS: PrivacySettingsInput = {
-  accountVisibility: 'public',
-  allowDirectMessages: true,
-  showOnlineStatus: true,
-  showLastActive: true,
-  allowFriendRequests: true,
-  blockedUsers: [],
-};
 
 const resolveSnapshotSize = (value: unknown): number => {
   if (typeof value !== 'object' || value === null || !('size' in value)) return 1;

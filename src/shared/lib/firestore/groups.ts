@@ -5,7 +5,6 @@ import {
   getCountFromServer as _getCountFromServer,
   getDoc as _getDoc,
   getDocs as _getDocs,
-  increment,
   limit,
   orderBy,
   query,
@@ -291,45 +290,31 @@ export async function addGroupMember(
   role: 'member' | 'moderator' | 'admin' = 'member',
 ): Promise<void> {
   const memberRef = doc(db, 'groups', groupId, 'members', uid);
-  const membershipRef = doc(db, 'users', uid, 'memberships', groupId);
-  const groupRef = doc(db, 'groups', groupId);
-  const [memberSnap, membershipSnap] = await Promise.all([
-    getDoc(memberRef),
-    getDoc(membershipRef),
-  ]);
+  const memberSnap = await getDoc(memberRef);
+  if (memberSnap.exists()) return;
+
+  // The group owner may create (but not read) another user's membership index, so it is
+  // written together with the member instead of being checked first. memberCount is kept by
+  // the onGroupMemberCreated Cloud Function, like for joinGroupWithSync.
   const batch = writeBatch(db);
-
-  if (!memberSnap.exists()) {
-    batch.set(
-      memberRef,
-      {
-        uid,
-        groupId,
-        role,
-        joinedAt: serverTimestamp(),
-      } as GroupMemberWrite,
-      { merge: false },
-    );
-  }
-
-  if (!membershipSnap.exists()) {
-    batch.set(
-      membershipRef,
-      {
-        groupId,
-        joinedAt: serverTimestamp(),
-      } as UserMembershipWrite,
-      { merge: false },
-    );
-  }
-
-  if (!memberSnap.exists()) {
-    batch.update(groupRef, {
-      memberCount: increment(1),
-      updatedAt: serverTimestamp(),
-    });
-  }
-
+  batch.set(
+    memberRef,
+    {
+      uid,
+      groupId,
+      role,
+      joinedAt: serverTimestamp(),
+    } as GroupMemberWrite,
+    { merge: false },
+  );
+  batch.set(
+    doc(db, 'users', uid, 'memberships', groupId),
+    {
+      groupId,
+      joinedAt: serverTimestamp(),
+    } as UserMembershipWrite,
+    { merge: false },
+  );
   await batch.commit();
 }
 
