@@ -90,7 +90,11 @@ final class FirebaseChatRepo: ChatRepo {
   static let maxMessageLength = 4000
   private static let listLimit = 50
 
-  private var senderProfile: (name: String?, photoURL: String?)?
+  /// How long the sender's name and photo are reused before reading them again, so a profile edit
+  /// shows up in new messages without reading the profile for every message sent.
+  static let senderProfileLifetime: TimeInterval = 5 * 60
+
+  private var senderProfile: (uid: String, name: String?, photoURL: String?, loadedAt: Date)?
 
   private func context() throws -> (Firestore, String) {
     guard FirebaseApp.app() != nil else { throw ChatRepoError.firebaseNotConfigured }
@@ -204,8 +208,14 @@ final class FirebaseChatRepo: ChatRepo {
     let conversationID = Self.directConversationID(uid, otherUserID)
     let conversation = db.collection("conversations").document(conversationID)
 
-    // The read is denied while the conversation doesn't exist, so a failure means "create it".
-    let exists = (try? await conversation.getDocument().exists) ?? false
+    // The read is denied while the conversation doesn't exist, so "permission denied" means
+    // "create it". Any other failure (no connection, timeout) is reported as it is.
+    let exists: Bool
+    do {
+      exists = try await conversation.getDocument().exists
+    } catch where FirestoreValue.isPermissionDenied(error) {
+      exists = false
+    }
     if !exists {
       do {
         try await conversation.setData([
@@ -215,7 +225,7 @@ final class FirebaseChatRepo: ChatRepo {
           "createdAt": FieldValue.serverTimestamp(),
           "updatedAt": FieldValue.serverTimestamp(),
         ])
-      } catch {
+      } catch where FirestoreValue.isPermissionDenied(error) {
         // The rules only allow it between people who follow each other and haven't blocked.
         throw ChatRepoError.cannotStartConversation
       }
@@ -273,15 +283,17 @@ final class FirebaseChatRepo: ChatRepo {
   }
 
   private func currentSenderProfile(db: Firestore, uid: String) async throws -> (name: String?, photoURL: String?) {
-    if let senderProfile { return senderProfile }
+    if let senderProfile, senderProfile.uid == uid,
+      Date().timeIntervalSince(senderProfile.loadedAt) < Self.senderProfileLifetime
+    {
+      return (senderProfile.name, senderProfile.photoURL)
+    }
     let data = (try? await db.collection("users_public").document(uid).getDocument().data()) ?? [:]
     let user = Auth.auth().currentUser
-    let profile = (
-      name: (data["displayName"] as? String) ?? user?.displayName,
-      photoURL: (data["photoURL"] as? String) ?? user?.photoURL?.absoluteString
-    )
-    senderProfile = profile
-    return profile
+    let name = (data["displayName"] as? String) ?? user?.displayName
+    let photoURL = (data["photoURL"] as? String) ?? user?.photoURL?.absoluteString
+    senderProfile = (uid, name, photoURL, Date())
+    return (name, photoURL)
   }
 
   /// Id of the direct conversation between two users, the same for both (`dm_<a>_<b>`, sorted).
