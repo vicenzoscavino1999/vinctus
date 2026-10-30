@@ -735,7 +735,9 @@ export const markConversationRead = async (conversationId: string, uid: string):
       .commit();
   } catch (error) {
     const code = (error as { code?: string })?.code;
-    if (code !== 'not-found') {
+    // A missing member doc comes back as permission-denied, not not-found: the update rule reads
+    // the existing doc. Try creating it; the create rule decides whether that's allowed.
+    if (code !== 'not-found' && code !== 'permission-denied') {
       console.error('Error marking conversation read:', error);
       return;
     }
