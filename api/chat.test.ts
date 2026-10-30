@@ -2,14 +2,19 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetRateLimitStore } from './lib/rateLimit.js';
 
-const { mockCreateGroupAction, mockVerifyIdToken, mockGetUserDoc, mockGetUserDocGet } = vi.hoisted(
-  () => ({
-    mockCreateGroupAction: vi.fn(),
-    mockVerifyIdToken: vi.fn(),
-    mockGetUserDoc: vi.fn(),
-    mockGetUserDocGet: vi.fn(),
-  }),
-);
+const {
+  mockCreateGroupAction,
+  mockVerifyIdToken,
+  mockGetUserDoc,
+  mockGetUserDocGet,
+  mockRunTransaction,
+} = vi.hoisted(() => ({
+  mockCreateGroupAction: vi.fn(),
+  mockVerifyIdToken: vi.fn(),
+  mockGetUserDoc: vi.fn(),
+  mockGetUserDocGet: vi.fn(),
+  mockRunTransaction: vi.fn(),
+}));
 
 vi.mock('./lib/firebaseAdmin.js', () => ({
   getAuth: () => ({
@@ -17,6 +22,8 @@ vi.mock('./lib/firebaseAdmin.js', () => ({
   }),
   getDb: () => ({
     doc: mockGetUserDoc,
+    collection: () => ({ doc: () => ({ collection: () => ({ doc: () => ({}) }) }) }),
+    runTransaction: mockRunTransaction,
   }),
 }));
 
@@ -115,6 +122,8 @@ describe('api/chat', () => {
     process.env.NVIDIA_API_KEY = '';
     process.env.NVIDIA_BASE_URL = '';
     process.env.NVIDIA_MODEL = '';
+    process.env.OPENAI_API_KEY = '';
+    process.env.OPENAI_MODEL = '';
     process.env.FIREBASE_WEB_API_KEY = '';
     process.env.VITE_FIREBASE_API_KEY = '';
     process.env.FIREBASE_PROJECT_ID = '';
@@ -138,6 +147,12 @@ describe('api/chat', () => {
       name: 'Grupo',
       visibility: 'public',
     });
+    mockRunTransaction.mockImplementation(async (fn) =>
+      fn({
+        get: vi.fn().mockResolvedValue({ data: () => ({ count: 0 }) }),
+        set: vi.fn(),
+      }),
+    );
   });
 
   it('requires bearer auth even if body contains idToken', async () => {
@@ -227,6 +242,252 @@ describe('api/chat', () => {
     expect(result.statusCode).toBe(504);
     expect(result.payload).toEqual({ error: 'AI provider timeout' });
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('uses OpenAI only when selected, with a server-side key and redacted text', async () => {
+    process.env.OPENAI_API_KEY = 'openai-test-key';
+    process.env.OPENAI_MODEL = 'test-model';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: 'completed',
+        output: [{ type: 'message', content: [{ type: 'output_text', text: 'respuesta OpenAI' }] }],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+
+    await handler(
+      createReq({
+        authorization: 'Bearer token_1',
+        body: {
+          message: 'Escribe a persona@correo.com',
+          useOpenAI: true,
+          history: [{ role: 'model', parts: [{ text: 'Hola' }] }],
+        },
+      }),
+      createRes(result),
+    );
+
+    expect(result.payload).toEqual(
+      expect.objectContaining({
+        provider: 'openai',
+        model: 'test-model',
+        response: 'respuesta OpenAI',
+      }),
+    );
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.openai.com/v1/responses');
+    expect(init.headers).toEqual(
+      expect.objectContaining({ Authorization: 'Bearer openai-test-key' }),
+    );
+    const body = JSON.parse(String(init.body));
+    expect(body.max_output_tokens).toBe(4096);
+    expect(body.reasoning.effort).toBe('high');
+    expect(body.store).toBe(false);
+    expect(body.input).toEqual(
+      expect.arrayContaining([
+        { role: 'assistant', content: 'Hola' },
+        { role: 'user', content: 'Escribe a [email_redacted]' },
+      ]),
+    );
+    expect(body.tools[0].name).toBe('createGroup');
+  });
+
+  it('executes the existing group action returned by OpenAI', async () => {
+    process.env.OPENAI_API_KEY = 'openai-test-key';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: 'completed',
+        output: [
+          {
+            type: 'function_call',
+            name: 'createGroup',
+            arguments: JSON.stringify({ name: 'Grupo', visibility: 'private' }),
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({
+        authorization: 'Bearer token_1',
+        body: { message: 'crea un grupo', useOpenAI: true },
+      }),
+      createRes(result),
+    );
+    expect(mockCreateGroupAction).toHaveBeenCalledWith('user_1', {
+      name: 'Grupo',
+      visibility: 'private',
+      description: null,
+    });
+    expect(result.payload).toEqual(
+      expect.objectContaining({
+        provider: 'openai',
+        action: { type: 'createGroup', groupId: 'group_1' },
+      }),
+    );
+  });
+
+  it('sends an attached image to OpenAI with the user message', async () => {
+    process.env.OPENAI_API_KEY = 'openai-test-key';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: 'completed',
+        output: [{ type: 'message', content: [{ type: 'output_text', text: 'Un dibujo' }] }],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    const image = 'data:image/png;base64,YWJj';
+    await handler(
+      createReq({
+        authorization: 'Bearer token_1',
+        body: { message: 'Qué ves?', useOpenAI: true, image },
+      }),
+      createRes(result),
+    );
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
+    expect(body.input.at(-1).content).toContainEqual({ type: 'input_image', image_url: image });
+  });
+
+  it('generates an image only when explicitly requested', async () => {
+    process.env.OPENAI_API_KEY = 'openai-test-key';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: 'completed',
+        output: [{ type: 'image_generation_call', result: 'YWJj' }],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({
+        authorization: 'Bearer token_1',
+        body: { message: 'Un gato', useOpenAI: true, generateImage: true },
+      }),
+      createRes(result),
+    );
+    expect(result.payload).toEqual(
+      expect.objectContaining({ image: 'data:image/png;base64,YWJj', provider: 'openai' }),
+    );
+    const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
+    expect(body.tool_choice).toEqual({ type: 'image_generation' });
+    expect(body.tools[0].type).toBe('image_generation');
+  });
+
+  it('fails closed when the persistent image limit cannot be verified', async () => {
+    process.env.OPENAI_API_KEY = 'openai-test-key';
+    mockRunTransaction.mockRejectedValueOnce(new Error('firestore unavailable'));
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({
+        authorization: 'Bearer token_1',
+        body: { message: 'Un gato', useOpenAI: true, generateImage: true },
+      }),
+      createRes(result),
+    );
+    expect(result.statusCode).toBe(503);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects generation when the daily user limit is reached', async () => {
+    process.env.OPENAI_API_KEY = 'openai-test-key';
+    mockRunTransaction.mockImplementationOnce(async (fn) =>
+      fn({
+        get: vi
+          .fn()
+          .mockResolvedValueOnce({ data: () => ({ count: 1 }) })
+          .mockResolvedValueOnce({ data: () => ({ count: 5 }) }),
+        set: vi.fn(),
+      }),
+    );
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({
+        authorization: 'Bearer token_1',
+        body: { message: 'Un gato', useOpenAI: true, generateImage: true },
+      }),
+      createRes(result),
+    );
+    expect(result.statusCode).toBe(429);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects images without OpenAI selection and does not send them to fallback providers', async () => {
+    process.env.OPENAI_API_KEY = 'openai-test-key';
+    const fetchMock = vi.fn().mockResolvedValue(upstreamError(503, 'unavailable'));
+    vi.stubGlobal('fetch', fetchMock);
+    const rejected: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({
+        authorization: 'Bearer token_1',
+        body: { message: 'hola', image: 'data:image/png;base64,YWJj' },
+      }),
+      createRes(rejected),
+    );
+    expect(rejected.statusCode).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const failed: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({
+        authorization: 'Bearer token_1',
+        body: { message: 'hola', image: 'data:image/png;base64,YWJj', useOpenAI: true },
+      }),
+      createRes(failed),
+    );
+    expect(failed.statusCode).toBe(502);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not send messages to OpenAI without explicit selection', async () => {
+    process.env.OPENAI_API_KEY = 'openai-test-key';
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(createSuccessfulUpstreamResponse('respuesta Gemini'));
+    vi.stubGlobal('fetch', fetchMock);
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(createReq({ authorization: 'Bearer token_1' }), createRes(result));
+    expect(result.payload).toEqual(expect.objectContaining({ provider: 'gemini' }));
+    expect(String(fetchMock.mock.calls[0][0])).toContain('generativelanguage.googleapis.com');
+  });
+
+  it('falls back to Gemini when selected OpenAI is unavailable', async () => {
+    process.env.OPENAI_API_KEY = 'openai-test-key';
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(upstreamError(429, 'rate limit'))
+      .mockResolvedValueOnce(createSuccessfulUpstreamResponse('respuesta Gemini'));
+    vi.stubGlobal('fetch', fetchMock);
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({ authorization: 'Bearer token_1', body: { message: 'hola', useOpenAI: true } }),
+      createRes(result),
+    );
+    expect(result.payload).toEqual(
+      expect.objectContaining({ provider: 'gemini', response: 'respuesta Gemini' }),
+    );
+  });
+
+  it('reports missing OpenAI configuration when selected', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({ authorization: 'Bearer token_1', body: { message: 'hola', useOpenAI: true } }),
+      createRes(result),
+    );
+    expect(result.statusCode).toBe(503);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('falls back to NVIDIA when Gemini models are rate limited', async () => {

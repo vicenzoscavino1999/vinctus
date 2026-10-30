@@ -6,9 +6,10 @@ import {
   type FormEvent,
   type TouchEvent,
   type MouseEvent,
+  type ChangeEvent,
 } from 'react';
 import { Link } from 'react-router-dom';
-import { Send, Sparkles, Loader2, Mic, Volume2, Square } from 'lucide-react';
+import { Send, Sparkles, Loader2, Mic, Volume2, Square, ImagePlus } from 'lucide-react';
 import { sendChatMessage, type GeminiMessage } from '@/shared/lib/aiChat';
 import { getAIConsent, setAIConsent } from '@/shared/lib/aiConsent';
 import { useVoice } from '@/shared/lib/voice';
@@ -24,6 +25,8 @@ interface Message {
   timestamp: Date;
   /** Set when the assistant created a group, to link straight to it. */
   groupId?: string;
+  provider?: 'openai' | 'gemini' | 'nvidia';
+  image?: string;
 }
 
 export default function AIChatPage() {
@@ -38,12 +41,17 @@ export default function AIChatPage() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [history, setHistory] = useState<GeminiMessage[]>([]);
+  const [useOpenAI, setUseOpenAI] = useState(false);
+  const [image, setImage] = useState<string | undefined>();
+  const [generateImage, setGenerateImage] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [hasAiConsent, setHasAiConsent] = useState(() => getAIConsent().granted);
   const [isConsentSyncing, setIsConsentSyncing] = useState(false);
   const [consentSyncError, setConsentSyncError] = useState<string | null>(null);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isHoldingRef = useRef(false);
   const { user } = useAuth();
@@ -185,16 +193,20 @@ export default function AIChatPage() {
     setIsLoading(true);
 
     try {
-      const response = await sendChatMessage(text, history);
+      const response = await sendChatMessage(text, history, useOpenAI, { image, generateImage });
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: response.response,
         timestamp: new Date(),
         groupId: response.action?.type === 'createGroup' ? response.action.groupId : undefined,
+        provider: response.provider,
+        image: response.image,
       };
       setMessages((prev) => [...prev, assistantMessage]);
       setHistory(response.history);
+      setImage(undefined);
+      setGenerateImage(false);
     } catch (error) {
       console.error('Chat error:', error);
       const errorText =
@@ -211,6 +223,26 @@ export default function AIChatPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleImage = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (
+      !['image/png', 'image/jpeg', 'image/webp'].includes(file.type) ||
+      file.size > 2 * 1024 * 1024
+    ) {
+      setImageError('Elige una imagen PNG, JPEG o WebP de hasta 2 MB.');
+      return;
+    }
+    setImageError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') setImage(reader.result);
+    };
+    reader.onerror = () => setImageError('No se pudo leer la imagen.');
+    reader.readAsDataURL(file);
   };
 
   const handleAcceptAiConsent = async () => {
@@ -250,6 +282,24 @@ export default function AIChatPage() {
         </div>
 
         <AIModeTabs active="chat" />
+        <label className="flex items-start gap-2 text-xs text-neutral-300">
+          <input
+            type="checkbox"
+            checked={useOpenAI}
+            onChange={(e) => {
+              setUseOpenAI(e.target.checked);
+              if (!e.target.checked) {
+                setImage(undefined);
+                setGenerateImage(false);
+              }
+            }}
+            disabled={isLoading}
+          />
+          <span>
+            Usar OpenAI para este chat. Al seleccionarlo, tus mensajes y el historial se envían a
+            OpenAI; si no está disponible, se pueden usar Google Gemini o NVIDIA.
+          </span>
+        </label>
         <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-xs text-neutral-400">
           <p>{LEGAL_COPY.aiDisclosure}</p>
           <Link
@@ -317,6 +367,23 @@ export default function AIChatPage() {
                   <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
                 </div>
 
+                {msg.provider && (
+                  <span className="text-xs text-neutral-500">Proveedor: {msg.provider}</span>
+                )}
+
+                {msg.image && (
+                  <div className="space-y-2">
+                    <img src={msg.image} alt="Imagen generada" className="max-w-full rounded-xl" />
+                    <a
+                      href={msg.image}
+                      download="vinctus-imagen.png"
+                      className="text-xs text-brand-gold"
+                    >
+                      Descargar imagen
+                    </a>
+                  </div>
+                )}
+
                 {msg.groupId && (
                   <Link
                     to={`/group/${msg.groupId}`}
@@ -373,6 +440,48 @@ export default function AIChatPage() {
           onSubmit={handleSubmit}
           className="border-t border-neutral-800 bg-neutral-900 p-3 md:p-4"
         >
+          {imageError && (
+            <p role="alert" className="mb-2 text-xs text-red-300">
+              {imageError}
+            </p>
+          )}
+          {image && (
+            <div className="mb-2 flex items-center gap-2 text-xs text-neutral-300">
+              <img src={image} alt="Imagen adjunta" className="h-12 w-12 rounded object-cover" />
+              <span>La imagen se envía solo con este mensaje.</span>
+              <button type="button" onClick={() => setImage(undefined)} className="text-brand-gold">
+                Quitar
+              </button>
+            </div>
+          )}
+          {useOpenAI && (
+            <div className="mb-2 flex items-center gap-4 text-xs text-neutral-300">
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={handleImage}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={isLoading}
+                className="inline-flex items-center gap-1 disabled:opacity-50"
+              >
+                <ImagePlus size={16} /> Adjuntar imagen
+              </button>
+              <label className="inline-flex items-center gap-1">
+                <input
+                  type="checkbox"
+                  checked={generateImage}
+                  onChange={(e) => setGenerateImage(e.target.checked)}
+                  disabled={isLoading}
+                />{' '}
+                Crear imagen
+              </label>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             {voiceSupported && (
               <button
