@@ -11,7 +11,10 @@ import {
   persistentLocalCache,
   persistentMultipleTabManager,
 } from 'firebase/firestore';
-import { getFirestore as getFirestoreLite } from 'firebase/firestore/lite';
+import {
+  connectFirestoreEmulator as connectFirestoreLiteEmulator,
+  getFirestore as getFirestoreLite,
+} from 'firebase/firestore/lite';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
@@ -135,6 +138,8 @@ if (useEmulators) {
       disableWarnings: true,
     });
     connectFirestoreEmulator(db, emulatorHost, emulatorPorts.firestore);
+    // The REST instance too (follows and stories use it); otherwise it would reach the real project.
+    connectFirestoreLiteEmulator(dbLite, emulatorHost, emulatorPorts.firestore);
     connectFunctionsEmulator(functions, emulatorHost, emulatorPorts.functions);
     connectStorageEmulator(storage, emulatorHost, emulatorPorts.storage);
     globalState[globalKey] = true;

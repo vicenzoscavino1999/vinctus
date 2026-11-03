@@ -18,6 +18,8 @@
     "test:coverage": "vitest run --coverage",
     "test:rules:run": "vitest run --config vitest.rules.config.ts",
     "test:rules": "firebase emulators:exec --project vinctus-dev --only auth,firestore,storage \"npm run test:rules:run\"",
+    "test:emulators:run": "vitest run --config vitest.emulators.config.ts",
+    "test:emulators": "firebase emulators:exec --project vinctus-dev --only auth,firestore,storage,functions \"node scripts/run-emulator-tests.mjs\"",
     "test:delete-account:harness": "firebase emulators:exec --project vinctus-dev --only auth,firestore,storage,functions \"node scripts/delete-account-v2-harness.mjs\"",
     "preflight:appstore": "node scripts/app-store-preflight.mjs",
     "preflight:appcheck": "node scripts/app-check-preflight.mjs",
