@@ -7,6 +7,7 @@ import { compressToWebp, validateImage } from '@/shared/lib/compression';
 import { parseYouTubeUrl } from '@/shared/lib/youtube';
 import { fetchYouTubeVideoDetails, type YouTubeVideoDetails } from '@/shared/lib/youtubeApi';
 import { deletePostAllMedia, uploadPostMedia } from '@/shared/lib/storage';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 export type CreatePostAttachment = {
   id: string;
@@ -336,7 +337,9 @@ export const useCreatePost = ({
 
     const autoTitle =
       trimmedTitle ||
-      (youtubeDetails?.title?.trim() ? youtubeDetails.title.trim().slice(0, 120) : '');
+      (youtubeDetails?.title?.trim()
+        ? youtubeDetails.title.trim().slice(0, LIMITS.posts.titleMaxLength)
+        : '');
 
     setIsSubmitting(true);
     setError(null);

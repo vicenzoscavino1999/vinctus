@@ -38,7 +38,7 @@ export const authorSnapshotSchema = z.object({
   photoURL: urlSchema.nullable(),
 });
 
-export const commentTextSchema = z.string().trim().min(1).max(2000);
+export const commentTextSchema = z.string().trim().min(1).max(LIMITS.comments.textMaxLength);
 
 export const OWNER_IDS_READ_CHUNK_SIZE = 200;
 export const ownerIdsSchema = z.array(idSchema).min(1).max(OWNER_IDS_READ_CHUNK_SIZE);
@@ -60,10 +60,10 @@ export const createPostUploadingInputSchema = z.object({
   postId: idSchema,
   authorId: idSchema,
   authorSnapshot: authorSnapshotSchema,
-  title: z.string().trim().max(160).nullable().optional(),
+  title: z.string().trim().max(LIMITS.posts.titleMaxLength).nullable().optional(),
   text: z.string().trim().min(1).max(LIMITS.posts.textMaxLength),
   groupId: idSchema.nullable().optional(),
-  categoryId: z.string().trim().min(1).max(120).nullable().optional(),
+  categoryId: z.string().trim().min(1).max(LIMITS.posts.categoryIdMaxLength).nullable().optional(),
 });
 
 export const updatePostPatchSchema = z

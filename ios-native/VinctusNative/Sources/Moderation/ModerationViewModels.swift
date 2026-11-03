@@ -9,7 +9,7 @@ final class ReportViewModel: ObservableObject {
   @Published private(set) var didSubmit = false
   @Published private(set) var errorMessage: String?
 
-  static let detailsLimit = 1000
+  static let detailsLimit = Limits.Reports.detailsMaxLength
 
   private let target: ReportTarget
   private let repo: ModerationRepo

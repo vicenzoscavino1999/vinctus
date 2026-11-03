@@ -95,6 +95,10 @@ export const LIMITS = {
     /** Characters of history, all messages together, sent with an AI chat request. */
     historyMaxTotalLength: 12000,
   },
+  arena: {
+    /** Topic of a new Arena debate (MAX_TOPIC_CHARS in the createDebate Cloud Function). */
+    topicMaxLength: 240,
+  },
   savedArenaDebates: {
     /** users/{uid}/savedArenaDebates topic. */
     topicMaxLength: 240,
@@ -124,6 +128,14 @@ export const LIMITS = {
   posts: {
     /** Text of a post (content and text fields). */
     textMaxLength: 5000,
+    /** Title of a post. */
+    titleMaxLength: 120,
+    /** Category id of a post. */
+    categoryIdMaxLength: 100,
+  },
+  comments: {
+    /** Text of a post comment (posts/{id}/comments). */
+    textMaxLength: 1000,
   },
   groups: {
     /** Group name. */
@@ -134,12 +146,18 @@ export const LIMITS = {
   groupRequests: {
     /** Group name copied into a join request (group_requests). */
     groupNameMaxLength: 120,
+    /** Requester's display name copied into a join request. */
+    fromUserNameMaxLength: 80,
   },
   reports: {
     /** Details of a report (reports). */
     detailsMaxLength: 2000,
   },
   contributions: {
+    /** Title of a profile contribution (contributions). */
+    titleMaxLength: 140,
+    /** Description of a profile contribution. */
+    descriptionMaxLength: 2000,
     /** Link of a profile contribution (contributions). */
     linkMaxLength: 500,
   },

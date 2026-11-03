@@ -1,12 +1,14 @@
 // @vitest-environment node
-// firestore.rules can't import shared/firestore-contract.json, so this test checks that the
-// collections it matches and the limits it enforces are the ones in the contract.
+// firestore.rules (and the Cloud Functions) can't import shared/firestore-contract.json, so this
+// test checks that the collections the rules match and the limits they enforce are the ones in
+// the contract, and that the other files a limit names contain its value.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { COLLECTIONS, LIMITS, SUBCOLLECTIONS } from './firestoreContract';
 
 type RulesCheck = { in: string; field: string };
-type Limit = { value: number; doc: string; rules?: RulesCheck[] };
+type FileCheck = { path: string; contains: string };
+type Limit = { value: number; doc: string; rules?: RulesCheck[]; files?: FileCheck[] };
 type Contract = {
   collections: Record<string, string>;
   subcollections: Record<string, { name: string; parents: string[] }>;
@@ -99,10 +101,18 @@ describe('Firestore contract', () => {
     expect(new Set(found)).toEqual(new Set([value]));
   });
 
-  it('states the minimum age in the terms and the privacy policy', () => {
-    for (const page of ['public/terms.html', 'public/privacy.html']) {
-      expect(read(page)).toContain(`${LIMITS.account.minimumAge} años`);
-    }
+  const fileChecks = Object.entries(contract.limits).flatMap(([group, limits]) =>
+    Object.entries(limits).flatMap(([key, limit]) =>
+      (limit.files ?? []).map((file) => ({
+        name: `${group}.${key}`,
+        path: file.path,
+        text: file.contains.replace('{value}', String(limit.value)),
+      })),
+    ),
+  );
+
+  it.each(fileChecks)('$name appears in $path', ({ path, text }) => {
+    expect(read(path)).toContain(text);
   });
 
   it('is what the generated constants hold', () => {

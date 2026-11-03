@@ -98,6 +98,11 @@ enum Limits {
     static let historyMaxTotalLength = 12000
   }
 
+  enum Arena {
+    /// Topic of a new Arena debate (MAX_TOPIC_CHARS in the createDebate Cloud Function).
+    static let topicMaxLength = 240
+  }
+
   enum SavedArenaDebates {
     /// users/{uid}/savedArenaDebates topic.
     static let topicMaxLength = 240
@@ -131,6 +136,15 @@ enum Limits {
   enum Posts {
     /// Text of a post (content and text fields).
     static let textMaxLength = 5000
+    /// Title of a post.
+    static let titleMaxLength = 120
+    /// Category id of a post.
+    static let categoryIdMaxLength = 100
+  }
+
+  enum Comments {
+    /// Text of a post comment (posts/{id}/comments).
+    static let textMaxLength = 1000
   }
 
   enum Groups {
@@ -143,6 +157,8 @@ enum Limits {
   enum GroupRequests {
     /// Group name copied into a join request (group_requests).
     static let groupNameMaxLength = 120
+    /// Requester's display name copied into a join request.
+    static let fromUserNameMaxLength = 80
   }
 
   enum Reports {
@@ -151,6 +167,10 @@ enum Limits {
   }
 
   enum Contributions {
+    /// Title of a profile contribution (contributions).
+    static let titleMaxLength = 140
+    /// Description of a profile contribution.
+    static let descriptionMaxLength = 2000
     /// Link of a profile contribution (contributions).
     static let linkMaxLength = 500
   }

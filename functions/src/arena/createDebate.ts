@@ -14,6 +14,8 @@ import { checkTopic, sanitizeTopic } from './guardrails';
 
 const REGION = 'us-central1';
 const ARENA_DEBATES_COLLECTION = 'arenaDebates';
+// Default = LIMITS.arena.topicMaxLength in shared/firestore-contract.json, which the web and the
+// native app check before calling; src/shared/lib/firestore/firestoreContract.test.ts checks it.
 const MAX_TOPIC_CHARS = parseInt(process.env.AI_MAX_TOPIC_CHARS || '240', 10);
 const EMAIL_PII_REGEX = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const PHONE_PII_REGEX = /(?:\+?\d[\d().\s-]{7,}\d)/g;

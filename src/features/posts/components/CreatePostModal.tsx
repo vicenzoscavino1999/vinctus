@@ -110,10 +110,12 @@ const CreatePostModal = ({
               onChange={(event) => setTitle(event.target.value)}
               placeholder="Escribe un titulo breve"
               className="w-full bg-neutral-900/40 border border-neutral-800 rounded-lg px-4 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-              maxLength={120}
+              maxLength={LIMITS.posts.titleMaxLength}
               disabled={isSubmitting}
             />
-            <div className="text-right text-xs text-neutral-600 mt-1">{title.length}/120</div>
+            <div className="text-right text-xs text-neutral-600 mt-1">
+              {title.length}/{LIMITS.posts.titleMaxLength}
+            </div>
           </div>
 
           <textarea

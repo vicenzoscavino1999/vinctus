@@ -72,6 +72,13 @@ function validate(contract) {
           fail(`limit "${group}.${key}" has a rules check without "in" and "field"`);
         }
       }
+      for (const check of limit.files ?? []) {
+        if (typeof check?.path !== 'string' || !check?.contains?.includes?.('{value}')) {
+          fail(
+            `limit "${group}.${key}" has a files check without "path" and a "contains" with {value}`,
+          );
+        }
+      }
     }
   }
 }

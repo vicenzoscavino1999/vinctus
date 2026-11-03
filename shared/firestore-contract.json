@@ -4,7 +4,7 @@
     "After editing, run `npm run contract:generate`: it writes src/shared/lib/firestore/firestoreContract.ts, api/lib/firestoreContract.ts and ios-native/VinctusNative/Sources/Shared/FirestoreContract.swift.",
     "firestore.rules can't import this file: src/shared/lib/firestore/firestoreContract.test.ts checks that its paths and numbers match.",
     "collections: top-level collections. subcollections: name and the parent path(s) it lives under, as in firestore.rules.",
-    "limits: value, a doc comment, and the firestore.rules checks that use it ({ in: function name or match path, field: the checked expression })."
+    "limits: value, a doc comment, the firestore.rules checks that use it ({ in: function name or match path, field: the checked expression }), and other files that must contain it ({ path, contains: text with {value} }), such as Cloud Functions that can't import this file."
   ],
   "collections": {
     "users": "users",
@@ -55,7 +55,11 @@
     "account": {
       "minimumAge": {
         "value": 13,
-        "doc": "Minimum age to use Vinctus (terms, privacy policy and the native age check)."
+        "doc": "Minimum age to use Vinctus (terms, privacy policy and the native age check).",
+        "files": [
+          { "path": "public/terms.html", "contains": "{value} años" },
+          { "path": "public/privacy.html", "contains": "{value} años" }
+        ]
       }
     },
     "profile": {
@@ -79,6 +83,19 @@
       "historyMaxTotalLength": {
         "value": 12000,
         "doc": "Characters of history, all messages together, sent with an AI chat request."
+      }
+    },
+    "arena": {
+      "topicMaxLength": {
+        "value": 240,
+        "doc": "Topic of a new Arena debate (MAX_TOPIC_CHARS in the createDebate Cloud Function).",
+        "files": [
+          {
+            "path": "functions/src/arena/createDebate.ts",
+            "contains": "process.env.AI_MAX_TOPIC_CHARS || '{value}'"
+          },
+          { "path": "functions/src/arena/guardrails.ts", "contains": ".slice(0, {value})" }
+        ]
       }
     },
     "savedArenaDebates": {
@@ -166,6 +183,30 @@
           { "in": "isValidPostCreateUploading", "field": "data.content" },
           { "in": "isValidPostUpdate", "field": "request.resource.data.content" }
         ]
+      },
+      "titleMaxLength": {
+        "value": 120,
+        "doc": "Title of a post.",
+        "rules": [
+          { "in": "isValidPostCreate", "field": "data.title" },
+          { "in": "isValidPostCreateUploading", "field": "data.title" },
+          { "in": "isValidPostUpdate", "field": "request.resource.data.title" }
+        ]
+      },
+      "categoryIdMaxLength": {
+        "value": 100,
+        "doc": "Category id of a post.",
+        "rules": [
+          { "in": "isValidPostCreate", "field": "data.categoryId" },
+          { "in": "isValidPostCreateUploading", "field": "data.categoryId" }
+        ]
+      }
+    },
+    "comments": {
+      "textMaxLength": {
+        "value": 1000,
+        "doc": "Text of a post comment (posts/{id}/comments).",
+        "rules": [{ "in": "isValidPostCommentCreate", "field": "data.text" }]
       }
     },
     "groups": {
@@ -191,6 +232,11 @@
         "value": 120,
         "doc": "Group name copied into a join request (group_requests).",
         "rules": [{ "in": "isValidGroupJoinRequestCreate", "field": "data.groupName" }]
+      },
+      "fromUserNameMaxLength": {
+        "value": 80,
+        "doc": "Requester's display name copied into a join request.",
+        "rules": [{ "in": "isValidGroupJoinRequestCreate", "field": "data.fromUserName" }]
       }
     },
     "reports": {
@@ -201,6 +247,22 @@
       }
     },
     "contributions": {
+      "titleMaxLength": {
+        "value": 140,
+        "doc": "Title of a profile contribution (contributions).",
+        "rules": [
+          { "in": "isValidContributionCreate", "field": "data.title" },
+          { "in": "isValidContributionUpdate", "field": "data.title" }
+        ]
+      },
+      "descriptionMaxLength": {
+        "value": 2000,
+        "doc": "Description of a profile contribution.",
+        "rules": [
+          { "in": "isValidContributionCreate", "field": "data.description" },
+          { "in": "isValidContributionUpdate", "field": "data.description" }
+        ]
+      },
       "linkMaxLength": {
         "value": 500,
         "doc": "Link of a profile contribution (contributions).",

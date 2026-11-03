@@ -16,6 +16,7 @@ import type { PostSummary } from '@/features/posts/model/postSummary';
 import { useToast } from '@/shared/ui/Toast';
 import { formatRelativeTime, formatBytes } from '@/shared/lib/formatUtils';
 import { parseYouTubeUrl } from '@/shared/lib/youtube';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 interface PostCommentsModalProps {
   isOpen: boolean;
@@ -504,13 +505,15 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
                 rows={3}
-                maxLength={1000}
+                maxLength={LIMITS.comments.textMaxLength}
                 disabled={!user || submitting}
                 className="w-full bg-neutral-900/60 border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors resize-none disabled:opacity-60"
                 placeholder={user ? 'Escribe tu comentario...' : 'Inicia sesion para comentar'}
               />
               <div className="flex items-center justify-between text-xs text-neutral-500">
-                <span>{message.length}/1000</span>
+                <span>
+                  {message.length}/{LIMITS.comments.textMaxLength}
+                </span>
                 <button
                   type="submit"
                   disabled={!user || submitting}

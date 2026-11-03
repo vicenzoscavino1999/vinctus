@@ -57,5 +57,6 @@ export function checkTopic(topic: string): GuardrailResult {
 }
 
 export function sanitizeTopic(topic: string): string {
+  // LIMITS.arena.topicMaxLength in shared/firestore-contract.json (checked by its test).
   return topic.trim().replace(/\s+/g, ' ').slice(0, 240);
 }

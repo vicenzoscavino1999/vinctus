@@ -48,7 +48,7 @@ enum PostCommentsRepoError: LocalizedError {
 }
 
 final class FirebasePostCommentsRepo: PostCommentsRepo {
-  private let commentLimit = 1000
+  private let commentLimit = Limits.Comments.textMaxLength
   private let db: Firestore?
   private let auth: Auth?
 

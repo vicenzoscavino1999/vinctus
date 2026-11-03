@@ -359,7 +359,9 @@ final class FirebaseGroupsRepo: GroupsRepo {
       "createdAt": FieldValue.serverTimestamp(),
       "updatedAt": FieldValue.serverTimestamp(),
     ]
-    if let name = FirestoreValue.string(profile["displayName"]) { request["fromUserName"] = String(name.prefix(80)) }
+    if let name = FirestoreValue.string(profile["displayName"]) {
+      request["fromUserName"] = String(name.prefix(Limits.GroupRequests.fromUserNameMaxLength))
+    }
     if let photo = FirestoreValue.string(profile["photoURL"]) { request["fromUserPhoto"] = photo }
     try await db.collection(FirestoreCollections.groupRequests).document().setData(request)
   }

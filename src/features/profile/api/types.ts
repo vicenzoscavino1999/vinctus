@@ -56,8 +56,13 @@ export const userProfileUpdateSchema: z.ZodType<UserProfileUpdate> = z.object({
 export const createContributionInputSchema = z.object({
   userId: uidSchema,
   type: contributionTypeSchema,
-  title: z.string().trim().min(1).max(180),
-  description: z.string().trim().max(3000).nullable().optional(),
+  title: z.string().trim().min(1).max(LIMITS.contributions.titleMaxLength),
+  description: z
+    .string()
+    .trim()
+    .max(LIMITS.contributions.descriptionMaxLength)
+    .nullable()
+    .optional(),
   link: urlSchema.nullable().optional(),
   categoryId: categoryIdSchema.nullable().optional(),
 });

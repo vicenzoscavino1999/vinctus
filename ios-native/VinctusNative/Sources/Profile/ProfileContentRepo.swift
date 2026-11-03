@@ -112,7 +112,8 @@ struct NewContribution {
     let link = link.trimmingCharacters(in: .whitespacesAndNewlines)
     let scheme = URL(string: link)?.scheme?.lowercased()
     guard
-      !title.isEmpty, title.count <= 140, description.count <= 2000,
+      !title.isEmpty, title.count <= Limits.Contributions.titleMaxLength,
+      description.count <= Limits.Contributions.descriptionMaxLength,
       link.count <= Limits.Contributions.linkMaxLength,
       link.isEmpty || scheme == "http" || scheme == "https"
     else {
