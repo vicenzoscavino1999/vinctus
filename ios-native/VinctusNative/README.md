@@ -13,6 +13,9 @@ cd ios-native/VinctusNative
 xcodegen generate
 ```
 
+`VinctusNative.xcodeproj` is not committed (only its `Package.resolved`), so run this after every
+pull that adds, moves or removes files.
+
 ## Firebase setup (dev/staging/prod)
 
 Add the corresponding Firebase iOS config plists (not committed):

@@ -21,7 +21,8 @@ SwiftUI app that reads and writes the same Firebase data as the web app (`src/`)
 | `Settings/`    | Settings, account deletion                                               |
 
 XcodeGen (`project.yml`) turns each folder into an Xcode group, so a new file only has to be
-placed in the right folder.
+placed in the right folder. The generated `VinctusNative.xcodeproj` is not committed (only its
+`Package.resolved`): run `xcodegen generate` after pulling.
 
 ## Layers
 
