@@ -45,12 +45,7 @@ jobs:
         run: brew install xcodegen
 
       - name: Generate Xcode project
-        run: |
-          xcodegen generate
-          # Drift between project.yml and the committed project. It is harmless (every setup runs
-          # `xcodegen generate` first, see GUIA_APP_STORE.md); the stat shows when to refresh it.
-          # Not committed back automatically: bot commits leave a PR's checks waiting for approval.
-          git diff --stat -- VinctusNative.xcodeproj
+        run: xcodegen generate
 
       - uses: actions/cache@v4
         with:
