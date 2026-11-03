@@ -56,7 +56,9 @@ final class FollowIntegrationTests: EmulatorTestCase {
     do {
       _ = try await FirebaseChatRepo().openDirectConversation(with: bruno.uid)
       XCTFail("The rules should reject a conversation between people who don't follow each other")
-    } catch {}
+    } catch ChatRepoError.cannotStartConversation {
+      // Expected: the rules' denial is reported as "you can't write to this person".
+    }
   }
 }
 
@@ -85,7 +87,9 @@ final class ModerationIntegrationTests: EmulatorTestCase {
     do {
       _ = try await FirebaseChatRepo().openDirectConversation(with: bruno.uid)
       XCTFail("The rules should reject a conversation with a blocked user")
-    } catch {}
+    } catch ChatRepoError.cannotStartConversation {
+      // Expected.
+    }
 
     try await moderation.unblockUser(bruno.uid)
     let afterUnblock = try await moderation.fetchBlockedUserIDs()
