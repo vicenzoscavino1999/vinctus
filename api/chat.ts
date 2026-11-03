@@ -15,9 +15,13 @@ const DEFAULT_GEMINI_MODELS = [
   'gemini-flash-latest',
 ] as const;
 const DEFAULT_NVIDIA_MODEL = 'meta/llama-3.3-70b-instruct';
+const DEFAULT_OPENAI_MODEL = 'gpt-6.1-terra';
+const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 const DEFAULT_NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const MAX_BODY_BYTES = 64 * 1024;
+const MAX_BODY_BYTES = 3 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+const MAX_GENERATED_IMAGE_BASE64_CHARS = 3_500_000;
 const MAX_HISTORY_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 2000;
 const MAX_PART_TEXT_CHARS = 2000;
@@ -39,6 +43,9 @@ interface GeminiFunctionCall {
 interface ChatRequest {
   history?: GeminiMessage[];
   message: string;
+  useOpenAI?: boolean;
+  image?: string;
+  generateImage?: boolean;
 }
 
 interface GeminiApiResponse {
@@ -93,7 +100,7 @@ interface FirestoreRestDocument {
   fields?: Record<string, FirestoreRestValue>;
 }
 
-type AIProvider = 'gemini' | 'nvidia';
+type AIProvider = 'gemini' | 'nvidia' | 'openai';
 type AICallErrorCode = 'invalid_response' | 'network' | 'rate_limit' | 'timeout' | 'upstream';
 
 type AICallResult =
@@ -101,6 +108,7 @@ type AICallResult =
       data: {
         functionCall?: GeminiFunctionCall;
         responseText: string | null;
+        image?: string;
       };
       ok: true;
     }
@@ -112,8 +120,7 @@ type AICallResult =
     };
 
 type ValidationResult =
-  | { ok: true; value: ChatRequest }
-  | { error: string; ok: false; status: number };
+  { ok: true; value: ChatRequest } | { error: string; ok: false; status: number };
 
 class PayloadTooLargeError extends Error {
   constructor() {
@@ -385,6 +392,9 @@ function sanitizePIIFromChatRequest(input: ChatRequest): ChatRequest {
   return {
     history: safeHistory,
     message: redactPIIText(input.message),
+    useOpenAI: input.useOpenAI,
+    image: input.image,
+    generateImage: input.generateImage,
   };
 }
 
@@ -427,8 +437,31 @@ function validateChatRequest(input: unknown): ValidationResult {
   }
   const data = input as Record<string, unknown>;
   const keys = Object.keys(data);
-  if (keys.some((key) => key !== 'message' && key !== 'history')) {
+  if (
+    keys.some((key) => !['message', 'history', 'useOpenAI', 'image', 'generateImage'].includes(key))
+  ) {
     return { error: 'Body contains unsupported fields', ok: false, status: 400 };
+  }
+  if (data.useOpenAI !== undefined && typeof data.useOpenAI !== 'boolean') {
+    return { error: 'useOpenAI must be a boolean', ok: false, status: 400 };
+  }
+  if (data.generateImage !== undefined && typeof data.generateImage !== 'boolean') {
+    return { error: 'generateImage must be a boolean', ok: false, status: 400 };
+  }
+  if (data.image !== undefined) {
+    if (
+      typeof data.image !== 'string' ||
+      !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(data.image)
+    ) {
+      return { error: 'Imagen inválida. Usa PNG, JPEG o WebP.', ok: false, status: 400 };
+    }
+    const encoded = data.image.slice(data.image.indexOf(',') + 1);
+    if (encoded.length % 4 !== 0 || Buffer.byteLength(encoded, 'base64') > MAX_IMAGE_BYTES) {
+      return { error: 'La imagen debe pesar como máximo 2 MB.', ok: false, status: 400 };
+    }
+  }
+  if ((data.image || data.generateImage) && data.useOpenAI !== true) {
+    return { error: 'Selecciona OpenAI para usar imágenes.', ok: false, status: 400 };
   }
   if (typeof data.message !== 'string') {
     return { error: 'Message is required', ok: false, status: 400 };
@@ -525,6 +558,9 @@ function validateChatRequest(input: unknown): ValidationResult {
     value: {
       history,
       message,
+      useOpenAI: data.useOpenAI === true,
+      image: typeof data.image === 'string' ? data.image : undefined,
+      generateImage: data.generateImage === true,
     },
   };
 }
@@ -683,7 +719,7 @@ async function callGeminiAPI(
   }
 }
 
-async function callNVIDIAAPI(
+async function callOpenAICompatibleAPI(
   model: string,
   apiKey: string,
   baseUrl: string,
@@ -698,9 +734,9 @@ async function callNVIDIAAPI(
     const response = await fetch(url, {
       body: JSON.stringify({
         max_tokens: 1024,
+        temperature: 0.7,
         messages: buildOpenAIMessages(contents, systemInstruction),
         model,
-        temperature: 0.7,
         tool_choice: 'auto',
         tools: OPENAI_TOOLS,
       }),
@@ -748,6 +784,10 @@ async function callNVIDIAAPI(
       : undefined;
     const responseText = extractTextFromOpenAIContent(message.content);
 
+    if (!responseText && !functionCall) {
+      return { code: 'invalid_response', message: 'empty_message', ok: false, status: 502 };
+    }
+
     return {
       data: {
         functionCall,
@@ -769,6 +809,148 @@ async function callNVIDIAAPI(
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+interface OpenAIResponse {
+  status?: string;
+  output?: Array<{
+    type?: string;
+    name?: string;
+    arguments?: string;
+    result?: string;
+    content?: Array<{ type?: string; text?: string }>;
+  }>;
+}
+
+async function callOpenAIResponses(
+  model: string,
+  apiKey: string,
+  contents: GeminiMessage[],
+  systemInstruction: { parts: { text: string }[] },
+  image?: string,
+  generateImage = false,
+): Promise<AICallResult> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 90_000);
+  const messages = buildOpenAIMessages(contents, systemInstruction);
+  const input = messages.map((message, index) => {
+    if (image && index === messages.length - 1) {
+      return {
+        role: message.role,
+        content: [
+          { type: 'input_text', text: message.content },
+          { type: 'input_image', image_url: image },
+        ],
+      };
+    }
+    return message;
+  });
+
+  try {
+    const response = await fetch(`${OPENAI_BASE_URL}/responses`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        input,
+        reasoning: { effort: 'high' },
+        max_output_tokens: 4096,
+        store: false,
+        parallel_tool_calls: false,
+        tools: generateImage
+          ? [{ type: 'image_generation', quality: 'low', size: '1024x1024', output_format: 'png' }]
+          : [{ type: 'function', ...CREATE_GROUP_FUNCTION_DECLARATION, strict: false }],
+        ...(generateImage ? { tool_choice: { type: 'image_generation' } } : {}),
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const body = truncateForLog(
+        (await response.text().catch(() => 'upstream error')) || 'upstream error',
+      );
+      if (detectRateLimit(response.status, body)) {
+        return { code: 'rate_limit', message: body, ok: false, status: 429 };
+      }
+      return {
+        code: 'upstream',
+        message: `upstream_${response.status}:${body}`,
+        ok: false,
+        status: 502,
+      };
+    }
+    const data = (await response.json().catch(() => null)) as OpenAIResponse | null;
+    if (!data || data.status !== 'completed' || !Array.isArray(data.output)) {
+      return { code: 'invalid_response', message: 'incomplete_response', ok: false, status: 502 };
+    }
+    const call = data.output.find(
+      (item) => item.type === 'function_call' && item.name === 'createGroup',
+    );
+    const imageResult = data.output.find((item) => item.type === 'image_generation_call')?.result;
+    const responseText = data.output
+      .flatMap((item) => item.content ?? [])
+      .filter((item) => item.type === 'output_text' && typeof item.text === 'string')
+      .map((item) => item.text?.trim())
+      .filter(Boolean)
+      .join('\n');
+    if (
+      generateImage &&
+      (!imageResult ||
+        imageResult.length > MAX_GENERATED_IMAGE_BASE64_CHARS ||
+        !/^[A-Za-z0-9+/]+={0,2}$/.test(imageResult))
+    ) {
+      return { code: 'invalid_response', message: 'missing_image', ok: false, status: 502 };
+    }
+    if (!responseText && !call && !imageResult) {
+      return { code: 'invalid_response', message: 'empty_message', ok: false, status: 502 };
+    }
+    return {
+      ok: true,
+      data: {
+        responseText: responseText || (imageResult ? 'Aquí tienes la imagen.' : null),
+        functionCall: call?.name
+          ? { name: call.name, args: parseToolCallArgs(call.arguments) }
+          : undefined,
+        image: imageResult ? `data:image/png;base64,${imageResult}` : undefined,
+      },
+    };
+  } catch (error) {
+    const maybeError = error as { name?: string; message?: string };
+    if (maybeError?.name === 'AbortError') {
+      return { code: 'timeout', message: 'request_timeout', ok: false, status: 504 };
+    }
+    return {
+      code: 'network',
+      message: truncateForLog(maybeError?.message ?? 'network_error'),
+      ok: false,
+      status: 502,
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function reserveImageGeneration(uid: string): Promise<boolean> {
+  const db = getDb();
+  const day = new Date().toISOString().slice(0, 10);
+  const dailyRef = db.collection('aiImageUsage').doc(day);
+  const userRef = dailyRef.collection('users').doc(uid);
+  return db.runTransaction(async (transaction) => {
+    const [daily, user] = await Promise.all([transaction.get(dailyRef), transaction.get(userRef)]);
+    const total = Number(daily.data()?.count ?? 0);
+    const userCount = Number(user.data()?.count ?? 0);
+    if (
+      !Number.isSafeInteger(total) ||
+      !Number.isSafeInteger(userCount) ||
+      total < 0 ||
+      userCount < 0 ||
+      total >= 50 ||
+      userCount >= 5
+    )
+      return false;
+    transaction.set(dailyRef, { count: total + 1 }, { merge: true });
+    transaction.set(userRef, { count: userCount + 1 }, { merge: true });
+    return true;
+  });
 }
 
 function buildSystemInstruction(): { parts: { text: string }[] } {
@@ -793,9 +975,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY,
   );
   const nvidiaApiKey = normalizeSecret(process.env.NVIDIA_API_KEY);
+  const openaiApiKey = normalizeSecret(process.env.OPENAI_API_KEY);
   const nvidiaBaseUrl = normalizeBaseUrl(process.env.NVIDIA_BASE_URL, DEFAULT_NVIDIA_BASE_URL);
-  if (!geminiApiKey && !nvidiaApiKey) {
-    console.error('[chat-api] missing API keys (GEMINI_API_KEY or NVIDIA_API_KEY)');
+  if (!geminiApiKey && !nvidiaApiKey && !openaiApiKey) {
+    console.error('[chat-api] missing AI provider API keys');
     return res.status(500).json({ error: 'AI service not configured' });
   }
 
@@ -862,6 +1045,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const sanitizedRequest = sanitizePIIFromChatRequest(validation.value);
 
+  if (sanitizedRequest.useOpenAI && !openaiApiKey) {
+    return res.status(503).json({ error: 'OpenAI no está configurado para este chat.' });
+  }
+  if (!sanitizedRequest.useOpenAI && !geminiApiKey && !nvidiaApiKey) {
+    return res.status(503).json({ error: 'Selecciona OpenAI para usar el chat.' });
+  }
+  if (sanitizedRequest.generateImage) {
+    try {
+      if (!(await reserveImageGeneration(authUid))) {
+        return res
+          .status(429)
+          .json({ error: 'Límite diario de imágenes alcanzado. Intenta mañana.' });
+      }
+    } catch {
+      return res.status(503).json({ error: 'No se pudo verificar el límite de imágenes.' });
+    }
+  }
+
   const contents: GeminiMessage[] = [
     ...(sanitizedRequest.history ?? []),
     { parts: [{ text: sanitizedRequest.message }], role: 'user' },
@@ -877,7 +1078,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     run: () => Promise<AICallResult>;
   }> = [];
 
-  if (geminiApiKey) {
+  if (sanitizedRequest.useOpenAI && openaiApiKey) {
+    const model = process.env.OPENAI_MODEL?.trim() || DEFAULT_OPENAI_MODEL;
+    attempts.push({
+      model,
+      provider: 'openai',
+      run: () =>
+        callOpenAIResponses(
+          model,
+          openaiApiKey,
+          contents,
+          systemInstruction,
+          sanitizedRequest.image,
+          sanitizedRequest.generateImage,
+        ),
+    });
+  }
+
+  if (geminiApiKey && !sanitizedRequest.image && !sanitizedRequest.generateImage) {
     for (const model of geminiModels) {
       attempts.push({
         model,
@@ -887,18 +1105,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  if (nvidiaApiKey) {
+  if (nvidiaApiKey && !sanitizedRequest.image && !sanitizedRequest.generateImage) {
     for (const model of nvidiaModels) {
       attempts.push({
         model,
         provider: 'nvidia',
-        run: () => callNVIDIAAPI(model, nvidiaApiKey, nvidiaBaseUrl, contents, systemInstruction),
+        run: () =>
+          callOpenAICompatibleAPI(model, nvidiaApiKey, nvidiaBaseUrl, contents, systemInstruction),
       });
     }
   }
 
   let usedModel = '';
-  let usedProvider: AIProvider = geminiApiKey ? 'gemini' : 'nvidia';
+  let usedProvider: AIProvider = attempts[0]?.provider ?? 'openai';
   let latestFailure: Extract<AICallResult, { ok: false }> | null = null;
   let successData: Extract<AICallResult, { ok: true }>['data'] | null = null;
 
@@ -966,6 +1185,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     model: usedModel,
     provider: usedProvider,
     response: responseText,
+    ...(successData.image ? { image: successData.image } : {}),
   });
 }
 

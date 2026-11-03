@@ -23,7 +23,7 @@ export const LEGAL_LINKS = {
 
 export const LEGAL_COPY = {
   aiDisclosure:
-    'Las funciones de IA usan proveedores externos (Google Gemini / NVIDIA). Los mensajes que escribes en IA se envian para generar respuestas.',
+    'Las funciones de IA usan proveedores externos (Google Gemini, NVIDIA y, si lo seleccionas en el chat, OpenAI). Los mensajes que escribes en IA se envian para generar respuestas.',
   aiConsent:
     'Debes aceptar el envio de mensajes a proveedores externos de IA antes de usar AI Chat o Arena IA.',
   moderationSla: 'Moderacion: prioridad alta (riesgo de seguridad) <= 24h; prioridad media <= 72h.',

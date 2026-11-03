@@ -16,6 +16,8 @@ interface ChatAction {
 interface ChatResponse {
   response: string;
   history: GeminiMessage[];
+  provider?: 'openai' | 'gemini' | 'nvidia';
+  image?: string;
   action?: ChatAction;
 }
 
@@ -34,6 +36,8 @@ const parseChatAction = (value: unknown): ChatAction | undefined => {
 export async function sendChatMessage(
   message: string,
   history: GeminiMessage[] = [],
+  useOpenAI = false,
+  options: { image?: string; generateImage?: boolean } = {},
 ): Promise<ChatResponse> {
   const waitForUser = (timeoutMs = 8000): Promise<User | null> =>
     new Promise((resolve) => {
@@ -63,7 +67,7 @@ export async function sendChatMessage(
       'Content-Type': 'application/json',
       ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
     },
-    body: JSON.stringify({ message, history }),
+    body: JSON.stringify({ message, history, useOpenAI, ...options }),
   });
 
   const payload = await response.json().catch(() => null);

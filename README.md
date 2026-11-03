@@ -210,6 +210,12 @@ Copia `.env.example` a `.env.local` y completa lo necesario:
 
 ### Server-side AI (variables de servidor, no expuestas al cliente)
 
+- `OPENAI_API_KEY` — Clave de un proyecto de la organización de OpenAI que recibió los créditos. Configurar solo en el servidor (por ejemplo, en variables de entorno de Vercel), nunca con prefijo `VITE_` ni en el repositorio.
+- `OPENAI_MODEL` — Modelo de OpenAI para el chat (default `gpt-6.1-terra`, razonamiento alto; debe ser compatible con Responses API y sus herramientas).
+- En Chat IA, cada usuario puede seleccionar OpenAI para esa sesión; el historial se envía al proveedor seleccionado. Si falla, se intentan los proveedores alternativos configurados y se indica cuál respondió. Arena mantiene su configuración actual.
+- En el chat de OpenAI se puede adjuntar una imagen PNG/JPEG/WebP de hasta 2 MB o solicitar una imagen nueva. Las imágenes adjuntas solo se envían en ese turno, no se conservan en el historial; no se utiliza un proveedor alternativo para solicitudes con imágenes. La voz actual usa las funciones del navegador.
+- La generación de imágenes requiere Firebase Admin (`FIREBASE_SERVICE_ACCOUNT`) para reservar cuotas atómicas: máximo 5 intentos por usuario y 50 para toda la aplicación por día UTC, incluidos intentos fallidos. Si no se puede consultar la cuota, no se envía la solicitud. Estos límites son independientes de los límites y créditos de OpenAI; supervisar ambos antes de publicar.
+- Los límites de solicitudes de Vinctus no son un límite monetario: revisa el consumo, los créditos y la recarga automática en la plataforma de OpenAI antes de habilitar el servicio para usuarios.
 - `GEMINI_API_KEY` — API key de Google Gemini
 - `GEMINI_TIMEOUT_MS` — Timeout para llamadas a Gemini (default 12000)
 - `NVIDIA_API_KEY` — API key de NVIDIA
