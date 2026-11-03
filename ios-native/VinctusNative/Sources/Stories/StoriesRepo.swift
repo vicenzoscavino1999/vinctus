@@ -22,6 +22,8 @@ struct Story: Identifiable, Hashable {
   /// Set for the YouTube Shorts the web mixes into stories; they play in a YouTube embed and
   /// are not user content (nothing to report or delete).
   var youtubeVideoID: String? = nil
+  /// Storage path of the video thumbnail the web uploads with video stories.
+  var thumbPath: String? = nil
 
   var isYouTubeShort: Bool { youtubeVideoID != nil }
 }
@@ -173,8 +175,11 @@ final class FirebaseStoriesRepo: StoriesRepo {
   func deleteStory(_ story: Story) async throws {
     let (db, _) = try context()
     try await db.collection("stories").document(story.id).delete()
-    // The file goes too; if that fails the story is already gone for everyone.
-    try? await Storage.storage().reference(withPath: story.mediaPath).delete()
+    // The files go too (the media and, for web video stories, its thumbnail); if that fails the
+    // story is already gone for everyone.
+    for path in [story.mediaPath, story.thumbPath ?? ""] where !path.isEmpty {
+      try? await Storage.storage().reference(withPath: path).delete()
+    }
   }
 
   static func story(id: String, data: [String: Any]) -> Story? {
@@ -192,7 +197,8 @@ final class FirebaseStoriesRepo: StoriesRepo {
       mediaURL: mediaURL,
       mediaPath: FirestoreValue.string(data["mediaPath"]) ?? "",
       createdAt: FirestoreValue.date(data["createdAt"]) ?? Date(),
-      expiresAt: FirestoreValue.date(data["expiresAt"]) ?? Date()
+      expiresAt: FirestoreValue.date(data["expiresAt"]) ?? Date(),
+      thumbPath: FirestoreValue.string(data["thumbPath"])
     )
   }
 }
