@@ -96,7 +96,12 @@ export default defineConfig([
           ],
           patterns: [
             {
-              group: ['@/shared/lib/firestore/*', '@/shared/lib/firestore/**'],
+              // firestoreContract only holds the generated collection names and limits.
+              group: [
+                '@/shared/lib/firestore/*',
+                '@/shared/lib/firestore/**',
+                '!@/shared/lib/firestore/firestoreContract',
+              ],
               message:
                 'No importes Firestore directo (incluye subpaths). Usa el modulo de dominio en src/features/<domain>/api.',
             },

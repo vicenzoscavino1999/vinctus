@@ -14,6 +14,7 @@ import {
   trackFirestoreWrite,
 } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
+import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 type AccountVisibility = 'public' | 'private';
 
@@ -184,7 +185,7 @@ export async function getUserProfile(uid: string): Promise<UserProfileReadModel 
 
   // 1. Try private collection (might fail with permission-denied)
   try {
-    const userDoc = await getDoc(doc(db, 'users', uid));
+    const userDoc = await getDoc(doc(db, COLLECTIONS.users, uid));
     if (userDoc.exists()) {
       privateData = userDoc.data();
     }
@@ -199,7 +200,7 @@ export async function getUserProfile(uid: string): Promise<UserProfileReadModel 
 
   // 2. Load public data (always, for fallback or complementing)
   try {
-    const publicDoc = await getDoc(doc(db, 'users_public', uid));
+    const publicDoc = await getDoc(doc(db, COLLECTIONS.usersPublic, uid));
     if (publicDoc.exists()) {
       publicData = publicDoc.data();
     }
@@ -250,8 +251,7 @@ export async function getUserProfile(uid: string): Promise<UserProfileReadModel 
         ? publicData.karmaGlobal
         : undefined;
   const karmaByInterest = (privateData?.karmaByInterest ?? publicData?.karmaByInterest) as
-    | Record<string, number>
-    | undefined;
+    Record<string, number> | undefined;
 
   // 4. Merge data (private first, complement with public)
   return {
@@ -325,10 +325,10 @@ export async function updateUserProfile(
   }
 
   // Update private user doc
-  batch.set(doc(db, 'users', uid), userUpdates, { merge: true });
+  batch.set(doc(db, COLLECTIONS.users, uid), userUpdates, { merge: true });
 
   // Update public user doc (only public fields)
-  batch.set(doc(db, 'users_public', uid), publicUpdates, { merge: true });
+  batch.set(doc(db, COLLECTIONS.usersPublic, uid), publicUpdates, { merge: true });
 
   await batch.commit();
 }
@@ -342,7 +342,7 @@ export function subscribeToUserProfile(
   onError?: (error: Error) => void,
 ): Unsubscribe {
   return observeSnapshot(
-    doc(db, 'users', uid),
+    doc(db, COLLECTIONS.users, uid),
     (snapshot) => {
       if (!snapshot.exists()) {
         onData(null);
@@ -437,7 +437,7 @@ const normalizePrivacySettings = (value: unknown): PrivacySettingsInput => {
 
 export async function getUserSettings(uid: string): Promise<UserSettingsReadModel> {
   try {
-    const snap = await getDoc(doc(db, 'users', uid));
+    const snap = await getDoc(doc(db, COLLECTIONS.users, uid));
     if (!snap.exists()) {
       return {
         notifications: DEFAULT_NOTIFICATION_SETTINGS,
@@ -462,7 +462,7 @@ export async function updateNotificationSettings(
   uid: string,
   settings: NotificationSettingsInput,
 ): Promise<void> {
-  await updateDoc(doc(db, 'users', uid), {
+  await updateDoc(doc(db, COLLECTIONS.users, uid), {
     'settings.notifications': settings,
   });
 }
@@ -472,11 +472,11 @@ export async function updatePrivacySettings(
   settings: PrivacySettingsInput,
 ): Promise<void> {
   const batch = writeBatch(db);
-  batch.update(doc(db, 'users', uid), {
+  batch.update(doc(db, COLLECTIONS.users, uid), {
     'settings.privacy': settings,
   });
   batch.set(
-    doc(db, 'users_public', uid),
+    doc(db, COLLECTIONS.usersPublic, uid),
     {
       accountVisibility: settings.accountVisibility,
       updatedAt: serverTimestamp(),

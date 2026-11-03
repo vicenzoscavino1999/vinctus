@@ -10,6 +10,8 @@
     "check:cycles": "madge --circular --extensions ts,tsx --ts-config tsconfig.json src",
     "check:stubs": "node scripts/check-stubs.mjs",
     "check:raw-onsnapshot": "node scripts/check-raw-onsnapshot.mjs",
+    "contract:generate": "node scripts/gen-firestore-contract.mjs",
+    "contract:check": "node scripts/gen-firestore-contract.mjs --check",
     "guardrails": "npm run lint && npm run check:cycles && npm run check:stubs && npm run check:raw-onsnapshot",
     "preview": "vite preview",
     "test": "vitest",

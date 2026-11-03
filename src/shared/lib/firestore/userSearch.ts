@@ -2,6 +2,7 @@ import { collection, endAt, getDocs, limit, orderBy, query, startAt } from 'fire
 import { trackFirestoreRead } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
 import type { AccountVisibility, PublicUserRead } from './users';
+import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 export const searchUsersByDisplayName = async (
   queryText: string,
@@ -11,7 +12,7 @@ export const searchUsersByDisplayName = async (
   if (!normalized) return [];
 
   const q = query(
-    collection(db, 'users_public'),
+    collection(db, COLLECTIONS.usersPublic),
     orderBy('displayNameLowercase'),
     startAt(normalized),
     endAt(`${normalized}\uf8ff`),
@@ -47,7 +48,7 @@ export const getRecentUsers = async (
   excludeUid?: string,
 ): Promise<PublicUserRead[]> => {
   const q = query(
-    collection(db, 'users_public'),
+    collection(db, COLLECTIONS.usersPublic),
     orderBy('updatedAt', 'desc'),
     limit(limitCount + 1), // Fetch one extra in case we need to exclude current user
   );

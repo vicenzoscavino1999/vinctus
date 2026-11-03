@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { trackFirestoreRead } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
+import { COLLECTIONS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 export interface SavedPostRead {
   postId: string;
@@ -72,7 +73,7 @@ export interface SavedArenaDebateWrite {
 export const savePostWithSync = async (postId: string, uid: string): Promise<void> => {
   const batch = writeBatch(db);
   batch.set(
-    doc(db, 'users', uid, 'savedPosts', postId),
+    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedPosts, postId),
     {
       postId,
       createdAt: serverTimestamp(),
@@ -87,7 +88,7 @@ export const savePostWithSync = async (postId: string, uid: string): Promise<voi
  */
 export const unsavePostWithSync = async (postId: string, uid: string): Promise<void> => {
   const batch = writeBatch(db);
-  batch.delete(doc(db, 'users', uid, 'savedPosts', postId));
+  batch.delete(doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedPosts, postId));
   await batch.commit();
 };
 
@@ -96,7 +97,7 @@ export const unsavePostWithSync = async (postId: string, uid: string): Promise<v
  */
 export const isPostSaved = async (postId: string, uid: string): Promise<boolean> => {
   trackFirestoreRead('firestore.getDoc');
-  const docSnap = await getDoc(doc(db, 'users', uid, 'savedPosts', postId));
+  const docSnap = await getDoc(doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedPosts, postId));
   return docSnap.exists();
 };
 
@@ -106,7 +107,7 @@ export const isPostSaved = async (postId: string, uid: string): Promise<boolean>
 export const saveCategoryWithSync = async (categoryId: string, uid: string): Promise<void> => {
   const batch = writeBatch(db);
   batch.set(
-    doc(db, 'users', uid, 'savedCategories', categoryId),
+    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedCategories, categoryId),
     {
       categoryId,
       createdAt: serverTimestamp(),
@@ -121,7 +122,7 @@ export const saveCategoryWithSync = async (categoryId: string, uid: string): Pro
  */
 export const unsaveCategoryWithSync = async (categoryId: string, uid: string): Promise<void> => {
   const batch = writeBatch(db);
-  batch.delete(doc(db, 'users', uid, 'savedCategories', categoryId));
+  batch.delete(doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedCategories, categoryId));
   await batch.commit();
 };
 
@@ -130,7 +131,9 @@ export const unsaveCategoryWithSync = async (categoryId: string, uid: string): P
  */
 export const isCategorySaved = async (categoryId: string, uid: string): Promise<boolean> => {
   trackFirestoreRead('firestore.getDoc');
-  const docSnap = await getDoc(doc(db, 'users', uid, 'savedCategories', categoryId));
+  const docSnap = await getDoc(
+    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedCategories, categoryId),
+  );
   return docSnap.exists();
 };
 
@@ -140,7 +143,7 @@ export const isCategorySaved = async (categoryId: string, uid: string): Promise<
 export const followCategoryWithSync = async (categoryId: string, uid: string): Promise<void> => {
   const batch = writeBatch(db);
   batch.set(
-    doc(db, 'users', uid, 'followedCategories', categoryId),
+    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.followedCategories, categoryId),
     {
       categoryId,
       createdAt: serverTimestamp(),
@@ -155,7 +158,7 @@ export const followCategoryWithSync = async (categoryId: string, uid: string): P
  */
 export const unfollowCategoryWithSync = async (categoryId: string, uid: string): Promise<void> => {
   const batch = writeBatch(db);
-  batch.delete(doc(db, 'users', uid, 'followedCategories', categoryId));
+  batch.delete(doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.followedCategories, categoryId));
   await batch.commit();
 };
 
@@ -164,7 +167,9 @@ export const unfollowCategoryWithSync = async (categoryId: string, uid: string):
  */
 export const isCategoryFollowed = async (categoryId: string, uid: string): Promise<boolean> => {
   trackFirestoreRead('firestore.getDoc');
-  const docSnap = await getDoc(doc(db, 'users', uid, 'followedCategories', categoryId));
+  const docSnap = await getDoc(
+    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.followedCategories, categoryId),
+  );
   return docSnap.exists();
 };
 
@@ -177,7 +182,7 @@ export const saveArenaDebateWithSync = async (
 ): Promise<void> => {
   const batch = writeBatch(db);
   batch.set(
-    doc(db, 'users', uid, 'savedArenaDebates', debate.debateId),
+    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedArenaDebates, debate.debateId),
     {
       ...debate,
       createdAt: serverTimestamp(),
@@ -192,7 +197,7 @@ export const saveArenaDebateWithSync = async (
  */
 export const unsaveArenaDebateWithSync = async (debateId: string, uid: string): Promise<void> => {
   const batch = writeBatch(db);
-  batch.delete(doc(db, 'users', uid, 'savedArenaDebates', debateId));
+  batch.delete(doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedArenaDebates, debateId));
   await batch.commit();
 };
 
@@ -201,7 +206,9 @@ export const unsaveArenaDebateWithSync = async (debateId: string, uid: string): 
  */
 export const isArenaDebateSaved = async (debateId: string, uid: string): Promise<boolean> => {
   trackFirestoreRead('firestore.getDoc');
-  const docSnap = await getDoc(doc(db, 'users', uid, 'savedArenaDebates', debateId));
+  const docSnap = await getDoc(
+    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedArenaDebates, debateId),
+  );
   return docSnap.exists();
 };
 
@@ -213,7 +220,7 @@ export const getSavedArenaDebates = async (
   limitCount = 20,
 ): Promise<SavedArenaDebateRead[]> => {
   const q = query(
-    collection(db, 'users', uid, 'savedArenaDebates'),
+    collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedArenaDebates),
     orderBy('createdAt', 'desc'),
     limit(limitCount),
   );

@@ -5,6 +5,7 @@ import { useAuth } from '@/context/auth';
 import { createCollection } from '@/features/collections/api';
 import { useToast } from '@/shared/ui/Toast';
 import { COLLECTION_ICON_OPTIONS, getCollectionIcon } from './collectionIcons';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 interface CreateCollectionModalProps {
   isOpen: boolean;
@@ -85,7 +86,7 @@ const CreateCollectionModal = ({ isOpen, onClose, onCreated }: CreateCollectionM
               type="text"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              maxLength={80}
+              maxLength={LIMITS.collections.nameMaxLength}
               className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
               placeholder="Ej: Lecturas, Musica, Ideas"
             />

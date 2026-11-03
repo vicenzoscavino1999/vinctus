@@ -33,6 +33,7 @@ import {
   type UserReportReason,
 } from '@/features/chat/api';
 import { LEGAL_COPY, LEGAL_LINKS } from '@/shared/constants';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 const CLEARED_STORAGE_KEY = 'vinctus:clearedConversations';
 
@@ -634,12 +635,12 @@ export default function GroupConversationDetailsPage() {
                   value={groupReportDetails}
                   onChange={(event) => setGroupReportDetails(event.target.value)}
                   rows={4}
-                  maxLength={2000}
+                  maxLength={LIMITS.reports.detailsMaxLength}
                   className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-red-500/50 transition-colors resize-none"
                   placeholder="Describe el motivo del reporte"
                 />
                 <div className="text-right text-xs text-neutral-500 mt-1">
-                  {groupReportDetails.length}/2000
+                  {groupReportDetails.length}/{LIMITS.reports.detailsMaxLength}
                 </div>
               </div>
 

@@ -81,18 +81,23 @@ struct NewCollectionItem {
   /// link up to 600 and http or https, note 1-2000), or an error explaining what is wrong.
   func validatedFields() throws -> (type: CollectionItemType, title: String, url: String?, text: String?) {
     let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !title.isEmpty, title.count <= 160 else { throw CollectionsRepoError.invalidItem }
+    guard !title.isEmpty, title.count <= Limits.CollectionItems.titleMaxLength else {
+      throw CollectionsRepoError.invalidItem
+    }
     switch kind {
     case .link:
       let url = url.trimmingCharacters(in: .whitespacesAndNewlines)
       let scheme = URL(string: url)?.scheme?.lowercased()
-      guard !url.isEmpty, url.count <= 600, scheme == "http" || scheme == "https" else {
+      guard !url.isEmpty, url.count <= Limits.CollectionItems.urlMaxLength,
+            scheme == "http" || scheme == "https" else {
         throw CollectionsRepoError.invalidItem
       }
       return (.link, title, url, nil)
     case .note:
       let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !text.isEmpty, text.count <= 2000 else { throw CollectionsRepoError.invalidItem }
+      guard !text.isEmpty, text.count <= Limits.CollectionItems.noteMaxLength else {
+        throw CollectionsRepoError.invalidItem
+      }
       return (.note, title, nil, text)
     }
   }
@@ -123,9 +128,10 @@ enum CollectionsRepoError: LocalizedError {
     case .userNotAuthenticated:
       return "Debes iniciar sesión."
     case .invalidName:
-      return "El nombre debe tener entre 1 y 80 caracteres."
+      return "El nombre debe tener entre 1 y \(Limits.Collections.nameMaxLength) caracteres."
     case .invalidItem:
-      return "Revisa el título (máximo 160), el enlace (http o https) o la nota (máximo 2000)."
+      return "Revisa el título (máximo \(Limits.CollectionItems.titleMaxLength)), el enlace (http o https) "
+        + "o la nota (máximo \(Limits.CollectionItems.noteMaxLength))."
     }
   }
 }
@@ -137,12 +143,15 @@ final class FirebaseCollectionsRepo: CollectionsRepo {
   private func collectionsRef() throws -> CollectionReference {
     guard FirebaseApp.app() != nil else { throw CollectionsRepoError.firebaseNotConfigured }
     guard let uid = Auth.auth().currentUser?.uid else { throw CollectionsRepoError.userNotAuthenticated }
-    return Firestore.firestore().collection("users").document(uid).collection("collections")
+    return Firestore.firestore().collection(FirestoreCollections.users).document(uid)
+      .collection(FirestoreSubcollections.collections)
   }
 
   static func validatedName(_ name: String) throws -> String {
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty, trimmed.count <= 80 else { throw CollectionsRepoError.invalidName }
+    guard !trimmed.isEmpty, trimmed.count <= Limits.Collections.nameMaxLength else {
+      throw CollectionsRepoError.invalidName
+    }
     return trimmed
   }
 
@@ -189,7 +198,7 @@ final class FirebaseCollectionsRepo: CollectionsRepo {
   /// Mirrors `deleteCollection`, and also removes the items so none are left behind.
   func deleteCollection(id: String) async throws {
     let collection = try collectionsRef().document(id)
-    let items = try await collection.collection("items").limit(to: 400).getDocuments()
+    let items = try await collection.collection(FirestoreSubcollections.items).limit(to: 400).getDocuments()
     let batch = Firestore.firestore().batch()
     items.documents.forEach { batch.deleteDocument($0.reference) }
     batch.deleteDocument(collection)
@@ -198,7 +207,7 @@ final class FirebaseCollectionsRepo: CollectionsRepo {
 
   /// Mirrors `getCollectionItems`.
   func fetchItems(collectionID: String) async throws -> [CollectionItem] {
-    let snapshot = try await collectionsRef().document(collectionID).collection("items")
+    let snapshot = try await collectionsRef().document(collectionID).collection(FirestoreSubcollections.items)
       .order(by: "createdAt", descending: true)
       .limit(to: Self.itemsLimit)
       .getDocuments()
@@ -226,7 +235,7 @@ final class FirebaseCollectionsRepo: CollectionsRepo {
       [
         "ownerId": uid,
         "collectionId": collection.id,
-        "collectionName": String(collection.name.prefix(120)),
+        "collectionName": String(collection.name.prefix(Limits.CollectionItems.collectionNameMaxLength)),
         "type": fields.type.rawValue,
         "title": fields.title,
         "url": fields.url ?? NSNull(),
@@ -237,7 +246,7 @@ final class FirebaseCollectionsRepo: CollectionsRepo {
         "storagePath": NSNull(),
         "createdAt": FieldValue.serverTimestamp(),
       ],
-      forDocument: collectionRef.collection("items").document()
+      forDocument: collectionRef.collection(FirestoreSubcollections.items).document()
     )
     batch.updateData(
       ["itemCount": FieldValue.increment(Int64(1)), "updatedAt": FieldValue.serverTimestamp()],
@@ -250,7 +259,7 @@ final class FirebaseCollectionsRepo: CollectionsRepo {
   func deleteItem(id: String, from collectionID: String) async throws {
     let collectionRef = try collectionsRef().document(collectionID)
     let batch = Firestore.firestore().batch()
-    batch.deleteDocument(collectionRef.collection("items").document(id))
+    batch.deleteDocument(collectionRef.collection(FirestoreSubcollections.items).document(id))
     batch.updateData(
       ["itemCount": FieldValue.increment(Int64(-1)), "updatedAt": FieldValue.serverTimestamp()],
       forDocument: collectionRef

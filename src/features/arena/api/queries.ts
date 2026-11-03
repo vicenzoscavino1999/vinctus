@@ -18,8 +18,9 @@ import {
 import { db, functions } from '@/shared/lib/firebase';
 import { safeLimit } from '@/shared/lib/validators';
 import type { Debate, Persona, SavedArenaDebate, Turn, UsageStats } from '@/features/arena/types';
+import { COLLECTIONS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
-const ARENA_DEBATES_COLLECTION = 'arenaDebates';
+const ARENA_DEBATES_COLLECTION = COLLECTIONS.arenaDebates;
 
 export function subscribeToDebate(
   debateId: string,
@@ -43,7 +44,7 @@ export function subscribeToDebate(
 }
 
 export function subscribeToTurns(debateId: string, callback: (turns: Turn[]) => void): Unsubscribe {
-  const turnsRef = collection(db, ARENA_DEBATES_COLLECTION, debateId, 'turns');
+  const turnsRef = collection(db, ARENA_DEBATES_COLLECTION, debateId, SUBCOLLECTIONS.turns);
   const turnsQuery = query(turnsRef, orderBy('idx', 'asc'));
 
   return onSnapshot(

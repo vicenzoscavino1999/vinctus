@@ -20,7 +20,7 @@ final class CreatePostViewModel: ObservableObject {
     self.repo = repo
   }
 
-  var characterLimit: Int { 5000 }
+  var characterLimit: Int { Limits.Posts.textMaxLength }
 
   var characterCount: Int {
     normalizedText(draftText).count

@@ -83,7 +83,7 @@ final class FirebaseFeedRepo: FeedRepo {
     let db = self.db ?? Firestore.firestore()
     let pageSize = max(1, min(30, limit))
 
-    var query = db.collection("posts")
+    var query = db.collection(FirestoreCollections.posts)
       .order(by: "createdAt", descending: true)
       .limit(to: pageSize + 1)
 

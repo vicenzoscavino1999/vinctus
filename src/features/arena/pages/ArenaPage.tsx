@@ -28,6 +28,7 @@ import { LEGAL_COPY } from '@/shared/constants';
 import { getAIConsent, setAIConsent } from '@/shared/lib/aiConsent';
 import { db } from '@/shared/lib/firebase';
 import { useToast } from '@/shared/ui/Toast';
+import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 export default function ArenaPage() {
   const navigate = useNavigate();
@@ -194,7 +195,7 @@ export default function ArenaPage() {
     let clientDebateId = '';
 
     try {
-      clientDebateId = doc(collection(db, 'arenaDebates')).id;
+      clientDebateId = doc(collection(db, COLLECTIONS.arenaDebates)).id;
       navigate(`/arena/${clientDebateId}`);
 
       const result = await createDebate({
@@ -219,7 +220,7 @@ export default function ArenaPage() {
       if (!clientDebateId) {
         navigate('/arena');
       } else {
-        const createdDebate = await getDoc(doc(db, 'arenaDebates', clientDebateId)).catch(
+        const createdDebate = await getDoc(doc(db, COLLECTIONS.arenaDebates, clientDebateId)).catch(
           () => null,
         );
         if (!createdDebate?.exists()) {

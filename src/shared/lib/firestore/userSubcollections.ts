@@ -17,6 +17,7 @@ import { trackFirestoreListener, trackFirestoreRead } from '@/shared/lib/devMetr
 import { db } from '@/shared/lib/firebase';
 import { joinGroupWithSync, leaveGroupWithSync } from '@/shared/lib/firestore/groups';
 import { likePostWithSync, unlikePostWithSync } from '@/shared/lib/firestore/postEngagement';
+import { COLLECTIONS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 const DEFAULT_LIMIT = 30;
 const SMALL_LIST_LIMIT = 50;
@@ -147,7 +148,7 @@ export const subscribeToSavedCategories = (
   onUpdate: (categoryIds: string[]) => void,
 ): Unsubscribe => {
   const q = query(
-    collection(db, 'users', uid, 'savedCategories'),
+    collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedCategories),
     orderBy('createdAt', 'desc'),
     limit(SMALL_LIST_LIMIT),
   );
@@ -164,7 +165,7 @@ export const subscribeToLikedPosts = (
   limitCount: number = DEFAULT_LIMIT,
 ): Unsubscribe => {
   const q = query(
-    collection(db, 'users', uid, 'likes'),
+    collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.likes),
     orderBy('createdAt', 'desc'),
     limit(limitCount),
   );
@@ -181,7 +182,7 @@ export const subscribeToSavedPosts = (
   limitCount: number = DEFAULT_LIMIT,
 ): Unsubscribe => {
   const q = query(
-    collection(db, 'users', uid, 'savedPosts'),
+    collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedPosts),
     orderBy('createdAt', 'desc'),
     limit(limitCount),
   );
@@ -198,7 +199,7 @@ export const getUserMembershipsPaginated = async (
   pageSize: number = DEFAULT_LIMIT,
 ): Promise<PaginatedResultModel<string>> => {
   let q = query(
-    collection(db, 'users', uid, 'memberships'),
+    collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.memberships),
     orderBy('joinedAt', 'desc'),
     limit(pageSize + 1),
   );
@@ -224,7 +225,7 @@ export const getLikedPostsPaginated = async (
   pageSize: number = DEFAULT_LIMIT,
 ): Promise<PaginatedResultModel<string>> => {
   let q = query(
-    collection(db, 'users', uid, 'likes'),
+    collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.likes),
     orderBy('createdAt', 'desc'),
     limit(pageSize + 1),
   );
@@ -248,7 +249,7 @@ export const seedGroups = async (
   groups: Array<Omit<FirestoreGroupSeed, 'id' | 'createdAt'>>,
 ): Promise<void> => {
   const items = groups.map((group) => ({
-    ref: doc(collection(db, 'groups')),
+    ref: doc(collection(db, COLLECTIONS.groups)),
     data: {
       ...group,
       memberCount: group.memberCount || 0,
@@ -261,18 +262,18 @@ export const seedGroups = async (
 
 export const clearUserData = async (uid: string): Promise<void> => {
   const collections = [
-    'memberships',
-    'likes',
-    'likedArenaDebates',
-    'savedPosts',
-    'savedCategories',
-    'followedCategories',
-    'savedArenaDebates',
+    SUBCOLLECTIONS.memberships,
+    SUBCOLLECTIONS.likes,
+    SUBCOLLECTIONS.likedArenaDebates,
+    SUBCOLLECTIONS.savedPosts,
+    SUBCOLLECTIONS.savedCategories,
+    SUBCOLLECTIONS.followedCategories,
+    SUBCOLLECTIONS.savedArenaDebates,
   ];
   const allRefs: DocumentReference[] = [];
 
   for (const collName of collections) {
-    const snapshot = await getDocs(collection(db, 'users', uid, collName));
+    const snapshot = await getDocs(collection(db, COLLECTIONS.users, uid, collName));
     snapshot.docs.forEach((d) => allRefs.push(d.ref));
   }
 

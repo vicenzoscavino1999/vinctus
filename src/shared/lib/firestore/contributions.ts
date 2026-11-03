@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
+import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 export type ContributionType = 'project' | 'paper' | 'cv' | 'certificate' | 'other';
 const SMALL_LIST_LIMIT = 50;
@@ -94,7 +95,7 @@ const toDate = (value: unknown): Date | undefined => {
 
 export async function getUserContributions(uid: string): Promise<ContributionRead[]> {
   const q = query(
-    collection(db, 'contributions'),
+    collection(db, COLLECTIONS.contributions),
     where('userId', '==', uid),
     limit(SMALL_LIST_LIMIT),
   );
@@ -127,7 +128,7 @@ export async function getContributionsByCategory(
   limitCount: number = 12,
 ): Promise<ContributionRead[]> {
   const q = query(
-    collection(db, 'contributions'),
+    collection(db, COLLECTIONS.contributions),
     where('categoryId', '==', categoryId),
     orderBy('createdAt', 'desc'),
     limit(limitCount),
@@ -162,7 +163,7 @@ export async function createContribution(input: {
   link?: string | null;
   categoryId?: string | null;
 }): Promise<string> {
-  const ref = doc(collection(db, 'contributions'));
+  const ref = doc(collection(db, COLLECTIONS.contributions));
   await setDoc(
     ref,
     {
@@ -195,7 +196,7 @@ export async function updateContributionFile(
     fileType: string;
   },
 ): Promise<void> {
-  await updateDoc(doc(db, 'contributions', contributionId), {
+  await updateDoc(doc(db, COLLECTIONS.contributions, contributionId), {
     fileUrl: input.fileUrl,
     filePath: input.filePath,
     fileName: input.fileName,

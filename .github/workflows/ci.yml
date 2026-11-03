@@ -33,6 +33,10 @@ jobs:
           cache: npm
       - run: npm ci --include=optional
       - run: npm run guardrails
+      # Regenerates the constants from shared/firestore-contract.json and fails if the
+      # committed TypeScript or Swift files differ.
+      - name: Firestore contract is up to date
+        run: npm run contract:check
 
   typecheck:
     name: typecheck

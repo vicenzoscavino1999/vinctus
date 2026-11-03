@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
+import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 const SMALL_LIST_LIMIT = 50;
 
@@ -92,7 +93,7 @@ const mapCollaborationDoc = (docSnap: DocumentSnapshot): CollaborationRead => {
 
 export async function getCollaborations(limitCount = 20): Promise<CollaborationRead[]> {
   const q = query(
-    collection(db, 'collaborations'),
+    collection(db, COLLECTIONS.collaborations),
     orderBy('createdAt', 'desc'),
     limit(limitCount),
   );
@@ -117,7 +118,7 @@ export async function createCollaboration(
   authorSnapshot: CollaborationAuthorSnapshot,
   input: CreateCollaborationInput,
 ): Promise<string> {
-  const collaborationRef = doc(collection(db, 'collaborations'));
+  const collaborationRef = doc(collection(db, COLLECTIONS.collaborations));
   trackFirestoreWrite('firestore.setDoc');
   await setDoc(collaborationRef, {
     title: input.title,
@@ -143,7 +144,7 @@ export async function updateCollaboration(
   input: CreateCollaborationInput,
 ): Promise<void> {
   trackFirestoreWrite('firestore.updateDoc');
-  await updateDoc(doc(db, 'collaborations', collaborationId), {
+  await updateDoc(doc(db, COLLECTIONS.collaborations, collaborationId), {
     title: input.title,
     context: input.context,
     seekingRole: input.seekingRole,
@@ -182,7 +183,7 @@ export async function sendCollaborationRequest(input: {
   fromUserPhoto: string | null;
 }): Promise<string> {
   const existingQuery = query(
-    collection(db, 'collaboration_requests'),
+    collection(db, COLLECTIONS.collaborationRequests),
     where('fromUid', '==', input.fromUid),
     where('collaborationId', '==', input.collaborationId),
     limit(1),
@@ -201,7 +202,7 @@ export async function sendCollaborationRequest(input: {
     }
   }
 
-  const requestRef = doc(collection(db, 'collaboration_requests'));
+  const requestRef = doc(collection(db, COLLECTIONS.collaborationRequests));
   trackFirestoreWrite('firestore.setDoc');
   await setDoc(requestRef, {
     collaborationId: input.collaborationId,
@@ -224,7 +225,7 @@ export async function deleteCollaboration(
   collaborationId: string,
 ): Promise<void> {
   const pendingQuery = query(
-    collection(db, 'collaboration_requests'),
+    collection(db, COLLECTIONS.collaborationRequests),
     where('collaborationId', '==', collaborationId),
     where('toUid', '==', authorId),
     where('status', '==', 'pending'),
@@ -240,7 +241,7 @@ export async function deleteCollaboration(
     });
   });
 
-  batch.delete(doc(db, 'collaborations', collaborationId));
+  batch.delete(doc(db, COLLECTIONS.collaborations, collaborationId));
   await batch.commit();
 }
 
@@ -249,7 +250,7 @@ export async function getPendingCollaborationRequests(
   limitCount: number = SMALL_LIST_LIMIT,
 ): Promise<CollaborationRequestRead[]> {
   const q = query(
-    collection(db, 'collaboration_requests'),
+    collection(db, COLLECTIONS.collaborationRequests),
     where('toUid', '==', uid),
     where('status', '==', 'pending'),
     limit(limitCount),
@@ -282,7 +283,7 @@ export async function getPendingCollaborationRequests(
 
 export async function acceptCollaborationRequest(requestId: string): Promise<void> {
   trackFirestoreWrite('firestore.updateDoc');
-  await updateDoc(doc(db, 'collaboration_requests', requestId), {
+  await updateDoc(doc(db, COLLECTIONS.collaborationRequests, requestId), {
     status: 'accepted',
     updatedAt: serverTimestamp(),
   });
@@ -290,7 +291,7 @@ export async function acceptCollaborationRequest(requestId: string): Promise<voi
 
 export async function rejectCollaborationRequest(requestId: string): Promise<void> {
   trackFirestoreWrite('firestore.updateDoc');
-  await updateDoc(doc(db, 'collaboration_requests', requestId), {
+  await updateDoc(doc(db, COLLECTIONS.collaborationRequests, requestId), {
     status: 'rejected',
     updatedAt: serverTimestamp(),
   });

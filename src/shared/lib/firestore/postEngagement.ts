@@ -20,6 +20,7 @@ import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics
 import { db } from '@/shared/lib/firebase';
 import { getPost } from '@/shared/lib/firestore/posts';
 import { getUserProfile } from '@/shared/lib/firestore/profile';
+import { COLLECTIONS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 const DEFAULT_LIMIT = 30;
 const ACTIVITY_SNIPPET_LIMIT = 160;
@@ -82,7 +83,7 @@ export interface PostCommentRead {
   createdAt: Date;
 }
 
-const notificationsCollection = collection(db, 'notifications');
+const notificationsCollection = collection(db, COLLECTIONS.notifications);
 
 const trimText = (
   value: string | null | undefined,
@@ -147,8 +148,8 @@ const setDoc = ((...args: unknown[]) => {
  * User index: users/{uid}/likes/{postId}
  */
 export const likePostWithSync = async (postId: string, uid: string): Promise<void> => {
-  const likeRef = doc(db, 'posts', postId, 'likes', uid);
-  const userLikeRef = doc(db, 'users', uid, 'likes', postId);
+  const likeRef = doc(db, COLLECTIONS.posts, postId, SUBCOLLECTIONS.likes, uid);
+  const userLikeRef = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.likes, postId);
 
   const batch = writeBatch(db);
 
@@ -198,8 +199,8 @@ export const likePostWithSync = async (postId: string, uid: string): Promise<voi
  * Cloud Function should handle likesCount decrement on onDelete
  */
 export const unlikePostWithSync = async (postId: string, uid: string): Promise<void> => {
-  const likeRef = doc(db, 'posts', postId, 'likes', uid);
-  const userLikeRef = doc(db, 'users', uid, 'likes', postId);
+  const likeRef = doc(db, COLLECTIONS.posts, postId, SUBCOLLECTIONS.likes, uid);
+  const userLikeRef = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.likes, postId);
 
   const batch = writeBatch(db);
   batch.delete(likeRef);
@@ -211,7 +212,7 @@ export const unlikePostWithSync = async (postId: string, uid: string): Promise<v
  * Check if user liked a post
  */
 export const isPostLiked = async (postId: string, uid: string): Promise<boolean> => {
-  const docSnap = await getDoc(doc(db, 'posts', postId, 'likes', uid));
+  const docSnap = await getDoc(doc(db, COLLECTIONS.posts, postId, SUBCOLLECTIONS.likes, uid));
   return docSnap.exists();
 };
 
@@ -221,7 +222,7 @@ export async function addPostComment(
   authorSnapshot: { displayName: string; photoURL: string | null },
   text: string,
 ): Promise<string> {
-  const commentRef = doc(collection(db, 'posts', postId, 'comments'));
+  const commentRef = doc(collection(db, COLLECTIONS.posts, postId, SUBCOLLECTIONS.comments));
   await setDoc(commentRef, {
     postId,
     authorId,
@@ -254,7 +255,7 @@ export async function getPostComments(
   lastDoc?: DocumentSnapshot,
 ): Promise<PaginatedResultModel<PostCommentRead>> {
   let q = query(
-    collection(db, 'posts', postId, 'comments'),
+    collection(db, COLLECTIONS.posts, postId, SUBCOLLECTIONS.comments),
     orderBy('createdAt', 'desc'),
     limit(limitCount + 1),
   );
@@ -291,12 +292,16 @@ export async function getPostComments(
 }
 
 export async function getPostCommentCount(postId: string): Promise<number> {
-  const snapshot = await getCountFromServer(collection(db, 'posts', postId, 'comments'));
+  const snapshot = await getCountFromServer(
+    collection(db, COLLECTIONS.posts, postId, SUBCOLLECTIONS.comments),
+  );
   return snapshot.data().count;
 }
 
 export async function getPostLikeCount(postId: string): Promise<number> {
-  const snapshot = await getCountFromServer(collection(db, 'posts', postId, 'likes'));
+  const snapshot = await getCountFromServer(
+    collection(db, COLLECTIONS.posts, postId, SUBCOLLECTIONS.likes),
+  );
   return snapshot.data().count;
 }
 

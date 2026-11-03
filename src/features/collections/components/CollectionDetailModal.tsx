@@ -14,6 +14,7 @@ import {
 import { deleteCollectionFile, uploadCollectionFile } from '@/shared/lib/storage';
 import { useToast } from '@/shared/ui/Toast';
 import { getCollectionIcon } from './collectionIcons';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 interface CollectionDetailModalProps {
   isOpen: boolean;
@@ -300,7 +301,7 @@ const CollectionDetailModal = ({
                   type="text"
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
-                  maxLength={160}
+                  maxLength={LIMITS.collectionItems.titleMaxLength}
                   className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
                   placeholder="Ej: Paper, Video, Idea"
                 />
@@ -328,7 +329,7 @@ const CollectionDetailModal = ({
                 <textarea
                   value={text}
                   onChange={(event) => setText(event.target.value)}
-                  maxLength={2000}
+                  maxLength={LIMITS.collectionItems.noteMaxLength}
                   rows={3}
                   className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors resize-none"
                   placeholder="Guarda tu nota o resumen..."

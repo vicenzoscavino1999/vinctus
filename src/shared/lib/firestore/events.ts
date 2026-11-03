@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
+import { COLLECTIONS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 const DEFAULT_LIMIT = 30;
 
@@ -128,7 +129,7 @@ const deleteDoc = ((...args: unknown[]) => {
 }) as typeof _deleteDoc;
 
 export async function createEvent(ownerId: string, input: CreateEventInput): Promise<string> {
-  const eventRef = doc(collection(db, 'events'));
+  const eventRef = doc(collection(db, COLLECTIONS.events));
   await setDoc(
     eventRef,
     {
@@ -149,7 +150,7 @@ export async function createEvent(ownerId: string, input: CreateEventInput): Pro
   );
 
   try {
-    const attendeeRef = doc(db, 'events', eventRef.id, 'attendees', ownerId);
+    const attendeeRef = doc(db, COLLECTIONS.events, eventRef.id, SUBCOLLECTIONS.attendees, ownerId);
     await setDoc(
       attendeeRef,
       {
@@ -166,7 +167,7 @@ export async function createEvent(ownerId: string, input: CreateEventInput): Pro
 }
 
 export async function updateEvent(eventId: string, input: CreateEventInput): Promise<void> {
-  await updateDoc(doc(db, 'events', eventId), {
+  await updateDoc(doc(db, COLLECTIONS.events, eventId), {
     title: input.title,
     description: input.description,
     startAt: input.startAt,
@@ -181,7 +182,7 @@ export async function updateEvent(eventId: string, input: CreateEventInput): Pro
 }
 
 export async function getEvent(eventId: string): Promise<FirestoreEvent | null> {
-  const snap = await getDoc(doc(db, 'events', eventId));
+  const snap = await getDoc(doc(db, COLLECTIONS.events, eventId));
   if (!snap.exists()) return null;
   const data = snap.data();
   return {
@@ -207,7 +208,7 @@ export async function getUpcomingEvents(
 ): Promise<FirestoreEvent[]> {
   const now = Timestamp.now();
   const upcomingQuery = query(
-    collection(db, 'events'),
+    collection(db, COLLECTIONS.events),
     where('visibility', '==', 'public'),
     where('startAt', '>=', now),
     orderBy('startAt', 'asc'),
@@ -242,7 +243,7 @@ export async function getUpcomingEvents(
   try {
     const recentSnap = await getDocs(
       query(
-        collection(db, 'events'),
+        collection(db, COLLECTIONS.events),
         where('visibility', '==', 'public'),
         orderBy('startAt', 'asc'),
         limitToLast(limitCount),
@@ -255,7 +256,7 @@ export async function getUpcomingEvents(
       const fallbackScanLimit = Math.max(limitCount * 3, limitCount);
       const fallbackSnap = await getDocs(
         query(
-          collection(db, 'events'),
+          collection(db, COLLECTIONS.events),
           where('startAt', '>=', now),
           orderBy('startAt', 'asc'),
           limit(fallbackScanLimit),
@@ -270,7 +271,7 @@ export async function getUpcomingEvents(
 }
 
 export async function joinEvent(eventId: string, uid: string): Promise<void> {
-  const eventSnap = await getDoc(doc(db, 'events', eventId));
+  const eventSnap = await getDoc(doc(db, COLLECTIONS.events, eventId));
   if (!eventSnap.exists()) {
     throw new Error('Evento no encontrado');
   }
@@ -279,7 +280,7 @@ export async function joinEvent(eventId: string, uid: string): Promise<void> {
     throw new Error('Este evento es privado');
   }
 
-  const attendeeRef = doc(db, 'events', eventId, 'attendees', uid);
+  const attendeeRef = doc(db, COLLECTIONS.events, eventId, SUBCOLLECTIONS.attendees, uid);
   const attendeeSnap = await getDoc(attendeeRef);
   if (attendeeSnap.exists()) return;
   await setDoc(
@@ -293,19 +294,21 @@ export async function joinEvent(eventId: string, uid: string): Promise<void> {
 }
 
 export async function leaveEvent(eventId: string, uid: string): Promise<void> {
-  await deleteDoc(doc(db, 'events', eventId, 'attendees', uid));
+  await deleteDoc(doc(db, COLLECTIONS.events, eventId, SUBCOLLECTIONS.attendees, uid));
 }
 
 export async function deleteEvent(eventId: string): Promise<void> {
-  await deleteDoc(doc(db, 'events', eventId));
+  await deleteDoc(doc(db, COLLECTIONS.events, eventId));
 }
 
 export async function isEventAttendee(eventId: string, uid: string): Promise<boolean> {
-  const snap = await getDoc(doc(db, 'events', eventId, 'attendees', uid));
+  const snap = await getDoc(doc(db, COLLECTIONS.events, eventId, SUBCOLLECTIONS.attendees, uid));
   return snap.exists();
 }
 
 export async function getEventAttendeeCount(eventId: string): Promise<number> {
-  const snap = await getCountFromServer(collection(db, 'events', eventId, 'attendees'));
+  const snap = await getCountFromServer(
+    collection(db, COLLECTIONS.events, eventId, SUBCOLLECTIONS.attendees),
+  );
   return snap.data().count;
 }

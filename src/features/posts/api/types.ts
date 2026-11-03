@@ -6,6 +6,7 @@ import type { PostCommentRead } from '@/shared/lib/firestore/postEngagement';
 import type { PostRead } from '@/shared/lib/firestore/posts';
 import type { PaginatedResult } from '@/shared/lib/firestore/sharedTypes';
 import { idSchema, limitSchema, urlSchema } from '@/shared/lib/validators';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 export type {
   CreatePostUploadingInput,
@@ -25,7 +26,12 @@ export const userIdSchema = idSchema;
 export const paginationLimitSchema = limitSchema;
 export const reportReasonSchema = z.enum(['spam', 'harassment', 'abuse', 'fake', 'other']);
 export type UserReportReason = z.infer<typeof reportReasonSchema>;
-export const reportDetailsSchema = z.string().trim().max(2000).nullable().optional();
+export const reportDetailsSchema = z
+  .string()
+  .trim()
+  .max(LIMITS.reports.detailsMaxLength)
+  .nullable()
+  .optional();
 
 export const authorSnapshotSchema = z.object({
   displayName: z.string().trim().min(1).max(120),
@@ -55,7 +61,7 @@ export const createPostUploadingInputSchema = z.object({
   authorId: idSchema,
   authorSnapshot: authorSnapshotSchema,
   title: z.string().trim().max(160).nullable().optional(),
-  text: z.string().trim().min(1).max(5000),
+  text: z.string().trim().min(1).max(LIMITS.posts.textMaxLength),
   groupId: idSchema.nullable().optional(),
   categoryId: z.string().trim().min(1).max(120).nullable().optional(),
 });

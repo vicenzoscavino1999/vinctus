@@ -68,7 +68,7 @@ enum ReportTarget: Hashable {
 /// `src/shared/lib/firestore/reports.ts`, so moderators get the same shape from web and native.
 struct ReportFields: Equatable {
   /// `isValidUserReportCreate` caps `details` at 2000 characters.
-  static let maxDetailsLength = 2000
+  static let maxDetailsLength = Limits.Reports.detailsMaxLength
 
   let reportedUID: String
   let details: String?
@@ -172,13 +172,13 @@ final class FirebaseModerationRepo: ModerationRepo {
       "status": "open",
       "createdAt": FieldValue.serverTimestamp(),
     ]
-    try await db.collection("reports").document().setData(payload)
+    try await db.collection(FirestoreCollections.reports).document().setData(payload)
     AppLog.moderation.info("report.created reason=\(reason.rawValue, privacy: .public)")
   }
 
   func fetchBlockedUserIDs() async throws -> Set<String> {
     let (db, uid) = try firestoreAndUser()
-    let query = db.collection("users").document(uid).collection("blockedUsers")
+    let query = db.collection(FirestoreCollections.users).document(uid).collection(FirestoreSubcollections.blockedUsers)
       .limit(to: Self.blockedUsersFetchLimit)
     let snapshot = try await query.getDocuments()
     return Set(snapshot.documents.map(\.documentID))
@@ -190,7 +190,7 @@ final class FirebaseModerationRepo: ModerationRepo {
     guard let blocked = FirestoreValue.string(blockedUID) else { throw ModerationRepoError.invalidUserID }
     guard blocked != uid else { throw ModerationRepoError.cannotBlockSelf }
 
-    let users = db.collection("users")
+    let users = db.collection(FirestoreCollections.users)
     let batch = db.batch()
     batch.setData(
       [
@@ -198,18 +198,18 @@ final class FirebaseModerationRepo: ModerationRepo {
         "status": "active",
         "blockedAt": FieldValue.serverTimestamp(),
       ],
-      forDocument: users.document(uid).collection("blockedUsers").document(blocked)
+      forDocument: users.document(uid).collection(FirestoreSubcollections.blockedUsers).document(blocked)
     )
 
     // Follow relationships the rules let the blocker delete, in both directions
-    batch.deleteDocument(users.document(uid).collection("following").document(blocked))
-    batch.deleteDocument(users.document(uid).collection("followers").document(blocked))
-    batch.deleteDocument(users.document(blocked).collection("followers").document(uid))
+    batch.deleteDocument(users.document(uid).collection(FirestoreSubcollections.following).document(blocked))
+    batch.deleteDocument(users.document(uid).collection(FirestoreSubcollections.followers).document(blocked))
+    batch.deleteDocument(users.document(blocked).collection(FirestoreSubcollections.followers).document(uid))
 
     // Hide the direct conversation from the blocker (index only)
     let conversationID = FirebaseChatRepo.directConversationID(uid, blocked)
     batch.deleteDocument(
-      users.document(uid).collection("directConversations").document(conversationID)
+      users.document(uid).collection(FirestoreSubcollections.directConversations).document(conversationID)
     )
 
     try await batch.commit()
@@ -218,9 +218,9 @@ final class FirebaseModerationRepo: ModerationRepo {
     // Outside the batch so a denied cleanup can't undo the block (a batch is all-or-nothing):
     // the blocked user's following edge needs the rule that lets the followed user remove it,
     // and follow requests may only be deleted by a participant once they exist.
-    _ = try? await users.document(blocked).collection("following").document(uid).delete()
+    _ = try? await users.document(blocked).collection(FirestoreSubcollections.following).document(uid).delete()
     for requestID in ["\(uid)_\(blocked)", "\(blocked)_\(uid)"] {
-      let requestRef = db.collection("follow_requests").document(requestID)
+      let requestRef = db.collection(FirestoreCollections.followRequests).document(requestID)
       if let snapshot = try? await requestRef.getDocument(), snapshot.exists {
         _ = try? await requestRef.delete()
       }
@@ -230,7 +230,8 @@ final class FirebaseModerationRepo: ModerationRepo {
   func unblockUser(_ blockedUID: String) async throws {
     let (db, uid) = try firestoreAndUser()
     guard let blocked = FirestoreValue.string(blockedUID) else { throw ModerationRepoError.invalidUserID }
-    try await db.collection("users").document(uid).collection("blockedUsers").document(blocked).delete()
+    try await db.collection(FirestoreCollections.users).document(uid)
+      .collection(FirestoreSubcollections.blockedUsers).document(blocked).delete()
     AppLog.moderation.info("block.removed")
   }
 

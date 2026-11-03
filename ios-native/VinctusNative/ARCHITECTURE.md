@@ -41,9 +41,15 @@ View  →  ViewModel (screen state, @MainActor)  →  Repo protocol  →  Fireba
   their initializer, with an `AppRepos.x()` default. Don't write `FirebaseXRepo()` anywhere else.
 - **Demo mode:** screenshot builds (`SCREENSHOTS` flag, `-VinctusDemo` launch argument) get the
   sample repos in `App/DemoData.swift` from `AppRepos`, so screens can be checked without Firebase.
-- **Same data as the web:** each repo mirrors a file in `src/shared/lib/firestore/` and says which
-  one in a comment. Keep field names, document ids and limits identical, and check
-  `firestore.rules` when writing a new field.
+- **Same data as the web:** collection names and the limits both apps check come from
+  `shared/firestore-contract.json` at the repository root. `npm run contract:generate` turns it
+  into `Shared/FirestoreContract.swift` (`FirestoreCollections`, `FirestoreSubcollections`,
+  `Limits`) and the web's `src/shared/lib/firestore/firestoreContract.ts`, so use those constants
+  instead of literals. To add or change a name or a limit, edit the JSON and regenerate: CI fails
+  when a generated file is out of date, and a web test checks the JSON against `firestore.rules`.
+  Each repo still mirrors a file in `src/shared/lib/firestore/` and says which one in a comment:
+  keep field names and document ids identical, and check `firestore.rules` when writing a new
+  field.
 - **Firestore values:** read loose fields with `FirestoreValue.string/int/double/date`, and use
   the `async` Firebase APIs (`try await ref.getDocument()`) instead of callback wrappers.
 

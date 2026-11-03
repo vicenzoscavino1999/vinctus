@@ -29,6 +29,7 @@ import {
   followCategoryWithSync as followCategoryWithSyncProfile,
   unfollowCategoryWithSync as unfollowCategoryWithSyncProfile,
 } from '@/features/profile/api';
+import { COLLECTIONS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 // Create the context with proper typing
 const AppStateContext = createContext<AppStateContextType | null>(null);
@@ -106,20 +107,34 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
         const [membershipsSnap, categoriesSnap, followedCategoriesSnap, likesSnap, savedSnap] =
           await Promise.all([
             getDocs(
-              query(collection(db, 'users', uid, 'memberships'), limit(APP_STATE_REMOTE_LIMIT)),
-            ),
-            getDocs(
-              query(collection(db, 'users', uid, 'savedCategories'), limit(APP_STATE_REMOTE_LIMIT)),
-            ),
-            getDocs(
               query(
-                collection(db, 'users', uid, 'followedCategories'),
+                collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.memberships),
                 limit(APP_STATE_REMOTE_LIMIT),
               ),
             ),
-            getDocs(query(collection(db, 'users', uid, 'likes'), limit(APP_STATE_REMOTE_LIMIT))),
             getDocs(
-              query(collection(db, 'users', uid, 'savedPosts'), limit(APP_STATE_REMOTE_LIMIT)),
+              query(
+                collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedCategories),
+                limit(APP_STATE_REMOTE_LIMIT),
+              ),
+            ),
+            getDocs(
+              query(
+                collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.followedCategories),
+                limit(APP_STATE_REMOTE_LIMIT),
+              ),
+            ),
+            getDocs(
+              query(
+                collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.likes),
+                limit(APP_STATE_REMOTE_LIMIT),
+              ),
+            ),
+            getDocs(
+              query(
+                collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedPosts),
+                limit(APP_STATE_REMOTE_LIMIT),
+              ),
             ),
           ]);
 

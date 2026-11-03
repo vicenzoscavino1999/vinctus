@@ -91,7 +91,7 @@ final class FirebaseAIConsentRepo: AIConsentRepo {
     }
 
     let db = self.db ?? Firestore.firestore()
-    let ref = db.collection("users").document(uid)
+    let ref = db.collection(FirestoreCollections.users).document(uid)
     let payload: [String: Any] = [
       "settings": [
         "ai": [
@@ -113,7 +113,7 @@ final class FirebaseAIConsentRepo: AIConsentRepo {
 
   private func getUserDocument(uid: String) async throws -> DocumentSnapshot {
     let db = self.db ?? Firestore.firestore()
-    let ref = db.collection("users").document(uid)
+    let ref = db.collection(FirestoreCollections.users).document(uid)
 
     return try await ref.getDocument()
   }

@@ -8,6 +8,7 @@ import { CATEGORIES } from '@/shared/constants';
 import { getGroup, updateGroup, type GroupVisibility } from '@/features/groups/api';
 import { compressToWebp, validateImage } from '@/shared/lib/compression';
 import { uploadGroupIcon } from '@/shared/lib/storage';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 type SelectedImage = { file: File; url: string };
 
@@ -227,7 +228,7 @@ const GroupEditPage = () => {
             value={name}
             onChange={(event) => setName(event.target.value)}
             className="w-full bg-neutral-900/40 border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/60 transition-colors"
-            maxLength={80}
+            maxLength={LIMITS.groups.nameMaxLength}
           />
         </div>
 
@@ -240,7 +241,7 @@ const GroupEditPage = () => {
             onChange={(event) => setDescription(event.target.value)}
             className="w-full bg-neutral-900/40 border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/60 transition-colors resize-none"
             rows={5}
-            maxLength={600}
+            maxLength={LIMITS.groups.descriptionMaxLength}
           />
         </div>
 

@@ -27,6 +27,7 @@ import {
 import { deleteField, doc, getDoc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { appleProvider, auth, googleProvider, db } from '@/shared/lib/firebase';
 import { trackAppCall, trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
+import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 // Types
 interface AuthUser {
@@ -126,7 +127,7 @@ const LEGACY_DOTTED_SETTINGS_KEYS = ['settings.privacy', 'settings.notifications
 
 const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
   try {
-    const userRef = doc(db, 'users', firebaseUser.uid);
+    const userRef = doc(db, COLLECTIONS.users, firebaseUser.uid);
     trackFirestoreRead('auth.ensureUserProfile.getUser');
     const snapshot = await getDoc(userRef);
 
@@ -267,7 +268,9 @@ const ensureUserProfile = async (firebaseUser: User): Promise<void> => {
     }
 
     trackFirestoreWrite('auth.ensureUserProfile.upsertUserPublic');
-    await setDoc(doc(db, 'users_public', firebaseUser.uid), publicPayload, { merge: true });
+    await setDoc(doc(db, COLLECTIONS.usersPublic, firebaseUser.uid), publicPayload, {
+      merge: true,
+    });
   } catch (error) {
     console.error('Error ensuring user profile:', error);
   }

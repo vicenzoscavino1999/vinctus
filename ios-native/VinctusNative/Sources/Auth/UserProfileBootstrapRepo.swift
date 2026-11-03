@@ -37,7 +37,7 @@ final class FirebaseUserProfileBootstrapRepo: UserProfileBootstrapRepo {
     guard let user = Auth.auth().currentUser, !user.isAnonymous else { return }
 
     let db = self.db ?? Firestore.firestore()
-    let userRef = db.collection("users").document(user.uid)
+    let userRef = db.collection(FirestoreCollections.users).document(user.uid)
     let snapshot = try await userRef.getDocument()
 
     let authDisplayName = FirestoreValue.string(user.displayName)
@@ -134,7 +134,7 @@ final class FirebaseUserProfileBootstrapRepo: UserProfileBootstrapRepo {
       publicPayload["karmaByInterest"] = [String: Any]()
     }
 
-    try await db.collection("users_public").document(user.uid).setData(publicPayload, merge: true)
+    try await db.collection(FirestoreCollections.usersPublic).document(user.uid).setData(publicPayload, merge: true)
     AppLog.profile.info("ensureUserProfile.success isNewUser=\(isNewUser, privacy: .public)")
   }
 

@@ -100,9 +100,9 @@ final class FirebaseStoriesRepo: StoriesRepo {
   /// Mirrors `useStories`: own stories plus those of friends and followed users.
   func fetchStoryGroups() async throws -> [StoryGroup] {
     let (db, uid) = try context()
-    let users = db.collection("users").document(uid)
-    async let friends = ids(users.collection("friends").limit(to: 200))
-    async let following = ids(users.collection("following").limit(to: 1000))
+    let users = db.collection(FirestoreCollections.users).document(uid)
+    async let friends = ids(users.collection(FirestoreSubcollections.friends).limit(to: 200))
+    async let following = ids(users.collection(FirestoreSubcollections.following).limit(to: 1000))
     let others = Set(await friends + following).subtracting([uid])
 
     var owners = [uid] + Array(others)
@@ -121,7 +121,7 @@ final class FirebaseStoriesRepo: StoriesRepo {
 
   /// Mirrors `getStoriesForOwners` (same filters, so it uses the same index).
   private func storiesOf(_ ownerIDs: [String], db: Firestore) async throws -> [Story] {
-    let snapshot = try await db.collection("stories")
+    let snapshot = try await db.collection(FirestoreCollections.stories)
       .whereField("ownerId", in: ownerIDs)
       .whereField("visibility", isEqualTo: "friends")
       .whereField("expiresAt", isGreaterThan: Timestamp(date: Date()))
@@ -138,7 +138,7 @@ final class FirebaseStoriesRepo: StoriesRepo {
   /// `isValidStoryCreate` in firestore.rules).
   func publishImageStory(jpegData: Data) async throws {
     let (db, uid) = try context()
-    let storyRef = db.collection("stories").document()
+    let storyRef = db.collection(FirestoreCollections.stories).document()
     let millis = Int64(Date().timeIntervalSince1970 * 1000)
     let path = "stories/\(uid)/\(storyRef.documentID)/original/\(millis)_story.jpg"
     let mediaRef = Storage.storage().reference(withPath: path)
@@ -147,14 +147,14 @@ final class FirebaseStoriesRepo: StoriesRepo {
     _ = try await mediaRef.putDataAsync(jpegData, metadata: metadata)
     let url = try await mediaRef.downloadURL().absoluteString
 
-    let profile = (try? await db.collection("users_public").document(uid).getDocument().data()) ?? [:]
+    let profile = (try? await db.collection(FirestoreCollections.usersPublic).document(uid).getDocument().data()) ?? [:]
     let user = Auth.auth().currentUser
     let name = FirestoreValue.string(profile["displayName"]) ?? FirestoreValue.string(user?.displayName)
     let photo = FirestoreValue.string(profile["photoURL"]) ?? user?.photoURL?.absoluteString
 
     // `isValidStoryOwnerSnapshot`: a name of up to 80 characters and a photo URL, or nulls.
     var ownerSnapshot: [String: Any] = ["displayName": NSNull(), "photoURL": NSNull()]
-    if let name { ownerSnapshot["displayName"] = String(name.prefix(80)) }
+    if let name { ownerSnapshot["displayName"] = String(name.prefix(Limits.Stories.ownerNameMaxLength)) }
     if let photo { ownerSnapshot["photoURL"] = photo }
     let expiresAt = Timestamp(date: Date().addingTimeInterval(Self.storyDuration))
     let fields: [String: Any] = [
@@ -174,7 +174,7 @@ final class FirebaseStoriesRepo: StoriesRepo {
 
   func deleteStory(_ story: Story) async throws {
     let (db, _) = try context()
-    try await db.collection("stories").document(story.id).delete()
+    try await db.collection(FirestoreCollections.stories).document(story.id).delete()
     // The files go too (the media and, for web video stories, its thumbnail); if that fails the
     // story is already gone for everyone.
     for path in [story.mediaPath, story.thumbPath ?? ""] where !path.isEmpty {

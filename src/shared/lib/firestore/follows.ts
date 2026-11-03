@@ -32,6 +32,7 @@ import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics
 import { db, dbLite } from '@/shared/lib/firebase';
 import { getPublicUsersByIds, type FollowUserRead } from './publicUsers';
 import type { AccountVisibility } from './users';
+import { COLLECTIONS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 type PaginatedResult<T> = {
   items: T[];
@@ -102,7 +103,9 @@ export async function getFollowing(uid: string): Promise<FollowingProfileRead[]>
 
   let followingIds: string[] = [];
   try {
-    const followingQuery = queryLite(collectionLite(dbLite, 'users', uid, 'following'));
+    const followingQuery = queryLite(
+      collectionLite(dbLite, COLLECTIONS.users, uid, SUBCOLLECTIONS.following),
+    );
     const snapshot = await getDocsLite(followingQuery);
     followingIds = snapshot.docs.map((docSnap) => docSnap.id);
   } catch (error) {
@@ -111,7 +114,9 @@ export async function getFollowing(uid: string): Promise<FollowingProfileRead[]>
 
   if (followingIds.length === 0) {
     try {
-      const snapshot = await getDocs(collection(db, 'users', uid, 'following'));
+      const snapshot = await getDocs(
+        collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.following),
+      );
       trackFirestoreRead('firestore.getDocs', snapshot.size);
       followingIds = snapshot.docs.map((docSnap) => docSnap.id);
     } catch (error) {
@@ -127,7 +132,7 @@ export async function getFollowing(uid: string): Promise<FollowingProfileRead[]>
     for (let i = 0; i < followingIds.length; i += 10) {
       const chunk = followingIds.slice(i, i + 10);
       const profilesQuery = queryLite(
-        collectionLite(dbLite, 'users_public'),
+        collectionLite(dbLite, COLLECTIONS.usersPublic),
         whereLite(documentId(), 'in', chunk),
       );
       const profilesSnap = await getDocsLite(profilesQuery);
@@ -180,11 +185,15 @@ export async function getFollowStatus(
 ): Promise<{ status: FollowStatus; requestId?: string; isMutual?: boolean }> {
   try {
     trackFirestoreRead('firestore.getDoc');
-    const followerDoc = await getDoc(doc(db, 'users', targetUid, 'followers', currentUid));
+    const followerDoc = await getDoc(
+      doc(db, COLLECTIONS.users, targetUid, SUBCOLLECTIONS.followers, currentUid),
+    );
     if (followerDoc.exists()) {
       try {
         trackFirestoreRead('firestore.getDoc');
-        const reverseDoc = await getDoc(doc(db, 'users', currentUid, 'followers', targetUid));
+        const reverseDoc = await getDoc(
+          doc(db, COLLECTIONS.users, currentUid, SUBCOLLECTIONS.followers, targetUid),
+        );
         return { status: 'following', isMutual: reverseDoc.exists() };
       } catch (error) {
         const code = (error as { code?: string })?.code;
@@ -208,7 +217,7 @@ export async function getFollowStatus(
   const incomingId = buildFollowRequestId(targetUid, currentUid);
   try {
     trackFirestoreRead('firestore.getDoc');
-    const incoming = await getDoc(doc(db, 'follow_requests', incomingId));
+    const incoming = await getDoc(doc(db, COLLECTIONS.followRequests, incomingId));
     if (incoming.exists()) {
       const data = incoming.data() as { status?: FollowRequestStatus };
       if (data.status === 'pending') {
@@ -225,7 +234,7 @@ export async function getFollowStatus(
   const outgoingId = buildFollowRequestId(currentUid, targetUid);
   try {
     trackFirestoreRead('firestore.getDoc');
-    const outgoing = await getDoc(doc(db, 'follow_requests', outgoingId));
+    const outgoing = await getDoc(doc(db, COLLECTIONS.followRequests, outgoingId));
     if (outgoing.exists()) {
       const data = outgoing.data() as { status?: FollowRequestStatus };
       if (data.status === 'pending') {
@@ -244,7 +253,7 @@ export async function getFollowStatus(
 
 export async function sendFollowRequest(fromUid: string, toUid: string): Promise<string> {
   const requestId = buildFollowRequestId(fromUid, toUid);
-  const requestRef = doc(db, 'follow_requests', requestId);
+  const requestRef = doc(db, COLLECTIONS.followRequests, requestId);
   let existing = null as null | DocumentSnapshot;
   try {
     trackFirestoreRead('firestore.getDoc');
@@ -289,7 +298,7 @@ export async function sendFollowRequest(fromUid: string, toUid: string): Promise
 }
 
 export async function cancelFollowRequest(fromUid: string, toUid: string): Promise<void> {
-  const ref = doc(db, 'follow_requests', buildFollowRequestId(fromUid, toUid));
+  const ref = doc(db, COLLECTIONS.followRequests, buildFollowRequestId(fromUid, toUid));
   try {
     trackFirestoreRead('firestore.getDoc');
     const snap = await getDoc(ref);
@@ -306,7 +315,7 @@ export async function cancelFollowRequest(fromUid: string, toUid: string): Promi
 
 export async function acceptFollowRequest(fromUid: string, toUid: string): Promise<void> {
   trackFirestoreWrite('firestore.updateDoc');
-  await updateDoc(doc(db, 'follow_requests', buildFollowRequestId(fromUid, toUid)), {
+  await updateDoc(doc(db, COLLECTIONS.followRequests, buildFollowRequestId(fromUid, toUid)), {
     status: 'accepted',
     updatedAt: serverTimestamp(),
   });
@@ -314,15 +323,27 @@ export async function acceptFollowRequest(fromUid: string, toUid: string): Promi
 
 export async function declineFollowRequest(fromUid: string, toUid: string): Promise<void> {
   trackFirestoreWrite('firestore.updateDoc');
-  await updateDoc(doc(db, 'follow_requests', buildFollowRequestId(fromUid, toUid)), {
+  await updateDoc(doc(db, COLLECTIONS.followRequests, buildFollowRequestId(fromUid, toUid)), {
     status: 'declined',
     updatedAt: serverTimestamp(),
   });
 }
 
 export async function followPublicUser(followerUid: string, targetUid: string): Promise<void> {
-  const followerRef = docLite(dbLite, 'users', targetUid, 'followers', followerUid);
-  const followingRef = docLite(dbLite, 'users', followerUid, 'following', targetUid);
+  const followerRef = docLite(
+    dbLite,
+    COLLECTIONS.users,
+    targetUid,
+    SUBCOLLECTIONS.followers,
+    followerUid,
+  );
+  const followingRef = docLite(
+    dbLite,
+    COLLECTIONS.users,
+    followerUid,
+    SUBCOLLECTIONS.following,
+    targetUid,
+  );
   const [followerSnap, followingSnap] = await Promise.all([
     getDocLite(followerRef),
     getDocLite(followingRef),
@@ -359,8 +380,8 @@ export async function followPublicUser(followerUid: string, targetUid: string): 
 }
 
 export async function unfollowUser(followerUid: string, targetUid: string): Promise<void> {
-  const followerRef = doc(db, 'users', targetUid, 'followers', followerUid);
-  const followingRef = doc(db, 'users', followerUid, 'following', targetUid);
+  const followerRef = doc(db, COLLECTIONS.users, targetUid, SUBCOLLECTIONS.followers, followerUid);
+  const followingRef = doc(db, COLLECTIONS.users, followerUid, SUBCOLLECTIONS.following, targetUid);
   const batch = writeBatch(db);
   batch.delete(followerRef);
   batch.delete(followingRef);
@@ -373,7 +394,7 @@ export async function getFollowList(
   pageSize = 20,
   cursor?: PaginatedResult<FollowUserRead>['lastDoc'],
 ): Promise<PaginatedResult<FollowUserRead>> {
-  const baseRef = collection(db, 'users', uid, list);
+  const baseRef = collection(db, COLLECTIONS.users, uid, list);
   const constraints = [orderBy('createdAt', 'desc'), limit(pageSize)];
   const q = cursor
     ? query(baseRef, ...constraints, startAfter(cursor))
@@ -406,7 +427,7 @@ export async function getIncomingFollowRequests(
   pageSize = 20,
   cursor?: PaginatedResult<FollowRequestRead>['lastDoc'],
 ): Promise<PaginatedResult<FollowRequestRead & { fromUser: FollowUserRead | null }>> {
-  const baseRef = collection(db, 'follow_requests');
+  const baseRef = collection(db, COLLECTIONS.followRequests);
   const constraints = [
     where('toUid', '==', uid),
     where('status', '==', 'pending'),

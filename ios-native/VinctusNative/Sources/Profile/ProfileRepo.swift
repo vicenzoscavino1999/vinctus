@@ -81,8 +81,8 @@ final class FirebaseProfileRepo: ProfileRepo {
     guard !normalizedUID.isEmpty else { return nil }
 
     let db = self.db ?? Firestore.firestore()
-    let privateRef = db.collection("users").document(normalizedUID)
-    let publicRef = db.collection("users_public").document(normalizedUID)
+    let privateRef = db.collection(FirestoreCollections.users).document(normalizedUID)
+    let publicRef = db.collection(FirestoreCollections.usersPublic).document(normalizedUID)
 
     async let privateData = getDocumentData(privateRef, allowPermissionDenied: true)
     async let publicData = getDocumentData(publicRef)
@@ -175,8 +175,8 @@ final class FirebaseProfileRepo: ProfileRepo {
     }
 
     let batch = db.batch()
-    batch.setData(privateFields, forDocument: db.collection("users").document(uid), merge: true)
-    batch.setData(publicFields, forDocument: db.collection("users_public").document(uid), merge: true)
+    batch.setData(privateFields, forDocument: db.collection(FirestoreCollections.users).document(uid), merge: true)
+    batch.setData(publicFields, forDocument: db.collection(FirestoreCollections.usersPublic).document(uid), merge: true)
     try await batch.commit()
 
     if let user = Auth.auth().currentUser, user.uid == uid {

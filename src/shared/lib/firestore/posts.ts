@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
+import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 const DEFAULT_LIMIT = 30;
 const DEFAULT_AUTHOR_NAME = 'Usuario';
@@ -142,7 +143,7 @@ const deleteDoc = ((...args: unknown[]) => {
   return (_deleteDoc as (...innerArgs: unknown[]) => unknown)(...args);
 }) as typeof _deleteDoc;
 
-const postsCollection = collection(db, 'posts');
+const postsCollection = collection(db, COLLECTIONS.posts);
 
 const toNullableString = (value: unknown): string | null =>
   typeof value === 'string' ? value : null;

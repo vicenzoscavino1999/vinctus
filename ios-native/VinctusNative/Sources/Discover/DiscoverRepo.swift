@@ -43,7 +43,7 @@ final class FirebaseDiscoverRepo: DiscoverRepo {
     let db = self.db ?? Firestore.firestore()
     let pageSize = max(1, min(30, limit))
 
-    let query = db.collection("users_public")
+    let query = db.collection(FirestoreCollections.usersPublic)
       .order(by: "updatedAt", descending: true)
       .limit(to: pageSize + 1)
 
@@ -65,7 +65,7 @@ final class FirebaseDiscoverRepo: DiscoverRepo {
     let db = self.db ?? Firestore.firestore()
     let pageSize = max(1, min(30, limit))
 
-    let query = db.collection("users_public")
+    let query = db.collection(FirestoreCollections.usersPublic)
       .order(by: "displayNameLowercase")
       .start(at: [normalized])
       .end(at: ["\(normalized)\u{f8ff}"])

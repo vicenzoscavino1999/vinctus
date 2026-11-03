@@ -1,6 +1,7 @@
 import { collection, documentId, getDocs, query, where } from 'firebase/firestore';
 import { trackFirestoreRead } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
+import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 export interface FollowUserRead {
   uid: string;
@@ -20,7 +21,7 @@ export const getPublicUsersByIds = async (uids: string[]): Promise<Map<string, F
   }
 
   for (const chunk of chunks) {
-    const q = query(collection(db, 'users_public'), where(documentId(), 'in', chunk));
+    const q = query(collection(db, COLLECTIONS.usersPublic), where(documentId(), 'in', chunk));
     const snapshot = await getDocs(q);
     trackFirestoreRead('firestore.getDocs', snapshot.size);
     snapshot.docs.forEach((docSnap) => {

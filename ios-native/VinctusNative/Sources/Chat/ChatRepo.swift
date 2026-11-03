@@ -87,7 +87,7 @@ enum ChatRepoError: LocalizedError {
 /// `directConversations` and `memberships` indexes that list a user's conversations.
 final class FirebaseChatRepo: ChatRepo {
   /// Same limit as `isValidMessageCreate` in firestore.rules.
-  static let maxMessageLength = 4000
+  static let maxMessageLength = Limits.Messages.textMaxLength
   private static let listLimit = 50
 
   /// How long the sender's name and photo are reused before reading them again, so a profile edit
@@ -133,7 +133,8 @@ final class FirebaseChatRepo: ChatRepo {
       return ChatSubscription {}
     }
     let registration = Firestore.firestore()
-      .collection("conversations").document(conversationID).collection("messages")
+      .collection(FirestoreCollections.conversations).document(conversationID)
+      .collection(FirestoreSubcollections.messages)
       .order(by: "clientCreatedAt", descending: true)
       .limit(to: Self.listLimit)
       .addSnapshotListener { snapshot, error in
@@ -157,7 +158,7 @@ final class FirebaseChatRepo: ChatRepo {
     let now = Int64(Date().timeIntervalSince1970 * 1000)
     // Deterministic id, like the web, so a retried write doesn't duplicate the message.
     let clientID = "\(uid)_\(now)_\(UUID().uuidString.prefix(8).lowercased())"
-    let conversation = db.collection("conversations").document(conversationID)
+    let conversation = db.collection(FirestoreCollections.conversations).document(conversationID)
 
     let batch = db.batch()
     batch.setData(
@@ -170,7 +171,7 @@ final class FirebaseChatRepo: ChatRepo {
         "clientCreatedAt": now,
         "clientId": clientID,
       ],
-      forDocument: conversation.collection("messages").document(clientID)
+      forDocument: conversation.collection(FirestoreSubcollections.messages).document(clientID)
     )
     batch.updateData(
       [
@@ -192,8 +193,8 @@ final class FirebaseChatRepo: ChatRepo {
   func markRead(conversationID: String) async {
     guard let session = try? context() else { return }
     let (db, uid) = session
-    try? await db.collection("conversations").document(conversationID)
-      .collection("members").document(uid)
+    try? await db.collection(FirestoreCollections.conversations).document(conversationID)
+      .collection(FirestoreSubcollections.members).document(uid)
       .updateData([
         "lastReadClientAt": Int64(Date().timeIntervalSince1970 * 1000),
         "lastReadAt": FieldValue.serverTimestamp(),
@@ -206,7 +207,7 @@ final class FirebaseChatRepo: ChatRepo {
     let (db, uid) = try context()
     let memberIDs = [uid, otherUserID].sorted()
     let conversationID = Self.directConversationID(uid, otherUserID)
-    let conversation = db.collection("conversations").document(conversationID)
+    let conversation = db.collection(FirestoreCollections.conversations).document(conversationID)
 
     // The read is denied while the conversation doesn't exist, so "permission denied" means
     // "create it". Any other failure (no connection, timeout) is reported as it is.
@@ -235,8 +236,8 @@ final class FirebaseChatRepo: ChatRepo {
       try await ensureMember(memberID, in: conversation)
     }
     for (owner, other) in [(memberIDs[0], memberIDs[1]), (memberIDs[1], memberIDs[0])] {
-      try? await db.collection("users").document(owner)
-        .collection("directConversations").document(conversationID)
+      try? await db.collection(FirestoreCollections.users).document(owner)
+        .collection(FirestoreSubcollections.directConversations).document(conversationID)
         .setData(
           [
             "conversationId": conversationID,
@@ -253,7 +254,7 @@ final class FirebaseChatRepo: ChatRepo {
   func openGroupConversation(groupID: String) async throws -> String {
     let (db, uid) = try context()
     let conversationID = "grp_\(groupID)"
-    let conversation = db.collection("conversations").document(conversationID)
+    let conversation = db.collection(FirestoreCollections.conversations).document(conversationID)
     let exists = (try? await conversation.getDocument().exists) ?? false
     if !exists {
       try? await conversation.setData([
@@ -269,7 +270,7 @@ final class FirebaseChatRepo: ChatRepo {
   }
 
   private func ensureMember(_ memberID: String, in conversation: DocumentReference) async throws {
-    let member = conversation.collection("members").document(memberID)
+    let member = conversation.collection(FirestoreSubcollections.members).document(memberID)
     if (try? await member.getDocument().exists) == true { return }
     try await member.setData([
       "uid": memberID,
@@ -288,7 +289,7 @@ final class FirebaseChatRepo: ChatRepo {
     {
       return (senderProfile.name, senderProfile.photoURL)
     }
-    let data = (try? await db.collection("users_public").document(uid).getDocument().data()) ?? [:]
+    let data = (try? await db.collection(FirestoreCollections.usersPublic).document(uid).getDocument().data()) ?? [:]
     let user = Auth.auth().currentUser
     let name = (data["displayName"] as? String) ?? user?.displayName
     let photoURL = (data["photoURL"] as? String) ?? user?.photoURL?.absoluteString
@@ -351,9 +352,9 @@ private final class ConversationListObserver {
   }
 
   func start(limit: Int) {
-    let user = db.collection("users").document(uid)
+    let user = db.collection(FirestoreCollections.users).document(uid)
     indexListeners.append(
-      user.collection("directConversations")
+      user.collection(FirestoreSubcollections.directConversations)
         .order(by: "updatedAt", descending: true)
         .limit(to: limit)
         .addSnapshotListener { [weak self] snapshot, error in
@@ -373,7 +374,7 @@ private final class ConversationListObserver {
         }
     )
     indexListeners.append(
-      user.collection("memberships")
+      user.collection(FirestoreSubcollections.memberships)
         .order(by: "joinedAt", descending: true)
         .limit(to: limit)
         .addSnapshotListener { [weak self] snapshot, error in
@@ -409,7 +410,7 @@ private final class ConversationListObserver {
   }
 
   private func listen(to conversationID: String) {
-    conversationListeners[conversationID] = db.collection("conversations").document(conversationID)
+    conversationListeners[conversationID] = db.collection(FirestoreCollections.conversations).document(conversationID)
       .addSnapshotListener { [weak self] snapshot, _ in
         guard let self else { return }
         guard let snapshot, snapshot.exists, let data = snapshot.data() else {
@@ -456,7 +457,9 @@ private final class ConversationListObserver {
   @MainActor
   private func loadTitle(key: String, isGroup: Bool, id: String?) async {
     guard let id, titles[key] == nil else { return }
-    let path = isGroup ? db.collection("groups").document(id) : db.collection("users_public").document(id)
+    let path = isGroup
+      ? db.collection(FirestoreCollections.groups).document(id)
+      : db.collection(FirestoreCollections.usersPublic).document(id)
     let data = (try? await path.getDocument().data()) ?? [:]
     let title = (isGroup ? data["name"] : data["displayName"]) as? String
     let photo = (isGroup ? data["iconUrl"] : data["photoURL"]) as? String

@@ -20,6 +20,7 @@ import {
   trackFirestoreWrite,
 } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
+import { COLLECTIONS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 const SMALL_LIST_LIMIT = 50;
 
@@ -213,7 +214,7 @@ export const subscribeToUserMemberships = (
   limitCount: number = SMALL_LIST_LIMIT,
 ): Unsubscribe => {
   const q = query(
-    collection(db, 'users', uid, 'memberships'),
+    collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.memberships),
     orderBy('joinedAt', 'desc'),
     limit(limitCount),
   );
@@ -231,7 +232,7 @@ export const subscribeToUserDirectConversations = (
   onError?: (error: unknown) => void,
 ): Unsubscribe => {
   const q = query(
-    collection(db, 'users', uid, 'directConversations'),
+    collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.directConversations),
     orderBy('updatedAt', 'desc'),
     limit(limitCount),
   );
@@ -256,7 +257,13 @@ const upsertDirectConversationIndex = async (
   conversationId: string,
   otherUid: string,
 ): Promise<void> => {
-  const indexRef = doc(db, 'users', uid, 'directConversations', conversationId);
+  const indexRef = doc(
+    db,
+    COLLECTIONS.users,
+    uid,
+    SUBCOLLECTIONS.directConversations,
+    conversationId,
+  );
   try {
     await setDoc(
       indexRef,
@@ -286,7 +293,7 @@ export const getOrCreateDirectConversation = async (
 ): Promise<string> => {
   const memberIds = [uid1, uid2].sort();
   const conversationId = `dm_${memberIds.join('_')}`;
-  const convRef = doc(db, 'conversations', conversationId);
+  const convRef = doc(db, COLLECTIONS.conversations, conversationId);
 
   let convExists = false;
   try {
@@ -337,8 +344,16 @@ export const getOrCreateDirectConversation = async (
     }
   }
 
-  const memberRef1 = doc(db, `conversations/${conversationId}/members`, uid1);
-  const memberRef2 = doc(db, `conversations/${conversationId}/members`, uid2);
+  const memberRef1 = doc(
+    db,
+    `${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.members}`,
+    uid1,
+  );
+  const memberRef2 = doc(
+    db,
+    `${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.members}`,
+    uid2,
+  );
   const [memberSnap1, memberSnap2] = await Promise.all([getDoc(memberRef1), getDoc(memberRef2)]);
 
   if (!memberSnap1.exists()) {
@@ -391,7 +406,7 @@ export const getOrCreateGroupConversation = async (
   uid: string,
 ): Promise<string> => {
   const conversationId = `grp_${groupId}`;
-  const convRef = doc(db, 'conversations', conversationId);
+  const convRef = doc(db, COLLECTIONS.conversations, conversationId);
 
   let convExists = false;
   try {
@@ -422,7 +437,11 @@ export const getOrCreateGroupConversation = async (
     }
   }
 
-  const memberRef = doc(db, `conversations/${conversationId}/members`, uid);
+  const memberRef = doc(
+    db,
+    `${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.members}`,
+    uid,
+  );
   const memberSnap = await getDoc(memberRef);
   if (!memberSnap.exists()) {
     await setDoc(
@@ -458,8 +477,12 @@ export const sendMessage = async (
 ): Promise<void> => {
   const clientId =
     clientIdOverride ?? `${uid}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const messageRef = doc(db, `conversations/${conversationId}/messages`, clientId);
-  const convRef = doc(db, 'conversations', conversationId);
+  const messageRef = doc(
+    db,
+    `${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.messages}`,
+    clientId,
+  );
+  const convRef = doc(db, COLLECTIONS.conversations, conversationId);
 
   const normalizedText = text ?? '';
   const normalizedAttachments = attachments && attachments.length > 0 ? attachments : undefined;
@@ -585,7 +608,7 @@ export const subscribeToConversations = (
     fallbackType: ConversationRead['type'],
   ) => {
     if (conversationUnsubs.has(conversationId)) return;
-    const convRef = doc(db, 'conversations', conversationId);
+    const convRef = doc(db, COLLECTIONS.conversations, conversationId);
     const unsubscribe = observeSnapshot(
       convRef,
       (convSnap) => {
@@ -687,7 +710,7 @@ export const subscribeToMessages = (
   callback: (messages: MessageRead[]) => void,
 ): Unsubscribe => {
   const q = query(
-    collection(db, `conversations/${conversationId}/messages`),
+    collection(db, `${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.messages}`),
     orderBy('clientCreatedAt', 'desc'),
     limit(50),
   );
@@ -725,7 +748,11 @@ export const subscribeToMessages = (
 };
 
 export const markConversationRead = async (conversationId: string, uid: string): Promise<void> => {
-  const memberRef = doc(db, `conversations/${conversationId}/members`, uid);
+  const memberRef = doc(
+    db,
+    `${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.members}`,
+    uid,
+  );
   try {
     await writeBatch(db)
       .update(memberRef, {
@@ -764,7 +791,11 @@ export const setTyping = async (
   uid: string,
   isTyping: boolean,
 ): Promise<void> => {
-  const typingRef = doc(db, `conversations/${conversationId}/typing`, uid);
+  const typingRef = doc(
+    db,
+    `${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.typing}`,
+    uid,
+  );
   await writeBatch(db)
     .set(
       typingRef,
@@ -782,7 +813,11 @@ export const setConversationMute = async (
   uid: string,
   mutedUntil: Date | null,
 ): Promise<void> => {
-  const memberRef = doc(db, `conversations/${conversationId}/members`, uid);
+  const memberRef = doc(
+    db,
+    `${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.members}`,
+    uid,
+  );
   await writeBatch(db)
     .update(memberRef, {
       muted: true,
@@ -792,7 +827,11 @@ export const setConversationMute = async (
 };
 
 export const clearConversationMute = async (conversationId: string, uid: string): Promise<void> => {
-  const memberRef = doc(db, `conversations/${conversationId}/members`, uid);
+  const memberRef = doc(
+    db,
+    `${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.members}`,
+    uid,
+  );
   await writeBatch(db)
     .update(memberRef, {
       muted: false,
@@ -805,7 +844,11 @@ export const getConversationMember = async (
   conversationId: string,
   uid: string,
 ): Promise<ConversationMemberRead | null> => {
-  const memberRef = doc(db, `conversations/${conversationId}/members`, uid);
+  const memberRef = doc(
+    db,
+    `${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.members}`,
+    uid,
+  );
   const snap = await getDoc(memberRef);
   if (!snap.exists()) return null;
   const data = snap.data();
@@ -825,7 +868,7 @@ export const subscribeToTyping = (
   callback: (typing: TypingIndicatorRead[]) => void,
 ): Unsubscribe => {
   const q = query(
-    collection(db, `conversations/${conversationId}/typing`),
+    collection(db, `${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.typing}`),
     orderBy('updatedAt', 'desc'),
     limit(SMALL_LIST_LIMIT),
   );

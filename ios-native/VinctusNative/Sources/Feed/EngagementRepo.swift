@@ -48,15 +48,18 @@ final class FirebaseEngagementRepo: EngagementRepo {
 
   func isPostLiked(postID: String) async throws -> Bool {
     let (db, uid) = try context()
-    return try await db.collection("posts").document(postID).collection("likes").document(uid)
+    return try await db.collection(FirestoreCollections.posts).document(postID)
+      .collection(FirestoreSubcollections.likes).document(uid)
       .getDocument().exists
   }
 
   func setPostLiked(_ liked: Bool, postID: String) async throws {
     let (db, uid) = try context()
     // Source of truth for the counter trigger, plus the user's own index.
-    let likeRef = db.collection("posts").document(postID).collection("likes").document(uid)
-    let userLikeRef = db.collection("users").document(uid).collection("likes").document(postID)
+    let likeRef = db.collection(FirestoreCollections.posts).document(postID)
+      .collection(FirestoreSubcollections.likes).document(uid)
+    let userLikeRef = db.collection(FirestoreCollections.users).document(uid)
+      .collection(FirestoreSubcollections.likes).document(postID)
     let batch = db.batch()
     if liked {
       batch.setData(
@@ -78,12 +81,12 @@ final class FirebaseEngagementRepo: EngagementRepo {
 
   func followStatus(targetUID: String) async throws -> FollowStatus {
     let (db, uid) = try context()
-    let follower = try? await db.collection("users").document(targetUID)
-      .collection("followers").document(uid).getDocument()
+    let follower = try? await db.collection(FirestoreCollections.users).document(targetUID)
+      .collection(FirestoreSubcollections.followers).document(uid).getDocument()
     if follower?.exists == true {
       return .following
     }
-    let request = try? await db.collection("follow_requests")
+    let request = try? await db.collection(FirestoreCollections.followRequests)
       .document(Self.requestID(from: uid, to: targetUID)).getDocument()
     if request?.exists == true, request?.data()?["status"] as? String == "pending" {
       return .requested
@@ -96,7 +99,7 @@ final class FirebaseEngagementRepo: EngagementRepo {
     guard targetUID != uid else { throw EngagementRepoError.cannotFollowSelf }
 
     if isPrivate {
-      let ref = db.collection("follow_requests").document(Self.requestID(from: uid, to: targetUID))
+      let ref = db.collection(FirestoreCollections.followRequests).document(Self.requestID(from: uid, to: targetUID))
       let existing = try? await ref.getDocument()
       if existing?.exists == true {
         try await ref.updateData(["status": "pending", "updatedAt": FieldValue.serverTimestamp()])
@@ -112,15 +115,15 @@ final class FirebaseEngagementRepo: EngagementRepo {
       return .requested
     }
 
-    let users = db.collection("users")
+    let users = db.collection(FirestoreCollections.users)
     let batch = db.batch()
     batch.setData(
       ["uid": uid, "createdAt": FieldValue.serverTimestamp()],
-      forDocument: users.document(targetUID).collection("followers").document(uid)
+      forDocument: users.document(targetUID).collection(FirestoreSubcollections.followers).document(uid)
     )
     batch.setData(
       ["uid": targetUID, "createdAt": FieldValue.serverTimestamp()],
-      forDocument: users.document(uid).collection("following").document(targetUID)
+      forDocument: users.document(uid).collection(FirestoreSubcollections.following).document(targetUID)
     )
     try await batch.commit()
     return .following
@@ -130,13 +133,13 @@ final class FirebaseEngagementRepo: EngagementRepo {
     let (db, uid) = try context()
     switch status {
     case .requested:
-      try await db.collection("follow_requests")
+      try await db.collection(FirestoreCollections.followRequests)
         .document(Self.requestID(from: uid, to: targetUID)).delete()
     case .following, .none:
-      let users = db.collection("users")
+      let users = db.collection(FirestoreCollections.users)
       let batch = db.batch()
-      batch.deleteDocument(users.document(targetUID).collection("followers").document(uid))
-      batch.deleteDocument(users.document(uid).collection("following").document(targetUID))
+      batch.deleteDocument(users.document(targetUID).collection(FirestoreSubcollections.followers).document(uid))
+      batch.deleteDocument(users.document(uid).collection(FirestoreSubcollections.following).document(targetUID))
       try await batch.commit()
     }
   }

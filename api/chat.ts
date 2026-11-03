@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createGroupAction, type CreateGroupArgs } from './lib/aiActions.js';
 import { getAuth, getDb } from './lib/firebaseAdmin.js';
 import { checkRateLimit } from './lib/rateLimit.js';
+import { LIMITS } from './lib/firestoreContract.js';
 
 // gemini-2.0-flash was shut down (404) and moonshotai/kimi-k2-instruct was retired (410).
 // gemini-3.8-flash is the replacement the Gemini API itself points to, but it often answers
@@ -22,11 +23,11 @@ const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models
 const MAX_BODY_BYTES = 3 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_GENERATED_IMAGE_BASE64_CHARS = 3_500_000;
-const MAX_HISTORY_MESSAGES = 20;
-const MAX_MESSAGE_CHARS = 2000;
+const MAX_HISTORY_MESSAGES = LIMITS.aiChat.historyMaxMessages;
+const MAX_MESSAGE_CHARS = LIMITS.aiChat.messageMaxLength;
 const MAX_PART_TEXT_CHARS = 2000;
 const MAX_PARTS_PER_MESSAGE = 2;
-const MAX_TOTAL_HISTORY_CHARS = 12_000;
+const MAX_TOTAL_HISTORY_CHARS = LIMITS.aiChat.historyMaxTotalLength;
 const EMAIL_PII_REGEX = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const PHONE_PII_REGEX = /(?:\+?\d[\d().\s-]{7,}\d)/g;
 

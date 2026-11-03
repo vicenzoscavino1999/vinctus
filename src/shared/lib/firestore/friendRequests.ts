@@ -16,6 +16,7 @@ import {
 import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
 import type { PublicUserRead } from './users';
+import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 const DEFAULT_LIMIT = 30;
 const SMALL_LIST_LIMIT = 50;
@@ -52,7 +53,7 @@ export async function sendFriendRequest(
 ): Promise<string> {
   // Check if request already exists
   const existingQuery = query(
-    collection(db, 'friend_requests'),
+    collection(db, COLLECTIONS.friendRequests),
     where('fromUid', '==', fromUid),
     where('toUid', '==', toUid),
     limit(1),
@@ -71,7 +72,7 @@ export async function sendFriendRequest(
     }
     // If rejected, allow re-sending
     trackFirestoreWrite('firestore.updateDoc');
-    await updateDoc(doc(db, 'friend_requests', existingDoc.id), {
+    await updateDoc(doc(db, COLLECTIONS.friendRequests, existingDoc.id), {
       status: 'pending',
       updatedAt: serverTimestamp(),
     });
@@ -80,7 +81,7 @@ export async function sendFriendRequest(
 
   // Check if there's a reverse request (they sent one to us)
   const reverseQuery = query(
-    collection(db, 'friend_requests'),
+    collection(db, COLLECTIONS.friendRequests),
     where('fromUid', '==', toUid),
     where('toUid', '==', fromUid),
     limit(1),
@@ -94,7 +95,7 @@ export async function sendFriendRequest(
     if (data.status === 'pending') {
       // Auto-accept: they already sent us a request
       trackFirestoreWrite('firestore.updateDoc');
-      await updateDoc(doc(db, 'friend_requests', reverseDoc.id), {
+      await updateDoc(doc(db, COLLECTIONS.friendRequests, reverseDoc.id), {
         status: 'accepted',
         updatedAt: serverTimestamp(),
       });
@@ -107,11 +108,11 @@ export async function sendFriendRequest(
 
   // Get target user info
   trackFirestoreRead('firestore.getDoc');
-  const toUserDoc = await getDoc(doc(db, 'users_public', toUid));
+  const toUserDoc = await getDoc(doc(db, COLLECTIONS.usersPublic, toUid));
   const toUserData = toUserDoc.exists() ? toUserDoc.data() : {};
 
   // Create new request
-  const requestRef = doc(collection(db, 'friend_requests'));
+  const requestRef = doc(collection(db, COLLECTIONS.friendRequests));
   trackFirestoreWrite('firestore.setDoc');
   await setDoc(requestRef, {
     fromUid,
@@ -133,7 +134,7 @@ export async function sendFriendRequest(
  */
 export async function acceptFriendRequest(requestId: string): Promise<void> {
   trackFirestoreWrite('firestore.updateDoc');
-  await updateDoc(doc(db, 'friend_requests', requestId), {
+  await updateDoc(doc(db, COLLECTIONS.friendRequests, requestId), {
     status: 'accepted',
     updatedAt: serverTimestamp(),
   });
@@ -144,7 +145,7 @@ export async function acceptFriendRequest(requestId: string): Promise<void> {
  */
 export async function rejectFriendRequest(requestId: string): Promise<void> {
   trackFirestoreWrite('firestore.updateDoc');
-  await updateDoc(doc(db, 'friend_requests', requestId), {
+  await updateDoc(doc(db, COLLECTIONS.friendRequests, requestId), {
     status: 'rejected',
     updatedAt: serverTimestamp(),
   });
@@ -155,7 +156,7 @@ export async function rejectFriendRequest(requestId: string): Promise<void> {
  */
 export async function cancelFriendRequest(requestId: string): Promise<void> {
   trackFirestoreWrite('firestore.deleteDoc');
-  await deleteDoc(doc(db, 'friend_requests', requestId));
+  await deleteDoc(doc(db, COLLECTIONS.friendRequests, requestId));
 }
 
 /**
@@ -163,7 +164,7 @@ export async function cancelFriendRequest(requestId: string): Promise<void> {
  */
 export async function getPendingFriendRequests(uid: string): Promise<FriendRequestRead[]> {
   const q = query(
-    collection(db, 'friend_requests'),
+    collection(db, COLLECTIONS.friendRequests),
     where('toUid', '==', uid),
     where('status', '==', 'pending'),
     orderBy('createdAt', 'desc'),
@@ -194,7 +195,7 @@ export async function getPendingFriendRequests(uid: string): Promise<FriendReque
  */
 export async function getSentFriendRequests(uid: string): Promise<FriendRequestRead[]> {
   const q = query(
-    collection(db, 'friend_requests'),
+    collection(db, COLLECTIONS.friendRequests),
     where('fromUid', '==', uid),
     where('status', '==', 'pending'),
     orderBy('createdAt', 'desc'),
@@ -229,7 +230,7 @@ export async function getFriends(
 ): Promise<PublicUserRead[]> {
   // Get accepted requests where user is sender
   const sentQ = query(
-    collection(db, 'friend_requests'),
+    collection(db, COLLECTIONS.friendRequests),
     where('fromUid', '==', uid),
     where('status', '==', 'accepted'),
     limit(limitCount),
@@ -237,7 +238,7 @@ export async function getFriends(
 
   // Get accepted requests where user is receiver
   const receivedQ = query(
-    collection(db, 'friend_requests'),
+    collection(db, COLLECTIONS.friendRequests),
     where('toUid', '==', uid),
     where('status', '==', 'accepted'),
     limit(limitCount),
@@ -263,7 +264,7 @@ export async function getFriends(
   const friends: PublicUserRead[] = [];
   for (const friendUid of friendUids) {
     trackFirestoreRead('firestore.getDoc');
-    const userDoc = await getDoc(doc(db, 'users_public', friendUid));
+    const userDoc = await getDoc(doc(db, COLLECTIONS.usersPublic, friendUid));
     if (userDoc.exists()) {
       const data = userDoc.data();
       friends.push({
@@ -289,7 +290,7 @@ export async function getFriendshipStatus(
 }> {
   // Check if we sent a request
   const sentQ = query(
-    collection(db, 'friend_requests'),
+    collection(db, COLLECTIONS.friendRequests),
     where('fromUid', '==', currentUid),
     where('toUid', '==', targetUid),
     limit(1),
@@ -309,7 +310,7 @@ export async function getFriendshipStatus(
 
   // Check if they sent us a request
   const receivedQ = query(
-    collection(db, 'friend_requests'),
+    collection(db, COLLECTIONS.friendRequests),
     where('fromUid', '==', targetUid),
     where('toUid', '==', currentUid),
     limit(1),
