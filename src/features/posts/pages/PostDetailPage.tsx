@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
-import { triggerSelectionHaptic } from '@/shared/lib/native';
+import { triggerSelectionHaptic } from '@/shared/lib/haptics';
 import PostCommentsModal from '@/features/posts/components/PostCommentsModal';
 import { toPostSummary } from '@/features/posts/model/postSummary';
 import {
