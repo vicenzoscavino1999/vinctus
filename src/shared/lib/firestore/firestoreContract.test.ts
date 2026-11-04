@@ -12,7 +12,6 @@ import {
   STORAGE_PATHS,
   SUBCOLLECTIONS,
 } from './firestoreContract';
-import { SERVER_COLLECTIONS, storagePrefix } from '../../../../functions/src/firestoreContract';
 
 type RulesCheck = { in: string; field: string };
 type FileCheck = { path: string; contains: string };
@@ -156,13 +155,14 @@ describe('Firestore contract', () => {
     expect(read('api/lib/firestoreContract.ts')).toBe(
       read('src/shared/lib/firestore/firestoreContract.ts'),
     );
-    // functions/ gets the same constants plus what only the server uses.
+    // functions/ gets the same constants plus what only the server uses. It is read, not
+    // imported: Vercel doesn't upload functions/ and type-checks src/ (functions/src/
+    // firestoreContract.test.ts checks the server part).
     expect(
       read('functions/src/firestoreContract.ts').startsWith(
         read('src/shared/lib/firestore/firestoreContract.ts'),
       ),
     ).toBe(true);
-    expect(SERVER_COLLECTIONS).toEqual(contract.serverCollections);
   });
 });
 
@@ -266,16 +266,5 @@ describe('Storage contract', () => {
       ) => string;
       expect(build(params)).toBe(path);
     }
-  });
-
-  it('gives the Cloud Functions the folders to delete', () => {
-    expect(storagePrefix('profileAvatar', { userId: 'u1' })).toBe('profiles/u1/');
-    expect(storagePrefix('groupIcon', { userId: 'u1', groupId: 'g1' })).toBe('groups/u1/g1/');
-    expect(storagePrefix('conversationThumbnail', { conversationId: 'c1', userId: 'u1' })).toBe(
-      'conversations/c1/thumbnails/u1/',
-    );
-    expect(() => storagePrefix('postImage', {})).toThrow();
-    expect(() => storagePrefix('postImage', { userId: '' })).toThrow();
-    expect(() => storagePrefix('postImage', { userId: 'a/b' })).toThrow();
   });
 });
