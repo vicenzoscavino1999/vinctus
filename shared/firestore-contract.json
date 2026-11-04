@@ -305,11 +305,13 @@
       },
       "file": {
         "megabytes": 25,
-        "doc": "Files: post and chat files, collection and contribution files. Also the largest fileSize a contribution can store.",
+        "doc": "Files: post and chat files, collection and contribution files. Also the largest file size that contributions, collection items and post media store in Firestore.",
         "rules": "isUnderCollectionFileSizeLimit",
         "firestoreRules": [
           { "in": "isValidContributionCreate", "field": "data.fileSize" },
-          { "in": "isValidContributionUpdate", "field": "data.fileSize" }
+          { "in": "isValidContributionUpdate", "field": "data.fileSize" },
+          { "in": "isValidCollectionItemCreate", "field": "data.fileSize" },
+          { "in": "isValidMediaItem", "field": "item.size" }
         ]
       }
     },

@@ -179,7 +179,7 @@ export const STORAGE_MAX_BYTES = {
   video: 100 * 1024 * 1024,
   /** Story videos. */
   storyVideo: 25 * 1024 * 1024,
-  /** Files: post and chat files, collection and contribution files. Also the largest fileSize a contribution can store. */
+  /** Files: post and chat files, collection and contribution files. Also the largest file size that contributions, collection items and post media store in Firestore. */
   file: 25 * 1024 * 1024,
 } as const;
 

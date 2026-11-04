@@ -194,7 +194,7 @@ enum StorageMaxBytes {
   static let video = 100 * 1024 * 1024
   /// Story videos.
   static let storyVideo = 25 * 1024 * 1024
-  /// Files: post and chat files, collection and contribution files. Also the largest fileSize a contribution can store.
+  /// Files: post and chat files, collection and contribution files. Also the largest file size that contributions, collection items and post media store in Firestore.
   static let file = 25 * 1024 * 1024
 }
 
