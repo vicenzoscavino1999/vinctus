@@ -1,6 +1,12 @@
 import * as admin from 'firebase-admin';
 import * as functions from 'firebase-functions/v1';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import {
+  COLLECTIONS,
+  SERVER_COLLECTIONS,
+  SUBCOLLECTIONS,
+  storagePrefix,
+} from './firestoreContract';
 
 if (admin.apps.length === 0) {
   admin.initializeApp();
@@ -11,7 +17,7 @@ const bucket = admin.storage().bucket();
 
 const QUERY_BATCH_SIZE = 200;
 const WRITE_BATCH_SIZE = 400;
-const DELETION_JOB_COLLECTION = 'deletionJobs';
+const DELETION_JOB_COLLECTION = SERVER_COLLECTIONS.deletionJobs;
 const YOUTUBE_MEDIA_PATH_TOKEN = '/videos/youtube-';
 
 type DeletionStats = Record<string, number>;
@@ -161,7 +167,7 @@ async function decrementCommentCounters(decrements: ReadonlyMap<string, number>)
       continue;
     }
 
-    const postRef = db.doc(`posts/${postId}`);
+    const postRef = db.doc(`${COLLECTIONS.posts}/${postId}`);
     await db.runTransaction(async (tx) => {
       const postSnap = await tx.get(postRef);
       if (!postSnap.exists) return;
@@ -190,7 +196,7 @@ async function deleteAuthoredComments(uid: string): Promise<number> {
 
   while (true) {
     const snapshot = await db
-      .collectionGroup('comments')
+      .collectionGroup(SUBCOLLECTIONS.comments)
       .where('authorId', '==', uid)
       .limit(QUERY_BATCH_SIZE)
       .get();
@@ -222,7 +228,7 @@ async function deleteOwnedContributions(uid: string): Promise<{ docs: number; fi
 
   while (true) {
     const snapshot = await db
-      .collection('contributions')
+      .collection(COLLECTIONS.contributions)
       .where('userId', '==', uid)
       .limit(QUERY_BATCH_SIZE)
       .get();
@@ -294,7 +300,7 @@ async function deleteOwnedStories(uid: string): Promise<{ docs: number; files: n
 
   while (true) {
     const snapshot = await db
-      .collection('stories')
+      .collection(COLLECTIONS.stories)
       .where('ownerId', '==', uid)
       .limit(QUERY_BATCH_SIZE)
       .get();
@@ -326,7 +332,7 @@ async function deleteOwnedPosts(
 
   while (true) {
     const snapshot = await db
-      .collection('posts')
+      .collection(COLLECTIONS.posts)
       .where('authorId', '==', uid)
       .limit(QUERY_BATCH_SIZE)
       .get();
@@ -346,8 +352,12 @@ async function deleteOwnedPosts(
     filesDeleted += await deleteStorageFiles(filePaths);
 
     for (const postId of postIds) {
-      savedRefsDeleted += await deleteCollectionGroupByField('savedPosts', 'postId', postId);
-      likeRefsDeleted += await deleteCollectionGroupByField('likes', 'postId', postId);
+      savedRefsDeleted += await deleteCollectionGroupByField(
+        SUBCOLLECTIONS.savedPosts,
+        'postId',
+        postId,
+      );
+      likeRefsDeleted += await deleteCollectionGroupByField(SUBCOLLECTIONS.likes, 'postId', postId);
     }
 
     if (snapshot.size < QUERY_BATCH_SIZE) break;
@@ -366,7 +376,7 @@ async function deleteOwnedEvents(uid: string): Promise<number> {
 
   while (true) {
     const snapshot = await db
-      .collection('events')
+      .collection(COLLECTIONS.events)
       .where('createdBy', '==', uid)
       .limit(QUERY_BATCH_SIZE)
       .get();
@@ -389,7 +399,7 @@ async function deleteOwnedGroups(uid: string): Promise<number> {
 
   while (true) {
     const snapshot = await db
-      .collection('groups')
+      .collection(COLLECTIONS.groups)
       .where('ownerId', '==', uid)
       .limit(QUERY_BATCH_SIZE)
       .get();
@@ -400,9 +410,9 @@ async function deleteOwnedGroups(uid: string): Promise<number> {
       const groupId = groupDoc.id;
       const conversationId = `grp_${groupId}`;
 
-      await deleteStoragePrefix(`groups/${uid}/${groupId}/`);
-      await deleteStoragePrefix(`conversations/${conversationId}/`);
-      await db.recursiveDelete(db.doc(`conversations/${conversationId}`));
+      await deleteStoragePrefix(storagePrefix('groupIcon', { userId: uid, groupId }));
+      await deleteStoragePrefix(storagePrefix('conversationAttachment', { conversationId }));
+      await db.recursiveDelete(db.doc(`${COLLECTIONS.conversations}/${conversationId}`));
       await db.recursiveDelete(groupDoc.ref);
       totalDeleted += 1;
     }
@@ -418,7 +428,7 @@ async function deleteOwnedArenaDebates(uid: string): Promise<number> {
 
   while (true) {
     const snapshot = await db
-      .collection('arenaDebates')
+      .collection(COLLECTIONS.arenaDebates)
       .where('createdBy', '==', uid)
       .limit(QUERY_BATCH_SIZE)
       .get();
@@ -440,9 +450,9 @@ async function deleteDirectConversations(uid: string): Promise<number> {
   const conversationIds = new Set<string>();
 
   const userDirectIndex = await db
-    .collection('users')
+    .collection(COLLECTIONS.users)
     .doc(uid)
-    .collection('directConversations')
+    .collection(SUBCOLLECTIONS.directConversations)
     .get();
   userDirectIndex.docs.forEach((docSnap) => {
     if (docSnap.id.startsWith('dm_')) {
@@ -451,7 +461,7 @@ async function deleteDirectConversations(uid: string): Promise<number> {
   });
 
   const directConversationQuery = await db
-    .collection('conversations')
+    .collection(COLLECTIONS.conversations)
     .where('memberIds', 'array-contains', uid)
     .get();
   directConversationQuery.docs.forEach((docSnap) => {
@@ -464,8 +474,8 @@ async function deleteDirectConversations(uid: string): Promise<number> {
 
   let deleted = 0;
   for (const conversationId of conversationIds) {
-    await deleteStoragePrefix(`conversations/${conversationId}/`);
-    await db.recursiveDelete(db.doc(`conversations/${conversationId}`));
+    await deleteStoragePrefix(storagePrefix('conversationAttachment', { conversationId }));
+    await db.recursiveDelete(db.doc(`${COLLECTIONS.conversations}/${conversationId}`));
     deleted += 1;
   }
 
@@ -480,7 +490,7 @@ async function deleteMessagesBySender(
 
   while (true) {
     const snapshot = await db
-      .collectionGroup('messages')
+      .collectionGroup(SUBCOLLECTIONS.messages)
       .where('senderId', '==', uid)
       .limit(QUERY_BATCH_SIZE)
       .get();
@@ -505,9 +515,11 @@ async function deleteMessagesBySender(
       });
 
       const pathSegments = docSnap.ref.path.split('/');
-      const conversationId = pathSegments[0] === 'conversations' ? pathSegments[1] : null;
+      const conversationId = pathSegments[0] === COLLECTIONS.conversations ? pathSegments[1] : null;
       if (conversationId) {
-        thumbnailPrefixes.add(`conversations/${conversationId}/thumbnails/${uid}/`);
+        thumbnailPrefixes.add(
+          storagePrefix('conversationThumbnail', { conversationId, userId: uid }),
+        );
       }
     });
 
@@ -544,82 +556,86 @@ async function executeAccountDeletion(uid: string): Promise<DeletionStats> {
   incrementStat(
     stats,
     'followerDocsDeleted',
-    await deleteCollectionGroupByField('followers', 'uid', uid),
+    await deleteCollectionGroupByField(SUBCOLLECTIONS.followers, 'uid', uid),
   );
   incrementStat(
     stats,
     'followingDocsDeleted',
-    await deleteCollectionGroupByField('following', 'uid', uid),
+    await deleteCollectionGroupByField(SUBCOLLECTIONS.following, 'uid', uid),
   );
   incrementStat(
     stats,
     'friendDocsDeleted',
-    await deleteCollectionGroupByField('friends', 'uid', uid),
+    await deleteCollectionGroupByField(SUBCOLLECTIONS.friends, 'uid', uid),
   );
   incrementStat(
     stats,
     'blockedByOthersDeleted',
-    await deleteCollectionGroupByField('blockedUsers', 'blockedUid', uid),
+    await deleteCollectionGroupByField(SUBCOLLECTIONS.blockedUsers, 'blockedUid', uid),
   );
   incrementStat(
     stats,
     'memberDocsDeleted',
-    await deleteCollectionGroupByField('members', 'uid', uid),
+    await deleteCollectionGroupByField(SUBCOLLECTIONS.members, 'uid', uid),
   );
   incrementStat(
     stats,
     'attendeeDocsDeleted',
-    await deleteCollectionGroupByField('attendees', 'uid', uid),
+    await deleteCollectionGroupByField(SUBCOLLECTIONS.attendees, 'uid', uid),
   );
-  incrementStat(stats, 'likeDocsDeleted', await deleteCollectionGroupByField('likes', 'uid', uid));
+  incrementStat(
+    stats,
+    'likeDocsDeleted',
+    await deleteCollectionGroupByField(SUBCOLLECTIONS.likes, 'uid', uid),
+  );
 
   // 2) Delete top-level docs tied to uid.
   incrementStat(
     stats,
     'notificationsDeleted',
-    (await deleteTopLevelByField('notifications', 'toUid', uid)) +
-      (await deleteTopLevelByField('notifications', 'fromUid', uid)),
+    (await deleteTopLevelByField(COLLECTIONS.notifications, 'toUid', uid)) +
+      (await deleteTopLevelByField(COLLECTIONS.notifications, 'fromUid', uid)),
   );
   incrementStat(
     stats,
     'followRequestsDeleted',
-    (await deleteTopLevelByField('follow_requests', 'fromUid', uid)) +
-      (await deleteTopLevelByField('follow_requests', 'toUid', uid)),
+    (await deleteTopLevelByField(COLLECTIONS.followRequests, 'fromUid', uid)) +
+      (await deleteTopLevelByField(COLLECTIONS.followRequests, 'toUid', uid)),
   );
   incrementStat(
     stats,
     'friendRequestsDeleted',
-    (await deleteTopLevelByField('friend_requests', 'fromUid', uid)) +
-      (await deleteTopLevelByField('friend_requests', 'toUid', uid)),
+    (await deleteTopLevelByField(COLLECTIONS.friendRequests, 'fromUid', uid)) +
+      (await deleteTopLevelByField(COLLECTIONS.friendRequests, 'toUid', uid)),
   );
   incrementStat(
     stats,
     'groupRequestsDeleted',
-    (await deleteTopLevelByField('group_requests', 'fromUid', uid)) +
-      (await deleteTopLevelByField('group_requests', 'toUid', uid)),
+    (await deleteTopLevelByField(COLLECTIONS.groupRequests, 'fromUid', uid)) +
+      (await deleteTopLevelByField(COLLECTIONS.groupRequests, 'toUid', uid)),
   );
   incrementStat(
     stats,
     'collaborationRequestsDeleted',
-    (await deleteTopLevelByField('collaboration_requests', 'fromUid', uid)) +
-      (await deleteTopLevelByField('collaboration_requests', 'toUid', uid)),
+    (await deleteTopLevelByField(COLLECTIONS.collaborationRequests, 'fromUid', uid)) +
+      (await deleteTopLevelByField(COLLECTIONS.collaborationRequests, 'toUid', uid)),
   );
   incrementStat(
     stats,
     'reportsDeleted',
-    (await deleteTopLevelByField('reports', 'reporterUid', uid)) +
-      (await deleteTopLevelByField('reports', 'reportedUid', uid)),
+    (await deleteTopLevelByField(COLLECTIONS.reports, 'reporterUid', uid)) +
+      (await deleteTopLevelByField(COLLECTIONS.reports, 'reportedUid', uid)),
   );
   incrementStat(
     stats,
     'moderationQueueDeleted',
-    (await deleteTopLevelByField('moderation_queue', 'reporterUid', uid)) +
-      (await deleteTopLevelByField('moderation_queue', 'reportedUid', uid)),
+    (await deleteTopLevelByField(COLLECTIONS.moderationQueue, 'reporterUid', uid)) +
+      (await deleteTopLevelByField(COLLECTIONS.moderationQueue, 'reportedUid', uid)),
   );
   incrementStat(
     stats,
     'supportTicketsDeleted',
-    await deleteTopLevelByField('support_tickets', 'uid', uid),
+    await deleteTopLevelByField(COLLECTIONS.supportTickets, 'uid', uid),
   );
 
   // 3) Remove conversations and chat payload.
@@ -644,7 +660,7 @@ async function executeAccountDeletion(uid: string): Promise<DeletionStats> {
   incrementStat(
     stats,
     'collaborationsDeleted',
-    await deleteTopLevelByField('collaborations', 'authorId', uid),
+    await deleteTopLevelByField(COLLECTIONS.collaborations, 'authorId', uid),
   );
   incrementStat(stats, 'arenaDebatesDeleted', await deleteOwnedArenaDebates(uid));
 
@@ -652,26 +668,32 @@ async function executeAccountDeletion(uid: string): Promise<DeletionStats> {
   incrementStat(stats, 'contributionsDeleted', contributionCleanup.docs);
   incrementStat(stats, 'contributionFilesDeleted', contributionCleanup.files);
 
-  // 5) Best-effort storage cleanup by user prefixes.
-  await deleteStoragePrefix(`profiles/${uid}/`);
-  await deleteStoragePrefix(`posts/${uid}/`);
-  await deleteStoragePrefix(`stories/${uid}/`);
-  await deleteStoragePrefix(`collections/${uid}/`);
-  await deleteStoragePrefix(`contributions/${uid}/`);
-  await deleteStoragePrefix(`groups/${uid}/`);
+  // 5) Best-effort storage cleanup by user prefixes: profiles/{uid}/, posts/{uid}/, stories/{uid}/,
+  // collections/{uid}/, contributions/{uid}/ and groups/{uid}/.
+  const userFolders = [
+    'profileAvatar',
+    'postImage',
+    'storyOriginal',
+    'collectionFile',
+    'contributionFile',
+    'groupIcon',
+  ] as const;
+  for (const folder of userFolders) {
+    await deleteStoragePrefix(storagePrefix(folder, { userId: uid }));
+  }
 
   // 6) Remove arena usage and user profile docs (with all subcollections).
-  const arenaUsageRef = db.doc(`arenaUsage/${uid}`);
+  const arenaUsageRef = db.doc(`${COLLECTIONS.arenaUsage}/${uid}`);
   const arenaUsageSnap = await arenaUsageRef.get();
   if (arenaUsageSnap.exists) {
     await db.recursiveDelete(arenaUsageRef);
     incrementStat(stats, 'arenaUsageDocsDeleted', 1);
   }
 
-  const userRef = db.collection('users').doc(uid);
+  const userRef = db.collection(COLLECTIONS.users).doc(uid);
   await db.recursiveDelete(userRef);
 
-  const publicUserRef = db.collection('users_public').doc(uid);
+  const publicUserRef = db.collection(COLLECTIONS.usersPublic).doc(uid);
   await publicUserRef.delete().catch((error) => {
     const code = (error as { code?: string }).code;
     if (code !== 'not-found') {

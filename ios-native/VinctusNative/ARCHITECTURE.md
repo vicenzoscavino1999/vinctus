@@ -45,12 +45,14 @@ View  →  ViewModel (screen state, @MainActor)  →  Repo protocol  →  Fireba
   sample repos from `AppRepos`, so screens can be checked without Firebase. Each feature keeps its
   own in its folder (`SampleFeedRepo.swift`); the people and groups they share are in
   `App/DemoData.swift`.
-- **Same data as the web:** collection names and the limits both apps check come from
-  `shared/firestore-contract.json` at the repository root. `npm run contract:generate` turns it
-  into `Shared/FirestoreContract.swift` (`FirestoreCollections`, `FirestoreSubcollections`,
-  `Limits`) and the web's `src/shared/lib/firestore/firestoreContract.ts`, so use those constants
-  instead of literals. To add or change a name or a limit, edit the JSON and regenerate: CI fails
-  when a generated file is out of date, and a web test checks the JSON against `firestore.rules`.
+- **Same data as the web:** collection names, the limits both apps check and the Storage paths of
+  uploads come from `shared/firestore-contract.json` at the repository root.
+  `npm run contract:generate` turns it into `Shared/FirestoreContract.swift`
+  (`FirestoreCollections`, `FirestoreSubcollections`, `Limits`, `StoragePaths`, `StorageMaxBytes`,
+  `StorageContentTypes`), the web's `src/shared/lib/firestore/firestoreContract.ts` and a copy for
+  the Cloud Functions, so use those constants instead of literals. To add or change a name, a limit
+  or a path, edit the JSON and regenerate: CI fails when a generated file is out of date, and a web
+  test checks the JSON against `firestore.rules` and `storage.rules`.
   Each repo still mirrors a file in `src/shared/lib/firestore/` and says which one in a comment:
   keep field names and document ids identical, and check `firestore.rules` when writing a new
   field.

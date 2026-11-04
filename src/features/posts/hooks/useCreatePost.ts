@@ -7,7 +7,12 @@ import { compressToWebp, validateImage } from '@/shared/lib/compression';
 import { parseYouTubeUrl } from '@/shared/lib/youtube';
 import { fetchYouTubeVideoDetails, type YouTubeVideoDetails } from '@/shared/lib/youtubeApi';
 import { deletePostAllMedia, uploadPostMedia } from '@/shared/lib/storage';
-import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
+import {
+  LIMITS,
+  STORAGE_CONTENT_TYPES,
+  STORAGE_MAX_BYTES,
+  STORAGE_PATHS,
+} from '@/shared/lib/firestore/firestoreContract';
 
 export type CreatePostAttachment = {
   id: string;
@@ -32,20 +37,13 @@ type UseCreatePostOptions = {
 };
 
 const MAX_ATTACHMENTS = 10;
-const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
-const MAX_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_VIDEO_BYTES = STORAGE_MAX_BYTES.video;
+const MAX_FILE_BYTES = STORAGE_MAX_BYTES.file;
+const BYTES_PER_MB = 1024 * 1024;
 
-const ALLOWED_VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
+const ALLOWED_VIDEO_TYPES = new Set(STORAGE_CONTENT_TYPES.video);
 const ALLOWED_VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'mov']);
-const ALLOWED_FILE_TYPES = new Set([
-  'application/pdf',
-  'application/msword',
-  'application/vnd.ms-excel',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-]);
+const ALLOWED_FILE_TYPES = new Set(STORAGE_CONTENT_TYPES.chatFile);
 const ALLOWED_FILE_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx']);
 
 const logCreatePostError = (message: string, error: unknown) => {
@@ -249,7 +247,7 @@ export const useCreatePost = ({
         return;
       }
       if (file.size > MAX_VIDEO_BYTES) {
-        setError('El video supera el limite de 100MB.');
+        setError(`El video supera el limite de ${MAX_VIDEO_BYTES / BYTES_PER_MB}MB.`);
         return;
       }
     }
@@ -280,7 +278,7 @@ export const useCreatePost = ({
         return;
       }
       if (file.size > MAX_FILE_BYTES) {
-        setError('El archivo supera el limite de 25MB.');
+        setError(`El archivo supera el limite de ${MAX_FILE_BYTES / BYTES_PER_MB}MB.`);
         return;
       }
     }
@@ -381,7 +379,11 @@ export const useCreatePost = ({
           ...uploadedMedia,
           {
             url: parsedYouTube.embedUrl,
-            path: `posts/${user.uid}/${postId}/videos/youtube-${parsedYouTube.videoId}`,
+            path: STORAGE_PATHS.postVideo({
+              userId: user.uid,
+              postId,
+              filename: `youtube-${parsedYouTube.videoId}`,
+            }),
             type: 'video',
             contentType: 'video/youtube',
             fileName: `youtube-${parsedYouTube.videoId}.url`,

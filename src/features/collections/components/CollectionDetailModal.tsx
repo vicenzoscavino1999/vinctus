@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { formatBytes, formatRelativeTime } from '@/shared/lib/formatUtils';
+import { STORAGE_CONTENT_TYPES, STORAGE_MAX_BYTES } from '@/shared/lib/firestore/firestoreContract';
 import { File, FileText, Link2, Trash2, X } from 'lucide-react';
 
 import { useAuth } from '@/context/auth';
@@ -24,28 +25,8 @@ interface CollectionDetailModalProps {
   onItemDeleted?: () => void;
 }
 
-const MAX_COLLECTION_FILE_SIZE = 25 * 1024 * 1024;
-const COLLECTION_FILE_TYPES = [
-  'application/pdf',
-  'text/plain',
-  'text/markdown',
-  'application/json',
-  'application/zip',
-  'application/x-zip-compressed',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'audio/mpeg',
-  'audio/wav',
-  'audio/ogg',
-  'video/mp4',
-  'video/webm',
-  'video/quicktime',
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-];
+const MAX_COLLECTION_FILE_SIZE = STORAGE_MAX_BYTES.file;
+const COLLECTION_FILE_TYPES = STORAGE_CONTENT_TYPES.collectionFile;
 const COLLECTION_FILE_ACCEPT = COLLECTION_FILE_TYPES.join(',');
 
 const CollectionDetailModal = ({
@@ -157,7 +138,7 @@ const CollectionDetailModal = ({
         return;
       }
       if (file.size > MAX_COLLECTION_FILE_SIZE) {
-        setError('El archivo supera 25MB.');
+        setError(`El archivo supera ${MAX_COLLECTION_FILE_SIZE / (1024 * 1024)}MB.`);
         return;
       }
     }

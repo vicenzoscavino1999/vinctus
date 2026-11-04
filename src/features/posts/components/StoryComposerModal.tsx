@@ -6,6 +6,7 @@ import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
 import { createStory, getNewStoryId, type StoryMediaType } from '@/features/posts/api';
 import { uploadStoryImage, uploadStoryVideo } from '@/shared/lib/storage';
+import { STORAGE_MAX_BYTES } from '@/shared/lib/firestore/firestoreContract';
 import { loadHeic2Any } from '@/shared/lib/heic2any-loader';
 
 type StoryDraft = {
@@ -21,8 +22,9 @@ interface StoryComposerModalProps {
   onCreated?: () => void;
 }
 
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
+const MAX_IMAGE_BYTES = STORAGE_MAX_BYTES.image;
+const MAX_VIDEO_BYTES = STORAGE_MAX_BYTES.storyVideo;
+const MAX_IMAGE_MB = MAX_IMAGE_BYTES / (1024 * 1024);
 
 const isHeicFile = (file: File): boolean => {
   const name = file.name.toLowerCase();
@@ -86,7 +88,7 @@ const StoryComposerModal = ({ isOpen, onClose, onCreated }: StoryComposerModalPr
 
   const prepareImage = async (file: File): Promise<StoryDraft | null> => {
     if (file.size > MAX_IMAGE_BYTES) {
-      showToast('La imagen supera el limite de 10MB.', 'error');
+      showToast(`La imagen supera el limite de ${MAX_IMAGE_MB}MB.`, 'error');
       return null;
     }
 
@@ -122,7 +124,7 @@ const StoryComposerModal = ({ isOpen, onClose, onCreated }: StoryComposerModalPr
       });
 
       if (compressedFile.size > MAX_IMAGE_BYTES) {
-        showToast('La imagen supera el limite de 10MB despues de comprimir.', 'error');
+        showToast(`La imagen supera el limite de ${MAX_IMAGE_MB}MB despues de comprimir.`, 'error');
         return null;
       }
 
@@ -151,7 +153,7 @@ const StoryComposerModal = ({ isOpen, onClose, onCreated }: StoryComposerModalPr
 
   const prepareVideo = (file: File): StoryDraft | null => {
     if (file.size > MAX_VIDEO_BYTES) {
-      showToast('El video supera el limite de 25MB.', 'error');
+      showToast(`El video supera el limite de ${MAX_VIDEO_BYTES / (1024 * 1024)}MB.`, 'error');
       return null;
     }
     return {

@@ -99,7 +99,7 @@ enum Limits {
   }
 
   enum Arena {
-    /// Topic of a new Arena debate (MAX_TOPIC_CHARS in the createDebate Cloud Function).
+    /// Topic of a new Arena debate (MAX_TOPIC_CHARS in the createDebate Cloud Function, unless AI_MAX_TOPIC_CHARS overrides it).
     static let topicMaxLength = 240
   }
 
@@ -161,6 +161,11 @@ enum Limits {
     static let fromUserNameMaxLength = 80
   }
 
+  enum Moderation {
+    /// Note a moderator adds when reviewing a moderation_queue item (also cut to this by the moderationTakeAction Cloud Function).
+    static let reviewNoteMaxLength = 2000
+  }
+
   enum Reports {
     /// Details of a report (reports).
     static let detailsMaxLength = 2000
@@ -178,5 +183,130 @@ enum Limits {
   enum Stories {
     /// Owner display name copied into a story (ownerSnapshot.displayName).
     static let ownerNameMaxLength = 80
+  }
+}
+
+/// Upload size limits, in bytes. storage.rules accept files smaller than these: `request.resource.size < limit`.
+enum StorageMaxBytes {
+  /// Images: post images, avatars, group icons, stories, thumbnails and chat images.
+  static let image = 10 * 1024 * 1024
+  /// Post videos.
+  static let video = 100 * 1024 * 1024
+  /// Story videos.
+  static let storyVideo = 25 * 1024 * 1024
+  /// Files: post and chat files, collection and contribution files.
+  static let file = 25 * 1024 * 1024
+}
+
+/// Content types that storage.rules accept, by kind of file.
+enum StorageContentTypes {
+  /// Images.
+  static let image = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+  /// Videos.
+  static let video = ["video/mp4", "video/webm", "video/quicktime"]
+  /// Files of a collection item or a contribution.
+  static let collectionFile = [
+    "application/pdf",
+    "text/plain",
+    "text/markdown",
+    "application/json",
+    "application/zip",
+    "application/x-zip-compressed",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "audio/mpeg",
+    "audio/wav",
+    "audio/ogg",
+    "video/mp4",
+    "video/webm",
+    "video/quicktime",
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+  ]
+  /// Documents attached to a post or a chat message.
+  static let chatFile = [
+    "application/pdf",
+    "application/msword",
+    "application/vnd.ms-excel",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ]
+}
+
+/// Where uploaded files go, as storage.rules match them.
+enum StoragePaths {
+  /// `posts/{userId}/{postId}/images/{filename}`: `image` under 10 MB.
+  static func postImage(userID: String, postID: String, filename: String) -> String {
+    "posts/\(userID)/\(postID)/images/\(filename)"
+  }
+
+  /// `posts/{userId}/{postId}/videos/{filename}`: `video` under 100 MB.
+  static func postVideo(userID: String, postID: String, filename: String) -> String {
+    "posts/\(userID)/\(postID)/videos/\(filename)"
+  }
+
+  /// `posts/{userId}/{postId}/files/{filename}`: `chatFile` under 25 MB.
+  static func postFile(userID: String, postID: String, filename: String) -> String {
+    "posts/\(userID)/\(postID)/files/\(filename)"
+  }
+
+  /// `profiles/{userId}/avatar/{filename}`: `image` under 10 MB.
+  static func profileAvatar(userID: String, filename: String) -> String {
+    "profiles/\(userID)/avatar/\(filename)"
+  }
+
+  /// `groups/{userId}/{groupId}/icon/{filename}`: `image` under 10 MB.
+  static func groupIcon(userID: String, groupID: String, filename: String) -> String {
+    "groups/\(userID)/\(groupID)/icon/\(filename)"
+  }
+
+  /// `stories/{userId}/{storyId}/original/{filename}`: `image` under 10 MB or `video` under 25 MB.
+  static func storyOriginal(userID: String, storyID: String, filename: String) -> String {
+    "stories/\(userID)/\(storyID)/original/\(filename)"
+  }
+
+  /// `stories/{userId}/{storyId}/thumb/{filename}`: `image` under 10 MB.
+  static func storyThumb(userID: String, storyID: String, filename: String) -> String {
+    "stories/\(userID)/\(storyID)/thumb/\(filename)"
+  }
+
+  /// `conversations/{conversationId}/attachments/{userId}/{messageId}/{filename}`: `image` under 10 MB or `chatFile` under 25 MB.
+  static func conversationAttachment(
+    conversationID: String,
+    userID: String,
+    messageID: String,
+    filename: String
+  ) -> String {
+    "conversations/\(conversationID)/attachments/\(userID)/\(messageID)/\(filename)"
+  }
+
+  /// `conversations/{conversationId}/thumbnails/{userId}/{messageId}/{filename}`: `image` under 10 MB.
+  static func conversationThumbnail(
+    conversationID: String,
+    userID: String,
+    messageID: String,
+    filename: String
+  ) -> String {
+    "conversations/\(conversationID)/thumbnails/\(userID)/\(messageID)/\(filename)"
+  }
+
+  /// `collections/{userId}/{collectionId}/{itemId}/{filename}`: `collectionFile` under 25 MB.
+  static func collectionFile(
+    userID: String,
+    collectionID: String,
+    itemID: String,
+    filename: String
+  ) -> String {
+    "collections/\(userID)/\(collectionID)/\(itemID)/\(filename)"
+  }
+
+  /// `contributions/{userId}/{contributionId}/{filename}`: `collectionFile` under 25 MB.
+  static func contributionFile(userID: String, contributionID: String, filename: String) -> String {
+    "contributions/\(userID)/\(contributionID)/\(filename)"
   }
 }

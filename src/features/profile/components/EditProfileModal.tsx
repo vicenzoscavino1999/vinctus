@@ -7,7 +7,7 @@ import { getUserProfile, updateUserProfile } from '@/features/profile/api';
 import { auth } from '@/shared/lib/firebase';
 import { uploadProfilePhoto } from '@/shared/lib/storage';
 import { useToast } from '@/shared/ui/Toast';
-import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
+import { LIMITS, STORAGE_MAX_BYTES } from '@/shared/lib/firestore/firestoreContract';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -96,8 +96,8 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      setPhotoError('La imagen supera el limite de 10MB.');
+    if (file.size > STORAGE_MAX_BYTES.image) {
+      setPhotoError(`La imagen supera el limite de ${STORAGE_MAX_BYTES.image / (1024 * 1024)}MB.`);
       return;
     }
 

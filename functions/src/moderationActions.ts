@@ -6,6 +6,7 @@ import {
   parseReportedMessageTarget,
   parseReportedStoryTarget,
 } from './moderation';
+import { COLLECTIONS, LIMITS, SERVER_COLLECTIONS, SUBCOLLECTIONS } from './firestoreContract';
 
 export type ModerationEnforcementAction = 'remove_content' | 'suspend_user' | 'restore_user';
 
@@ -45,7 +46,7 @@ export async function clearLastMessagePreview(
   if (typeof senderId !== 'string' || !text) {
     return;
   }
-  const conversationRef = db.doc(`conversations/${conversationId}`);
+  const conversationRef = db.doc(`${COLLECTIONS.conversations}/${conversationId}`);
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(conversationRef);
     const lastMessage = snap.data()?.lastMessage as Record<string, unknown> | null | undefined;
@@ -71,14 +72,17 @@ export const moderationTakeAction = functions.https.onCall(
 
     const db = admin.firestore();
     const adminUid = context.auth.uid;
-    const adminDoc = await db.doc(`app_admins/${adminUid}`).get();
+    const adminDoc = await db.doc(`${COLLECTIONS.appAdmins}/${adminUid}`).get();
     if (!adminDoc.exists) {
       return fail('permission-denied', 'Solo administradores de moderacion.');
     }
 
     const itemId = typeof data?.itemId === 'string' ? data.itemId.trim() : '';
     const action = data?.action as ModerationEnforcementAction;
-    const note = typeof data?.note === 'string' ? data.note.trim().slice(0, 2000) : '';
+    const note =
+      typeof data?.note === 'string'
+        ? data.note.trim().slice(0, LIMITS.moderation.reviewNoteMaxLength)
+        : '';
     if (!itemId || itemId.includes('/')) {
       return fail('invalid-argument', 'Caso de moderacion invalido.');
     }
@@ -86,7 +90,7 @@ export const moderationTakeAction = functions.https.onCall(
       return fail('invalid-argument', 'Accion de moderacion invalida.');
     }
 
-    const itemRef = db.doc(`moderation_queue/${itemId}`);
+    const itemRef = db.doc(`${COLLECTIONS.moderationQueue}/${itemId}`);
     const itemSnap = await itemRef.get();
     if (!itemSnap.exists) {
       return fail('not-found', 'El caso de moderacion no existe.');
@@ -102,14 +106,14 @@ export const moderationTakeAction = functions.https.onCall(
       const storyId = content || message ? null : parseReportedStoryTarget(item.conversationId);
       if (content) {
         target = content.commentId
-          ? `posts/${content.postId}/comments/${content.commentId}`
-          : `posts/${content.postId}`;
+          ? `${COLLECTIONS.posts}/${content.postId}/${SUBCOLLECTIONS.comments}/${content.commentId}`
+          : `${COLLECTIONS.posts}/${content.postId}`;
         reviewAction = content.commentId ? 'comment_removed' : 'post_removed';
       } else if (message) {
-        target = `conversations/${message.conversationId}/messages/${message.messageId}`;
+        target = `${COLLECTIONS.conversations}/${message.conversationId}/${SUBCOLLECTIONS.messages}/${message.messageId}`;
         reviewAction = 'message_removed';
       } else if (storyId) {
-        target = `stories/${storyId}`;
+        target = `${COLLECTIONS.stories}/${storyId}`;
         reviewAction = 'story_removed';
         const story = (await db.doc(target).get()).data();
         const mediaPaths = [story?.mediaPath, story?.thumbPath].filter(
@@ -144,7 +148,7 @@ export const moderationTakeAction = functions.https.onCall(
         return fail('failed-precondition', 'Este caso no tiene un usuario que se pueda suspender.');
       }
       if (action === 'suspend_user') {
-        const reportedIsAdmin = await db.doc(`app_admins/${reportedUid}`).get();
+        const reportedIsAdmin = await db.doc(`${COLLECTIONS.appAdmins}/${reportedUid}`).get();
         if (reportedIsAdmin.exists) {
           return fail('failed-precondition', 'No se puede suspender a un administrador.');
         }
@@ -162,7 +166,7 @@ export const moderationTakeAction = functions.https.onCall(
         // Signs the user out everywhere; a disabled account can't sign back in.
         await admin.auth().revokeRefreshTokens(reportedUid);
       }
-      target = `users/${reportedUid}`;
+      target = `${COLLECTIONS.users}/${reportedUid}`;
       reviewAction = action === 'suspend_user' ? 'user_suspended' : 'user_restored';
     }
 
@@ -178,7 +182,7 @@ export const moderationTakeAction = functions.https.onCall(
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    await db.collection('moderation_actions').add({
+    await db.collection(SERVER_COLLECTIONS.moderationActions).add({
       itemId,
       reportId: typeof item.reportId === 'string' ? item.reportId : itemId,
       action,

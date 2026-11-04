@@ -2,6 +2,8 @@
  * Arena AI - Content Guardrails
  */
 
+import { LIMITS } from '../firestoreContract';
+
 const PROHIBITED_PATTERNS = [
   /\b(matar|asesinar|torturar|mutilar)\b/i,
   /\b(kill|murder|torture|mutilate)\b/i,
@@ -57,6 +59,5 @@ export function checkTopic(topic: string): GuardrailResult {
 }
 
 export function sanitizeTopic(topic: string): string {
-  // LIMITS.arena.topicMaxLength in shared/firestore-contract.json (checked by its test).
-  return topic.trim().replace(/\s+/g, ' ').slice(0, 240);
+  return topic.trim().replace(/\s+/g, ' ').slice(0, LIMITS.arena.topicMaxLength);
 }
