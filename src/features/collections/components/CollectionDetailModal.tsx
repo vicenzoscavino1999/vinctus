@@ -25,6 +25,7 @@ interface CollectionDetailModalProps {
   onItemDeleted?: () => void;
 }
 
+// storage.rules take files smaller than this, so a file of exactly the limit is rejected too.
 const MAX_COLLECTION_FILE_SIZE = STORAGE_MAX_BYTES.file;
 const COLLECTION_FILE_TYPES = STORAGE_CONTENT_TYPES.collectionFile;
 const COLLECTION_FILE_ACCEPT = COLLECTION_FILE_TYPES.join(',');
@@ -137,7 +138,7 @@ const CollectionDetailModal = ({
         setError('Tipo de archivo no permitido.');
         return;
       }
-      if (file.size > MAX_COLLECTION_FILE_SIZE) {
+      if (file.size >= MAX_COLLECTION_FILE_SIZE) {
         setError(`El archivo supera ${MAX_COLLECTION_FILE_SIZE / (1024 * 1024)}MB.`);
         return;
       }

@@ -37,6 +37,7 @@ type UseCreatePostOptions = {
 };
 
 const MAX_ATTACHMENTS = 10;
+// storage.rules take files smaller than these, so a file of exactly the limit is rejected too.
 const MAX_VIDEO_BYTES = STORAGE_MAX_BYTES.video;
 const MAX_FILE_BYTES = STORAGE_MAX_BYTES.file;
 const BYTES_PER_MB = 1024 * 1024;
@@ -246,7 +247,7 @@ export const useCreatePost = ({
         setError('Video no permitido. Usa MP4 o WebM.');
         return;
       }
-      if (file.size > MAX_VIDEO_BYTES) {
+      if (file.size >= MAX_VIDEO_BYTES) {
         setError(`El video supera el limite de ${MAX_VIDEO_BYTES / BYTES_PER_MB}MB.`);
         return;
       }
@@ -277,7 +278,7 @@ export const useCreatePost = ({
         setError('Archivo no permitido. Usa PDF, Word, Excel o PowerPoint.');
         return;
       }
-      if (file.size > MAX_FILE_BYTES) {
+      if (file.size >= MAX_FILE_BYTES) {
         setError(`El archivo supera el limite de ${MAX_FILE_BYTES / BYTES_PER_MB}MB.`);
         return;
       }

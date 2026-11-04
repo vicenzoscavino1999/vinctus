@@ -5,7 +5,7 @@
     "firestore.rules and storage.rules can't import this file: src/shared/lib/firestore/firestoreContract.test.ts checks that their paths and numbers match.",
     "collections: top-level collections. serverCollections: collections only the Cloud Functions use; firestore.rules deny clients. subcollections: name and the parent path(s) it lives under, as in firestore.rules.",
     "limits: value, a doc comment, the firestore.rules checks that use it ({ in: function name or match path, field: the checked expression }), and other files that must contain it ({ path, contains: text with {value} }).",
-    "storage: maxBytes (megabytes, and the storage.rules function that checks `request.resource.size <`), contentTypes (the storage.rules function and its list) and paths (the storage.rules match path and the content types and size each accepts)."
+    "storage: maxBytes (megabytes, the storage.rules function that checks `request.resource.size <`, and firestore.rules checks { in, field } that must use the same `field < bytes`), contentTypes (the storage.rules function and its list) and paths (the storage.rules match path and the content types and size each accepts)."
   ],
   "collections": {
     "users": "users",
@@ -305,8 +305,12 @@
       },
       "file": {
         "megabytes": 25,
-        "doc": "Files: post and chat files, collection and contribution files.",
-        "rules": "isUnderCollectionFileSizeLimit"
+        "doc": "Files: post and chat files, collection and contribution files. Also the largest fileSize a contribution can store.",
+        "rules": "isUnderCollectionFileSizeLimit",
+        "firestoreRules": [
+          { "in": "isValidContributionCreate", "field": "data.fileSize" },
+          { "in": "isValidContributionUpdate", "field": "data.fileSize" }
+        ]
       }
     },
     "contentTypes": {

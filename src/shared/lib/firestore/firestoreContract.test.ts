@@ -24,7 +24,7 @@ type Contract = {
   subcollections: Record<string, { name: string; parents: string[] }>;
   limits: Record<string, Record<string, Limit>>;
   storage: {
-    maxBytes: Record<string, { megabytes: number; rules: string }>;
+    maxBytes: Record<string, { megabytes: number; rules: string; firestoreRules?: RulesCheck[] }>;
     contentTypes: Record<string, { rules: string; values: string[] }>;
     paths: Record<string, StoragePath>;
   };
@@ -214,6 +214,28 @@ describe('Storage contract', () => {
     const bytes = limit![1].split('*').reduce((product, factor) => product * Number(factor), 1);
     expect(bytes).toBe(entry.megabytes * 1024 * 1024);
   });
+
+  const firestoreChecks = Object.entries(maxBytes).flatMap(([key, entry]) =>
+    (entry.firestoreRules ?? []).map((check) => ({
+      name: `maxBytes.${key}`,
+      bytes: entry.megabytes * 1024 * 1024,
+      check,
+    })),
+  );
+
+  it.each(firestoreChecks)(
+    '$name is the $check.field limit in firestore.rules $check.in',
+    ({ bytes, check }) => {
+      // Strictly smaller, like storage.rules: a stored size can't be one Storage refused.
+      const escaped = check.field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = new RegExp(`(?<![\\w.])${escaped} (<=?) (\\d+)`, 'g');
+      const found = [...rulesBlock(rulesWithoutComments, check.in).matchAll(pattern)].map(
+        (match) => `${match[1]} ${match[2]}`,
+      );
+      expect(found.length).toBeGreaterThan(0);
+      expect(new Set(found)).toEqual(new Set([`< ${bytes}`]));
+    },
+  );
 
   it.each(Object.entries(contentTypes))(
     'contentTypes.%s matches its storage.rules list',

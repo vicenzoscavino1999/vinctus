@@ -179,7 +179,7 @@ export const STORAGE_MAX_BYTES = {
   video: 100 * 1024 * 1024,
   /** Story videos. */
   storyVideo: 25 * 1024 * 1024,
-  /** Files: post and chat files, collection and contribution files. */
+  /** Files: post and chat files, collection and contribution files. Also the largest fileSize a contribution can store. */
   file: 25 * 1024 * 1024,
 } as const;
 

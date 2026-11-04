@@ -22,6 +22,7 @@ interface StoryComposerModalProps {
   onCreated?: () => void;
 }
 
+// storage.rules take files smaller than these, so a file of exactly the limit is rejected too.
 const MAX_IMAGE_BYTES = STORAGE_MAX_BYTES.image;
 const MAX_VIDEO_BYTES = STORAGE_MAX_BYTES.storyVideo;
 const MAX_IMAGE_MB = MAX_IMAGE_BYTES / (1024 * 1024);
@@ -87,7 +88,7 @@ const StoryComposerModal = ({ isOpen, onClose, onCreated }: StoryComposerModalPr
   };
 
   const prepareImage = async (file: File): Promise<StoryDraft | null> => {
-    if (file.size > MAX_IMAGE_BYTES) {
+    if (file.size >= MAX_IMAGE_BYTES) {
       showToast(`La imagen supera el limite de ${MAX_IMAGE_MB}MB.`, 'error');
       return null;
     }
@@ -123,7 +124,7 @@ const StoryComposerModal = ({ isOpen, onClose, onCreated }: StoryComposerModalPr
         type: 'image/webp',
       });
 
-      if (compressedFile.size > MAX_IMAGE_BYTES) {
+      if (compressedFile.size >= MAX_IMAGE_BYTES) {
         showToast(`La imagen supera el limite de ${MAX_IMAGE_MB}MB despues de comprimir.`, 'error');
         return null;
       }
@@ -152,7 +153,7 @@ const StoryComposerModal = ({ isOpen, onClose, onCreated }: StoryComposerModalPr
   };
 
   const prepareVideo = (file: File): StoryDraft | null => {
-    if (file.size > MAX_VIDEO_BYTES) {
+    if (file.size >= MAX_VIDEO_BYTES) {
       showToast(`El video supera el limite de ${MAX_VIDEO_BYTES / (1024 * 1024)}MB.`, 'error');
       return null;
     }

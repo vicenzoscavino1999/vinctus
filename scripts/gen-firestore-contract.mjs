@@ -39,6 +39,11 @@ function validateStorage(storage) {
     if (typeof entry.doc !== 'string' || typeof entry.rules !== 'string') {
       fail(`storage.maxBytes.${key} needs "doc" and "rules"`);
     }
+    for (const check of entry.firestoreRules ?? []) {
+      if (typeof check?.in !== 'string' || typeof check?.field !== 'string') {
+        fail(`storage.maxBytes.${key} has a firestoreRules check without "in" and "field"`);
+      }
+    }
   }
   for (const [key, entry] of Object.entries(contentTypes)) {
     if (!IDENTIFIER.test(key)) {

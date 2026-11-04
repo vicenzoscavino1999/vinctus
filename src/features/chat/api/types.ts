@@ -46,7 +46,8 @@ export const messageAttachmentSchema = z.object({
   path: z.string().trim().min(1).max(600),
   fileName: z.string().trim().min(1).max(200),
   contentType: z.string().trim().min(1).max(120),
-  size: z.number().int().min(0).max(STORAGE_MAX_BYTES.file),
+  // storage.rules take files smaller than the limit.
+  size: z.number().int().min(0).lt(STORAGE_MAX_BYTES.file),
   width: z.number().int().positive().nullable().optional(),
   height: z.number().int().positive().nullable().optional(),
 });
