@@ -1,5 +1,6 @@
 import { collection, doc, serverTimestamp, setDoc, type FieldValue } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase';
+import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 export type UserReportReason = 'spam' | 'harassment' | 'abuse' | 'fake' | 'other';
 
@@ -20,7 +21,7 @@ export async function createUserReport(input: {
   details?: string | null;
   conversationId?: string | null;
 }): Promise<string> {
-  const reportRef = doc(collection(db, 'reports'));
+  const reportRef = doc(collection(db, COLLECTIONS.reports));
   await setDoc(
     reportRef,
     {

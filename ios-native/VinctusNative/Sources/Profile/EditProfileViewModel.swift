@@ -13,10 +13,10 @@ final class EditProfileViewModel: ObservableObject {
   @Published private(set) var errorMessage: String?
 
   // Limits of `userProfileUpdateSchema` in src/features/profile/api/types.ts.
-  static let nameLimit = 120
-  static let roleLimit = 120
-  static let bioLimit = 500
-  static let locationLimit = 120
+  static let nameLimit = Limits.Profile.displayNameMaxLength
+  static let roleLimit = Limits.Profile.roleMaxLength
+  static let bioLimit = Limits.Profile.bioMaxLength
+  static let locationLimit = Limits.Profile.locationMaxLength
 
   let profile: UserProfile
   private let repo: ProfileRepo

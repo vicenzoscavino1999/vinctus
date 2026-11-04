@@ -2,6 +2,7 @@ import { X, Image as ImageIcon, Loader2, Film, FileText, Link2 } from 'lucide-re
 import { useCreatePost } from '@/features/posts/hooks/useCreatePost';
 import { formatBytes } from '@/shared/lib/formatUtils';
 import { formatYouTubeDuration, formatYouTubeViews } from '@/shared/lib/youtubeApi';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 interface CreatePostModalProps {
   isOpen: boolean;
@@ -109,10 +110,12 @@ const CreatePostModal = ({
               onChange={(event) => setTitle(event.target.value)}
               placeholder="Escribe un titulo breve"
               className="w-full bg-neutral-900/40 border border-neutral-800 rounded-lg px-4 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-              maxLength={120}
+              maxLength={LIMITS.posts.titleMaxLength}
               disabled={isSubmitting}
             />
-            <div className="text-right text-xs text-neutral-600 mt-1">{title.length}/120</div>
+            <div className="text-right text-xs text-neutral-600 mt-1">
+              {title.length}/{LIMITS.posts.titleMaxLength}
+            </div>
           </div>
 
           <textarea
@@ -120,12 +123,14 @@ const CreatePostModal = ({
             onChange={(event) => setText(event.target.value)}
             placeholder="Escribe la descripcion de tu publicacion"
             className="w-full h-32 bg-transparent text-white placeholder-neutral-500 resize-none focus:outline-none text-base leading-relaxed"
-            maxLength={5000}
+            maxLength={LIMITS.posts.textMaxLength}
             autoFocus
             disabled={isSubmitting}
           />
 
-          <div className="text-right text-neutral-500 text-sm">{text.length}/5000</div>
+          <div className="text-right text-neutral-500 text-sm">
+            {text.length}/{LIMITS.posts.textMaxLength}
+          </div>
 
           <div className="mt-4">
             <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-2">

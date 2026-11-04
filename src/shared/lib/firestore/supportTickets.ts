@@ -1,5 +1,6 @@
 import { collection, doc, serverTimestamp, setDoc, type FieldValue } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase';
+import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 export type SupportTicketType = 'issue' | 'feature';
 
@@ -41,7 +42,7 @@ export async function createSupportTicket(input: {
   context: SupportTicketContext | null;
   appVersion: string;
 }): Promise<string> {
-  const ticketRef = doc(collection(db, 'support_tickets'));
+  const ticketRef = doc(collection(db, COLLECTIONS.supportTickets));
   await setDoc(
     ticketRef,
     {

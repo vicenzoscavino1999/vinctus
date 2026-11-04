@@ -1,5 +1,6 @@
 import { doc, setDoc, updateDoc, serverTimestamp, type FieldValue } from 'firebase/firestore';
 import { db } from './firebase';
+import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 export type PostStatus = 'uploading' | 'ready' | 'failed';
 
@@ -22,7 +23,7 @@ export type CreatePostUploadingInput = {
  * Create post with "uploading" status (Phase 1 of 3)
  */
 export async function createPostUploading(input: CreatePostUploadingInput): Promise<void> {
-  const ref = doc(db, 'posts', input.postId);
+  const ref = doc(db, COLLECTIONS.posts, input.postId);
 
   await setDoc(ref, {
     postId: input.postId,
@@ -50,7 +51,7 @@ export async function updatePost(
   postId: string,
   patch: Record<string, unknown> & { updatedAt?: FieldValue },
 ): Promise<void> {
-  const ref = doc(db, 'posts', postId);
+  const ref = doc(db, COLLECTIONS.posts, postId);
   await updateDoc(ref, {
     ...patch,
     updatedAt: serverTimestamp(),

@@ -14,19 +14,14 @@ import {
 } from 'firebase/firestore';
 import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
+import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 const DEFAULT_LIMIT = 25;
 
 export type ModerationQueueStatus = 'pending' | 'in_review' | 'resolved' | 'dismissed';
 export type ModerationQueuePriority = 'low' | 'medium' | 'high';
 export type ModerationQueueTargetType =
-  | 'user'
-  | 'group'
-  | 'post'
-  | 'comment'
-  | 'message'
-  | 'story'
-  | 'unknown';
+  'user' | 'group' | 'post' | 'comment' | 'message' | 'story' | 'unknown';
 
 export interface ModerationQueueItemRead {
   id: string;
@@ -129,7 +124,7 @@ const updateDoc = ((...args: unknown[]) => {
 
 export async function isAppAdmin(uid: string): Promise<boolean> {
   if (!uid) return false;
-  const snap = await getDoc(doc(db, 'app_admins', uid));
+  const snap = await getDoc(doc(db, COLLECTIONS.appAdmins, uid));
   return snap.exists();
 }
 
@@ -138,7 +133,7 @@ export async function getModerationQueue(
   lastDoc?: DocumentSnapshot,
 ): Promise<PaginatedResultModel<ModerationQueueItemRead>> {
   let q = query(
-    collection(db, 'moderation_queue'),
+    collection(db, COLLECTIONS.moderationQueue),
     orderBy('createdAt', 'desc'),
     limit(pageSize + 1),
   );
@@ -186,7 +181,7 @@ export async function updateModerationQueueItem(
   itemId: string,
   input: ModerationQueueWrite,
 ): Promise<void> {
-  await updateDoc(doc(db, 'moderation_queue', itemId), {
+  await updateDoc(doc(db, COLLECTIONS.moderationQueue, itemId), {
     status: input.status,
     reviewAction: input.reviewAction,
     reviewNote: input.reviewNote ?? null,

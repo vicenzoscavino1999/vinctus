@@ -15,6 +15,7 @@ import {
 } from '@/features/groups/api';
 import { compressToWebp, validateImage } from '@/shared/lib/compression';
 import { uploadGroupIcon } from '@/shared/lib/storage';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 type SelectedImage = { file: File; url: string };
 
@@ -247,7 +248,7 @@ const CreateGroupModal = ({
                   type="text"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  maxLength={80}
+                  maxLength={LIMITS.groups.nameMaxLength}
                   className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
                   placeholder="Ej: Exploradores Cuanticos"
                 />
@@ -342,12 +343,12 @@ const CreateGroupModal = ({
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 rows={4}
-                maxLength={600}
+                maxLength={LIMITS.groups.descriptionMaxLength}
                 className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors resize-none"
                 placeholder="Cuenta de que trata el grupo..."
               />
               <div className="text-right text-xs text-neutral-500 mt-1">
-                {description.length}/600
+                {description.length}/{LIMITS.groups.descriptionMaxLength}
               </div>
             </div>
 

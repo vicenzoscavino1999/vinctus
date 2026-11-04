@@ -2,6 +2,7 @@ import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
 import { trackFirestoreRead } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
 import { getFollowerIds, getFollowingIds } from './followIds';
+import { COLLECTIONS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 // Matches the legacy cap used for friends lists.
 const LARGE_LIST_LIMIT = 200;
@@ -9,7 +10,7 @@ const LARGE_LIST_LIMIT = 200;
 export async function getFriendIds(uid: string): Promise<string[]> {
   try {
     const indexedFriendsQ = query(
-      collection(db, 'users', uid, 'friends'),
+      collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.friends),
       orderBy('createdAt', 'desc'),
       limit(LARGE_LIST_LIMIT),
     );

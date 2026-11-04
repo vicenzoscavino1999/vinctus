@@ -48,7 +48,7 @@ enum PostCommentsRepoError: LocalizedError {
 }
 
 final class FirebasePostCommentsRepo: PostCommentsRepo {
-  private let commentLimit = 1000
+  private let commentLimit = Limits.Comments.textMaxLength
   private let db: Firestore?
   private let auth: Auth?
 
@@ -66,9 +66,9 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     let db = self.db ?? Firestore.firestore()
     let pageSize = max(1, min(120, limit))
 
-    let query = db.collection("posts")
+    let query = db.collection(FirestoreCollections.posts)
       .document(normalizedPostID)
-      .collection("comments")
+      .collection(FirestoreSubcollections.comments)
       .order(by: "createdAt", descending: false)
       .limit(to: pageSize)
 
@@ -111,9 +111,9 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
 
     let db = self.db ?? Firestore.firestore()
     let authorSnapshot = try await resolveAuthorSnapshot(uid: currentUser.uid, fallbackUser: currentUser, db: db)
-    let commentRef = db.collection("posts")
+    let commentRef = db.collection(FirestoreCollections.posts)
       .document(normalizedPostID)
-      .collection("comments")
+      .collection(FirestoreSubcollections.comments)
       .document()
 
     let authorSnapshotPayload: [String: Any] = [
@@ -137,7 +137,7 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     fallbackUser: User,
     db: Firestore
   ) async throws -> (displayName: String, photoURL: String?) {
-    let publicRef = db.collection("users_public").document(uid)
+    let publicRef = db.collection(FirestoreCollections.usersPublic).document(uid)
     let snapshot = try await publicRef.getDocument()
     let data = snapshot.data() ?? [:]
 

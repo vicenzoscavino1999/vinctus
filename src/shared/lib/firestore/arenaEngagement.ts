@@ -1,6 +1,7 @@
 import { doc, getDoc, serverTimestamp, writeBatch, type FieldValue } from 'firebase/firestore';
 import { trackFirestoreRead } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
+import { COLLECTIONS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 interface ArenaLikeWrite {
   uid: string;
@@ -19,8 +20,8 @@ interface UserArenaLikeWrite {
  * User index: users/{uid}/likedArenaDebates/{debateId}
  */
 export const likeArenaDebateWithSync = async (debateId: string, uid: string): Promise<void> => {
-  const likeRef = doc(db, 'arenaDebates', debateId, 'likes', uid);
-  const userLikeRef = doc(db, 'users', uid, 'likedArenaDebates', debateId);
+  const likeRef = doc(db, COLLECTIONS.arenaDebates, debateId, SUBCOLLECTIONS.likes, uid);
+  const userLikeRef = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.likedArenaDebates, debateId);
 
   const batch = writeBatch(db);
 
@@ -50,8 +51,8 @@ export const likeArenaDebateWithSync = async (debateId: string, uid: string): Pr
  * Unlike an Arena debate.
  */
 export const unlikeArenaDebateWithSync = async (debateId: string, uid: string): Promise<void> => {
-  const likeRef = doc(db, 'arenaDebates', debateId, 'likes', uid);
-  const userLikeRef = doc(db, 'users', uid, 'likedArenaDebates', debateId);
+  const likeRef = doc(db, COLLECTIONS.arenaDebates, debateId, SUBCOLLECTIONS.likes, uid);
+  const userLikeRef = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.likedArenaDebates, debateId);
 
   const batch = writeBatch(db);
   batch.delete(likeRef);
@@ -64,6 +65,8 @@ export const unlikeArenaDebateWithSync = async (debateId: string, uid: string): 
  */
 export const isArenaDebateLiked = async (debateId: string, uid: string): Promise<boolean> => {
   trackFirestoreRead('firestore.getDoc');
-  const docSnap = await getDoc(doc(db, 'arenaDebates', debateId, 'likes', uid));
+  const docSnap = await getDoc(
+    doc(db, COLLECTIONS.arenaDebates, debateId, SUBCOLLECTIONS.likes, uid),
+  );
   return docSnap.exists();
 };

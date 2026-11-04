@@ -7,6 +7,7 @@ import { getUserProfile, updateUserProfile } from '@/features/profile/api';
 import { auth } from '@/shared/lib/firebase';
 import { uploadProfilePhoto } from '@/shared/lib/storage';
 import { useToast } from '@/shared/ui/Toast';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -316,10 +317,12 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
                 onChange={(e) => setBio(e.target.value)}
                 placeholder="Cuéntale al mundo sobre ti..."
                 rows={4}
-                maxLength={500}
+                maxLength={LIMITS.profile.bioMaxLength}
                 className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors resize-none"
               />
-              <div className="text-right text-xs text-neutral-600 mt-1">{bio.length}/500</div>
+              <div className="text-right text-xs text-neutral-600 mt-1">
+                {bio.length}/{LIMITS.profile.bioMaxLength}
+              </div>
             </div>
 
             {/* Actions */}

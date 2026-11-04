@@ -17,7 +17,8 @@ import {
 import { db, dbLite } from '@/shared/lib/firebase';
 import { toDate as toDateValue } from '@/shared/lib/formatUtils';
 import { STORY_DURATION_MS } from '@/shared/lib/storyConstants';
-const storiesCollection = collection(db, 'stories');
+import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
+const storiesCollection = collection(db, COLLECTIONS.stories);
 
 export type StoryVisibility = 'friends';
 
@@ -120,7 +121,7 @@ export function getNewStoryId(): string {
 export async function getUserStories(uid: string): Promise<StoryRead[]> {
   const now = TimestampLite.now();
   const q = queryLite(
-    collectionLite(dbLite, 'stories'),
+    collectionLite(dbLite, COLLECTIONS.stories),
     whereLite('ownerId', '==', uid),
     whereLite('visibility', '==', 'friends'),
     whereLite('expiresAt', '>', now),
@@ -146,7 +147,7 @@ export async function getStoriesForOwners(ownerIds: string[]): Promise<StoryRead
   const results = await Promise.allSettled(
     chunks.map(async (chunk) => {
       const q = queryLite(
-        collectionLite(dbLite, 'stories'),
+        collectionLite(dbLite, COLLECTIONS.stories),
         whereLite('ownerId', 'in', chunk),
         whereLite('visibility', '==', 'friends'),
         whereLite('expiresAt', '>', now),

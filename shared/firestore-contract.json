@@ -1,0 +1,283 @@
+{
+  "$comment": [
+    "Single source for the Firestore collection names and the limits that the web (src/, api/) and the native iOS app (ios-native/) both use.",
+    "After editing, run `npm run contract:generate`: it writes src/shared/lib/firestore/firestoreContract.ts, api/lib/firestoreContract.ts and ios-native/VinctusNative/Sources/Shared/FirestoreContract.swift.",
+    "firestore.rules can't import this file: src/shared/lib/firestore/firestoreContract.test.ts checks that its paths and numbers match.",
+    "collections: top-level collections. subcollections: name and the parent path(s) it lives under, as in firestore.rules.",
+    "limits: value, a doc comment, the firestore.rules checks that use it ({ in: function name or match path, field: the checked expression }), and other files that must contain it ({ path, contains: text with {value} }), such as Cloud Functions that can't import this file."
+  ],
+  "collections": {
+    "users": "users",
+    "usersPublic": "users_public",
+    "friendRequests": "friend_requests",
+    "followRequests": "follow_requests",
+    "notifications": "notifications",
+    "supportTickets": "support_tickets",
+    "appAdmins": "app_admins",
+    "reports": "reports",
+    "moderationQueue": "moderation_queue",
+    "contributions": "contributions",
+    "stories": "stories",
+    "groups": "groups",
+    "groupRequests": "group_requests",
+    "events": "events",
+    "posts": "posts",
+    "collaborations": "collaborations",
+    "collaborationRequests": "collaboration_requests",
+    "arenaDebates": "arenaDebates",
+    "arenaUsage": "arenaUsage",
+    "conversations": "conversations"
+  },
+  "subcollections": {
+    "followers": { "name": "followers", "parents": ["users"] },
+    "following": { "name": "following", "parents": ["users"] },
+    "memberships": { "name": "memberships", "parents": ["users"] },
+    "directConversations": { "name": "directConversations", "parents": ["users"] },
+    "blockedUsers": { "name": "blockedUsers", "parents": ["users"] },
+    "friends": { "name": "friends", "parents": ["users"] },
+    "likes": { "name": "likes", "parents": ["users", "posts", "arenaDebates"] },
+    "likedArenaDebates": { "name": "likedArenaDebates", "parents": ["users"] },
+    "savedPosts": { "name": "savedPosts", "parents": ["users"] },
+    "savedCategories": { "name": "savedCategories", "parents": ["users"] },
+    "followedCategories": { "name": "followedCategories", "parents": ["users"] },
+    "savedArenaDebates": { "name": "savedArenaDebates", "parents": ["users"] },
+    "collections": { "name": "collections", "parents": ["users"] },
+    "items": { "name": "items", "parents": ["users/collections"] },
+    "attendees": { "name": "attendees", "parents": ["events"] },
+    "members": { "name": "members", "parents": ["groups", "conversations"] },
+    "comments": { "name": "comments", "parents": ["posts"] },
+    "turns": { "name": "turns", "parents": ["arenaDebates"] },
+    "days": { "name": "days", "parents": ["arenaUsage"] },
+    "messages": { "name": "messages", "parents": ["conversations"] },
+    "typing": { "name": "typing", "parents": ["conversations"] }
+  },
+  "limits": {
+    "account": {
+      "minimumAge": {
+        "value": 13,
+        "doc": "Minimum age to use Vinctus (terms, privacy policy and the native age check).",
+        "files": [
+          { "path": "public/terms.html", "contains": "{value} años" },
+          { "path": "public/privacy.html", "contains": "{value} años" }
+        ]
+      }
+    },
+    "profile": {
+      "displayNameMaxLength": {
+        "value": 120,
+        "doc": "Profile display name (userProfileUpdateSchema)."
+      },
+      "roleMaxLength": { "value": 120, "doc": "Profile role (userProfileUpdateSchema)." },
+      "bioMaxLength": { "value": 500, "doc": "Profile bio (userProfileUpdateSchema)." },
+      "locationMaxLength": { "value": 120, "doc": "Profile location (userProfileUpdateSchema)." }
+    },
+    "aiChat": {
+      "messageMaxLength": {
+        "value": 2000,
+        "doc": "Characters in one AI chat message (validateChatRequest in api/chat.ts)."
+      },
+      "historyMaxMessages": {
+        "value": 20,
+        "doc": "Messages of history sent with an AI chat request."
+      },
+      "historyMaxTotalLength": {
+        "value": 12000,
+        "doc": "Characters of history, all messages together, sent with an AI chat request."
+      }
+    },
+    "arena": {
+      "topicMaxLength": {
+        "value": 240,
+        "doc": "Topic of a new Arena debate (MAX_TOPIC_CHARS in the createDebate Cloud Function).",
+        "files": [
+          {
+            "path": "functions/src/arena/createDebate.ts",
+            "contains": "process.env.AI_MAX_TOPIC_CHARS || '{value}'"
+          },
+          { "path": "functions/src/arena/guardrails.ts", "contains": ".slice(0, {value})" }
+        ]
+      }
+    },
+    "savedArenaDebates": {
+      "topicMaxLength": {
+        "value": 240,
+        "doc": "users/{uid}/savedArenaDebates topic.",
+        "rules": [
+          {
+            "in": "match /users/{uid}/savedArenaDebates/{debateId}",
+            "field": "request.resource.data.topic"
+          }
+        ]
+      },
+      "personaMaxLength": {
+        "value": 80,
+        "doc": "users/{uid}/savedArenaDebates personaA and personaB.",
+        "rules": [
+          {
+            "in": "match /users/{uid}/savedArenaDebates/{debateId}",
+            "field": "request.resource.data.personaA"
+          },
+          {
+            "in": "match /users/{uid}/savedArenaDebates/{debateId}",
+            "field": "request.resource.data.personaB"
+          }
+        ]
+      },
+      "summaryMaxLength": {
+        "value": 3000,
+        "doc": "users/{uid}/savedArenaDebates summary.",
+        "rules": [
+          {
+            "in": "match /users/{uid}/savedArenaDebates/{debateId}",
+            "field": "request.resource.data.summary"
+          }
+        ]
+      }
+    },
+    "messages": {
+      "textMaxLength": {
+        "value": 4000,
+        "doc": "Text of a chat message (conversations/{id}/messages).",
+        "rules": [{ "in": "isValidMessageCreate", "field": "data.text" }]
+      }
+    },
+    "collections": {
+      "nameMaxLength": {
+        "value": 80,
+        "doc": "Name of a user collection (users/{uid}/collections).",
+        "rules": [
+          { "in": "isValidCollectionCreate", "field": "data.name" },
+          { "in": "isValidCollectionUpdate", "field": "data.name" }
+        ]
+      }
+    },
+    "collectionItems": {
+      "collectionNameMaxLength": {
+        "value": 120,
+        "doc": "Collection name copied into each item.",
+        "rules": [{ "in": "isValidCollectionItemCreate", "field": "data.collectionName" }]
+      },
+      "titleMaxLength": {
+        "value": 160,
+        "doc": "Title of a collection item.",
+        "rules": [{ "in": "isValidCollectionItemCreate", "field": "data.title" }]
+      },
+      "urlMaxLength": {
+        "value": 600,
+        "doc": "URL of a link or file item.",
+        "rules": [{ "in": "isValidCollectionItemCreate", "field": "data.url" }]
+      },
+      "noteMaxLength": {
+        "value": 2000,
+        "doc": "Text of a note item.",
+        "rules": [{ "in": "isValidCollectionItemCreate", "field": "data.text" }]
+      }
+    },
+    "posts": {
+      "textMaxLength": {
+        "value": 5000,
+        "doc": "Text of a post (content and text fields).",
+        "rules": [
+          { "in": "isValidPostCreate", "field": "data.content" },
+          { "in": "isValidPostCreateUploading", "field": "data.text" },
+          { "in": "isValidPostCreateUploading", "field": "data.content" },
+          { "in": "isValidPostUpdate", "field": "request.resource.data.content" }
+        ]
+      },
+      "titleMaxLength": {
+        "value": 120,
+        "doc": "Title of a post.",
+        "rules": [
+          { "in": "isValidPostCreate", "field": "data.title" },
+          { "in": "isValidPostCreateUploading", "field": "data.title" },
+          { "in": "isValidPostUpdate", "field": "request.resource.data.title" }
+        ]
+      },
+      "categoryIdMaxLength": {
+        "value": 100,
+        "doc": "Category id of a post.",
+        "rules": [
+          { "in": "isValidPostCreate", "field": "data.categoryId" },
+          { "in": "isValidPostCreateUploading", "field": "data.categoryId" }
+        ]
+      }
+    },
+    "comments": {
+      "textMaxLength": {
+        "value": 1000,
+        "doc": "Text of a post comment (posts/{id}/comments).",
+        "rules": [{ "in": "isValidPostCommentCreate", "field": "data.text" }]
+      }
+    },
+    "groups": {
+      "nameMaxLength": {
+        "value": 80,
+        "doc": "Group name.",
+        "rules": [
+          { "in": "isValidGroupCreate", "field": "data.name" },
+          { "in": "isValidGroupUpdate", "field": "data.name" }
+        ]
+      },
+      "descriptionMaxLength": {
+        "value": 600,
+        "doc": "Group description.",
+        "rules": [
+          { "in": "isValidGroupCreate", "field": "data.description" },
+          { "in": "isValidGroupUpdate", "field": "data.description" }
+        ]
+      }
+    },
+    "groupRequests": {
+      "groupNameMaxLength": {
+        "value": 120,
+        "doc": "Group name copied into a join request (group_requests).",
+        "rules": [{ "in": "isValidGroupJoinRequestCreate", "field": "data.groupName" }]
+      },
+      "fromUserNameMaxLength": {
+        "value": 80,
+        "doc": "Requester's display name copied into a join request.",
+        "rules": [{ "in": "isValidGroupJoinRequestCreate", "field": "data.fromUserName" }]
+      }
+    },
+    "reports": {
+      "detailsMaxLength": {
+        "value": 2000,
+        "doc": "Details of a report (reports).",
+        "rules": [{ "in": "isValidUserReportCreate", "field": "data.details" }]
+      }
+    },
+    "contributions": {
+      "titleMaxLength": {
+        "value": 140,
+        "doc": "Title of a profile contribution (contributions).",
+        "rules": [
+          { "in": "isValidContributionCreate", "field": "data.title" },
+          { "in": "isValidContributionUpdate", "field": "data.title" }
+        ]
+      },
+      "descriptionMaxLength": {
+        "value": 2000,
+        "doc": "Description of a profile contribution.",
+        "rules": [
+          { "in": "isValidContributionCreate", "field": "data.description" },
+          { "in": "isValidContributionUpdate", "field": "data.description" }
+        ]
+      },
+      "linkMaxLength": {
+        "value": 500,
+        "doc": "Link of a profile contribution (contributions).",
+        "rules": [
+          { "in": "isValidContributionCreate", "field": "data.link" },
+          { "in": "isValidContributionUpdate", "field": "data.link" }
+        ]
+      }
+    },
+    "stories": {
+      "ownerNameMaxLength": {
+        "value": 80,
+        "doc": "Owner display name copied into a story (ownerSnapshot.displayName).",
+        "rules": [{ "in": "isValidStoryOwnerSnapshot", "field": "snapshot.displayName" }]
+      }
+    }
+  }
+}

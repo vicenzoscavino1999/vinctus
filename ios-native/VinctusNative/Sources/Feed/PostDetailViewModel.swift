@@ -10,7 +10,7 @@ final class PostDetailViewModel: ObservableObject {
   @Published var infoMessage: String?
   @Published var draftComment = ""
 
-  private let commentLimit = 1000
+  private let commentLimit = Limits.Comments.textMaxLength
   private let postID: String
   private let repo: any PostCommentsRepo
 

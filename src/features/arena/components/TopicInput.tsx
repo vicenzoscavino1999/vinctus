@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 interface TopicInputProps {
   value: string;
@@ -17,7 +18,7 @@ export function TopicInput({
   value,
   onChange,
   disabled = false,
-  maxLength = 240,
+  maxLength = LIMITS.arena.topicMaxLength,
 }: TopicInputProps) {
   const remaining = maxLength - value.length;
   const counterClass = useMemo(() => {

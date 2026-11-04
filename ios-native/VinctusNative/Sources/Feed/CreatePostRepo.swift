@@ -47,7 +47,7 @@ enum CreatePostRepoError: LocalizedError {
 }
 
 final class FirebaseCreatePostRepo: CreatePostRepo {
-  private let textLimit = 5000
+  private let textLimit = Limits.Posts.textMaxLength
   private let db: Firestore?
   private let auth: Auth?
 
@@ -59,7 +59,8 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
   func makePostID() throws -> String {
     guard FirebaseApp.app() != nil else { throw CreatePostRepoError.firebaseNotConfigured }
     let db = self.db ?? Firestore.firestore()
-    let postID = db.collection("posts").document().documentID.trimmingCharacters(in: .whitespacesAndNewlines)
+    let postID = db.collection(FirestoreCollections.posts).document().documentID
+      .trimmingCharacters(in: .whitespacesAndNewlines)
     guard !postID.isEmpty else { throw CreatePostRepoError.invalidPostID }
     return postID
   }
@@ -78,7 +79,7 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
     guard let currentUser = auth.currentUser else { throw CreatePostRepoError.userNotAuthenticated }
 
     let db = self.db ?? Firestore.firestore()
-    let postRef = db.collection("posts").document(normalizedPostID)
+    let postRef = db.collection(FirestoreCollections.posts).document(normalizedPostID)
     let authorSnapshot = try await resolveAuthorSnapshot(uid: currentUser.uid, fallbackUser: currentUser, db: db)
 
     let existingDoc = try await postRef.getDocument()
@@ -130,7 +131,7 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
     fallbackUser: User,
     db: Firestore
   ) async throws -> CreatePostAuthorSnapshot {
-    let publicRef = db.collection("users_public").document(uid)
+    let publicRef = db.collection(FirestoreCollections.usersPublic).document(uid)
     let publicDoc = try await publicRef.getDocument()
     let publicData = publicDoc.data() ?? [:]
 

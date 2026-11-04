@@ -1,5 +1,6 @@
 import { doc, getDoc, serverTimestamp, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase';
+import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 export type AIConsentSource = 'settings' | 'ai_chat' | 'arena' | 'migration';
 
@@ -44,7 +45,7 @@ const normalizeSource = (value: unknown): AIConsentSource | null => {
 };
 
 export const getServerAIConsent = async (uid: string): Promise<ServerAIConsentRead> => {
-  const snap = await getDoc(doc(db, 'users', uid));
+  const snap = await getDoc(doc(db, COLLECTIONS.users, uid));
   if (!snap.exists()) {
     return DEFAULT_SERVER_AI_CONSENT;
   }
@@ -66,7 +67,7 @@ export const setServerAIConsent = async (
   input: { granted: boolean; source: AIConsentSource },
 ): Promise<void> => {
   await setDoc(
-    doc(db, 'users', uid),
+    doc(db, COLLECTIONS.users, uid),
     {
       settings: {
         ai: {

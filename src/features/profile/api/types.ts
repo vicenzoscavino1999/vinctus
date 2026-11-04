@@ -13,6 +13,7 @@ import type {
   UserProfileUpdate,
 } from '@/shared/lib/firestore';
 import { idSchema, limitSchema, urlSchema } from '@/shared/lib/validators';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 export type {
   AccountVisibility,
@@ -44,19 +45,24 @@ export const contributionTypeSchema = z.enum(['project', 'paper', 'cv', 'certifi
 const optionalTrimmedString = (max: number) => z.string().trim().max(max).optional();
 
 export const userProfileUpdateSchema: z.ZodType<UserProfileUpdate> = z.object({
-  displayName: optionalTrimmedString(120),
+  displayName: optionalTrimmedString(LIMITS.profile.displayNameMaxLength),
   photoURL: urlSchema.nullable().optional(),
-  bio: optionalTrimmedString(500),
-  role: optionalTrimmedString(120),
-  location: optionalTrimmedString(120),
+  bio: optionalTrimmedString(LIMITS.profile.bioMaxLength),
+  role: optionalTrimmedString(LIMITS.profile.roleMaxLength),
+  location: optionalTrimmedString(LIMITS.profile.locationMaxLength),
   username: optionalTrimmedString(40),
 });
 
 export const createContributionInputSchema = z.object({
   userId: uidSchema,
   type: contributionTypeSchema,
-  title: z.string().trim().min(1).max(180),
-  description: z.string().trim().max(3000).nullable().optional(),
+  title: z.string().trim().min(1).max(LIMITS.contributions.titleMaxLength),
+  description: z
+    .string()
+    .trim()
+    .max(LIMITS.contributions.descriptionMaxLength)
+    .nullable()
+    .optional(),
   link: urlSchema.nullable().optional(),
   categoryId: categoryIdSchema.nullable().optional(),
 });

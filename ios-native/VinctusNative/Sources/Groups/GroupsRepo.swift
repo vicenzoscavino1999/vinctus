@@ -78,8 +78,8 @@ enum GroupMembershipStatus: Equatable {
 /// The fields the owner can change, like the web's `updateGroup` (GroupEditPage).
 struct GroupUpdate: Equatable {
   // Limits of `isValidGroupUpdate` in firestore.rules.
-  static let nameLimit = 80
-  static let descriptionLimit = 600
+  static let nameLimit = Limits.Groups.nameMaxLength
+  static let descriptionLimit = Limits.Groups.descriptionMaxLength
 
   var name: String
   var description: String
@@ -152,7 +152,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
     let db = self.db ?? Firestore.firestore()
     let pageSize = max(1, min(60, limit))
 
-    let query = db.collection("groups")
+    let query = db.collection(FirestoreCollections.groups)
       .order(by: "updatedAt", descending: true)
       .limit(to: pageSize)
 
@@ -170,26 +170,26 @@ final class FirebaseGroupsRepo: GroupsRepo {
 
     let db = self.db ?? Firestore.firestore()
 
-    let groupRef = db.collection("groups").document(normalizedGroupID)
+    let groupRef = db.collection(FirestoreCollections.groups).document(normalizedGroupID)
     let (groupDoc, groupFromCache) = try await getDocumentWithFallback(groupRef)
     guard let groupData = groupDoc.data() else { return nil }
 
     let postsLimit = max(1, min(10, recentPostLimit))
     let membersLimit = max(1, min(12, topMemberLimit))
 
-    let recentPostsQuery = db.collection("posts")
+    let recentPostsQuery = db.collection(FirestoreCollections.posts)
       .whereField("groupId", isEqualTo: normalizedGroupID)
       .order(by: "createdAt", descending: true)
       .limit(to: postsLimit)
 
-    let membersQuery = db.collection("groups")
+    let membersQuery = db.collection(FirestoreCollections.groups)
       .document(normalizedGroupID)
-      .collection("members")
+      .collection(FirestoreSubcollections.members)
       .order(by: "joinedAt", descending: true)
       .limit(to: membersLimit)
 
     let weekAgo = Timestamp(date: Date().addingTimeInterval(-7 * 24 * 60 * 60))
-    let weeklyPostsQuery = db.collection("posts")
+    let weeklyPostsQuery = db.collection(FirestoreCollections.posts)
       .whereField("groupId", isEqualTo: normalizedGroupID)
       .whereField("createdAt", isGreaterThanOrEqualTo: weekAgo)
       .limit(to: 200)
@@ -275,7 +275,8 @@ final class FirebaseGroupsRepo: GroupsRepo {
   func isMember(groupID: String, uid: String) async throws -> Bool {
     guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
     let db = self.db ?? Firestore.firestore()
-    let ref = db.collection("groups").document(groupID).collection("members").document(uid)
+    let ref = db.collection(FirestoreCollections.groups).document(groupID)
+      .collection(FirestoreSubcollections.members).document(uid)
     return try await ref.getDocument(source: .server).exists
   }
 
@@ -283,7 +284,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
   func joinGroup(groupID: String, uid: String) async throws {
     guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
     let db = self.db ?? Firestore.firestore()
-    let groupRef = db.collection("groups").document(groupID)
+    let groupRef = db.collection(FirestoreCollections.groups).document(groupID)
     let groupDoc = try await groupRef.getDocument(source: .server)
     guard let data = groupDoc.data() else { throw GroupsRepoError.missingSnapshot }
     if (data["visibility"] as? String) == ProfileAccountVisibility.private.rawValue {
@@ -298,14 +299,15 @@ final class FirebaseGroupsRepo: GroupsRepo {
         "role": "member",
         "joinedAt": FieldValue.serverTimestamp(),
       ],
-      forDocument: groupRef.collection("members").document(uid)
+      forDocument: groupRef.collection(FirestoreSubcollections.members).document(uid)
     )
     batch.setData(
       [
         "groupId": groupID,
         "joinedAt": FieldValue.serverTimestamp(),
       ],
-      forDocument: db.collection("users").document(uid).collection("memberships").document(groupID)
+      forDocument: db.collection(FirestoreCollections.users).document(uid)
+        .collection(FirestoreSubcollections.memberships).document(groupID)
     )
     try await batch.commit()
   }
@@ -315,8 +317,10 @@ final class FirebaseGroupsRepo: GroupsRepo {
     guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
     let db = self.db ?? Firestore.firestore()
     let batch = db.batch()
-    batch.deleteDocument(db.collection("groups").document(groupID).collection("members").document(uid))
-    batch.deleteDocument(db.collection("users").document(uid).collection("memberships").document(groupID))
+    batch.deleteDocument(db.collection(FirestoreCollections.groups).document(groupID)
+      .collection(FirestoreSubcollections.members).document(uid))
+    batch.deleteDocument(db.collection(FirestoreCollections.users).document(uid)
+      .collection(FirestoreSubcollections.memberships).document(groupID))
     try await batch.commit()
   }
 
@@ -326,7 +330,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
     let db = self.db ?? Firestore.firestore()
     // Only pending requests, like the web's `getGroupJoinStatus`: an older rejected request
     // must not hide a newer pending one.
-    let requests = try? await db.collection("group_requests")
+    let requests = try? await db.collection(FirestoreCollections.groupRequests)
       .whereField("fromUid", isEqualTo: uid)
       .whereField("groupId", isEqualTo: groupID)
       .whereField("status", isEqualTo: "pending")
@@ -342,10 +346,10 @@ final class FirebaseGroupsRepo: GroupsRepo {
     if try await membershipStatus(groupID: groupID, ownerID: ownerID, uid: uid) == .pending {
       throw GroupsRepoError.requestAlreadySent
     }
-    let profile = (try? await db.collection("users_public").document(uid).getDocument().data()) ?? [:]
+    let profile = (try? await db.collection(FirestoreCollections.usersPublic).document(uid).getDocument().data()) ?? [:]
     var request: [String: Any] = [
       "groupId": groupID,
-      "groupName": String(groupName.prefix(120)),
+      "groupName": String(groupName.prefix(Limits.GroupRequests.groupNameMaxLength)),
       "fromUid": uid,
       "toUid": ownerID,
       "status": "pending",
@@ -355,9 +359,11 @@ final class FirebaseGroupsRepo: GroupsRepo {
       "createdAt": FieldValue.serverTimestamp(),
       "updatedAt": FieldValue.serverTimestamp(),
     ]
-    if let name = FirestoreValue.string(profile["displayName"]) { request["fromUserName"] = String(name.prefix(80)) }
+    if let name = FirestoreValue.string(profile["displayName"]) {
+      request["fromUserName"] = String(name.prefix(Limits.GroupRequests.fromUserNameMaxLength))
+    }
     if let photo = FirestoreValue.string(profile["photoURL"]) { request["fromUserPhoto"] = photo }
-    try await db.collection("group_requests").document().setData(request)
+    try await db.collection(FirestoreCollections.groupRequests).document().setData(request)
   }
 
   /// Mirrors `updateGroup` in `src/shared/lib/firestore/groups.ts`.
@@ -373,7 +379,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
     ]
     fields["categoryId"] = update.categoryID ?? NSNull()
     fields["iconUrl"] = update.iconURL ?? NSNull()
-    try await db.collection("groups").document(groupID).updateData(fields)
+    try await db.collection(FirestoreCollections.groups).document(groupID).updateData(fields)
   }
 
   func uploadGroupIcon(ownerID: String, groupID: String, jpegData: Data) async throws -> String {
@@ -394,7 +400,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
       for memberDoc in memberDocs {
         let uid = memberDoc.documentID
         group.addTask {
-          let publicRef = db.collection("users_public").document(uid)
+          let publicRef = db.collection(FirestoreCollections.usersPublic).document(uid)
           let (publicDoc, _) = try await self.getDocumentWithFallback(publicRef)
 
           if let data = publicDoc.data() {
@@ -403,7 +409,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
             return (uid, (name, photoURL))
           }
 
-          let privateRef = db.collection("users").document(uid)
+          let privateRef = db.collection(FirestoreCollections.users).document(uid)
           let (privateDoc, _) = try await self.getDocumentWithFallback(privateRef)
           let privateData = privateDoc.data() ?? [:]
 

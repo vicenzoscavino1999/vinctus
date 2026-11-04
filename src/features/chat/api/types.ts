@@ -9,6 +9,7 @@ import type {
   UserReportReason,
 } from '@/shared/lib/firestore';
 import { idSchema, validate } from '@/shared/lib/validators';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 export type {
   ConversationMemberRead,
@@ -31,7 +32,12 @@ export const conversationListLimitSchema = z.coerce.number().int().min(1).max(50
 export const membershipLimitSchema = z.coerce.number().int().min(1).max(50);
 
 export const reportReasonSchema = z.enum(['spam', 'harassment', 'abuse', 'fake', 'other']);
-export const reportDetailsSchema = z.string().trim().max(2000).nullable().optional();
+export const reportDetailsSchema = z
+  .string()
+  .trim()
+  .max(LIMITS.reports.detailsMaxLength)
+  .nullable()
+  .optional();
 
 export const messageAttachmentSchema = z.object({
   kind: z.enum(['image', 'file']),
@@ -49,7 +55,7 @@ export const messageAttachmentSchema = z.object({
   height: z.number().int().positive().nullable().optional(),
 });
 
-export const sendMessageTextSchema = z.string().max(4000);
+export const sendMessageTextSchema = z.string().max(LIMITS.messages.textMaxLength);
 
 export const createUserReportInputSchema = z.object({
   reporterUid: uidSchema,

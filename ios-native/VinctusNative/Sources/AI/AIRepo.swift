@@ -86,9 +86,9 @@ enum AIRepoError: LocalizedError {
 
 final class FirebaseAIRepo: AIRepo {
   /// Limits enforced by `validateChatRequest` in api/chat.ts.
-  static let maxMessageLength = 2000
-  private static let maxHistoryMessages = 20
-  private static let maxHistoryCharacters = 12_000
+  static let maxMessageLength = Limits.AIChat.messageMaxLength
+  private static let maxHistoryMessages = Limits.AIChat.historyMaxMessages
+  private static let maxHistoryCharacters = Limits.AIChat.historyMaxTotalLength
   /// Same region as the Arena callables (functions/src/arena/createDebate.ts).
   private static let functionsRegion = "us-central1"
   /// A debate generates six turns plus a verdict, well past the SDK's 70-second default.
@@ -182,8 +182,8 @@ final class FirebaseAIRepo: AIRepo {
 
   private func fetchTurns(debateID: String) async throws -> [ArenaTurn] {
     let snapshot = try await Firestore.firestore()
-      .collection("arenaDebates").document(debateID)
-      .collection("turns")
+      .collection(FirestoreCollections.arenaDebates).document(debateID)
+      .collection(FirestoreSubcollections.turns)
       .order(by: "idx")
       .getDocuments()
     return snapshot.documents.compactMap { doc in

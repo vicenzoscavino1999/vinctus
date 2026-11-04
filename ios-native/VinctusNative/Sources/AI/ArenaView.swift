@@ -4,7 +4,8 @@ import SwiftUI
 
 @MainActor
 final class ArenaViewModel: ObservableObject {
-  static let maxTopicLength = 500
+  /// `MAX_TOPIC_CHARS` of the createDebate Cloud Function (functions/src/arena/createDebate.ts).
+  static let maxTopicLength = Limits.Arena.topicMaxLength
 
   @Published private(set) var personas: [ArenaPersona] = []
   @Published private(set) var usage: ArenaUsage?

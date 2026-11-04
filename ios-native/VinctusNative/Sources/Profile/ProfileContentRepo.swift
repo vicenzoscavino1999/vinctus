@@ -112,7 +112,9 @@ struct NewContribution {
     let link = link.trimmingCharacters(in: .whitespacesAndNewlines)
     let scheme = URL(string: link)?.scheme?.lowercased()
     guard
-      !title.isEmpty, title.count <= 140, description.count <= 2000, link.count <= 500,
+      !title.isEmpty, title.count <= Limits.Contributions.titleMaxLength,
+      description.count <= Limits.Contributions.descriptionMaxLength,
+      link.count <= Limits.Contributions.linkMaxLength,
       link.isEmpty || scheme == "http" || scheme == "https"
     else {
       throw ProfileContentRepoError.invalidContribution
@@ -199,7 +201,7 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
 
   /// Mirrors `getPostsByUser` in `src/shared/lib/firestore/posts.ts`.
   func fetchPosts(uid: String, limit: Int, after cursor: ProfileListCursor?) async throws -> ProfileListPage<FeedItem> {
-    let query = try database().collection("posts")
+    let query = try database().collection(FirestoreCollections.posts)
       .whereField("authorId", isEqualTo: uid)
       .order(by: "createdAt", descending: true)
     let snapshot = try await page(query, limit: limit, after: cursor).getDocuments()
@@ -216,7 +218,7 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
     uid: String, kind: FollowListKind, limit: Int, after cursor: ProfileListCursor?
   ) async throws -> ProfileListPage<ProfileUserSummary> {
     let db = try database()
-    let query = db.collection("users").document(uid).collection(kind.rawValue)
+    let query = db.collection(FirestoreCollections.users).document(uid).collection(kind.rawValue)
       .order(by: "createdAt", descending: true)
     let snapshot = try await page(query, limit: limit, after: cursor).getDocuments()
     var users: [ProfileUserSummary] = []
@@ -229,7 +231,7 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
   /// Mirrors `getIncomingFollowRequests` in `src/shared/lib/firestore/follows.ts`.
   func fetchIncomingFollowRequests() async throws -> [IncomingFollowRequest] {
     let (db, uid) = try context()
-    let snapshot = try await db.collection("follow_requests")
+    let snapshot = try await db.collection(FirestoreCollections.followRequests)
       .whereField("toUid", isEqualTo: uid)
       .whereField("status", isEqualTo: "pending")
       .order(by: "createdAt", descending: true)
@@ -245,7 +247,7 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
 
   func hasPendingFollowRequest(from fromUID: String) async throws -> Bool {
     let (db, uid) = try context()
-    let request = try? await db.collection("follow_requests")
+    let request = try? await db.collection(FirestoreCollections.followRequests)
       .document(FirebaseEngagementRepo.requestID(from: fromUID, to: uid)).getDocument()
     return request?.exists == true && request?.data()?["status"] as? String == "pending"
   }
@@ -253,7 +255,7 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
   /// Mirrors `acceptFollowRequest` / `declineFollowRequest`; a Cloud Function adds the follow.
   func answerFollowRequest(from fromUID: String, accept: Bool) async throws {
     let (db, uid) = try context()
-    try await db.collection("follow_requests")
+    try await db.collection(FirestoreCollections.followRequests)
       .document(FirebaseEngagementRepo.requestID(from: fromUID, to: uid))
       .updateData([
         "status": accept ? "accepted" : "declined",
@@ -265,7 +267,7 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
 
   /// Mirrors `getUserContributions` in `src/shared/lib/firestore/contributions.ts`.
   func fetchContributions(uid: String) async throws -> [Contribution] {
-    let snapshot = try await database().collection("contributions")
+    let snapshot = try await database().collection(FirestoreCollections.contributions)
       .whereField("userId", isEqualTo: uid)
       .limit(to: 50)
       .getDocuments()
@@ -291,7 +293,7 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
   func createContribution(_ contribution: NewContribution) async throws {
     let (db, uid) = try context()
     let (title, description, link) = try contribution.validated()
-    try await db.collection("contributions").document().setData([
+    try await db.collection(FirestoreCollections.contributions).document().setData([
       "userId": uid,
       "type": contribution.type.rawValue,
       "title": title,
@@ -309,14 +311,15 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
   }
 
   func deleteContribution(id: String) async throws {
-    try await database().collection("contributions").document(id).delete()
+    try await database().collection(FirestoreCollections.contributions).document(id).delete()
   }
 
   // MARK: Followed categories
 
   func fetchFollowedCategories() async throws -> [String] {
     let (db, uid) = try context()
-    let snapshot = try await db.collection("users").document(uid).collection("followedCategories")
+    let snapshot = try await db.collection(FirestoreCollections.users).document(uid)
+      .collection(FirestoreSubcollections.followedCategories)
       .getDocuments()
     return snapshot.documents.map(\.documentID)
   }
@@ -324,7 +327,8 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
   /// Mirrors `followCategoryWithSync` / `unfollowCategoryWithSync` in `savedItems.ts`.
   func setCategoryFollowed(_ followed: Bool, categoryID: String) async throws {
     let (db, uid) = try context()
-    let ref = db.collection("users").document(uid).collection("followedCategories").document(categoryID)
+    let ref = db.collection(FirestoreCollections.users).document(uid)
+      .collection(FirestoreSubcollections.followedCategories).document(categoryID)
     if followed {
       try await ref.setData(["categoryId": categoryID, "createdAt": FieldValue.serverTimestamp()])
     } else {
@@ -337,7 +341,8 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
   /// Mirrors `getSavedArenaDebates` in `src/shared/lib/firestore/savedItems.ts`.
   func fetchSavedDebates() async throws -> [SavedDebate] {
     let (db, uid) = try context()
-    let snapshot = try await db.collection("users").document(uid).collection("savedArenaDebates")
+    let snapshot = try await db.collection(FirestoreCollections.users).document(uid)
+      .collection(FirestoreSubcollections.savedArenaDebates)
       .order(by: "createdAt", descending: true)
       .limit(to: 20)
       .getDocuments()
@@ -359,13 +364,15 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
   func saveDebate(_ debate: SavedDebate) async throws {
     let (db, uid) = try context()
     let winner = debate.winner.flatMap { ["A", "B", "draw"].contains($0) ? $0 : nil }
-    try await db.collection("users").document(uid).collection("savedArenaDebates").document(debate.id)
+    try await db.collection(FirestoreCollections.users).document(uid)
+      .collection(FirestoreSubcollections.savedArenaDebates).document(debate.id)
       .setData([
         "debateId": debate.id,
-        "topic": String(debate.topic.prefix(240)),
+        "topic": String(debate.topic.prefix(Limits.SavedArenaDebates.topicMaxLength)),
         "personaA": debate.personaA,
         "personaB": debate.personaB,
-        "summary": debate.summary.map { String($0.prefix(3000)) } ?? NSNull(),
+        "summary": debate.summary.map { String($0.prefix(Limits.SavedArenaDebates.summaryMaxLength)) }
+          ?? NSNull(),
         "verdictWinner": winner ?? NSNull(),
         "createdAt": FieldValue.serverTimestamp(),
       ])
@@ -373,7 +380,8 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
 
   func removeSavedDebate(id: String) async throws {
     let (db, uid) = try context()
-    try await db.collection("users").document(uid).collection("savedArenaDebates").document(id).delete()
+    try await db.collection(FirestoreCollections.users).document(uid)
+      .collection(FirestoreSubcollections.savedArenaDebates).document(id).delete()
   }
 
   // MARK: Helpers
@@ -392,7 +400,7 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
 
   private func user(_ uid: String, db: Firestore) async -> ProfileUserSummary {
     if let cached = userCache[uid] { return cached }
-    let data = (try? await db.collection("users_public").document(uid).getDocument().data()) ?? [:]
+    let data = (try? await db.collection(FirestoreCollections.usersPublic).document(uid).getDocument().data()) ?? [:]
     let summary = ProfileUserSummary(
       id: uid,
       name: FirestoreValue.string(data["displayName"]) ?? FirestoreValue.string(data["username"]) ?? "Usuario",

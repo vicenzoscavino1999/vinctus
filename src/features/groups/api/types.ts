@@ -12,6 +12,7 @@ import type {
   UserProfileRead,
 } from '@/shared/lib/firestore';
 import { idSchema, limitSchema, urlSchema } from '@/shared/lib/validators';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 export type {
   CreateGroupInput,
@@ -40,8 +41,8 @@ export const groupRequestLimitSchema = limitSchema;
 export type GroupRole = z.infer<typeof groupRoleSchema>;
 
 export const createGroupInputSchema = z.object({
-  name: z.string().trim().min(1).max(80),
-  description: z.string().trim().min(1).max(600),
+  name: z.string().trim().min(1).max(LIMITS.groups.nameMaxLength),
+  description: z.string().trim().min(1).max(LIMITS.groups.descriptionMaxLength),
   categoryId: categoryIdSchema.nullable(),
   visibility: groupVisibilitySchema,
   iconUrl: urlSchema.nullable(),
@@ -51,10 +52,10 @@ export const updateGroupInputSchema = createGroupInputSchema;
 
 export const sendGroupJoinRequestInputSchema = z.object({
   groupId: groupIdSchema,
-  groupName: z.string().trim().min(1).max(120),
+  groupName: z.string().trim().min(1).max(LIMITS.groupRequests.groupNameMaxLength),
   fromUid: uidSchema,
   toUid: uidSchema,
   message: z.string().trim().max(1000).nullable(),
-  fromUserName: z.string().trim().max(120).nullable(),
+  fromUserName: z.string().trim().max(LIMITS.groupRequests.fromUserNameMaxLength).nullable(),
   fromUserPhoto: urlSchema.nullable(),
 });

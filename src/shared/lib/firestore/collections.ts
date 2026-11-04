@@ -19,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
+import { COLLECTIONS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 const DEFAULT_LIMIT = 30;
 const SMALL_LIST_LIMIT = 50;
@@ -86,7 +87,7 @@ export const getUserCollections = async (
 ): Promise<CollectionRead[]> => {
   const safeLimit = Math.min(LARGE_LIST_LIMIT, Math.max(1, Math.floor(limitCount)));
   const q = query(
-    collection(db, 'users', uid, 'collections'),
+    collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.collections),
     orderBy('createdAt', 'desc'),
     limit(safeLimit),
   );
@@ -109,7 +110,7 @@ export async function createCollection(
   uid: string,
   input: { name: string; icon?: string | null },
 ): Promise<string> {
-  const ref = doc(collection(db, 'users', uid, 'collections'));
+  const ref = doc(collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.collections));
   trackFirestoreWrite('firestore.setDoc');
   await setDoc(
     ref,
@@ -131,7 +132,7 @@ export async function updateCollection(
   input: { name: string; icon?: string | null },
 ): Promise<void> {
   trackFirestoreWrite('firestore.updateDoc');
-  await updateDoc(doc(db, 'users', uid, 'collections', collectionId), {
+  await updateDoc(doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.collections, collectionId), {
     name: input.name,
     icon: input.icon ?? null,
     updatedAt: serverTimestamp(),
@@ -140,7 +141,7 @@ export async function updateCollection(
 
 export async function deleteCollection(uid: string, collectionId: string): Promise<void> {
   trackFirestoreWrite('firestore.deleteDoc');
-  await deleteDoc(doc(db, 'users', uid, 'collections', collectionId));
+  await deleteDoc(doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.collections, collectionId));
 }
 
 export async function getCollectionItems(
@@ -149,7 +150,14 @@ export async function getCollectionItems(
   limitCount: number = DEFAULT_LIMIT,
 ): Promise<CollectionItemRead[]> {
   const q = query(
-    collection(db, 'users', uid, 'collections', collectionId, 'items'),
+    collection(
+      db,
+      COLLECTIONS.users,
+      uid,
+      SUBCOLLECTIONS.collections,
+      collectionId,
+      SUBCOLLECTIONS.items,
+    ),
     orderBy('createdAt', 'desc'),
     limit(limitCount),
   );
@@ -190,8 +198,17 @@ export async function createCollectionItem(
     storagePath?: string | null;
   },
 ): Promise<string> {
-  const itemRef = doc(collection(db, 'users', uid, 'collections', collectionId, 'items'));
-  const collectionRef = doc(db, 'users', uid, 'collections', collectionId);
+  const itemRef = doc(
+    collection(
+      db,
+      COLLECTIONS.users,
+      uid,
+      SUBCOLLECTIONS.collections,
+      collectionId,
+      SUBCOLLECTIONS.items,
+    ),
+  );
+  const collectionRef = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.collections, collectionId);
   const batch = writeBatch(db);
   batch.set(
     itemRef,
@@ -224,8 +241,16 @@ export async function deleteCollectionItem(
   collectionId: string,
   itemId: string,
 ): Promise<void> {
-  const itemRef = doc(db, 'users', uid, 'collections', collectionId, 'items', itemId);
-  const collectionRef = doc(db, 'users', uid, 'collections', collectionId);
+  const itemRef = doc(
+    db,
+    COLLECTIONS.users,
+    uid,
+    SUBCOLLECTIONS.collections,
+    collectionId,
+    SUBCOLLECTIONS.items,
+    itemId,
+  );
+  const collectionRef = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.collections, collectionId);
   const batch = writeBatch(db);
   batch.delete(itemRef);
   batch.update(collectionRef, {
@@ -260,7 +285,7 @@ const fallbackRecentCollectionItems = async (
 ): Promise<CollectionItemRead[]> => {
   const collectionSnap = await getDocs(
     query(
-      collection(db, 'users', uid, 'collections'),
+      collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.collections),
       orderBy('updatedAt', 'desc'),
       limit(Math.min(limitCount * 2, 12)),
     ),
@@ -271,7 +296,14 @@ const fallbackRecentCollectionItems = async (
 
   const itemSnaps = await Promise.all(
     collectionSnap.docs.map((docSnap) => {
-      const itemsRef = collection(db, 'users', uid, 'collections', docSnap.id, 'items');
+      const itemsRef = collection(
+        db,
+        COLLECTIONS.users,
+        uid,
+        SUBCOLLECTIONS.collections,
+        docSnap.id,
+        SUBCOLLECTIONS.items,
+      );
       const itemsQuery = query(itemsRef, orderBy('createdAt', 'desc'), limit(limitCount));
       return getDocs(itemsQuery).catch(() => null);
     }),
@@ -293,7 +325,7 @@ export async function getRecentCollectionItems(
   limitCount: number = SMALL_LIST_LIMIT,
 ): Promise<CollectionItemRead[]> {
   const q = query(
-    collectionGroup(db, 'items'),
+    collectionGroup(db, SUBCOLLECTIONS.items),
     where('ownerId', '==', uid),
     orderBy('createdAt', 'desc'),
     limit(limitCount),

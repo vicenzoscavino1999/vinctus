@@ -15,7 +15,7 @@ enum AgeCheckOutcome: Equatable {
 /// for the age range, and people under the minimum age can't use Vinctus. Everyone else (older
 /// iOS versions, regions without those laws) is let through without a prompt.
 enum AgeAssurance {
-  static let minimumAge = 13
+  static let minimumAge = Limits.Account.minimumAge
   /// `isEligibleForAgeFeatures` has been reported to hang, so don't block launch on it.
   private static let eligibilityTimeout: Duration = .seconds(5)
 

@@ -21,6 +21,7 @@ import {
 } from 'firebase/firestore';
 import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
+import { COLLECTIONS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 const DEFAULT_LIMIT = 30;
 const SMALL_LIST_LIMIT = 50;
@@ -97,7 +98,7 @@ const toDate = (value: unknown): Date | undefined => {
   return undefined;
 };
 
-const groupsCollection = collection(db, 'groups');
+const groupsCollection = collection(db, COLLECTIONS.groups);
 
 const getDoc = ((...args: unknown[]) => {
   trackFirestoreRead('firestore.getDoc');
@@ -176,7 +177,7 @@ export const getGroupsByCategory = async (categoryId: string): Promise<Firestore
 };
 
 export const getGroup = async (groupId: string): Promise<FirestoreGroup | null> => {
-  const docSnap = await getDoc(doc(db, 'groups', groupId));
+  const docSnap = await getDoc(doc(db, COLLECTIONS.groups, groupId));
   if (!docSnap.exists()) return null;
   const data = docSnap.data();
   return {
@@ -188,8 +189,8 @@ export const getGroup = async (groupId: string): Promise<FirestoreGroup | null> 
 };
 
 export const joinGroupWithSync = async (groupId: string, uid: string): Promise<void> => {
-  const memberRef = doc(db, 'groups', groupId, 'members', uid);
-  const membershipRef = doc(db, 'users', uid, 'memberships', groupId);
+  const memberRef = doc(db, COLLECTIONS.groups, groupId, SUBCOLLECTIONS.members, uid);
+  const membershipRef = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.memberships, groupId);
   const batch = writeBatch(db);
 
   batch.set(
@@ -216,8 +217,8 @@ export const joinGroupWithSync = async (groupId: string, uid: string): Promise<v
 };
 
 export const leaveGroupWithSync = async (groupId: string, uid: string): Promise<void> => {
-  const memberRef = doc(db, 'groups', groupId, 'members', uid);
-  const membershipRef = doc(db, 'users', uid, 'memberships', groupId);
+  const memberRef = doc(db, COLLECTIONS.groups, groupId, SUBCOLLECTIONS.members, uid);
+  const membershipRef = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.memberships, groupId);
   const batch = writeBatch(db);
   batch.delete(memberRef);
   batch.delete(membershipRef);
@@ -225,14 +226,20 @@ export const leaveGroupWithSync = async (groupId: string, uid: string): Promise<
 };
 
 export const isGroupMember = async (groupId: string, uid: string): Promise<boolean> => {
-  const docSnap = await getDoc(doc(db, 'groups', groupId, 'members', uid));
+  const docSnap = await getDoc(doc(db, COLLECTIONS.groups, groupId, SUBCOLLECTIONS.members, uid));
   return docSnap.exists();
 };
 
 export async function createGroup(ownerId: string, input: CreateGroupInput): Promise<string> {
-  const groupRef = doc(collection(db, 'groups'));
-  const memberRef = doc(db, 'groups', groupRef.id, 'members', ownerId);
-  const membershipRef = doc(db, 'users', ownerId, 'memberships', groupRef.id);
+  const groupRef = doc(collection(db, COLLECTIONS.groups));
+  const memberRef = doc(db, COLLECTIONS.groups, groupRef.id, SUBCOLLECTIONS.members, ownerId);
+  const membershipRef = doc(
+    db,
+    COLLECTIONS.users,
+    ownerId,
+    SUBCOLLECTIONS.memberships,
+    groupRef.id,
+  );
   await setDoc(groupRef, {
     name: input.name,
     description: input.description,
@@ -275,7 +282,7 @@ export async function createGroup(ownerId: string, input: CreateGroupInput): Pro
 }
 
 export async function updateGroup(groupId: string, input: CreateGroupInput): Promise<void> {
-  await updateDoc(doc(db, 'groups', groupId), {
+  await updateDoc(doc(db, COLLECTIONS.groups, groupId), {
     name: input.name,
     description: input.description,
     categoryId: input.categoryId,
@@ -290,9 +297,9 @@ export async function addGroupMember(
   uid: string,
   role: 'member' | 'moderator' | 'admin' = 'member',
 ): Promise<void> {
-  const memberRef = doc(db, 'groups', groupId, 'members', uid);
-  const membershipRef = doc(db, 'users', uid, 'memberships', groupId);
-  const groupRef = doc(db, 'groups', groupId);
+  const memberRef = doc(db, COLLECTIONS.groups, groupId, SUBCOLLECTIONS.members, uid);
+  const membershipRef = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.memberships, groupId);
+  const groupRef = doc(db, COLLECTIONS.groups, groupId);
   const [memberSnap, membershipSnap] = await Promise.all([
     getDoc(memberRef),
     getDoc(membershipRef),
@@ -338,14 +345,14 @@ export async function updateGroupMemberRole(
   uid: string,
   role: 'member' | 'moderator' | 'admin',
 ): Promise<void> {
-  await updateDoc(doc(db, 'groups', groupId, 'members', uid), {
+  await updateDoc(doc(db, COLLECTIONS.groups, groupId, SUBCOLLECTIONS.members, uid), {
     role,
   });
 }
 
 export async function removeGroupMember(groupId: string, uid: string): Promise<void> {
-  const memberRef = doc(db, 'groups', groupId, 'members', uid);
-  const membershipRef = doc(db, 'users', uid, 'memberships', groupId);
+  const memberRef = doc(db, COLLECTIONS.groups, groupId, SUBCOLLECTIONS.members, uid);
+  const membershipRef = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.memberships, groupId);
   const batch = writeBatch(db);
   batch.delete(memberRef);
   batch.delete(membershipRef);
@@ -374,7 +381,7 @@ export async function sendGroupJoinRequest(input: {
   fromUserPhoto: string | null;
 }): Promise<string> {
   const existingQuery = query(
-    collection(db, 'group_requests'),
+    collection(db, COLLECTIONS.groupRequests),
     where('fromUid', '==', input.fromUid),
     where('groupId', '==', input.groupId),
     limit(1),
@@ -392,7 +399,7 @@ export async function sendGroupJoinRequest(input: {
     }
   }
 
-  const requestRef = doc(collection(db, 'group_requests'));
+  const requestRef = doc(collection(db, COLLECTIONS.groupRequests));
   await setDoc(requestRef, {
     groupId: input.groupId,
     groupName: input.groupName,
@@ -414,7 +421,7 @@ export async function getPendingGroupJoinRequests(
   limitCount: number = SMALL_LIST_LIMIT,
 ): Promise<GroupJoinRequestRead[]> {
   const q = query(
-    collection(db, 'group_requests'),
+    collection(db, COLLECTIONS.groupRequests),
     where('toUid', '==', ownerId),
     where('status', '==', 'pending'),
     orderBy('createdAt', 'desc'),
@@ -440,7 +447,7 @@ export async function getPendingGroupJoinRequests(
 }
 
 export async function acceptGroupJoinRequest(requestId: string): Promise<void> {
-  const requestRef = doc(db, 'group_requests', requestId);
+  const requestRef = doc(db, COLLECTIONS.groupRequests, requestId);
   const requestSnap = await getDoc(requestRef);
   if (!requestSnap.exists()) {
     throw new Error('Solicitud no encontrada');
@@ -451,8 +458,8 @@ export async function acceptGroupJoinRequest(requestId: string): Promise<void> {
 
   const groupId = data.groupId as string;
   const memberUid = data.fromUid as string;
-  const memberRef = doc(db, 'groups', groupId, 'members', memberUid);
-  const membershipRef = doc(db, 'users', memberUid, 'memberships', groupId);
+  const memberRef = doc(db, COLLECTIONS.groups, groupId, SUBCOLLECTIONS.members, memberUid);
+  const membershipRef = doc(db, COLLECTIONS.users, memberUid, SUBCOLLECTIONS.memberships, groupId);
   const batch = writeBatch(db);
   batch.update(requestRef, {
     status: 'accepted',
@@ -480,18 +487,20 @@ export async function acceptGroupJoinRequest(requestId: string): Promise<void> {
 }
 
 export async function rejectGroupJoinRequest(requestId: string): Promise<void> {
-  await updateDoc(doc(db, 'group_requests', requestId), {
+  await updateDoc(doc(db, COLLECTIONS.groupRequests, requestId), {
     status: 'rejected',
     updatedAt: serverTimestamp(),
   });
 }
 
 export async function getGroupJoinStatus(groupId: string, uid: string): Promise<GroupJoinStatus> {
-  const memberSnap = await getDoc(doc(db, 'groups', groupId, 'members', uid));
+  const memberSnap = await getDoc(
+    doc(db, COLLECTIONS.groups, groupId, SUBCOLLECTIONS.members, uid),
+  );
   if (memberSnap.exists()) return 'member';
 
   const reqQuery = query(
-    collection(db, 'group_requests'),
+    collection(db, COLLECTIONS.groupRequests),
     where('groupId', '==', groupId),
     where('fromUid', '==', uid),
     where('status', '==', 'pending'),
@@ -502,7 +511,9 @@ export async function getGroupJoinStatus(groupId: string, uid: string): Promise<
 }
 
 export async function getGroupMemberCount(groupId: string): Promise<number> {
-  const snap = await getCountFromServer(collection(db, 'groups', groupId, 'members'));
+  const snap = await getCountFromServer(
+    collection(db, COLLECTIONS.groups, groupId, SUBCOLLECTIONS.members),
+  );
   return snap.data().count;
 }
 
@@ -511,7 +522,7 @@ export async function getGroupMembers(
   limitCount: number = DEFAULT_LIMIT,
 ): Promise<GroupMemberRead[]> {
   const q = query(
-    collection(db, 'groups', groupId, 'members'),
+    collection(db, COLLECTIONS.groups, groupId, SUBCOLLECTIONS.members),
     orderBy('joinedAt', 'desc'),
     limit(limitCount),
   );
@@ -537,7 +548,7 @@ export async function getGroupMembersPage(
   lastDoc?: DocumentSnapshot,
 ): Promise<PaginatedResult<GroupMemberRead>> {
   let q = query(
-    collection(db, 'groups', groupId, 'members'),
+    collection(db, COLLECTIONS.groups, groupId, SUBCOLLECTIONS.members),
     orderBy('joinedAt', 'desc'),
     limit(pageSize + 1),
   );
@@ -575,7 +586,7 @@ export async function getGroupMembersPage(
 export async function getGroupPostsWeekCount(groupId: string): Promise<number> {
   const weekAgo = Timestamp.fromDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
   const q = query(
-    collection(db, 'posts'),
+    collection(db, COLLECTIONS.posts),
     where('groupId', '==', groupId),
     where('createdAt', '>=', weekAgo),
   );

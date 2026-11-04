@@ -7,6 +7,7 @@ import {
   unsaveArenaDebateWithSync as unsaveArenaDebateWithSyncRaw,
 } from '@/shared/lib/firestore';
 import type { CreateDebateParams, CreateDebateResult } from '@/features/arena/types';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 type CallableErrorLike = {
   code?: string;
@@ -97,7 +98,7 @@ export async function saveArenaDebateWithSync(
 
   const safeSummary =
     typeof input.summary === 'string' && input.summary.trim().length > 0
-      ? input.summary.trim().slice(0, 3000)
+      ? input.summary.trim().slice(0, LIMITS.savedArenaDebates.summaryMaxLength)
       : null;
 
   const safeWinner =
@@ -108,9 +109,9 @@ export async function saveArenaDebateWithSync(
   await saveArenaDebateWithSyncRaw(
     {
       debateId: safeDebateId,
-      topic: safeTopic.slice(0, 240),
-      personaA: safePersonaA.slice(0, 80),
-      personaB: safePersonaB.slice(0, 80),
+      topic: safeTopic.slice(0, LIMITS.savedArenaDebates.topicMaxLength),
+      personaA: safePersonaA.slice(0, LIMITS.savedArenaDebates.personaMaxLength),
+      personaB: safePersonaB.slice(0, LIMITS.savedArenaDebates.personaMaxLength),
       summary: safeSummary,
       verdictWinner: safeWinner,
     },
