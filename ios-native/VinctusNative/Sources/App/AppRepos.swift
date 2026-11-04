@@ -5,8 +5,9 @@ import Foundation
 /// themselves, so every data source can be swapped in one spot.
 ///
 /// Builds made by the screenshot workflow (.github/workflows/ios-screenshots.yml) compile with
-/// `SCREENSHOTS` and, when launched with `-VinctusDemo`, skip sign-in and use the sample data in
-/// DemoData.swift, so screens can be reviewed without a Firebase account.
+/// `SCREENSHOTS` and, when launched with `-VinctusDemo`, skip sign-in and use the sample repos
+/// (`Sample…Repo.swift` in each feature folder, see DemoData.swift), so screens can be reviewed
+/// without a Firebase account.
 enum AppRepos {
   static var isDemo: Bool {
     #if SCREENSHOTS

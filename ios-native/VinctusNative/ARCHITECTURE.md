@@ -39,8 +39,12 @@ View  →  ViewModel (screen state, @MainActor)  →  Repo protocol  →  Fireba
   environment (the signed-in user, `BlockedUsersStore`), it passes it to the view model's method.
 - **Repos are created in one place: `App/AppRepos.swift`.** Views and view models take a repo in
   their initializer, with an `AppRepos.x()` default. Don't write `FirebaseXRepo()` anywhere else.
+- **`Shared/` doesn't use any feature.** Code that opens a feature's screen, like the top bar's
+  buttons (`App/TopBarNavigation.swift`), goes in `App/`.
 - **Demo mode:** screenshot builds (`SCREENSHOTS` flag, `-VinctusDemo` launch argument) get the
-  sample repos in `App/DemoData.swift` from `AppRepos`, so screens can be checked without Firebase.
+  sample repos from `AppRepos`, so screens can be checked without Firebase. Each feature keeps its
+  own in its folder (`SampleFeedRepo.swift`); the people and groups they share are in
+  `App/DemoData.swift`.
 - **Same data as the web:** each repo mirrors a file in `src/shared/lib/firestore/` and says which
   one in a comment. Keep field names, document ids and limits identical, and check
   `firestore.rules` when writing a new field.
@@ -49,7 +53,7 @@ View  →  ViewModel (screen state, @MainActor)  →  Repo protocol  →  Fireba
 
 ## Tests
 
-`Tests/` runs without Firebase: view models get the fakes in `Tests/TestFakes.swift`, and data
+`Tests/` runs without Firebase: view models get the fakes in `Tests/Fakes/` (one per repo), and data
 rules (conversation ids, report fields, contribution checks) are plain functions tested directly.
 When a screen gets new logic, put it in its view model or a `static func` so it can be tested.
 
