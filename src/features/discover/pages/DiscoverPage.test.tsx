@@ -234,6 +234,37 @@ describe('DiscoverPage', () => {
     );
   });
 
+  it('likes and saves community posts, but not videos', async () => {
+    renderPage();
+
+    const postCard = (await screen.findByText('Post de la comunidad')).closest(
+      'article',
+    ) as HTMLElement;
+    fireEvent.click(within(postCard).getByRole('button', { name: /^Me gusta/ }));
+    fireEvent.click(within(postCard).getByRole('button', { name: 'Guardar publicacion' }));
+    expect(appState.toggleLikePost).toHaveBeenCalledWith('p1');
+    expect(appState.toggleSavePost).toHaveBeenCalledWith('p1');
+
+    const videoCard = screen.getByText('Video de YouTube').closest('article') as HTMLElement;
+    expect(within(videoCard).getByRole('button', { name: /^Me gusta/ })).toBeDisabled();
+    expect(within(videoCard).getByRole('button', { name: 'Guardar publicacion' })).toBeDisabled();
+  });
+
+  it('follows and saves a category from its trend card', async () => {
+    renderPage();
+    await screen.findByText('Fisicos');
+    // Cards move between the featured and compact slots as signals load, so look it up per click.
+    const card = () =>
+      screen.getAllByRole('heading', { name: 'Ciencia & Materia' })[0].closest('article')!;
+
+    fireEvent.click(within(card()).getByRole('button', { name: 'Seguir' }));
+    expect(appState.toggleFollowCategory).toHaveBeenCalledWith('science');
+    expect(showToast).toHaveBeenCalledWith('Categoria seguida', 'success');
+
+    fireEvent.click(within(card()).getByRole('button', { name: 'Guardar' }));
+    expect(appState.toggleSaveCategory).toHaveBeenCalledWith('science');
+  });
+
   it('filters the trend categories with the search box', async () => {
     renderPage();
     await screen.findByText('Fisicos');
