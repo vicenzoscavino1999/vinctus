@@ -4,9 +4,10 @@
 
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { COLLECTIONS, SUBCOLLECTIONS } from '../firestoreContract';
 
 const AI_DAILY_LIMIT = parseInt(process.env.AI_DAILY_LIMIT || '10', 10);
-const ARENA_USAGE_COLLECTION = 'arenaUsage';
+const ARENA_USAGE_COLLECTION = COLLECTIONS.arenaUsage;
 
 export async function checkRateLimit(uid: string): Promise<{
   allowed: boolean;
@@ -15,7 +16,7 @@ export async function checkRateLimit(uid: string): Promise<{
 }> {
   const db = admin.firestore();
   const today = new Date().toISOString().split('T')[0];
-  const usageRef = db.doc(`${ARENA_USAGE_COLLECTION}/${uid}/days/${today}`);
+  const usageRef = db.doc(`${ARENA_USAGE_COLLECTION}/${uid}/${SUBCOLLECTIONS.days}/${today}`);
 
   const result = await db.runTransaction(async (tx) => {
     const usageDoc = await tx.get(usageRef);
@@ -63,7 +64,9 @@ export async function getUsage(uid: string): Promise<{
 }> {
   const db = admin.firestore();
   const today = new Date().toISOString().split('T')[0];
-  const usageDoc = await db.doc(`${ARENA_USAGE_COLLECTION}/${uid}/days/${today}`).get();
+  const usageDoc = await db
+    .doc(`${ARENA_USAGE_COLLECTION}/${uid}/${SUBCOLLECTIONS.days}/${today}`)
+    .get();
   const used = usageDoc.exists ? ((usageDoc.data()?.count as number | undefined) ?? 0) : 0;
 
   return {

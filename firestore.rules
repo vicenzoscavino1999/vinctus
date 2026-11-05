@@ -423,7 +423,7 @@ service cloud.firestore {
         && (data.filePath == null || (data.filePath is string && data.filePath.size() <= 600))
         && (data.fileName == null || (data.fileName is string && data.fileName.size() <= 140))
         && (data.fileType == null || (data.fileType is string && data.fileType.size() <= 120))
-        && (data.fileSize == null || (data.fileSize is int && data.fileSize >= 0 && data.fileSize <= 26214400))
+        && (data.fileSize == null || (data.fileSize is int && data.fileSize >= 0 && data.fileSize < 26214400))
         && data.createdAt == request.time
         && data.updatedAt == request.time;
     }
@@ -448,7 +448,7 @@ service cloud.firestore {
         && (data.filePath == null || (data.filePath is string && data.filePath.size() <= 600))
         && (data.fileName == null || (data.fileName is string && data.fileName.size() <= 140))
         && (data.fileType == null || (data.fileType is string && data.fileType.size() <= 120))
-        && (data.fileSize == null || (data.fileSize is int && data.fileSize >= 0 && data.fileSize <= 26214400))
+        && (data.fileSize == null || (data.fileSize is int && data.fileSize >= 0 && data.fileSize < 26214400))
         && data.updatedAt == request.time;
     }
 
@@ -823,7 +823,7 @@ service cloud.firestore {
         && (isFile
           ? (data.url is string && data.url.size() > 0 && data.url.size() <= 600
             && data.fileName is string && data.fileName.size() > 0 && data.fileName.size() <= 200
-            && data.fileSize is int && data.fileSize > 0 && data.fileSize <= 26214400
+            && data.fileSize is int && data.fileSize > 0 && data.fileSize < 26214400
             && data.contentType is string && data.contentType.size() > 0 && data.contentType.size() <= 120
             && data.storagePath is string && data.storagePath.size() > 0 && data.storagePath.size() <= 600
             && data.text == null)
@@ -1148,7 +1148,7 @@ service cloud.firestore {
 
       let hasSize = item.keys().hasAny(['size']);
       let validSize = !hasSize
-        || (item.size is int && item.size >= 0 && item.size <= 26214400);
+        || (item.size is int && item.size >= 0 && item.size < 26214400);
 
       let hasFileName = item.keys().hasAny(['fileName']);
       let validFileName = !isFile

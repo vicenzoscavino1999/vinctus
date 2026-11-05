@@ -6,8 +6,9 @@ import { useAuth } from '@/context/auth';
 import { getUserProfile, updateUserProfile } from '@/features/profile/api';
 import { auth } from '@/shared/lib/firebase';
 import { uploadProfilePhoto } from '@/shared/lib/storage';
+import { compressToWebp } from '@/shared/lib/compression';
 import { useToast } from '@/shared/ui/Toast';
-import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
+import { LIMITS, STORAGE_MAX_BYTES } from '@/shared/lib/firestore/firestoreContract';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -86,7 +87,7 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
     };
   }, [isOpen]);
 
-  const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] || null;
     event.target.value = '';
     if (!file) return;
@@ -96,8 +97,23 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      setPhotoError('La imagen supera el limite de 10MB.');
+    const maxMB = STORAGE_MAX_BYTES.image / (1024 * 1024);
+    if (file.size >= STORAGE_MAX_BYTES.image) {
+      setPhotoError(`La imagen supera el limite de ${maxMB}MB.`);
+      return;
+    }
+
+    // storage.rules only take JPEG, PNG, GIF and WebP, so the photo goes up as WebP, like group
+    // icons and post images.
+    let photo: File;
+    try {
+      photo = await compressToWebp(file);
+    } catch {
+      setPhotoError('No se pudo convertir la imagen. Prueba con una foto JPEG, PNG, GIF o WebP.');
+      return;
+    }
+    if (photo.size >= STORAGE_MAX_BYTES.image) {
+      setPhotoError(`La imagen supera el limite de ${maxMB}MB.`);
       return;
     }
 
@@ -105,8 +121,8 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
       URL.revokeObjectURL(photoPreview);
     }
 
-    const previewUrl = URL.createObjectURL(file);
-    setPhotoFile(file);
+    const previewUrl = URL.createObjectURL(photo);
+    setPhotoFile(photo);
     setPhotoPreview(previewUrl);
     setPhotoRemoved(false);
     setPhotoError(null);

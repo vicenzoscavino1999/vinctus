@@ -385,7 +385,8 @@ final class FirebaseGroupsRepo: GroupsRepo {
   func uploadGroupIcon(ownerID: String, groupID: String, jpegData: Data) async throws -> String {
     guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
     let millis = Int64(Date().timeIntervalSince1970 * 1000)
-    let ref = Storage.storage().reference(withPath: "groups/\(ownerID)/\(groupID)/icon/\(millis).jpg")
+    let path = StoragePaths.groupIcon(userID: ownerID, groupID: groupID, filename: "\(millis).jpg")
+    let ref = Storage.storage().reference(withPath: path)
     let metadata = StorageMetadata()
     metadata.contentType = "image/jpeg"
     _ = try await ref.putDataAsync(jpegData, metadata: metadata)

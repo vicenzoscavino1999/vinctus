@@ -16,6 +16,7 @@ import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { messageReportKey, moderateUserText, newlyMatchedTerms } from './moderation';
 import { clearLastMessagePreview } from './moderationActions';
+import { COLLECTIONS, SERVER_COLLECTIONS, SUBCOLLECTIONS } from './firestoreContract';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -70,7 +71,7 @@ async function commitInBatches<T>(
 }
 
 async function claimModerationEvent(eventId: string): Promise<boolean> {
-  const dedupRef = db.collection('_dedup_events').doc(`moderation_${eventId}`);
+  const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(`moderation_${eventId}`);
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(dedupRef);
     if (snap.exists) {
@@ -101,7 +102,7 @@ async function upsertAutoModerationReport(input: {
     ? `Auto moderation removed content with blocked terms: ${input.matchedTerms.join(', ')}`
     : `Auto moderation flagged terms for review: ${input.matchedTerms.join(', ')}`;
 
-  await db.doc(`reports/${reportId}`).set(
+  await db.doc(`${COLLECTIONS.reports}/${reportId}`).set(
     {
       reporterUid: 'system_moderation',
       reportedUid: input.authorId || 'unknown_user',
@@ -191,7 +192,7 @@ async function moderatePostContent(
     conversationId: `post_${postId}`,
   });
 
-  await db.doc(`posts/${postId}`).delete();
+  await db.doc(`${COLLECTIONS.posts}/${postId}`).delete();
   functions.logger.warn('Post removed by auto moderation', {
     postId,
     authorId,
@@ -243,7 +244,9 @@ async function moderateCommentContent(input: {
     return;
   }
 
-  const commentRef = db.doc(`posts/${postId}/comments/${commentId}`);
+  const commentRef = db.doc(
+    `${COLLECTIONS.posts}/${postId}/${SUBCOLLECTIONS.comments}/${commentId}`,
+  );
   await commentRef.delete();
 
   functions.logger.warn('Comment removed by auto moderation', {
@@ -307,7 +310,7 @@ async function flagProfileOrGroupText(input: {
  * Trigger: onCreate events/{eventId}/attendees/{userId}
  */
 export const onEventAttendeeCreated = functions.firestore
-  .document('events/{eventId}/attendees/{userId}')
+  .document(`${COLLECTIONS.events}/{eventId}/${SUBCOLLECTIONS.attendees}/{userId}`)
   .onCreate(async (snap, context) => {
     const { eventId, userId } = context.params;
     const dedupEventId = context.eventId;
@@ -315,7 +318,7 @@ export const onEventAttendeeCreated = functions.firestore
     try {
       functions.logger.info('Event attendee joined', { eventId, userId, dedupEventId });
 
-      const eventRef = db.doc(`events/${eventId}`);
+      const eventRef = db.doc(`${COLLECTIONS.events}/${eventId}`);
       await deduplicatedIncrement(dedupEventId, eventRef, 'attendeesCount', 1);
 
       functions.logger.info('Event attendeesCount incremented', { eventId, dedupEventId });
@@ -334,7 +337,7 @@ export const onEventAttendeeCreated = functions.firestore
  * Trigger: onDelete events/{eventId}/attendees/{userId}
  */
 export const onEventAttendeeDeleted = functions.firestore
-  .document('events/{eventId}/attendees/{userId}')
+  .document(`${COLLECTIONS.events}/{eventId}/${SUBCOLLECTIONS.attendees}/{userId}`)
   .onDelete(async (snap, context) => {
     const { eventId, userId } = context.params;
     const dedupEventId = context.eventId;
@@ -342,7 +345,7 @@ export const onEventAttendeeDeleted = functions.firestore
     try {
       functions.logger.info('Event attendee left', { eventId, userId, dedupEventId });
 
-      const eventRef = db.doc(`events/${eventId}`);
+      const eventRef = db.doc(`${COLLECTIONS.events}/${eventId}`);
       await deduplicatedDecrement(dedupEventId, eventRef, 'attendeesCount');
 
       functions.logger.info('Event attendeesCount decremented', { eventId, dedupEventId });
@@ -370,7 +373,7 @@ async function deduplicatedIncrement(
   field: string,
   delta: number,
 ): Promise<void> {
-  const dedupRef = db.collection('_dedup_events').doc(eventId);
+  const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(eventId);
 
   await db.runTransaction(async (tx) => {
     const dedupDoc = await tx.get(dedupRef);
@@ -402,7 +405,7 @@ async function deduplicatedDecrement(
   docRef: admin.firestore.DocumentReference,
   field: string,
 ): Promise<void> {
-  const dedupRef = db.collection('_dedup_events').doc(eventId);
+  const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(eventId);
 
   await db.runTransaction(async (tx) => {
     const dedupDoc = await tx.get(dedupRef);
@@ -453,8 +456,8 @@ async function deduplicatedDecrement(
 // ==========================================================
 
 async function handlePostLikeChange(eventId: string, postId: string, delta: number): Promise<void> {
-  const dedupRef = db.collection('_dedup_events').doc(eventId);
-  const postRef = db.doc(`posts/${postId}`);
+  const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(eventId);
+  const postRef = db.doc(`${COLLECTIONS.posts}/${postId}`);
 
   await db.runTransaction(async (tx) => {
     const dedupDoc = await tx.get(dedupRef);
@@ -491,8 +494,8 @@ async function handlePostLikeChange(eventId: string, postId: string, delta: numb
 
     const karmaDelta = delta * KARMA_PER_LIKE;
 
-    const userRef = db.doc(`users/${authorId}`);
-    const userPublicRef = db.doc(`users_public/${authorId}`);
+    const userRef = db.doc(`${COLLECTIONS.users}/${authorId}`);
+    const userPublicRef = db.doc(`${COLLECTIONS.usersPublic}/${authorId}`);
     const userSnap = await tx.get(userRef);
     const userData = userSnap.data() || {};
 
@@ -543,8 +546,8 @@ async function handlePostCommentChange(
   postId: string,
   delta: number,
 ): Promise<void> {
-  const dedupRef = db.collection('_dedup_events').doc(`post_comment_${eventId}`);
-  const postRef = db.doc(`posts/${postId}`);
+  const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(`post_comment_${eventId}`);
+  const postRef = db.doc(`${COLLECTIONS.posts}/${postId}`);
 
   await db.runTransaction(async (tx) => {
     const dedupDoc = await tx.get(dedupRef);
@@ -586,8 +589,8 @@ async function handleArenaDebateLikeChange(
   debateId: string,
   delta: number,
 ): Promise<void> {
-  const dedupRef = db.collection('_dedup_events').doc(eventId);
-  const debateRef = db.doc(`arenaDebates/${debateId}`);
+  const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(eventId);
+  const debateRef = db.doc(`${COLLECTIONS.arenaDebates}/${debateId}`);
 
   await db.runTransaction(async (tx) => {
     const dedupDoc = await tx.get(dedupRef);
@@ -628,9 +631,9 @@ async function deduplicatedUserCounterUpdate(
   field: string,
   delta: number,
 ): Promise<void> {
-  const dedupRef = db.collection('_dedup_events').doc(eventId);
-  const userRef = db.doc(`users/${userId}`);
-  const publicRef = db.doc(`users_public/${userId}`);
+  const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(eventId);
+  const userRef = db.doc(`${COLLECTIONS.users}/${userId}`);
+  const publicRef = db.doc(`${COLLECTIONS.usersPublic}/${userId}`);
 
   await db.runTransaction(async (tx) => {
     const dedupDoc = await tx.get(dedupRef);
@@ -663,7 +666,7 @@ async function deduplicatedUserCounterUpdate(
 }
 
 export const onUserFollowerCreated = functions.firestore
-  .document('users/{uid}/followers/{followerUid}')
+  .document(`${COLLECTIONS.users}/{uid}/${SUBCOLLECTIONS.followers}/{followerUid}`)
   .onCreate(async (_snap, context) => {
     const { uid, followerUid } = context.params;
     const eventId = context.eventId;
@@ -686,8 +689,8 @@ export const onUserFollowerCreated = functions.firestore
 
     try {
       const [blockedByTarget, blockedByFollower] = await Promise.all([
-        db.doc(`users/${uid}/blockedUsers/${followerUid}`).get(),
-        db.doc(`users/${followerUid}/blockedUsers/${uid}`).get(),
+        db.doc(`${COLLECTIONS.users}/${uid}/${SUBCOLLECTIONS.blockedUsers}/${followerUid}`).get(),
+        db.doc(`${COLLECTIONS.users}/${followerUid}/${SUBCOLLECTIONS.blockedUsers}/${uid}`).get(),
       ]);
       if (blockedByTarget.exists || blockedByFollower.exists) {
         functions.logger.info('Skipping follow notification due to block', {
@@ -699,14 +702,14 @@ export const onUserFollowerCreated = functions.firestore
         return;
       }
 
-      const followerSnap = await db.doc(`users_public/${followerUid}`).get();
+      const followerSnap = await db.doc(`${COLLECTIONS.usersPublic}/${followerUid}`).get();
       const followerData = followerSnap.exists ? followerSnap.data() : null;
       const fromUserName =
         typeof followerData?.displayName === 'string' ? followerData.displayName : null;
       const fromUserPhoto =
         typeof followerData?.photoURL === 'string' ? followerData.photoURL : null;
 
-      const notificationRef = db.doc(`notifications/follow_${eventId}`);
+      const notificationRef = db.doc(`${COLLECTIONS.notifications}/follow_${eventId}`);
       await notificationRef.set(
         {
           type: 'follow',
@@ -733,7 +736,7 @@ export const onUserFollowerCreated = functions.firestore
   });
 
 export const onUserFollowerDeleted = functions.firestore
-  .document('users/{uid}/followers/{followerUid}')
+  .document(`${COLLECTIONS.users}/{uid}/${SUBCOLLECTIONS.followers}/{followerUid}`)
   .onDelete(async (_snap, context) => {
     const { uid, followerUid } = context.params;
     const eventId = context.eventId;
@@ -752,7 +755,7 @@ export const onUserFollowerDeleted = functions.firestore
   });
 
 export const onUserFollowingCreated = functions.firestore
-  .document('users/{uid}/following/{targetUid}')
+  .document(`${COLLECTIONS.users}/{uid}/${SUBCOLLECTIONS.following}/{targetUid}`)
   .onCreate(async (_snap, context) => {
     const { uid, targetUid } = context.params;
     const eventId = context.eventId;
@@ -771,7 +774,7 @@ export const onUserFollowingCreated = functions.firestore
   });
 
 export const onUserFollowingDeleted = functions.firestore
-  .document('users/{uid}/following/{targetUid}')
+  .document(`${COLLECTIONS.users}/{uid}/${SUBCOLLECTIONS.following}/{targetUid}`)
   .onDelete(async (_snap, context) => {
     const { uid, targetUid } = context.params;
     const eventId = context.eventId;
@@ -790,7 +793,7 @@ export const onUserFollowingDeleted = functions.firestore
   });
 
 export const onFollowRequestUpdated = functions.firestore
-  .document('follow_requests/{requestId}')
+  .document(`${COLLECTIONS.followRequests}/{requestId}`)
   .onUpdate(async (change, context) => {
     const before = change.before.data() || {};
     const after = change.after.data() || {};
@@ -808,9 +811,13 @@ export const onFollowRequestUpdated = functions.firestore
     }
 
     try {
-      const dedupRef = db.collection('_dedup_events').doc(eventId);
-      const followerRef = db.doc(`users/${toUid}/followers/${fromUid}`);
-      const followingRef = db.doc(`users/${fromUid}/following/${toUid}`);
+      const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(eventId);
+      const followerRef = db.doc(
+        `${COLLECTIONS.users}/${toUid}/${SUBCOLLECTIONS.followers}/${fromUid}`,
+      );
+      const followingRef = db.doc(
+        `${COLLECTIONS.users}/${fromUid}/${SUBCOLLECTIONS.following}/${toUid}`,
+      );
 
       await db.runTransaction(async (tx) => {
         const dedupDoc = await tx.get(dedupRef);
@@ -859,7 +866,7 @@ export const onFollowRequestUpdated = functions.firestore
  * Trigger: onCreate groups/{groupId}/members/{userId}
  */
 export const onGroupMemberCreated = functions.firestore
-  .document('groups/{groupId}/members/{userId}')
+  .document(`${COLLECTIONS.groups}/{groupId}/${SUBCOLLECTIONS.members}/{userId}`)
   .onCreate(async (snap, context) => {
     const { groupId, userId } = context.params;
     const eventId = context.eventId;
@@ -871,7 +878,7 @@ export const onGroupMemberCreated = functions.firestore
     });
 
     try {
-      const groupRef = db.doc(`groups/${groupId}`);
+      const groupRef = db.doc(`${COLLECTIONS.groups}/${groupId}`);
       await deduplicatedIncrement(eventId, groupRef, 'memberCount', 1);
       functions.logger.info('Member count incremented', { groupId, eventId });
     } catch (error) {
@@ -899,7 +906,7 @@ export const onGroupMemberCreated = functions.firestore
  * Trigger: onDelete groups/{groupId}/members/{userId}
  */
 export const onGroupMemberDeleted = functions.firestore
-  .document('groups/{groupId}/members/{userId}')
+  .document(`${COLLECTIONS.groups}/{groupId}/${SUBCOLLECTIONS.members}/{userId}`)
   .onDelete(async (snap, context) => {
     const { groupId, userId } = context.params;
     const eventId = context.eventId;
@@ -907,7 +914,7 @@ export const onGroupMemberDeleted = functions.firestore
     try {
       functions.logger.info('Member left group', { groupId, userId, eventId });
 
-      const groupRef = db.doc(`groups/${groupId}`);
+      const groupRef = db.doc(`${COLLECTIONS.groups}/${groupId}`);
       await deduplicatedDecrement(eventId, groupRef, 'memberCount');
 
       functions.logger.info('Member count decremented', { groupId, eventId });
@@ -922,7 +929,9 @@ export const onGroupMemberDeleted = functions.firestore
 
     try {
       const conversationId = `grp_${groupId}`;
-      await db.doc(`conversations/${conversationId}/members/${userId}`).delete();
+      await db
+        .doc(`${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.members}/${userId}`)
+        .delete();
     } catch (error) {
       functions.logger.error('Failed to remove group conversation member', {
         groupId,
@@ -934,8 +943,10 @@ export const onGroupMemberDeleted = functions.firestore
 
 async function ensureGroupConversationForMember(groupId: string, uid: string): Promise<void> {
   const conversationId = `grp_${groupId}`;
-  const convRef = db.doc(`conversations/${conversationId}`);
-  const memberRef = db.doc(`conversations/${conversationId}/members/${uid}`);
+  const convRef = db.doc(`${COLLECTIONS.conversations}/${conversationId}`);
+  const memberRef = db.doc(
+    `${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.members}/${uid}`,
+  );
 
   await db.runTransaction(async (tx) => {
     const [convSnap, memberSnap] = await Promise.all([tx.get(convRef), tx.get(memberRef)]);
@@ -985,7 +996,7 @@ async function ensureGroupConversationForMember(groupId: string, uid: string): P
  * Trigger: onCreate posts/{postId}/likes/{userId}
  */
 export const onPostLikeCreated = functions.firestore
-  .document('posts/{postId}/likes/{userId}')
+  .document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.likes}/{userId}`)
   .onCreate(async (snap, context) => {
     const { postId, userId } = context.params;
     const eventId = context.eventId;
@@ -1011,7 +1022,7 @@ export const onPostLikeCreated = functions.firestore
  * Trigger: onDelete posts/{postId}/likes/{userId}
  */
 export const onPostLikeDeleted = functions.firestore
-  .document('posts/{postId}/likes/{userId}')
+  .document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.likes}/{userId}`)
   .onDelete(async (snap, context) => {
     const { postId, userId } = context.params;
     const eventId = context.eventId;
@@ -1037,7 +1048,7 @@ export const onPostLikeDeleted = functions.firestore
  * Trigger: onCreate posts/{postId}/comments/{commentId}
  */
 export const onPostCommentCreated = functions.firestore
-  .document('posts/{postId}/comments/{commentId}')
+  .document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.comments}/{commentId}`)
   .onCreate(async (_snap, context) => {
     const { postId, commentId } = context.params;
     const eventId = context.eventId;
@@ -1061,7 +1072,7 @@ export const onPostCommentCreated = functions.firestore
  * Trigger: onDelete posts/{postId}/comments/{commentId}
  */
 export const onPostCommentDeleted = functions.firestore
-  .document('posts/{postId}/comments/{commentId}')
+  .document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.comments}/{commentId}`)
   .onDelete(async (_snap, context) => {
     const { postId, commentId } = context.params;
     const eventId = context.eventId;
@@ -1085,7 +1096,7 @@ export const onPostCommentDeleted = functions.firestore
  * Trigger: onCreate arenaDebates/{debateId}/likes/{uid}
  */
 export const onArenaDebateLikeCreated = functions.firestore
-  .document('arenaDebates/{debateId}/likes/{uid}')
+  .document(`${COLLECTIONS.arenaDebates}/{debateId}/${SUBCOLLECTIONS.likes}/{uid}`)
   .onCreate(async (_snap, context) => {
     const { debateId, uid } = context.params;
     const eventId = context.eventId;
@@ -1111,7 +1122,7 @@ export const onArenaDebateLikeCreated = functions.firestore
  * Trigger: onDelete arenaDebates/{debateId}/likes/{uid}
  */
 export const onArenaDebateLikeDeleted = functions.firestore
-  .document('arenaDebates/{debateId}/likes/{uid}')
+  .document(`${COLLECTIONS.arenaDebates}/{debateId}/${SUBCOLLECTIONS.likes}/{uid}`)
   .onDelete(async (_snap, context) => {
     const { debateId, uid } = context.params;
     const eventId = context.eventId;
@@ -1142,7 +1153,7 @@ export const onArenaDebateLikeDeleted = functions.firestore
  * Trigger: onDelete groups/{groupId}
  */
 export const onGroupDeleted = functions.firestore
-  .document('groups/{groupId}')
+  .document(`${COLLECTIONS.groups}/{groupId}`)
   .onDelete(async (snap, context) => {
     const { groupId } = context.params;
 
@@ -1150,7 +1161,9 @@ export const onGroupDeleted = functions.firestore
       functions.logger.info('Group deleted, cleaning up subcollections', { groupId });
 
       // Delete all members in batches (max 500 per batch)
-      const membersRef = db.collection(`groups/${groupId}/members`);
+      const membersRef = db.collection(
+        `${COLLECTIONS.groups}/${groupId}/${SUBCOLLECTIONS.members}`,
+      );
       const membersSnapshot = await membersRef.get();
 
       if (membersSnapshot.empty) {
@@ -1182,14 +1195,16 @@ export const onGroupDeleted = functions.firestore
  * Trigger: onDelete events/{eventId}
  */
 export const onEventDeleted = functions.firestore
-  .document('events/{eventId}')
+  .document(`${COLLECTIONS.events}/{eventId}`)
   .onDelete(async (snap, context) => {
     const { eventId } = context.params;
 
     try {
       functions.logger.info('Event deleted, cleaning up attendees', { eventId });
 
-      const attendeesRef = db.collection(`events/${eventId}/attendees`);
+      const attendeesRef = db.collection(
+        `${COLLECTIONS.events}/${eventId}/${SUBCOLLECTIONS.attendees}`,
+      );
       try {
         await db.recursiveDelete(attendeesRef);
         functions.logger.info('Deleted event attendees subcollection', { eventId });
@@ -1212,7 +1227,7 @@ export const onEventDeleted = functions.firestore
  * Trigger: onCreate posts/{postId}
  */
 export const onPostCreated = functions.firestore
-  .document('posts/{postId}')
+  .document(`${COLLECTIONS.posts}/{postId}`)
   .onCreate(async (snap, context) => {
     const { postId } = context.params;
     const eventId = context.eventId;
@@ -1253,7 +1268,7 @@ export const onPostCreated = functions.firestore
  * Trigger: onUpdate posts/{postId}
  */
 export const onPostUpdatedModeration = functions.firestore
-  .document('posts/{postId}')
+  .document(`${COLLECTIONS.posts}/{postId}`)
   .onUpdate(async (change, context) => {
     const { postId } = context.params;
     const eventId = context.eventId;
@@ -1292,7 +1307,7 @@ export const onPostUpdatedModeration = functions.firestore
  * Trigger: onDelete posts/{postId}
  */
 export const onPostDeleted = functions.firestore
-  .document('posts/{postId}')
+  .document(`${COLLECTIONS.posts}/{postId}`)
   .onDelete(async (snap, context) => {
     const { postId } = context.params;
     const eventId = context.eventId;
@@ -1351,7 +1366,7 @@ export const onPostDeleted = functions.firestore
       }
 
       // 2. Delete likes subcollection (handles >500 docs with recursiveDelete)
-      const likesRef = db.collection(`posts/${postId}/likes`);
+      const likesRef = db.collection(`${COLLECTIONS.posts}/${postId}/${SUBCOLLECTIONS.likes}`);
       try {
         await db.recursiveDelete(likesRef);
         functions.logger.info('Deleted likes subcollection', { postId });
@@ -1363,7 +1378,9 @@ export const onPostDeleted = functions.firestore
       }
 
       // 3. Delete comments subcollection (future-proofing)
-      const commentsRef = db.collection(`posts/${postId}/comments`);
+      const commentsRef = db.collection(
+        `${COLLECTIONS.posts}/${postId}/${SUBCOLLECTIONS.comments}`,
+      );
       try {
         await db.recursiveDelete(commentsRef);
         functions.logger.info('Deleted comments subcollection', { postId });
@@ -1391,7 +1408,7 @@ export const onPostDeleted = functions.firestore
  * Trigger: onCreate posts/{postId}/comments/{commentId}
  */
 export const onPostCommentCreatedModeration = functions.firestore
-  .document('posts/{postId}/comments/{commentId}')
+  .document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.comments}/{commentId}`)
   .onCreate(async (snap, context) => {
     const { postId, commentId } = context.params;
     const eventId = context.eventId;
@@ -1419,7 +1436,7 @@ export const onPostCommentCreatedModeration = functions.firestore
  * Trigger: onWrite users/{uid}
  */
 export const onUserProfileWrittenModeration = functions.firestore
-  .document('users/{uid}')
+  .document(`${COLLECTIONS.users}/{uid}`)
   .onWrite(async (change, context) => {
     if (!change.after.exists) {
       return;
@@ -1454,7 +1471,7 @@ export const onUserProfileWrittenModeration = functions.firestore
  * Trigger: onWrite groups/{groupId}
  */
 export const onGroupWrittenModeration = functions.firestore
-  .document('groups/{groupId}')
+  .document(`${COLLECTIONS.groups}/{groupId}`)
   .onWrite(async (change, context) => {
     if (!change.after.exists) {
       return;
@@ -1490,7 +1507,7 @@ export const onGroupWrittenModeration = functions.firestore
  * Trigger: onCreate conversations/{conversationId}/messages/{messageId}
  */
 export const onMessageCreatedModeration = functions.firestore
-  .document('conversations/{conversationId}/messages/{messageId}')
+  .document(`${COLLECTIONS.conversations}/{conversationId}/${SUBCOLLECTIONS.messages}/{messageId}`)
   .onCreate(async (snap, context) => {
     const { conversationId, messageId } = context.params;
     const data = snap.data() || {};
@@ -1538,13 +1555,7 @@ export const onMessageCreatedModeration = functions.firestore
 
 type ReportQueuePriority = 'low' | 'medium' | 'high';
 type ReportQueueTargetType =
-  | 'user'
-  | 'group'
-  | 'post'
-  | 'comment'
-  | 'message'
-  | 'story'
-  | 'unknown';
+  'user' | 'group' | 'post' | 'comment' | 'message' | 'story' | 'unknown';
 
 function inferQueuePriority(reason: unknown): ReportQueuePriority {
   if (reason === 'abuse' || reason === 'harassment') return 'high';
@@ -1578,7 +1589,7 @@ function inferReportTargetType(conversationId: unknown): ReportQueueTargetType {
 }
 
 export const onReportCreatedQueue = functions.firestore
-  .document('reports/{reportId}')
+  .document(`${COLLECTIONS.reports}/{reportId}`)
   .onCreate(async (snap, context) => {
     const { reportId } = context.params;
     const data = snap.data() || {};
@@ -1594,10 +1605,10 @@ export const onReportCreatedQueue = functions.firestore
     const priority = inferQueuePriority(reason);
 
     try {
-      await db.doc(`moderation_queue/${reportId}`).set(
+      await db.doc(`${COLLECTIONS.moderationQueue}/${reportId}`).set(
         {
           reportId,
-          reportPath: `reports/${reportId}`,
+          reportPath: `${COLLECTIONS.reports}/${reportId}`,
           reporterUid,
           reportedUid,
           reason,
@@ -1631,7 +1642,9 @@ export const onReportCreatedQueue = functions.firestore
  * Trigger: onDelete users/{uid}/collections/{collectionId}/items/{itemId}
  */
 export const onCollectionItemDeleted = functions.firestore
-  .document('users/{uid}/collections/{collectionId}/items/{itemId}')
+  .document(
+    `${COLLECTIONS.users}/{uid}/${SUBCOLLECTIONS.collections}/{collectionId}/${SUBCOLLECTIONS.items}/{itemId}`,
+  )
   .onDelete(async (snap, context) => {
     const { uid, collectionId, itemId } = context.params;
     const data = snap.data();
@@ -1666,12 +1679,14 @@ export const onCollectionItemDeleted = functions.firestore
  * Trigger: onDelete users/{uid}/collections/{collectionId}
  */
 export const onCollectionDeleted = functions.firestore
-  .document('users/{uid}/collections/{collectionId}')
+  .document(`${COLLECTIONS.users}/{uid}/${SUBCOLLECTIONS.collections}/{collectionId}`)
   .onDelete(async (snap, context) => {
     const { uid, collectionId } = context.params;
 
     try {
-      const itemsRef = db.collection(`users/${uid}/collections/${collectionId}/items`);
+      const itemsRef = db.collection(
+        `${COLLECTIONS.users}/${uid}/${SUBCOLLECTIONS.collections}/${collectionId}/${SUBCOLLECTIONS.items}`,
+      );
       await db.recursiveDelete(itemsRef);
       functions.logger.info('Deleted collection items', { uid, collectionId });
     } catch (error) {
@@ -1692,7 +1707,7 @@ export const onCollectionDeleted = functions.firestore
  * Trigger: onUpdate users_public/{uid}
  */
 export const onUserPublicProfileUpdated = functions.firestore
-  .document('users_public/{uid}')
+  .document(`${COLLECTIONS.usersPublic}/{uid}`)
   .onUpdate(async (change, context) => {
     const { uid } = context.params;
     const before = change.before.data() || {};
@@ -1709,7 +1724,7 @@ export const onUserPublicProfileUpdated = functions.firestore
 
     try {
       const messagesQuery = db
-        .collectionGroup('messages')
+        .collectionGroup(SUBCOLLECTIONS.messages)
         .where('senderId', '==', uid)
         .orderBy('createdAt', 'desc')
         .limit(500);
@@ -1761,7 +1776,7 @@ export const onUserPublicProfileUpdated = functions.firestore
 // ==========================================================
 
 export const onFriendRequestWrite = functions.firestore
-  .document('friend_requests/{requestId}')
+  .document(`${COLLECTIONS.friendRequests}/{requestId}`)
   .onWrite(async (change) => {
     const after = change.after.exists ? change.after.data() : null;
     const before = change.before.exists ? change.before.data() : null;
@@ -1775,8 +1790,8 @@ export const onFriendRequestWrite = functions.firestore
     const wasAccepted = before?.status === 'accepted';
     const isAccepted = after?.status === 'accepted';
 
-    const fromRef = db.doc(`users/${fromUid}/friends/${toUid}`);
-    const toRef = db.doc(`users/${toUid}/friends/${fromUid}`);
+    const fromRef = db.doc(`${COLLECTIONS.users}/${fromUid}/${SUBCOLLECTIONS.friends}/${toUid}`);
+    const toRef = db.doc(`${COLLECTIONS.users}/${toUid}/${SUBCOLLECTIONS.friends}/${fromUid}`);
 
     try {
       if (isAccepted) {
@@ -1830,7 +1845,7 @@ function parseDirectConversationMembers(
  * Trigger: onWrite conversations/{conversationId}
  */
 export const onDirectConversationWrite = functions.firestore
-  .document('conversations/{conversationId}')
+  .document(`${COLLECTIONS.conversations}/{conversationId}`)
   .onWrite(async (change, context) => {
     const { conversationId } = context.params;
     const after = change.after.exists ? change.after.data() : null;
@@ -1845,7 +1860,9 @@ export const onDirectConversationWrite = functions.firestore
       await Promise.all(
         memberIds.map((uid) =>
           db
-            .doc(`users/${uid}/directConversations/${conversationId}`)
+            .doc(
+              `${COLLECTIONS.users}/${uid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`,
+            )
             .delete()
             .catch((error) => {
               functions.logger.warn('Failed to delete direct conversation index', {
@@ -1875,22 +1892,26 @@ export const onDirectConversationWrite = functions.firestore
     const [firstUid, secondUid] = memberIds;
 
     const [firstBlockedSnap, secondBlockedSnap] = await Promise.all([
-      db.doc(`users/${firstUid}/blockedUsers/${secondUid}`).get(),
-      db.doc(`users/${secondUid}/blockedUsers/${firstUid}`).get(),
+      db.doc(`${COLLECTIONS.users}/${firstUid}/${SUBCOLLECTIONS.blockedUsers}/${secondUid}`).get(),
+      db.doc(`${COLLECTIONS.users}/${secondUid}/${SUBCOLLECTIONS.blockedUsers}/${firstUid}`).get(),
     ]);
 
     const writes: Promise<unknown>[] = [];
     if (!firstBlockedSnap.exists) {
       writes.push(
-        db.doc(`users/${firstUid}/directConversations/${conversationId}`).set(
-          {
-            conversationId,
-            otherUid: secondUid,
-            type: 'direct',
-            updatedAt,
-          },
-          { merge: true },
-        ),
+        db
+          .doc(
+            `${COLLECTIONS.users}/${firstUid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`,
+          )
+          .set(
+            {
+              conversationId,
+              otherUid: secondUid,
+              type: 'direct',
+              updatedAt,
+            },
+            { merge: true },
+          ),
       );
     } else {
       functions.logger.info('Skipping direct conversation index for blocked user', {
@@ -1902,15 +1923,19 @@ export const onDirectConversationWrite = functions.firestore
 
     if (!secondBlockedSnap.exists) {
       writes.push(
-        db.doc(`users/${secondUid}/directConversations/${conversationId}`).set(
-          {
-            conversationId,
-            otherUid: firstUid,
-            type: 'direct',
-            updatedAt,
-          },
-          { merge: true },
-        ),
+        db
+          .doc(
+            `${COLLECTIONS.users}/${secondUid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`,
+          )
+          .set(
+            {
+              conversationId,
+              otherUid: firstUid,
+              type: 'direct',
+              updatedAt,
+            },
+            { merge: true },
+          ),
       );
     } else {
       functions.logger.info('Skipping direct conversation index for blocked user', {

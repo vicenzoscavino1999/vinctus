@@ -11,12 +11,15 @@ import { PERSONAS, getPersona } from './personas';
 import { buildSummaryVerdictPrompt, buildTurnPrompt, parseSummaryVerdictResponse } from './prompts';
 import { checkRateLimit, getUsage } from './rateLimit';
 import { checkTopic, sanitizeTopic } from './guardrails';
+import { COLLECTIONS, LIMITS, SUBCOLLECTIONS } from '../firestoreContract';
 
 const REGION = 'us-central1';
-const ARENA_DEBATES_COLLECTION = 'arenaDebates';
-// Default = LIMITS.arena.topicMaxLength in shared/firestore-contract.json, which the web and the
-// native app check before calling; src/shared/lib/firestore/firestoreContract.test.ts checks it.
-const MAX_TOPIC_CHARS = parseInt(process.env.AI_MAX_TOPIC_CHARS || '240', 10);
+const ARENA_DEBATES_COLLECTION = COLLECTIONS.arenaDebates;
+// The web and the native app check the same limit before calling.
+const MAX_TOPIC_CHARS = parseInt(
+  process.env.AI_MAX_TOPIC_CHARS || String(LIMITS.arena.topicMaxLength),
+  10,
+);
 const EMAIL_PII_REGEX = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const PHONE_PII_REGEX = /(?:\+?\d[\d().\s-]{7,}\d)/g;
 const CLIENT_DEBATE_ID_REGEX = /^[A-Za-z0-9_-]{8,120}$/;
@@ -506,7 +509,7 @@ const generateWithFallback = async (params: {
 };
 
 const hasServerAIConsent = async (uid: string): Promise<boolean> => {
-  const snap = await admin.firestore().doc(`users/${uid}`).get();
+  const snap = await admin.firestore().doc(`${COLLECTIONS.users}/${uid}`).get();
   if (!snap.exists) return false;
   const data = snap.data() as UserDocShape | undefined;
   return data?.settings?.ai?.consentGranted === true;
@@ -647,7 +650,7 @@ export const createDebate = functions
     }
 
     try {
-      const turnsRef = debateRef.collection('turns');
+      const turnsRef = debateRef.collection(SUBCOLLECTIONS.turns);
       const generatedTurns: Array<{ speaker: 'A' | 'B'; text: string }> = [];
       let modelUsedForCompletion = '';
       let promptCharsTotal = 0;

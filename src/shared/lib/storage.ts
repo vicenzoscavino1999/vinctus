@@ -6,6 +6,7 @@ import {
   deleteObject,
 } from 'firebase/storage';
 import { storage } from './firebase';
+import { STORAGE_PATHS } from './firestore/firestoreContract';
 
 type UploadProgress = {
   bytesTransferred: number;
@@ -43,7 +44,7 @@ export function uploadPostImage(
   onProgress?: (progress: UploadProgress) => void,
 ): Promise<{ url: string; path: string }> {
   return new Promise((resolve, reject) => {
-    const storagePath = `posts/${userId}/${postId}/images/${index}.webp`;
+    const storagePath = STORAGE_PATHS.postImage({ userId, postId, filename: `${index}.webp` });
     const storageRef = ref(storage, storagePath);
     const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'image/webp');
 
@@ -155,14 +156,14 @@ const buildPostMediaPath = (
   fileName: string,
 ): string => {
   const safeName = sanitizeFileName(fileName);
-  const storageName = `${Date.now()}_${safeName}`;
+  const params = { userId, postId, filename: `${Date.now()}_${safeName}` };
   if (kind === 'video') {
-    return `posts/${userId}/${postId}/videos/${storageName}`;
+    return STORAGE_PATHS.postVideo(params);
   }
   if (kind === 'file') {
-    return `posts/${userId}/${postId}/files/${storageName}`;
+    return STORAGE_PATHS.postFile(params);
   }
-  return `posts/${userId}/${postId}/images/${storageName}`;
+  return STORAGE_PATHS.postImage(params);
 };
 
 /**
@@ -294,7 +295,12 @@ export function uploadCollectionFile(
 ): Promise<{ url: string; path: string; fileName: string; contentType: string; size: number }> {
   return new Promise((resolve, reject) => {
     const safeName = sanitizeFileName(file.name);
-    const storagePath = `collections/${userId}/${collectionId}/${itemId}/${safeName}`;
+    const storagePath = STORAGE_PATHS.collectionFile({
+      userId,
+      collectionId,
+      itemId,
+      filename: safeName,
+    });
     const storageRef = ref(storage, storagePath);
     const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'application/octet-stream');
 
@@ -342,7 +348,11 @@ export function uploadContributionFile(
 ): Promise<{ url: string; path: string; fileName: string; contentType: string; size: number }> {
   return new Promise((resolve, reject) => {
     const safeName = sanitizeFileName(file.name);
-    const storagePath = `contributions/${userId}/${contributionId}/${safeName}`;
+    const storagePath = STORAGE_PATHS.contributionFile({
+      userId,
+      contributionId,
+      filename: safeName,
+    });
     const storageRef = ref(storage, storagePath);
     const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'application/pdf');
 
@@ -403,7 +413,12 @@ export async function uploadConversationImage(
 ): Promise<{ url: string; path: string; thumbUrl: string | null; thumbPath: string | null }> {
   const safeName = sanitizeFileName(file.name);
   const storageName = `${Date.now()}_${safeName}`;
-  const storagePath = `conversations/${conversationId}/attachments/${userId}/${messageId}/${storageName}`;
+  const storagePath = STORAGE_PATHS.conversationAttachment({
+    conversationId,
+    userId,
+    messageId,
+    filename: storageName,
+  });
   const storageRef = ref(storage, storagePath);
   const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'image/jpeg');
 
@@ -439,7 +454,12 @@ export async function uploadConversationImage(
   if (thumbFile) {
     const thumbSafeName = sanitizeFileName(thumbFile.name);
     const thumbStorageName = `${Date.now()}_${thumbSafeName}`;
-    thumbPath = `conversations/${conversationId}/thumbnails/${userId}/${messageId}/${thumbStorageName}`;
+    thumbPath = STORAGE_PATHS.conversationThumbnail({
+      conversationId,
+      userId,
+      messageId,
+      filename: thumbStorageName,
+    });
     const thumbRef = ref(storage, thumbPath);
     try {
       await uploadBytesWithCache(thumbRef, thumbFile, 'image/webp');
@@ -465,7 +485,12 @@ export function uploadConversationFile(
   return new Promise((resolve, reject) => {
     const safeName = sanitizeFileName(file.name);
     const storageName = `${Date.now()}_${safeName}`;
-    const storagePath = `conversations/${conversationId}/attachments/${userId}/${messageId}/${storageName}`;
+    const storagePath = STORAGE_PATHS.conversationAttachment({
+      conversationId,
+      userId,
+      messageId,
+      filename: storageName,
+    });
     const storageRef = ref(storage, storagePath);
     const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'application/octet-stream');
 
@@ -508,7 +533,10 @@ export function uploadProfilePhoto(
 ): Promise<{ url: string; path: string }> {
   return new Promise((resolve, reject) => {
     const safeName = sanitizeFileName(file.name);
-    const storagePath = `profiles/${userId}/avatar/${Date.now()}_${safeName}`;
+    const storagePath = STORAGE_PATHS.profileAvatar({
+      userId,
+      filename: `${Date.now()}_${safeName}`,
+    });
     const storageRef = ref(storage, storagePath);
     const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'image/jpeg');
 
@@ -551,7 +579,11 @@ export function uploadGroupIcon(
   onProgress?: (progress: UploadProgress) => void,
 ): Promise<{ url: string; path: string }> {
   return new Promise((resolve, reject) => {
-    const storagePath = `groups/${ownerId}/${groupId}/icon/${Date.now()}.webp`;
+    const storagePath = STORAGE_PATHS.groupIcon({
+      userId: ownerId,
+      groupId,
+      filename: `${Date.now()}.webp`,
+    });
     const storageRef = ref(storage, storagePath);
     const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'image/webp');
 
@@ -596,7 +628,7 @@ export async function uploadStoryImage(
 ): Promise<{ url: string; path: string; thumbUrl: string | null; thumbPath: string | null }> {
   const safeName = sanitizeFileName(file.name);
   const storageName = `${Date.now()}_${safeName}`;
-  const storagePath = `stories/${userId}/${storyId}/original/${storageName}`;
+  const storagePath = STORAGE_PATHS.storyOriginal({ userId, storyId, filename: storageName });
   const storageRef = ref(storage, storagePath);
   const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'image/jpeg');
 
@@ -632,7 +664,7 @@ export async function uploadStoryImage(
   if (thumbFile) {
     const thumbSafeName = sanitizeFileName(thumbFile.name);
     const thumbStorageName = `${Date.now()}_${thumbSafeName}`;
-    thumbPath = `stories/${userId}/${storyId}/thumb/${thumbStorageName}`;
+    thumbPath = STORAGE_PATHS.storyThumb({ userId, storyId, filename: thumbStorageName });
     const thumbRef = ref(storage, thumbPath);
     try {
       await uploadBytesWithCache(thumbRef, thumbFile, 'image/webp');
@@ -657,7 +689,7 @@ export function uploadStoryVideo(
   return new Promise((resolve, reject) => {
     const safeName = sanitizeFileName(file.name);
     const storageName = `${Date.now()}_${safeName}`;
-    const storagePath = `stories/${userId}/${storyId}/original/${storageName}`;
+    const storagePath = STORAGE_PATHS.storyOriginal({ userId, storyId, filename: storageName });
     const storageRef = ref(storage, storagePath);
     const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'video/mp4');
 

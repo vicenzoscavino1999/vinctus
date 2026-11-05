@@ -1,10 +1,11 @@
 {
   "$comment": [
-    "Single source for the Firestore collection names and the limits that the web (src/, api/) and the native iOS app (ios-native/) both use.",
-    "After editing, run `npm run contract:generate`: it writes src/shared/lib/firestore/firestoreContract.ts, api/lib/firestoreContract.ts and ios-native/VinctusNative/Sources/Shared/FirestoreContract.swift.",
-    "firestore.rules can't import this file: src/shared/lib/firestore/firestoreContract.test.ts checks that its paths and numbers match.",
-    "collections: top-level collections. subcollections: name and the parent path(s) it lives under, as in firestore.rules.",
-    "limits: value, a doc comment, the firestore.rules checks that use it ({ in: function name or match path, field: the checked expression }), and other files that must contain it ({ path, contains: text with {value} }), such as Cloud Functions that can't import this file."
+    "Single source for the Firestore collection names, the limits and the Storage paths that the web (src/, api/), the native iOS app (ios-native/) and the Cloud Functions (functions/) use.",
+    "After editing, run `npm run contract:generate`: it writes src/shared/lib/firestore/firestoreContract.ts, api/lib/firestoreContract.ts, functions/src/firestoreContract.ts and ios-native/VinctusNative/Sources/Shared/FirestoreContract.swift.",
+    "firestore.rules and storage.rules can't import this file: src/shared/lib/firestore/firestoreContract.test.ts checks that their paths and numbers match.",
+    "collections: top-level collections. serverCollections: collections only the Cloud Functions use; firestore.rules deny clients. subcollections: name and the parent path(s) it lives under, as in firestore.rules.",
+    "limits: value, a doc comment, the firestore.rules checks that use it ({ in: function name or match path, field: the checked expression }), and other files that must contain it ({ path, contains: text with {value} }).",
+    "storage: maxBytes (megabytes, the storage.rules function that checks `request.resource.size <`, and firestore.rules checks { in, field } that must use the same `field < bytes`), contentTypes (the storage.rules function and its list) and paths (the storage.rules match path and the content types and size each accepts)."
   ],
   "collections": {
     "users": "users",
@@ -27,6 +28,11 @@
     "arenaDebates": "arenaDebates",
     "arenaUsage": "arenaUsage",
     "conversations": "conversations"
+  },
+  "serverCollections": {
+    "deletionJobs": "deletionJobs",
+    "dedupEvents": "_dedup_events",
+    "moderationActions": "moderation_actions"
   },
   "subcollections": {
     "followers": { "name": "followers", "parents": ["users"] },
@@ -88,14 +94,7 @@
     "arena": {
       "topicMaxLength": {
         "value": 240,
-        "doc": "Topic of a new Arena debate (MAX_TOPIC_CHARS in the createDebate Cloud Function).",
-        "files": [
-          {
-            "path": "functions/src/arena/createDebate.ts",
-            "contains": "process.env.AI_MAX_TOPIC_CHARS || '{value}'"
-          },
-          { "path": "functions/src/arena/guardrails.ts", "contains": ".slice(0, {value})" }
-        ]
+        "doc": "Topic of a new Arena debate (MAX_TOPIC_CHARS in the createDebate Cloud Function, unless AI_MAX_TOPIC_CHARS overrides it)."
       }
     },
     "savedArenaDebates": {
@@ -239,6 +238,13 @@
         "rules": [{ "in": "isValidGroupJoinRequestCreate", "field": "data.fromUserName" }]
       }
     },
+    "moderation": {
+      "reviewNoteMaxLength": {
+        "value": 2000,
+        "doc": "Note a moderator adds when reviewing a moderation_queue item (also cut to this by the moderationTakeAction Cloud Function).",
+        "rules": [{ "in": "isValidModerationQueueUpdate", "field": "data.reviewNote" }]
+      }
+    },
     "reports": {
       "detailsMaxLength": {
         "value": 2000,
@@ -277,6 +283,195 @@
         "value": 80,
         "doc": "Owner display name copied into a story (ownerSnapshot.displayName).",
         "rules": [{ "in": "isValidStoryOwnerSnapshot", "field": "snapshot.displayName" }]
+      }
+    }
+  },
+  "storage": {
+    "maxBytes": {
+      "image": {
+        "megabytes": 10,
+        "doc": "Images: post images, avatars, group icons, stories, thumbnails and chat images.",
+        "rules": "isUnderImageSizeLimit"
+      },
+      "video": {
+        "megabytes": 100,
+        "doc": "Post videos.",
+        "rules": "isUnderVideoSizeLimit"
+      },
+      "storyVideo": {
+        "megabytes": 25,
+        "doc": "Story videos.",
+        "rules": "isUnderStoryVideoSizeLimit"
+      },
+      "file": {
+        "megabytes": 25,
+        "doc": "Files: post and chat files, collection and contribution files. Also the largest file size that contributions, collection items and post media store in Firestore.",
+        "rules": "isUnderCollectionFileSizeLimit",
+        "firestoreRules": [
+          { "in": "isValidContributionCreate", "field": "data.fileSize" },
+          { "in": "isValidContributionUpdate", "field": "data.fileSize" },
+          { "in": "isValidCollectionItemCreate", "field": "data.fileSize" },
+          { "in": "isValidMediaItem", "field": "item.size" }
+        ]
+      }
+    },
+    "contentTypes": {
+      "image": {
+        "doc": "Images.",
+        "rules": "isValidImageType",
+        "values": ["image/jpeg", "image/png", "image/gif", "image/webp"]
+      },
+      "video": {
+        "doc": "Videos.",
+        "rules": "isValidVideoType",
+        "values": ["video/mp4", "video/webm", "video/quicktime"]
+      },
+      "collectionFile": {
+        "doc": "Files of a collection item or a contribution.",
+        "rules": "isValidCollectionFileType",
+        "values": [
+          "application/pdf",
+          "text/plain",
+          "text/markdown",
+          "application/json",
+          "application/zip",
+          "application/x-zip-compressed",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+          "audio/mpeg",
+          "audio/wav",
+          "audio/ogg",
+          "video/mp4",
+          "video/webm",
+          "video/quicktime",
+          "image/jpeg",
+          "image/png",
+          "image/gif",
+          "image/webp"
+        ]
+      },
+      "chatFile": {
+        "doc": "Documents attached to a post or a chat message.",
+        "rules": "isValidChatFileType",
+        "values": [
+          "application/pdf",
+          "application/msword",
+          "application/vnd.ms-excel",
+          "application/vnd.ms-powerpoint",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        ]
+      }
+    },
+    "paths": {
+      "postImage": {
+        "path": "posts/{userId}/{postId}/images/{filename}",
+        "accepts": [
+          {
+            "contentTypes": "image",
+            "maxBytes": "image"
+          }
+        ]
+      },
+      "postVideo": {
+        "path": "posts/{userId}/{postId}/videos/{filename}",
+        "accepts": [
+          {
+            "contentTypes": "video",
+            "maxBytes": "video"
+          }
+        ]
+      },
+      "postFile": {
+        "path": "posts/{userId}/{postId}/files/{filename}",
+        "accepts": [
+          {
+            "contentTypes": "chatFile",
+            "maxBytes": "file"
+          }
+        ]
+      },
+      "profileAvatar": {
+        "path": "profiles/{userId}/avatar/{filename}",
+        "accepts": [
+          {
+            "contentTypes": "image",
+            "maxBytes": "image"
+          }
+        ]
+      },
+      "groupIcon": {
+        "path": "groups/{userId}/{groupId}/icon/{filename}",
+        "accepts": [
+          {
+            "contentTypes": "image",
+            "maxBytes": "image"
+          }
+        ]
+      },
+      "storyOriginal": {
+        "path": "stories/{userId}/{storyId}/original/{filename}",
+        "accepts": [
+          {
+            "contentTypes": "image",
+            "maxBytes": "image"
+          },
+          {
+            "contentTypes": "video",
+            "maxBytes": "storyVideo"
+          }
+        ]
+      },
+      "storyThumb": {
+        "path": "stories/{userId}/{storyId}/thumb/{filename}",
+        "accepts": [
+          {
+            "contentTypes": "image",
+            "maxBytes": "image"
+          }
+        ]
+      },
+      "conversationAttachment": {
+        "path": "conversations/{conversationId}/attachments/{userId}/{messageId}/{filename}",
+        "accepts": [
+          {
+            "contentTypes": "image",
+            "maxBytes": "image"
+          },
+          {
+            "contentTypes": "chatFile",
+            "maxBytes": "file"
+          }
+        ]
+      },
+      "conversationThumbnail": {
+        "path": "conversations/{conversationId}/thumbnails/{userId}/{messageId}/{filename}",
+        "accepts": [
+          {
+            "contentTypes": "image",
+            "maxBytes": "image"
+          }
+        ]
+      },
+      "collectionFile": {
+        "path": "collections/{userId}/{collectionId}/{itemId}/{filename}",
+        "accepts": [
+          {
+            "contentTypes": "collectionFile",
+            "maxBytes": "file"
+          }
+        ]
+      },
+      "contributionFile": {
+        "path": "contributions/{userId}/{contributionId}/{filename}",
+        "accepts": [
+          {
+            "contentTypes": "collectionFile",
+            "maxBytes": "file"
+          }
+        ]
       }
     }
   }

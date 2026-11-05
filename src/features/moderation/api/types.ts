@@ -5,6 +5,7 @@ import type {
   PaginatedResultModel,
 } from '@/shared/lib/firestore';
 import { idSchema, limitSchema } from '@/shared/lib/validators';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 export type { ModerationQueueItemRead, ModerationQueueStatus, PaginatedResultModel };
 
@@ -18,7 +19,12 @@ export const moderationQueueStatusSchema = z.enum([
   'dismissed',
 ]);
 export const moderationReviewActionSchema = z.string().trim().min(1).max(80);
-export const moderationReviewNoteSchema = z.string().trim().max(2000).nullable().optional();
+export const moderationReviewNoteSchema = z
+  .string()
+  .trim()
+  .max(LIMITS.moderation.reviewNoteMaxLength)
+  .nullable()
+  .optional();
 export const moderationEnforcementActionSchema = z.enum([
   'remove_content',
   'suspend_user',

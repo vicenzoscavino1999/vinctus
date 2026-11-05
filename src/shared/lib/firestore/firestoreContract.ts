@@ -96,7 +96,7 @@ export const LIMITS = {
     historyMaxTotalLength: 12000,
   },
   arena: {
-    /** Topic of a new Arena debate (MAX_TOPIC_CHARS in the createDebate Cloud Function). */
+    /** Topic of a new Arena debate (MAX_TOPIC_CHARS in the createDebate Cloud Function, unless AI_MAX_TOPIC_CHARS overrides it). */
     topicMaxLength: 240,
   },
   savedArenaDebates: {
@@ -149,6 +149,10 @@ export const LIMITS = {
     /** Requester's display name copied into a join request. */
     fromUserNameMaxLength: 80,
   },
+  moderation: {
+    /** Note a moderator adds when reviewing a moderation_queue item (also cut to this by the moderationTakeAction Cloud Function). */
+    reviewNoteMaxLength: 2000,
+  },
   reports: {
     /** Details of a report (reports). */
     detailsMaxLength: 2000,
@@ -165,4 +169,148 @@ export const LIMITS = {
     /** Owner display name copied into a story (ownerSnapshot.displayName). */
     ownerNameMaxLength: 80,
   },
+} as const;
+
+/** Upload size limits, in bytes. storage.rules accept files smaller than these: `request.resource.size < limit`. */
+export const STORAGE_MAX_BYTES = {
+  /** Images: post images, avatars, group icons, stories, thumbnails and chat images. */
+  image: 10 * 1024 * 1024,
+  /** Post videos. */
+  video: 100 * 1024 * 1024,
+  /** Story videos. */
+  storyVideo: 25 * 1024 * 1024,
+  /** Files: post and chat files, collection and contribution files. Also the largest file size that contributions, collection items and post media store in Firestore. */
+  file: 25 * 1024 * 1024,
+} as const;
+
+/** Content types that storage.rules accept, by kind of file. */
+export const STORAGE_CONTENT_TYPES = {
+  /** Images. */
+  image: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as readonly string[],
+  /** Videos. */
+  video: ['video/mp4', 'video/webm', 'video/quicktime'] as readonly string[],
+  /** Files of a collection item or a contribution. */
+  collectionFile: [
+    'application/pdf',
+    'text/plain',
+    'text/markdown',
+    'application/json',
+    'application/zip',
+    'application/x-zip-compressed',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'audio/mpeg',
+    'audio/wav',
+    'audio/ogg',
+    'video/mp4',
+    'video/webm',
+    'video/quicktime',
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+  ] as readonly string[],
+  /** Documents attached to a post or a chat message. */
+  chatFile: [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.ms-excel',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  ] as readonly string[],
+} as const;
+
+/** Where uploaded files go, as storage.rules match them. */
+export const STORAGE_PATHS = {
+  /** `posts/{userId}/{postId}/images/{filename}`: `image` under 10 MB. */
+  postImage: ({ userId, postId, filename }: { userId: string; postId: string; filename: string }) =>
+    `posts/${userId}/${postId}/images/${filename}`,
+  /** `posts/{userId}/{postId}/videos/{filename}`: `video` under 100 MB. */
+  postVideo: ({ userId, postId, filename }: { userId: string; postId: string; filename: string }) =>
+    `posts/${userId}/${postId}/videos/${filename}`,
+  /** `posts/{userId}/{postId}/files/{filename}`: `chatFile` under 25 MB. */
+  postFile: ({ userId, postId, filename }: { userId: string; postId: string; filename: string }) =>
+    `posts/${userId}/${postId}/files/${filename}`,
+  /** `profiles/{userId}/avatar/{filename}`: `image` under 10 MB. */
+  profileAvatar: ({ userId, filename }: { userId: string; filename: string }) =>
+    `profiles/${userId}/avatar/${filename}`,
+  /** `groups/{userId}/{groupId}/icon/{filename}`: `image` under 10 MB. */
+  groupIcon: ({
+    userId,
+    groupId,
+    filename,
+  }: {
+    userId: string;
+    groupId: string;
+    filename: string;
+  }) => `groups/${userId}/${groupId}/icon/${filename}`,
+  /** `stories/{userId}/{storyId}/original/{filename}`: `image` under 10 MB or `video` under 25 MB. */
+  storyOriginal: ({
+    userId,
+    storyId,
+    filename,
+  }: {
+    userId: string;
+    storyId: string;
+    filename: string;
+  }) => `stories/${userId}/${storyId}/original/${filename}`,
+  /** `stories/{userId}/{storyId}/thumb/{filename}`: `image` under 10 MB. */
+  storyThumb: ({
+    userId,
+    storyId,
+    filename,
+  }: {
+    userId: string;
+    storyId: string;
+    filename: string;
+  }) => `stories/${userId}/${storyId}/thumb/${filename}`,
+  /** `conversations/{conversationId}/attachments/{userId}/{messageId}/{filename}`: `image` under 10 MB or `chatFile` under 25 MB. */
+  conversationAttachment: ({
+    conversationId,
+    userId,
+    messageId,
+    filename,
+  }: {
+    conversationId: string;
+    userId: string;
+    messageId: string;
+    filename: string;
+  }) => `conversations/${conversationId}/attachments/${userId}/${messageId}/${filename}`,
+  /** `conversations/{conversationId}/thumbnails/{userId}/{messageId}/{filename}`: `image` under 10 MB. */
+  conversationThumbnail: ({
+    conversationId,
+    userId,
+    messageId,
+    filename,
+  }: {
+    conversationId: string;
+    userId: string;
+    messageId: string;
+    filename: string;
+  }) => `conversations/${conversationId}/thumbnails/${userId}/${messageId}/${filename}`,
+  /** `collections/{userId}/{collectionId}/{itemId}/{filename}`: `collectionFile` under 25 MB. */
+  collectionFile: ({
+    userId,
+    collectionId,
+    itemId,
+    filename,
+  }: {
+    userId: string;
+    collectionId: string;
+    itemId: string;
+    filename: string;
+  }) => `collections/${userId}/${collectionId}/${itemId}/${filename}`,
+  /** `contributions/{userId}/{contributionId}/{filename}`: `collectionFile` under 25 MB. */
+  contributionFile: ({
+    userId,
+    contributionId,
+    filename,
+  }: {
+    userId: string;
+    contributionId: string;
+    filename: string;
+  }) => `contributions/${userId}/${contributionId}/${filename}`,
 } as const;

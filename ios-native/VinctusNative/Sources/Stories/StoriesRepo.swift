@@ -140,7 +140,9 @@ final class FirebaseStoriesRepo: StoriesRepo {
     let (db, uid) = try context()
     let storyRef = db.collection(FirestoreCollections.stories).document()
     let millis = Int64(Date().timeIntervalSince1970 * 1000)
-    let path = "stories/\(uid)/\(storyRef.documentID)/original/\(millis)_story.jpg"
+    let path = StoragePaths.storyOriginal(
+      userID: uid, storyID: storyRef.documentID, filename: "\(millis)_story.jpg"
+    )
     let mediaRef = Storage.storage().reference(withPath: path)
     let metadata = StorageMetadata()
     metadata.contentType = "image/jpeg"
