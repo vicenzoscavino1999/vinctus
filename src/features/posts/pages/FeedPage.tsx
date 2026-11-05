@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/auth';
 import { useAppState } from '@/context/app-state';
 import { formatRelativeTime } from '@/shared/lib/formatUtils';
-import { triggerSelectionHaptic } from '@/shared/lib/native';
+import { triggerSelectionHaptic } from '@/shared/lib/haptics';
 import { useToast } from '@/shared/ui/Toast';
 import PostCommentsModal from '@/features/posts/components/PostCommentsModal';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';

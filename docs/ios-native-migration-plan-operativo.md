@@ -38,7 +38,7 @@ Objetivo: migrar Vinctus a iOS nativo sin romper produccion, reutilizando backen
 ## Decision de alcance (bloqueada)
 
 1. Track de release mobile iOS: solo app nativa SwiftUI.
-2. Track Capacitor: congelado para iOS release (se mantiene solo como referencia historica/fallback tecnico).
+2. Track Capacitor: retirado. Su codigo (`ios/`, `capacitor.config.ts`, plugins) se borro del repo y queda en el historial de git.
 3. Web en Vercel continua activa para producto web, legal, soporte y landing.
 4. Backend/compliance es compartido y reutilizable entre web e iOS nativa.
 5. Cualquier reactivacion de release por Capacitor requiere RFC explicito y aprobacion de riesgo.

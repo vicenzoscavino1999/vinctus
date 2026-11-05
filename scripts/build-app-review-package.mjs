@@ -218,7 +218,6 @@ Commit: ${commitShort}
 - AI consent enforcement: \`api/chat.ts\`, \`functions/src/arena/createDebate.ts\`
 - Safe area baseline: \`src/index.css\`
 - Offline UX banner: \`src/app/routes/AppLayout.tsx\`
-- Native capabilities baseline: \`src/shared/lib/native/pushNotifications.ts\`, \`src/shared/lib/native/camera.ts\`, \`src/shared/lib/native/haptics.ts\`
 
 ## Submission Commands
 

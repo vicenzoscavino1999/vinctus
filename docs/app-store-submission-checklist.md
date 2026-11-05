@@ -65,14 +65,12 @@ Referencia tecnica: `docs/apple-sign-in-setup.md`.
 
 ## 3) Bloque manual iOS build y firma (Mac/Xcode)
 
-- [ ] Instalar Xcode y CocoaPods.
-- [ ] `npm run ios:prepare`.
-- [ ] Abrir proyecto iOS (`npm run cap:open:ios`).
-- [ ] Configurar Team, Signing y Bundle ID final.
-- [ ] Configurar APNs y permisos en `Info.plist` (camera/push/mic si aplica).
-- [ ] Probar push, camera y haptics en iPhone real.
+La app que se sube es la nativa SwiftUI. La de Capacitor se borro del repo.
 
-Referencia tecnica: `docs/capacitor-ios-setup.md`.
+- [ ] Seguir `ios-native/VinctusNative/GUIA_APP_STORE.md` (firma, Bundle ID `app.vinctus.social`, build y subida).
+- [ ] Probar la app en un iPhone real antes de enviarla a revision.
+
+Referencia tecnica: `ios-native/VinctusNative/README.md`.
 
 ## 4) Bloque manual App Store Connect
 
