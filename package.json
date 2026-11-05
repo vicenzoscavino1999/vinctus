@@ -47,10 +47,6 @@
     "review:package": "node scripts/build-app-review-package.mjs",
     "gate:appstore": "node scripts/app-store-release-gate.mjs",
     "gate:appstore:submit": "node scripts/app-store-release-gate.mjs --submit",
-    "cap:add:ios": "npx cap add ios",
-    "cap:sync": "npx cap sync",
-    "cap:open:ios": "npx cap open ios",
-    "ios:prepare": "npm run build && npm run cap:sync",
     "metrics:phase6:seed": "node scripts/seed-phase6-metrics.mjs",
     "metrics:phase6:collect": "node scripts/collect-phase6-metrics.mjs",
     "metrics:phase6:compare": "node scripts/compare-phase6-metrics.mjs",
@@ -64,12 +60,6 @@
     "node": "22.x"
   },
   "dependencies": {
-    "@capacitor/camera": "^8.0.0",
-    "@capacitor/cli": "^7.4.5",
-    "@capacitor/core": "^8.0.2",
-    "@capacitor/haptics": "^8.0.0",
-    "@capacitor/ios": "^8.0.2",
-    "@capacitor/push-notifications": "^8.0.0",
     "@google/generative-ai": "^0.24.1",
     "browser-image-compression": "^2.0.2",
     "firebase": "^12.7.0",

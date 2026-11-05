@@ -145,7 +145,6 @@ const run = async () => {
     'docs/app-review-notes-draft.md',
     'docs/app-review-demo-account.md',
     'docs/apple-sign-in-setup.md',
-    'docs/capacitor-ios-setup.md',
     'docs/trust-safety-sla.md',
   ];
 
@@ -218,39 +217,10 @@ const run = async () => {
     /\/legal\/community-guidelines/,
     'Community Guidelines link in settings',
   );
-  await checkContains(
-    'src/features/settings/pages/SettingsPage.tsx',
-    /Probar haptics/,
-    'Native haptics test action',
-  );
-  await checkContains(
-    'ios/App/App/Info.plist',
-    /NSCameraUsageDescription/,
-    'iOS camera usage description',
-  );
-  await checkContains(
-    'ios/App/App/Info.plist',
-    /NSPhotoLibraryUsageDescription/,
-    'iOS photo library usage description',
-  );
-  await checkContains(
-    'ios/App/App/Info.plist',
-    /NSPhotoLibraryAddUsageDescription/,
-    'iOS photo save usage description',
-  );
-  await checkContains(
-    'ios/App/App/Info.plist',
-    /NSMicrophoneUsageDescription/,
-    'iOS microphone usage description',
-  );
-
   await checkFileExists(
     'src/features/legal/pages/CommunityGuidelinesPage.tsx',
     'Community Guidelines page',
   );
-  await checkFileExists('src/shared/lib/native/pushNotifications.ts', 'Native push wrapper');
-  await checkFileExists('src/shared/lib/native/camera.ts', 'Native camera wrapper');
-  await checkFileExists('src/shared/lib/native/haptics.ts', 'Native haptics wrapper');
 
   const envLocalRaw = await readFileIfExists('.env.local');
   const envExampleRaw = await readFileIfExists('.env.example');

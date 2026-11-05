@@ -43,8 +43,8 @@ targets:
         buildPhase: resources
     settings:
       base:
-        # Keep bundle id aligned with the existing Capacitor app so this can
-        # eventually ship as an update under the same App Store listing.
+        # Same bundle id as the former Capacitor app, so this ships under the same App Store
+        # listing if one was already created for it.
         PRODUCT_BUNDLE_IDENTIFIER: app.vinctus.social
         # iPhone only: the UI is portrait-only and not designed for iPad (iPad would also need
         # every orientation for multitasking and its own App Store screenshots).

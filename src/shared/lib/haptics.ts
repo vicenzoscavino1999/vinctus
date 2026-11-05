@@ -1,13 +1,6 @@
-import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { isNativePlatform } from '@/shared/lib/native/capacitor';
-
+/** Short vibration on phones whose browser supports it (Android Chrome); does nothing elsewhere. */
 export const triggerSelectionHaptic = async (): Promise<void> => {
   try {
-    if (isNativePlatform()) {
-      await Haptics.impact({ style: ImpactStyle.Light });
-      return;
-    }
-
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
       navigator.vibrate(12);
     }

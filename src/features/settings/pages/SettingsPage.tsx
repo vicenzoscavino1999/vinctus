@@ -13,10 +13,6 @@ import {
   FileText,
   Scale,
   ShieldAlert,
-  Smartphone,
-  Camera,
-  BellRing,
-  Vibrate,
   Loader2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -25,13 +21,6 @@ import SupportModal from '@/features/help/components/SupportModal';
 import { isCurrentUserAppAdmin } from '@/features/moderation/api';
 import { getServerAIConsent, updateServerAIConsent } from '@/features/settings/api/aiConsent';
 import DeleteAccountModal from '@/features/settings/components/DeleteAccountModal';
-import {
-  captureNativeCameraPhoto,
-  getNativePlatform,
-  isNativePlatform,
-  registerNativePushNotifications,
-  triggerSelectionHaptic,
-} from '@/shared/lib/native';
 import { LEGAL_COPY } from '@/shared/constants';
 import { getAIConsent, setAIConsent } from '@/shared/lib/aiConsent';
 import { applyTheme, getStoredTheme, setStoredTheme, type ThemeMode } from '@/shared/lib/theme';
@@ -47,12 +36,6 @@ const SettingsPage = () => {
   const [aiConsentGranted, setAiConsentGranted] = useState(() => getAIConsent().granted);
   const [aiConsentSyncLoading, setAiConsentSyncLoading] = useState(false);
   const [isModerationAdmin, setIsModerationAdmin] = useState(false);
-  const [nativeActionLoading, setNativeActionLoading] = useState<
-    'camera' | 'push' | 'haptic' | null
-  >(null);
-  const [nativeCameraPreview, setNativeCameraPreview] = useState<string | null>(null);
-  const nativePlatform = getNativePlatform();
-  const nativeEnabled = isNativePlatform();
 
   useEffect(() => {
     applyTheme(theme);
@@ -151,61 +134,6 @@ const SettingsPage = () => {
       showToast('No se pudo guardar el consentimiento de IA.', 'error');
     } finally {
       setAiConsentSyncLoading(false);
-    }
-  };
-
-  const handleNativeHaptic = async () => {
-    setNativeActionLoading('haptic');
-    try {
-      await triggerSelectionHaptic();
-      showToast(
-        nativeEnabled ? 'Haptics ejecutado en dispositivo.' : 'Vibracion de prueba ejecutada.',
-        'success',
-      );
-    } catch (error) {
-      console.error('Error triggering native haptic:', error);
-      showToast('No se pudo ejecutar haptics.', 'error');
-    } finally {
-      setNativeActionLoading(null);
-    }
-  };
-
-  const handleNativeCamera = async () => {
-    setNativeActionLoading('camera');
-    try {
-      const result = await captureNativeCameraPhoto();
-      if (!result.dataUrl) {
-        showToast('No se obtuvo imagen desde la camara.', 'warning');
-        return;
-      }
-      setNativeCameraPreview(result.dataUrl);
-      showToast(
-        result.native ? 'Foto capturada con plugin nativo.' : 'Foto capturada en modo web.',
-        'success',
-      );
-    } catch (error) {
-      console.error('Error capturing native photo:', error);
-      showToast('No se pudo abrir la camara.', 'error');
-    } finally {
-      setNativeActionLoading(null);
-    }
-  };
-
-  const handleNativePush = async () => {
-    setNativeActionLoading('push');
-    try {
-      const result = await registerNativePushNotifications();
-      if (!result.granted || !result.token) {
-        showToast(result.error || 'Registro push no disponible.', 'warning');
-        return;
-      }
-      const shortToken = `${result.token.slice(0, 14)}...`;
-      showToast(`Push registrado: ${shortToken}`, 'success');
-    } catch (error) {
-      console.error('Error registering native push:', error);
-      showToast('No se pudo registrar push notifications.', 'error');
-    } finally {
-      setNativeActionLoading(null);
     }
   };
 
@@ -339,77 +267,6 @@ const SettingsPage = () => {
               <div className="p-4 text-center">
                 <p className="text-xs text-neutral-600 font-mono">Vinctus v0.0.2 (Alpha)</p>
               </div>
-            </div>
-          </section>
-
-          {/* Native capabilities */}
-          <section>
-            <h2 className="text-sm font-medium text-neutral-400 mb-4 uppercase tracking-wider px-2">
-              Capacidades nativas
-            </h2>
-            <div className="bg-[#1A1A1A] border border-neutral-800 rounded-2xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-neutral-800 text-xs text-neutral-500 flex items-center gap-2">
-                <Smartphone size={14} className="text-neutral-400" />
-                Plataforma detectada: {nativePlatform} {nativeEnabled ? '(nativo)' : '(web)'}
-              </div>
-
-              <button
-                onClick={() => void handleNativeHaptic()}
-                disabled={nativeActionLoading !== null}
-                className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-neutral-800 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <div className="flex items-center gap-3">
-                  <Vibrate size={20} className="text-emerald-300" />
-                  <div className="text-left">
-                    <div className="font-medium">Probar haptics</div>
-                    <div className="text-xs text-neutral-500">Feedback tactil en interacciones</div>
-                  </div>
-                </div>
-                <ChevronRight size={18} className="text-neutral-600" />
-              </button>
-
-              <button
-                onClick={() => void handleNativeCamera()}
-                disabled={nativeActionLoading !== null}
-                className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-neutral-800 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <div className="flex items-center gap-3">
-                  <Camera size={20} className="text-sky-300" />
-                  <div className="text-left">
-                    <div className="font-medium">Capturar foto</div>
-                    <div className="text-xs text-neutral-500">Usa plugin de camara nativa</div>
-                  </div>
-                </div>
-                <ChevronRight size={18} className="text-neutral-600" />
-              </button>
-
-              <button
-                onClick={() => void handleNativePush()}
-                disabled={nativeActionLoading !== null}
-                className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <div className="flex items-center gap-3">
-                  <BellRing size={20} className="text-amber-300" />
-                  <div className="text-left">
-                    <div className="font-medium">Registrar push</div>
-                    <div className="text-xs text-neutral-500">
-                      Solicita permisos y registra token del dispositivo
-                    </div>
-                  </div>
-                </div>
-                <ChevronRight size={18} className="text-neutral-600" />
-              </button>
-
-              {nativeCameraPreview && (
-                <div className="border-t border-neutral-800 p-4">
-                  <p className="text-xs text-neutral-500 mb-2">Vista previa de camara</p>
-                  <img
-                    src={nativeCameraPreview}
-                    alt="Captura de camara nativa"
-                    className="w-full max-h-56 object-cover rounded-xl border border-neutral-700"
-                  />
-                </div>
-              )}
             </div>
           </section>
 

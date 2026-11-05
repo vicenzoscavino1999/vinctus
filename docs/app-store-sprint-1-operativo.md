@@ -212,7 +212,7 @@ npm run test:e2e:smoke
 - [x] Delete account UI hardening: estado realtime (`queued/processing/completed/failed`) con polling en modal.
 - [x] Dia 7 aplicado: metadata draft + review notes draft.
 - [x] Dia 2 aplicado en codigo: URLs publicas legales (`/privacy`, `/terms`, `/community-guidelines`, `/support`) listas para deploy.
-- [x] Capacitor baseline aplicado: config + `ios/` + plugins (push/camera/haptics) + pantalla de pruebas nativas en Settings.
+- [x] Capacitor baseline aplicado: config + `ios/` + plugins (push/camera/haptics) + pantalla de pruebas nativas en Settings. Despues se borro del repo: la app nativa (`ios-native/`) lo reemplaza.
 - [x] AI consent server-side aplicado: persistencia en `users/{uid}.settings.ai`, sync en UI y validacion obligatoria en `api/chat` + `createDebate`.
 - [x] PII guardrails IA aplicado: redaccion de email/telefono en backend antes de enviar texto a proveedores IA (`api/chat`, `createDebate`).
 - [x] Safe-area hardening ampliado en overlays/modales principales para iOS notch/home indicator (auth/chat/collab/collections/events/groups/posts/profile/discover).

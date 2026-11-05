@@ -118,19 +118,13 @@ Nota operativa:
 
 ## 4.2 - Minimum functionality / app-like iOS
 
-1. Capacitor + iOS project base
-   - Estado: completo baseline
-   - Evidencia: `capacitor.config.ts`, `ios/`, `docs/capacitor-ios-setup.md`
-2. Plugins nativos (push/camera/haptics)
-   - Estado: completo baseline
-   - Evidencia: `src/shared/lib/native/pushNotifications.ts`, `src/shared/lib/native/camera.ts`, `src/shared/lib/native/haptics.ts`, `src/features/settings/pages/SettingsPage.tsx`
-3. Permisos iOS declarados en Info.plist
-   - Estado: completo baseline
-   - Evidencia: `ios/App/App/Info.plist` (`NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, `NSPhotoLibraryAddUsageDescription`, `NSMicrophoneUsageDescription`)
-4. Evidencia UX nativa estable
+1. App nativa SwiftUI
+   - La app de Capacitor (`ios/`, `capacitor.config.ts`, plugins push/camera/haptics) se borro del repo: no se podia publicar. La reemplaza la app nativa.
+   - Evidencia: `ios-native/VinctusNative/`, `ios-native/VinctusNative/GUIA_APP_STORE.md`
+2. Evidencia UX nativa estable
    - Estado: parcial
    - Bloqueo: pruebas en iPhone real y firma Xcode
-5. UX offline basica
+3. UX offline basica
    - Estado: completo baseline
    - Evidencia: `src/app/routes/AppLayout.tsx` (banner global "Sin conexion")
 
