@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import PhotosUI
 
 struct ConversationView: View {
   let profileRepo: ProfileRepo
@@ -16,6 +17,8 @@ struct ConversationView: View {
   @State private var scrollPosition: String?
   @State private var bottomPosition: ChatBottomPosition?
   @State private var scrollState = ChatScrollState()
+  @State private var selectedPhotos: [PhotosPickerItem] = []
+  @StateObject private var voice = ChatVoiceRecorder()
 
   init(repo: ChatRepo, profileRepo: ProfileRepo, conversationID: String, title: String, otherUserID: String?) {
     self.profileRepo = profileRepo
@@ -147,10 +150,33 @@ struct ConversationView: View {
         Button("Reintentar carga") { vm.retryLoading() }
           .padding(.vertical, 6)
       }
+      if vm.readErrorMessage != nil {
+        Button("Reintentar lectura") { updateReadingContext() }
+      }
+
+      if let error = voice.errorMessage {
+        Text(error).font(.footnote).foregroundStyle(.red).padding(.horizontal)
+      }
+
+      if vm.isPreparingMedia {
+        ProgressView("Preparando archivos…").padding(8)
+      }
+      if vm.isSending {
+        ProgressView(value: vm.uploadProgress) {
+          Text(vm.uploadProgress < 1 ? "Enviando… \(Int(vm.uploadProgress * 100)) %" : "Guardando mensaje…")
+            .font(.caption)
+        }
+        .padding(.horizontal)
+      }
+
+      if !vm.attachments.isEmpty {
+        ChatPendingFilesView(files: vm.attachments, remove: vm.removeAttachment)
+          .disabled(voice.isRecording || voice.isRequestingPermission)
+      }
 
       ForEach(vm.failedMessages) { message in
         HStack {
-          Text("No enviado: \(message.text)")
+          Text("No enviado: \(message.text.isEmpty ? "Adjuntos (\(message.attachments.count))" : message.text)")
             .font(.footnote)
             .lineLimit(2)
           Spacer()
@@ -161,7 +187,17 @@ struct ConversationView: View {
         .padding(.vertical, 6)
       }
 
-      composer
+      if voice.isRecording {
+        HStack {
+          Label("Grabando \(voice.seconds / 60):\(String(format: "%02d", voice.seconds % 60)) / 5:00", systemImage: "mic.fill")
+            .foregroundStyle(.red)
+          Spacer()
+          Button("Cancelar") { voice.cancel() }
+          Button("Terminar") { voice.finish() }
+        }
+        .font(.subheadline)
+        .padding()
+      } else { composer }
     }
     .background(VinctusTokens.Color.background)
     .navigationTitle(title)
@@ -191,8 +227,22 @@ struct ConversationView: View {
       vm.start()
       updateReadingContext()
     }
-    .onDisappear { vm.stop() }
-    .onChange(of: scenePhase) { _, _ in updateReadingContext() }
+    .onDisappear { vm.stop(); voice.cancel() }
+    .onChange(of: scenePhase) { _, phase in
+      if phase != .active { voice.finish() }
+      if phase == .background { voice.cancel() }
+      updateReadingContext()
+    }
+    .task(id: selectedPhotos) {
+      guard !selectedPhotos.isEmpty else { return }
+      await vm.preparePhotos(selectedPhotos)
+      selectedPhotos = []
+    }
+    .onChange(of: voice.finishedRecording?.id) { _, _ in
+      guard let file = voice.takeRecording() else { return }
+      do { try vm.addAttachment(file) }
+      catch { vm.mediaErrorMessage = error.localizedDescription }
+    }
   }
 
   private func updateReadingContext() {
@@ -233,22 +283,36 @@ struct ConversationView: View {
         }
       }
     }
+    .disabled(voice.isRecording || voice.isRequestingPermission)
   }
 
   private var composer: some View {
     HStack(alignment: .bottom, spacing: VinctusTokens.Spacing.sm) {
+      PhotosPicker(selection: $selectedPhotos, maxSelectionCount: max(1, 10 - vm.attachments.count),
+                   matching: .any(of: [.images, .videos]), preferredItemEncoding: .compatible) {
+        Image(systemName: "plus.circle").font(.system(size: 26))
+      }
+      .accessibilityLabel("Adjuntar fotos o videos")
+      .disabled(vm.isSending || vm.isPreparingMedia || voice.isRequestingPermission || vm.attachments.count >= 10)
+
       TextField("Escribe un mensaje", text: $vm.draft, axis: .vertical)
         .lineLimit(1...5)
         .padding(10)
         .background(VinctusTokens.Color.surface2)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
+      Button { Task { await voice.start() } } label: {
+        Image(systemName: "mic").font(.system(size: 23))
+      }
+      .accessibilityLabel("Grabar nota de voz")
+      .disabled(vm.isSending || vm.isPreparingMedia || voice.isRequestingPermission || vm.attachments.count >= 10)
+
       Button { vm.send() } label: {
         Image(systemName: "arrow.up.circle.fill")
           .font(.system(size: 32))
           .foregroundStyle(vm.canSend ? VinctusTokens.Color.accent : VinctusTokens.Color.textMuted)
       }
-      .disabled(!vm.canSend)
+      .disabled(!vm.canSend || voice.isRequestingPermission)
       .accessibilityLabel("Enviar")
     }
     .padding(VinctusTokens.Spacing.sm)
@@ -294,13 +358,18 @@ private struct MessageBubble: View {
             .font(.caption.weight(.semibold))
             .foregroundStyle(VinctusTokens.Color.accent)
         }
-        Text(bubbleText)
+        ForEach(message.attachments) { attachment in
+          ChatAttachmentView(attachment: attachment)
+        }
+        if !message.text.isEmpty || (message.hasAttachments && message.attachments.isEmpty) {
+          Text(bubbleText)
           .foregroundStyle(isMine ? SwiftUI.Color.black : VinctusTokens.Color.textPrimary)
           .italic(message.text.isEmpty)
           .padding(.horizontal, 12)
           .padding(.vertical, 8)
           .background(isMine ? VinctusTokens.Color.accent : VinctusTokens.Color.surface2)
           .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
         Text(message.createdAt, style: .time)
           .font(.caption2)
           .foregroundStyle(VinctusTokens.Color.textMuted)
@@ -311,6 +380,6 @@ private struct MessageBubble: View {
 
   private var bubbleText: String {
     if !message.text.isEmpty { return message.text }
-    return message.hasAttachments ? "Archivo adjunto (ábrelo en la web)" : ""
+    return message.hasAttachments ? "Adjunto no disponible" : ""
   }
 }

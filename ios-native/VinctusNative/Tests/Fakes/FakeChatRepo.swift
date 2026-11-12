@@ -15,6 +15,9 @@ final class FakeChatRepo: ChatRepo {
   var failsToLoadOlder = false
   var olderHandler: (() async throws -> ChatMessagePage)?
   var readTimestamps: [Int64?] = []
+  var failsToMarkRead = false
+  var sentAttachments: [[ChatPendingAttachment]] = []
+  var sentClientIDs: [String] = []
 
   func observeConversations(
     onChange: @escaping ([ChatConversation]) -> Void,
@@ -46,15 +49,20 @@ final class FakeChatRepo: ChatRepo {
       : olderPages.removeFirst()
   }
 
-  func sendMessage(conversationID: String, text: String) async throws {
+  func sendMessage(conversationID: String, text: String, attachments: [ChatPendingAttachment],
+                   clientID: String, onProgress: @escaping (Double) -> Void) async throws {
+    sentClientIDs.append(clientID)
     if let sendHandler { try await sendHandler() }
     if failsToSend { throw FakeError() }
     sentTexts.append(text)
+    sentAttachments.append(attachments)
+    onProgress(1)
   }
 
   var failsToOpen = false
 
-  func markRead(conversationID: String, through clientCreatedAt: Int64?) async {
+  func markRead(conversationID: String, through clientCreatedAt: Int64?) async throws {
+    if failsToMarkRead { throw FakeError() }
     readTimestamps.append(clientCreatedAt)
   }
 

@@ -44,11 +44,12 @@ struct SampleChatRepo: ChatRepo {
     return ChatSubscription {}
   }
 
-  func sendMessage(conversationID: String, text: String) async throws {}
+  func sendMessage(conversationID: String, text: String, attachments: [ChatPendingAttachment],
+                   clientID: String, onProgress: @escaping (Double) -> Void) async throws {}
   func fetchOlderMessages(conversationID: String, before cursor: ChatMessageCursor) async throws -> ChatMessagePage {
     ChatMessagePage(messages: [], oldestCursor: nil, hasMore: false)
   }
-  func markRead(conversationID: String, through clientCreatedAt: Int64?) async {}
+  func markRead(conversationID: String, through clientCreatedAt: Int64?) async throws {}
   func openDirectConversation(with otherUserID: String) async throws -> String { "dm_me_\(otherUserID)" }
   func openGroupConversation(groupID: String) async throws -> String { "grp_\(groupID)" }
 }

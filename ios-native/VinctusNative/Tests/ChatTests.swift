@@ -101,6 +101,35 @@ final class ConversationViewModelTests: XCTestCase {
     XCTAssertFalse(vm.isSending)
   }
 
+  func testReadFailureDoesNotAdvanceTheAcknowledgementAndCanBeRetried() async {
+    let repo = FakeChatRepo()
+    let vm = ConversationViewModel(repo: repo, conversationID: "dm_a_b")
+    vm.start()
+    repo.messagesChanged?(page([1, 2], hasMore: false))
+    repo.failsToMarkRead = true
+    await vm.updateReadingContext(isActive: true, visibleLastMessageID: "m2")?.value
+    XCTAssertNotNil(vm.readErrorMessage)
+    XCTAssertTrue(repo.readTimestamps.isEmpty)
+
+    repo.failsToMarkRead = false
+    await vm.updateReadingContext(isActive: true, visibleLastMessageID: "m2")?.value
+    XCTAssertNil(vm.readErrorMessage)
+    XCTAssertEqual(repo.readTimestamps.compactMap { $0 }, [2])
+    vm.stop()
+  }
+
+  func testRetryOfARestoredTextDraftReusesItsMessageID() async {
+    let repo = FakeChatRepo()
+    let vm = ConversationViewModel(repo: repo, conversationID: "dm_a_b")
+    repo.failsToSend = true
+    vm.draft = "hola"
+    await vm.send()?.value
+    repo.failsToSend = false
+    await vm.send()?.value
+    XCTAssertEqual(repo.sentClientIDs.count, 2)
+    XCTAssertEqual(repo.sentClientIDs.first, repo.sentClientIDs.last)
+  }
+
   func testAFailedSendPreservesANewerDraftAndCanBeRetriedSeparately() async throws {
     let repo = FakeChatRepo()
     repo.failsToSend = true

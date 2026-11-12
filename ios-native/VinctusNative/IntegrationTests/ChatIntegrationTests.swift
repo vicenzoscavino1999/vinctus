@@ -1,10 +1,88 @@
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseStorage
 import XCTest
 @testable import VinctusNative
 
 @MainActor
 final class ChatIntegrationTests: EmulatorTestCase {
+  func testPhotoVideoAndAudioRoundTripAndRetryDoesNotDuplicateTheMessage() async throws {
+    let (repo, conversationID, uid) = try await makeConversation()
+    let cases: [(String, String, ChatMediaKind, Data)] = [
+      ("jpg", "image/jpeg", .image, Self.jpegData()),
+      ("mp4", "video/mp4", .video, Data([0, 1, 2, 3])),
+      ("m4a", "audio/mp4", .audio, Data([0, 1, 2, 3])),
+    ]
+    // Video/audio bytes here exercise upload permissions and message transport. Real codec
+    // decoding, microphone permissions and playback still need a device/simulator UI check.
+    for (suffix, type, kind, data) in cases {
+      let local = ChatPendingAttachment.temporaryURL(extension: suffix)
+      try data.write(to: local)
+      let file = try ChatPickedFile.ownedFile(local, name: "test.\(suffix)", type: type, kind: kind)
+      let id = UUID().uuidString
+      try await repo.sendMessage(conversationID: conversationID, text: "", attachments: [file], clientID: id, onProgress: { _ in })
+      try await repo.sendMessage(conversationID: conversationID, text: "", attachments: [file], clientID: id, onProgress: { _ in })
+      let stored = try await Firestore.firestore().collection("conversations").document(conversationID)
+        .collection("messages").document(id).getDocument(source: .server)
+      let message = try XCTUnwrap(FirebaseChatRepo.message(id: id, data: stored.data() ?? [:]))
+      let attachment = try XCTUnwrap(message.attachments.first)
+      XCTAssertEqual(attachment.mediaKind, kind)
+      XCTAssertEqual(attachment.contentType, type)
+      XCTAssertEqual(attachment.size, data.count)
+      XCTAssertTrue(attachment.path.contains("/\(uid)/\(id)/"))
+      let downloaded = try await Storage.storage().reference(withPath: attachment.path).data(maxSize: 1024 * 1024)
+      XCTAssertEqual(downloaded, data)
+    }
+    let messages = try await Firestore.firestore().collection("conversations").document(conversationID)
+      .collection("messages").getDocuments(source: .server)
+    XCTAssertEqual(messages.documents.count, 3)
+  }
+
+  func testReadAcknowledgementNeverMovesBackwards() async throws {
+    let (repo, conversationID, uid) = try await makeConversation()
+    let member = Firestore.firestore().collection("conversations").document(conversationID).collection("members").document(uid)
+    let newer = Int64(Date().timeIntervalSince1970 * 1000) + 1000
+    try await repo.markRead(conversationID: conversationID, through: newer)
+    try await repo.markRead(conversationID: conversationID, through: newer - 500)
+    let stored = try await member.getDocument(source: .server)
+    XCTAssertEqual((stored.data()?["lastReadClientAt"] as? NSNumber)?.int64Value, newer)
+  }
+
+  func testMoreThanFiftyDirectConversationsRemainAccessible() async throws {
+    let user = try await makeUser("Ana")
+    let db = Firestore.firestore()
+    let batch = db.batch()
+    let ids = (1...51).map { "dm_\(user.uid)_other\($0)" }
+    // Admin fixture writes create existing chats without 51 unrelated Auth sign-up flows.
+    // All application reads below still use FirebaseChatRepo under the user's real rules.
+    for id in ids {
+      let endpoint = URL(string: "http://127.0.0.1:8080/v1/projects/\(Emulator.projectID)/databases/(default)/documents/conversations/\(id)")!
+      var request = URLRequest(url: endpoint)
+      request.httpMethod = "PATCH"
+      request.setValue("Bearer owner", forHTTPHeaderField: "Authorization")
+      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+      request.httpBody = try JSONSerialization.data(withJSONObject: ["fields": [
+        "type": ["stringValue": "direct"],
+        "memberIds": ["arrayValue": ["values": [["stringValue": user.uid], ["stringValue": "other"]]]],
+        "updatedAt": ["timestampValue": "2026-01-01T00:00:00Z"],
+      ]])
+      let (_, response) = try await URLSession.shared.data(for: request)
+      XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+      batch.setData(["conversationId": id, "otherUid": "other", "type": "direct", "updatedAt": FieldValue.serverTimestamp()],
+        forDocument: db.collection("users").document(user.uid).collection("directConversations").document(id))
+    }
+    try await batch.commit()
+    let loaded = expectation(description: "All 51 direct chats are listed")
+    var didFulfill = false
+    let subscription = FirebaseChatRepo().observeConversations { conversations in
+      guard conversations.count == 51, !didFulfill else { return }
+      didFulfill = true
+      XCTAssertEqual(Set(conversations.map(\.id)), Set(ids))
+      loaded.fulfill()
+    } onError: { error in XCTFail("Conversation read failed: \(error)") }
+    defer { subscription.cancel() }
+    await fulfillment(of: [loaded], timeout: 30)
+  }
   func testHistoryPagesIncludeMessagesWithIdenticalTimestampsWithoutGapsOrDuplicates() async throws {
     let (repo, conversationID, uid) = try await makeConversation()
     try await seedMessages(1...105, conversationID: conversationID, uid: uid, timestamp: 1_700_000_000_000)

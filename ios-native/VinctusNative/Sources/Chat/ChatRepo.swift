@@ -1,6 +1,7 @@
 import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
+import FirebaseStorage
 import Foundation
 
 struct ChatConversation: Identifiable, Hashable {
@@ -24,14 +25,16 @@ struct ChatMessage: Identifiable, Hashable {
   let hasAttachments: Bool
   let createdAt: Date
   let clientCreatedAt: Int64
+  let attachments: [ChatAttachment]
 
   init(id: String, senderID: String, senderName: String?, text: String, hasAttachments: Bool,
-       createdAt: Date, clientCreatedAt: Int64? = nil) {
+       createdAt: Date, clientCreatedAt: Int64? = nil, attachments: [ChatAttachment] = []) {
     self.id = id
     self.senderID = senderID
     self.senderName = senderName
     self.text = text
-    self.hasAttachments = hasAttachments
+    self.hasAttachments = hasAttachments || !attachments.isEmpty
+    self.attachments = attachments
     self.createdAt = createdAt
     self.clientCreatedAt = clientCreatedAt ?? Int64(createdAt.timeIntervalSince1970 * 1000)
   }
@@ -80,15 +83,21 @@ protocol ChatRepo {
     onError: @escaping (Error) -> Void
   ) -> ChatSubscription
   func fetchOlderMessages(conversationID: String, before cursor: ChatMessageCursor) async throws -> ChatMessagePage
-  func sendMessage(conversationID: String, text: String) async throws
-  func markRead(conversationID: String, through clientCreatedAt: Int64?) async
+  func sendMessage(conversationID: String, text: String, attachments: [ChatPendingAttachment],
+                   clientID: String, onProgress: @escaping (Double) -> Void) async throws
+  func markRead(conversationID: String, through clientCreatedAt: Int64?) async throws
   func openDirectConversation(with otherUserID: String) async throws -> String
   func openGroupConversation(groupID: String) async throws -> String
 }
 
 extension ChatRepo {
-  func markRead(conversationID: String) async {
-    await markRead(conversationID: conversationID, through: nil)
+  func markRead(conversationID: String) async throws {
+    try await markRead(conversationID: conversationID, through: nil)
+  }
+
+  func sendMessage(conversationID: String, text: String) async throws {
+    try await sendMessage(conversationID: conversationID, text: text, attachments: [],
+      clientID: UUID().uuidString, onProgress: { _ in })
   }
 }
 
@@ -150,7 +159,7 @@ final class FirebaseChatRepo: ChatRepo {
     }
     let (db, uid) = session
     let observer = ConversationListObserver(db: db, uid: uid, onChange: onChange, onError: onError)
-    observer.start(limit: Self.listLimit)
+    observer.start()
     return ChatSubscription { observer.stop() }
   }
 
@@ -214,21 +223,46 @@ final class FirebaseChatRepo: ChatRepo {
     )
   }
 
-  func sendMessage(conversationID: String, text: String) async throws {
+  func sendMessage(conversationID: String, text: String, attachments: [ChatPendingAttachment],
+                   clientID: String, onProgress: @escaping (Double) -> Void) async throws {
     let (db, uid) = try context()
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { throw ChatRepoError.emptyMessage }
+    guard !trimmed.isEmpty || !attachments.isEmpty else { throw ChatRepoError.emptyMessage }
     guard trimmed.count <= Self.maxMessageLength else { throw ChatRepoError.messageTooLong }
+    guard attachments.count <= 10 else { throw ChatMediaError.tooManyAttachments }
+    for attachment in attachments { try attachment.validate() }
+
+    let conversation = db.collection(FirestoreCollections.conversations).document(conversationID)
+    let message = conversation.collection(FirestoreSubcollections.messages).document(clientID)
+    // A failed acknowledgement can follow a successful commit. Reuse the outbox ID on retry
+    // and check the server before uploading again; immutable messages cannot be overwritten.
+    let existing = try await message.getDocument(source: .server)
+    if let data = existing.data() {
+      guard data["senderId"] as? String == uid, data["text"] as? String == trimmed else {
+        throw ChatMediaError.invalidAttachment
+      }
+      onProgress(1)
+      return
+    }
 
     let profile = try await currentSenderProfile(db: db, uid: uid)
     let now = Int64(Date().timeIntervalSince1970 * 1000)
-    // Deterministic id, like the web, so a retried write doesn't duplicate the message.
-    let clientID = "\(uid)_\(now)_\(UUID().uuidString.prefix(8).lowercased())"
-    let conversation = db.collection(FirestoreCollections.conversations).document(conversationID)
+    var uploaded: [ChatAttachment] = []
+    let totalBytes = max(1, attachments.reduce(0) { $0 + $1.size })
+    var completedBytes = 0
+    for attachment in attachments {
+      let completed = completedBytes
+      let result = try await upload(attachment, conversationID: conversationID, uid: uid, messageID: clientID) { fraction in
+        onProgress(Double(completed) / Double(totalBytes) + fraction * Double(attachment.size) / Double(totalBytes))
+      }
+      uploaded.append(result)
+      completedBytes += attachment.size
+    }
+    // The signed-in account may change while a large file uploads.
+    guard Auth.auth().currentUser?.uid == uid else { throw ChatRepoError.userNotAuthenticated }
 
     let batch = db.batch()
-    batch.setData(
-      [
+    var payload: [String: Any] = [
         "senderId": uid,
         "senderName": profile.name ?? NSNull(),
         "senderPhotoURL": profile.photoURL ?? NSNull(),
@@ -236,13 +270,13 @@ final class FirebaseChatRepo: ChatRepo {
         "createdAt": FieldValue.serverTimestamp(),
         "clientCreatedAt": now,
         "clientId": clientID,
-      ],
-      forDocument: conversation.collection(FirestoreSubcollections.messages).document(clientID)
-    )
+      ]
+    if !uploaded.isEmpty { payload["attachments"] = uploaded.map(\.fields) }
+    batch.setData(payload, forDocument: message)
     batch.updateData(
       [
         "lastMessage": [
-          "text": trimmed,
+          "text": Self.preview(text: trimmed, attachments: uploaded),
           "senderId": uid,
           "senderName": profile.name ?? NSNull(),
           "senderPhotoURL": profile.photoURL ?? NSNull(),
@@ -254,17 +288,57 @@ final class FirebaseChatRepo: ChatRepo {
       forDocument: conversation
     )
     try await batch.commit()
+    onProgress(1)
   }
 
-  func markRead(conversationID: String, through clientCreatedAt: Int64?) async {
-    guard let session = try? context() else { return }
-    let (db, uid) = session
-    try? await db.collection(FirestoreCollections.conversations).document(conversationID)
+  private func upload(_ file: ChatPendingAttachment, conversationID: String, uid: String,
+                      messageID: String, onProgress: @escaping (Double) -> Void) async throws -> ChatAttachment {
+    let path = StoragePaths.conversationAttachment(conversationID: conversationID, userID: uid,
+      messageID: messageID, filename: file.id + "." + file.fileURL.pathExtension)
+    let ref = Storage.storage().reference(withPath: path)
+    do {
+      _ = try await ref.getMetadata()
+    } catch let error as NSError where error.domain == StorageErrorDomain && error.code == StorageErrorCode.objectNotFound.rawValue {
+      let metadata = StorageMetadata()
+      metadata.contentType = file.contentType
+      _ = try await ref.putFileAsync(from: file.fileURL, metadata: metadata) { progress in
+        onProgress(progress?.fractionCompleted ?? 0)
+      }
+    }
+    let url = try await ref.downloadURL()
+    return ChatAttachment(kind: file.kind == .image ? "image" : "file", url: url.absoluteString,
+      path: path, fileName: file.fileName, contentType: file.contentType, size: file.size)
+  }
+
+  static func preview(text: String, attachments: [ChatAttachment]) -> String {
+    if !text.isEmpty { return text }
+    if attachments.count > 1 { return "Adjuntos (\(attachments.count))" }
+    return attachments.first?.label ?? ""
+  }
+
+  func markRead(conversationID: String, through clientCreatedAt: Int64?) async throws {
+    let (db, uid) = try context()
+    let member = db.collection(FirestoreCollections.conversations).document(conversationID)
       .collection(FirestoreSubcollections.members).document(uid)
-      .updateData([
-        "lastReadClientAt": clientCreatedAt ?? Int64(Date().timeIntervalSince1970 * 1000),
-        "lastReadAt": FieldValue.serverTimestamp(),
-      ])
+    let timestamp = clientCreatedAt ?? Int64(Date().timeIntervalSince1970 * 1000)
+    _ = try await db.runTransaction { transaction, errorPointer in
+      do {
+        let snapshot = try transaction.getDocument(member)
+        let previous = (snapshot.data()?["lastReadClientAt"] as? NSNumber)?.int64Value ?? 0
+        if snapshot.exists {
+          if timestamp > previous {
+            transaction.updateData(["lastReadClientAt": timestamp, "lastReadAt": FieldValue.serverTimestamp()], forDocument: member)
+          }
+        } else {
+          transaction.setData([
+            "uid": uid, "role": "member", "joinedAt": FieldValue.serverTimestamp(),
+            "lastReadClientAt": timestamp, "lastReadAt": FieldValue.serverTimestamp(),
+            "muted": false, "mutedUntil": NSNull(),
+          ], forDocument: member)
+        }
+      } catch { errorPointer?.pointee = error as NSError }
+      return nil
+    }
   }
 
   // MARK: Opening conversations
@@ -385,7 +459,8 @@ final class FirebaseChatRepo: ChatRepo {
       text: data["text"] as? String ?? "",
       hasAttachments: !attachments.isEmpty,
       createdAt: createdAt,
-      clientCreatedAt: (data["clientCreatedAt"] as? NSNumber)?.int64Value
+      clientCreatedAt: (data["clientCreatedAt"] as? NSNumber)?.int64Value,
+      attachments: attachments.compactMap { ($0 as? [String: Any]).flatMap(ChatAttachment.init(fields:)) }
     )
   }
 }
@@ -420,12 +495,10 @@ private final class ConversationListObserver {
     self.onError = onError
   }
 
-  func start(limit: Int) {
+  func start() {
     let user = db.collection(FirestoreCollections.users).document(uid)
     indexListeners.append(
       user.collection(FirestoreSubcollections.directConversations)
-        .order(by: "updatedAt", descending: true)
-        .limit(to: limit)
         .addSnapshotListener { [weak self] snapshot, error in
           guard let self, !self.isStopped else { return }
           if let error {

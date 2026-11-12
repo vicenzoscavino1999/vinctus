@@ -17,7 +17,7 @@ final class FollowIntegrationTests: EmulatorTestCase {
     let conversationID = try await chat.openDirectConversation(with: bruno.uid)
     XCTAssertTrue(conversationID.hasPrefix("dm_"))
     try await chat.sendMessage(conversationID: conversationID, text: "¡Hola, Bruno!")
-    await chat.markRead(conversationID: conversationID)
+    try await chat.markRead(conversationID: conversationID)
 
     try await engagement.unfollow(targetUID: bruno.uid, status: .following)
     let afterUnfollow = try await engagement.followStatus(targetUID: bruno.uid)

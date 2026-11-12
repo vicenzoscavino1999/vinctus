@@ -114,6 +114,20 @@ service firebase.storage {
     function isUnderCollectionFileSizeLimit() {
       return request.resource.size < 25 * 1024 * 1024; // 25MB
     }
+
+    function isValidChatAudioType() {
+      return request.resource.contentType in [
+        'audio/mp4', 'audio/aac', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm'
+      ];
+    }
+
+    function isUnderChatVideoSizeLimit() {
+      return request.resource.size < 25 * 1024 * 1024;
+    }
+
+    function isUnderChatAudioSizeLimit() {
+      return request.resource.size < 10 * 1024 * 1024;
+    }
     
     // CRITICAL: resource == null prevents overwrite
     // NOTE: Requires Object Versioning enabled on bucket
@@ -233,6 +247,8 @@ service firebase.storage {
         && (
           (isValidImageType() && isUnderImageSizeLimit())
           || (isValidChatFileType() && isUnderCollectionFileSizeLimit())
+          || (isValidVideoType() && isUnderChatVideoSizeLimit())
+          || (isValidChatAudioType() && isUnderChatAudioSizeLimit())
         );
 
       allow delete: if isAuthenticated()

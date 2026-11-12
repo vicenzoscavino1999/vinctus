@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import PhotosUI
 
 // MARK: - Conversation list (Mensajes tab)
 
@@ -42,8 +43,9 @@ final class ConversationsViewModel: ObservableObject {
 // MARK: - Conversation
 
 struct FailedChatMessage: Identifiable {
-  let id = UUID()
+  let id: String
   let text: String
+  let attachments: [ChatPendingAttachment]
 }
 
 /// Distinguishes layout movement caused by incoming rows from an intentional user scroll.
@@ -102,8 +104,13 @@ final class ConversationViewModel: ObservableObject {
   @Published private(set) var loadErrorMessage: String?
   @Published private(set) var historyErrorMessage: String?
   @Published private(set) var sendErrorMessage: String?
+  @Published private(set) var readErrorMessage: String?
+  @Published private(set) var attachments: [ChatPendingAttachment] = []
+  @Published private(set) var isPreparingMedia = false
+  @Published private(set) var uploadProgress: Double = 0
+  @Published var mediaErrorMessage: String?
 
-  var errorMessage: String? { loadErrorMessage ?? historyErrorMessage ?? sendErrorMessage }
+  var errorMessage: String? { loadErrorMessage ?? historyErrorMessage ?? sendErrorMessage ?? mediaErrorMessage ?? readErrorMessage }
 
   let conversationID: String
   private let repo: ChatRepo
@@ -114,6 +121,9 @@ final class ConversationViewModel: ObservableObject {
   private var isStarted = false
   private var isActive = false
   private var lastReadClientAt: Int64?
+  private var readInFlight = false
+  private var restoredDraft: (text: String, clientID: String)?
+  private var visibleLastMessageID: String?
 
   init(repo: ChatRepo, conversationID: String) {
     self.repo = repo
@@ -122,7 +132,7 @@ final class ConversationViewModel: ObservableObject {
 
   var canSend: Bool {
     let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-    return !isSending && !text.isEmpty && text.count <= FirebaseChatRepo.maxMessageLength
+    return !isSending && !isPreparingMedia && (!text.isEmpty || !attachments.isEmpty) && text.count <= FirebaseChatRepo.maxMessageLength
   }
 
   func start() {
@@ -220,16 +230,25 @@ final class ConversationViewModel: ObservableObject {
   @discardableResult
   func updateReadingContext(isActive: Bool, visibleLastMessageID: String?) -> Task<Void, Never>? {
     self.isActive = isActive
-    guard isStarted, isActive, let message = messages.last,
+    self.visibleLastMessageID = visibleLastMessageID
+    guard isStarted, isActive, !readInFlight, let message = messages.last,
       message.id == visibleLastMessageID,
       lastReadClientAt.map({ message.clientCreatedAt > $0 }) ?? true
     else { return nil }
     let token = sessionID
     return Task { [weak self] in
-      guard let self, self.isStarted, self.isActive, self.sessionID == token else { return }
-      guard self.lastReadClientAt.map({ message.clientCreatedAt > $0 }) ?? true else { return }
-      self.lastReadClientAt = message.clientCreatedAt
-      await self.repo.markRead(conversationID: self.conversationID, through: message.clientCreatedAt)
+      guard let self, self.isStarted, self.isActive, self.sessionID == token,
+        self.visibleLastMessageID == message.id else { return }
+      guard !self.readInFlight, self.lastReadClientAt.map({ message.clientCreatedAt > $0 }) ?? true else { return }
+      self.readInFlight = true
+      defer { self.readInFlight = false }
+      do {
+        try await self.repo.markRead(conversationID: self.conversationID, through: message.clientCreatedAt)
+        self.lastReadClientAt = message.clientCreatedAt
+        self.readErrorMessage = nil
+      } catch {
+        self.readErrorMessage = "No se pudo registrar la lectura. Toca Reintentar."
+      }
     }
   }
 
@@ -238,34 +257,70 @@ final class ConversationViewModel: ObservableObject {
   func send() -> Task<Void, Never>? {
     guard canSend else { return nil }
     let text = draft
+    let files = attachments
     draft = ""
-    return performSend(text: text, retryID: nil)
+    attachments = []
+    let clientID = files.isEmpty && restoredDraft?.text == text ? restoredDraft!.clientID : UUID().uuidString
+    restoredDraft = nil
+    return performSend(text: text, files: files, clientID: clientID, isRetry: false)
   }
 
   @discardableResult
   func retry(_ message: FailedChatMessage) -> Task<Void, Never>? {
     guard !isSending, failedMessages.contains(where: { $0.id == message.id }) else { return nil }
-    return performSend(text: message.text, retryID: message.id)
+    return performSend(text: message.text, files: message.attachments, clientID: message.id, isRetry: true)
   }
 
-  private func performSend(text: String, retryID: UUID?) -> Task<Void, Never> {
+  private func performSend(text: String, files: [ChatPendingAttachment], clientID: String, isRetry: Bool) -> Task<Void, Never> {
     isSending = true
+    uploadProgress = 0
     sendErrorMessage = nil
     return Task {
       do {
-        try await repo.sendMessage(conversationID: conversationID, text: text)
-        if let retryID { failedMessages.removeAll { $0.id == retryID } }
+        try await repo.sendMessage(conversationID: conversationID, text: text, attachments: files, clientID: clientID) { [weak self] progress in
+          Task { @MainActor [weak self] in self?.uploadProgress = progress }
+        }
+        failedMessages.removeAll { $0.id == clientID }
       } catch {
-        if retryID == nil {
-          if draft.isEmpty {
+        if !isRetry {
+          if files.isEmpty, draft.isEmpty {
             draft = text
+            restoredDraft = (text, clientID)
           } else {
-            failedMessages.append(FailedChatMessage(text: text))
+            failedMessages.append(FailedChatMessage(id: clientID, text: text, attachments: files))
           }
         }
         sendErrorMessage = (error as? LocalizedError)?.errorDescription ?? "No se pudo enviar el mensaje."
       }
       isSending = false
     }
+  }
+
+  func preparePhotos(_ items: [PhotosPickerItem]) async {
+    guard !isPreparingMedia, !isSending else { return }
+    isPreparingMedia = true
+    mediaErrorMessage = nil
+    defer { isPreparingMedia = false }
+    for item in items {
+      do {
+        try Task.checkCancellation()
+        guard let file = try await item.loadTransferable(type: ChatPickedFile.self)?.attachment else {
+          throw ChatMediaError.invalidAttachment
+        }
+        try Task.checkCancellation()
+        try addAttachment(file)
+      } catch is CancellationError { return }
+      catch { mediaErrorMessage = error.localizedDescription }
+    }
+  }
+
+  func addAttachment(_ file: ChatPendingAttachment) throws {
+    guard attachments.count < 10 else { throw ChatMediaError.tooManyAttachments }
+    try file.validate()
+    attachments.append(file)
+  }
+
+  func removeAttachment(_ id: String) {
+    attachments.removeAll { $0.id == id }
   }
 }

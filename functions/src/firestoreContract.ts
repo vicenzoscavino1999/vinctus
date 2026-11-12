@@ -179,6 +179,10 @@ export const STORAGE_MAX_BYTES = {
   video: 100 * 1024 * 1024,
   /** Story videos. */
   storyVideo: 25 * 1024 * 1024,
+  /** Videos attached to a conversation. */
+  chatVideo: 25 * 1024 * 1024,
+  /** Voice notes and audio attached to a conversation. */
+  chatAudio: 10 * 1024 * 1024,
   /** Files: post and chat files, collection and contribution files. Also the largest file size that contributions, collection items and post media store in Firestore. */
   file: 25 * 1024 * 1024,
 } as const;
@@ -220,6 +224,15 @@ export const STORAGE_CONTENT_TYPES = {
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  ] as readonly string[],
+  /** Audio attached to a conversation, including AAC voice notes in an MP4 container. */
+  chatAudio: [
+    'audio/mp4',
+    'audio/aac',
+    'audio/mpeg',
+    'audio/wav',
+    'audio/ogg',
+    'audio/webm',
   ] as readonly string[],
 } as const;
 
@@ -267,7 +280,7 @@ export const STORAGE_PATHS = {
     storyId: string;
     filename: string;
   }) => `stories/${userId}/${storyId}/thumb/${filename}`,
-  /** `conversations/{conversationId}/attachments/{userId}/{messageId}/{filename}`: `image` under 10 MB or `chatFile` under 25 MB. */
+  /** `conversations/{conversationId}/attachments/{userId}/{messageId}/{filename}`: `image` under 10 MB or `chatFile` under 25 MB or `video` under 25 MB or `chatAudio` under 10 MB. */
   conversationAttachment: ({
     conversationId,
     userId,
