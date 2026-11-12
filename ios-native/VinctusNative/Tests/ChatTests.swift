@@ -319,3 +319,33 @@ final class ConversationsViewModelTests: XCTestCase {
     vm.stop()
   }
 }
+
+final class ChatScrollStateTests: XCTestCase {
+  func testIncomingMessagesDoNotInterruptReadingHistory() {
+    var state = ChatScrollState()
+    XCTAssertTrue(state.lastMessageChanged(previousID: nil, lastID: "m1", isSendingOwnMessage: false))
+    state.updateBottom(isVisible: true, messageID: "m1")
+    state.userDidScroll()
+    state.updateBottom(isVisible: false, messageID: "m1")
+
+    XCTAssertFalse(state.lastMessageChanged(previousID: "m1", lastID: "m2", isSendingOwnMessage: false))
+    XCTAssertTrue(state.hasNewMessages)
+    XCTAssertFalse(state.isAtBottom)
+  }
+
+  func testABurstOfMessagesFollowsTheLatestUntilTheUserScrolls() {
+    var state = ChatScrollState()
+    _ = state.lastMessageChanged(previousID: nil, lastID: "m1", isSendingOwnMessage: false)
+    state.updateBottom(isVisible: true, messageID: "m1")
+    // Layout may report the new bottom outside the viewport before onChange runs.
+    state.updateBottom(isVisible: false, messageID: "m2")
+    XCTAssertTrue(state.lastMessageChanged(previousID: "m1", lastID: "m2", isSendingOwnMessage: false))
+    state.updateBottom(isVisible: false, messageID: "m2")
+    XCTAssertTrue(state.lastMessageChanged(previousID: "m2", lastID: "m3", isSendingOwnMessage: false))
+
+    state.userDidScroll()
+    XCTAssertFalse(state.lastMessageChanged(previousID: "m3", lastID: "m4", isSendingOwnMessage: false))
+    state.updateBottom(isVisible: true, messageID: "m4")
+    XCTAssertFalse(state.hasNewMessages)
+  }
+}

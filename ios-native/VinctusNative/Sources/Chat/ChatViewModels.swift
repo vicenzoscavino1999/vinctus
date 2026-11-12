@@ -46,6 +46,50 @@ struct FailedChatMessage: Identifiable {
   let text: String
 }
 
+/// Distinguishes layout movement caused by incoming rows from an intentional user scroll.
+struct ChatScrollState {
+  private(set) var isAtBottom = true
+  private(set) var hasNewMessages = false
+  private var didPositionInitialMessages = false
+  private var bottomVisibleMessageID: String?
+  private var isScrollingToLatest = false
+
+  mutating func updateBottom(isVisible: Bool, messageID: String?) {
+    isAtBottom = isVisible
+    if isVisible {
+      hasNewMessages = false
+      bottomVisibleMessageID = messageID
+      isScrollingToLatest = false
+    } else if !isScrollingToLatest, messageID == bottomVisibleMessageID {
+      bottomVisibleMessageID = nil
+    }
+  }
+
+  mutating func lastMessageChanged(previousID: String?, lastID: String?, isSendingOwnMessage: Bool) -> Bool {
+    guard lastID != nil else { return false }
+    let followsLatest = !didPositionInitialMessages || isAtBottom || isScrollingToLatest ||
+      (previousID != nil && bottomVisibleMessageID == previousID) || isSendingOwnMessage
+    didPositionInitialMessages = true
+    if followsLatest {
+      scrollToLatest()
+    } else {
+      hasNewMessages = true
+    }
+    return followsLatest
+  }
+
+  mutating func scrollToLatest() {
+    isScrollingToLatest = true
+    hasNewMessages = false
+  }
+
+  mutating func userDidScroll() {
+    isScrollingToLatest = false
+    bottomVisibleMessageID = nil
+    isAtBottom = false
+  }
+}
+
 @MainActor
 final class ConversationViewModel: ObservableObject {
   @Published private(set) var messages: [ChatMessage] = []

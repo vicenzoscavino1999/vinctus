@@ -15,10 +15,7 @@ struct ConversationView: View {
   @State private var actionError: String?
   @State private var scrollPosition: String?
   @State private var bottomPosition: ChatBottomPosition?
-  @State private var isAtBottom = true
-  @State private var bottomWasVisibleForMessageID: String?
-  @State private var didPositionInitialMessages = false
-  @State private var hasNewMessages = false
+  @State private var scrollState = ChatScrollState()
 
   init(repo: ChatRepo, profileRepo: ProfileRepo, conversationID: String, title: String, otherUserID: String?) {
     self.profileRepo = profileRepo
@@ -92,29 +89,39 @@ struct ConversationView: View {
           .scrollPosition(id: $scrollPosition, anchor: .top)
           .onPreferenceChange(ChatBottomPositionKey.self) { position in
             bottomPosition = position
-            isAtBottom = position.map { $0.bottomY >= 0 && $0.bottomY <= viewport.size.height + 1 } ?? false
-            if isAtBottom {
-              hasNewMessages = false
-              bottomWasVisibleForMessageID = position?.messageID
-            } else if position?.messageID == bottomWasVisibleForMessageID {
-              bottomWasVisibleForMessageID = nil
-            }
+            scrollState.updateBottom(
+              isVisible: position.map { $0.bottomY >= 0 && $0.bottomY <= viewport.size.height + 1 } ?? false,
+              messageID: position?.messageID
+            )
             updateReadingContext()
           }
           .onChange(of: visibleMessages.last?.id) { previousID, lastID in
-            guard lastID != nil else { return }
-            if !didPositionInitialMessages || isAtBottom ||
-              (previousID != nil && bottomWasVisibleForMessageID == previousID) ||
-              (visibleMessages.last?.senderID == authVM.currentUserID && vm.isSending) {
-              didPositionInitialMessages = true
+            if scrollState.lastMessageChanged(
+              previousID: previousID,
+              lastID: lastID,
+              isSendingOwnMessage: visibleMessages.last?.senderID == authVM.currentUserID && vm.isSending
+            ) {
               withAnimation { proxy.scrollTo("conversation-bottom", anchor: .bottom) }
-            } else {
-              hasNewMessages = true
             }
           }
+          .simultaneousGesture(
+            DragGesture()
+              .onChanged { _ in
+                scrollState.userDidScroll()
+                updateReadingContext()
+              }
+              .onEnded { _ in
+                scrollState.updateBottom(
+                  isVisible: bottomPosition.map { $0.bottomY >= 0 && $0.bottomY <= viewport.size.height + 1 } ?? false,
+                  messageID: bottomPosition?.messageID
+                )
+                updateReadingContext()
+              }
+          )
           .overlay(alignment: .bottomTrailing) {
-            if hasNewMessages {
+            if scrollState.hasNewMessages {
               Button {
+                scrollState.scrollToLatest()
                 withAnimation { proxy.scrollTo("conversation-bottom", anchor: .bottom) }
               } label: {
                 Label("Mensajes nuevos", systemImage: "arrow.down")
@@ -191,7 +198,7 @@ struct ConversationView: View {
   private func updateReadingContext() {
     vm.updateReadingContext(
       isActive: scenePhase == .active,
-      visibleLastMessageID: isAtBottom ? bottomPosition?.messageID : nil
+      visibleLastMessageID: scrollState.isAtBottom ? bottomPosition?.messageID : nil
     )
   }
 
