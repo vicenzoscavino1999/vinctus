@@ -44,19 +44,23 @@ final class ChatUITests: XCTestCase {
 
   func testVoiceRecordingProducesAnAttachmentForPreview() {
     openFromList()
-    addUIInterruptionMonitor(withDescription: "Microphone permission") { alert in
-      let allow = alert.buttons.matching(NSPredicate(format: "label == 'Allow' OR label == 'Permitir' OR label == 'OK' OR label == 'Aceptar'")).firstMatch
-      guard allow.exists else { return false }
-      allow.tap()
-      return true
-    }
     app.buttons["Grabar nota de voz"].tap()
-    app.tap() // Lets XCTest handle the system permission prompt if it is shown.
+    // The permission request is asynchronous. An immediate app.tap() can run before
+    // SpringBoard presents the alert, leaving the permission unanswered.
+    let permissionAlert = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.firstMatch
+    if permissionAlert.waitForExistence(timeout: 10) {
+      let allow = permissionAlert.buttons.matching(NSPredicate(format: "label == 'Allow' OR label == 'Permitir' OR label == 'OK' OR label == 'Aceptar'")).firstMatch
+      XCTAssertTrue(allow.exists)
+      allow.tap()
+    }
     XCTAssertTrue(app.buttons["Terminar"].waitForExistence(timeout: 20))
     sleep(2)
     app.buttons["Terminar"].tap()
     XCTAssertTrue(app.buttons["Quitar Nota de voz.m4a"].waitForExistence(timeout: 10))
     XCTAssertTrue(app.buttons["Enviar"].isEnabled)
+    app.buttons.containing(.staticText, identifier: "Nota de voz.m4a").firstMatch.tap()
+    XCTAssertTrue(app.buttons["Cerrar"].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.navigationBars["Nota de voz.m4a"].exists)
   }
 
   private func openFromList() {
