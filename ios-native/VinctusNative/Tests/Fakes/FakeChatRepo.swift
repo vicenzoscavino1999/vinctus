@@ -16,6 +16,7 @@ final class FakeChatRepo: ChatRepo {
   var olderHandler: (() async throws -> ChatMessagePage)?
   var readTimestamps: [Int64?] = []
   var failsToMarkRead = false
+  var readHandler: ((Int64?) async throws -> Void)?
   var sentAttachments: [[ChatPendingAttachment]] = []
   var sentClientIDs: [String] = []
 
@@ -62,6 +63,7 @@ final class FakeChatRepo: ChatRepo {
   var failsToOpen = false
 
   func markRead(conversationID: String, through clientCreatedAt: Int64?) async throws {
+    if let readHandler { try await readHandler(clientCreatedAt) }
     if failsToMarkRead { throw FakeError() }
     readTimestamps.append(clientCreatedAt)
   }

@@ -13,6 +13,7 @@ final class ConversationsViewModel: ObservableObject {
 
   private let repo: ChatRepo
   private var subscription: ChatSubscription?
+  private var listenerID = UUID()
 
   init(repo: ChatRepo) {
     self.repo = repo
@@ -21,21 +22,26 @@ final class ConversationsViewModel: ObservableObject {
   func start() {
     guard subscription == nil else { return }
     isLoading = true
+    let token = UUID()
+    listenerID = token
     subscription = repo.observeConversations(
       onChange: { [weak self] conversations in
-        self?.conversations = conversations
-        self?.isLoading = false
-        self?.errorMessage = nil
+        guard let self, self.listenerID == token else { return }
+        self.conversations = conversations
+        self.isLoading = false
+        self.errorMessage = nil
       },
       onError: { [weak self] error in
-        self?.isLoading = false
-        self?.errorMessage = "No se pudieron cargar tus conversaciones."
+        guard let self, self.listenerID == token else { return }
+        self.isLoading = false
+        self.errorMessage = "No se pudieron cargar tus conversaciones."
         AppLog.ui.error("chat.list.failed errorType=\(AppLog.errorType(error), privacy: .public)")
       }
     )
   }
 
   func stop() {
+    listenerID = UUID()
     subscription?.cancel()
     subscription = nil
   }
@@ -122,7 +128,7 @@ final class ConversationViewModel: ObservableObject {
   private var isStarted = false
   private var isActive = false
   private var lastReadClientAt: Int64?
-  private var readInFlight = false
+  private var readRequestID: UUID?
   private var restoredDraft: (text: String, clientID: String)?
   private var visibleLastMessageID: String?
 
@@ -184,6 +190,7 @@ final class ConversationViewModel: ObservableObject {
     isActive = false
     sessionID = UUID()
     listenerID = UUID()
+    readRequestID = nil
     isLoadingOlder = false
     subscription?.cancel()
     subscription = nil
@@ -232,23 +239,31 @@ final class ConversationViewModel: ObservableObject {
   func updateReadingContext(isActive: Bool, visibleLastMessageID: String?) -> Task<Void, Never>? {
     self.isActive = isActive
     self.visibleLastMessageID = visibleLastMessageID
-    guard isStarted, isActive, !readInFlight, let message = messages.last,
+    guard isStarted, isActive, readRequestID == nil, let message = messages.last,
       message.id == visibleLastMessageID,
       lastReadClientAt.map({ message.clientCreatedAt > $0 }) ?? true
     else { return nil }
     let token = sessionID
+    let requestID = UUID()
+    readRequestID = requestID
     return Task { [weak self] in
-      guard let self, self.isStarted, self.isActive, self.sessionID == token,
-        self.visibleLastMessageID == message.id else { return }
-      guard !self.readInFlight, self.lastReadClientAt.map({ message.clientCreatedAt > $0 }) ?? true else { return }
-      self.readInFlight = true
-      defer { self.readInFlight = false }
-      do {
-        try await self.repo.markRead(conversationID: self.conversationID, through: message.clientCreatedAt)
-        self.lastReadClientAt = message.clientCreatedAt
-        self.readErrorMessage = nil
-      } catch {
-        self.readErrorMessage = "No se pudo registrar la lectura. Toca Reintentar."
+      guard let self else { return }
+      defer { if self.readRequestID == requestID { self.readRequestID = nil } }
+      // Coalesce arrivals while Firebase acknowledges an earlier visible message. A new
+      // layout callback may already have run during that await, so drain its latest context.
+      while self.isStarted, self.isActive, self.sessionID == token, self.readRequestID == requestID {
+        guard let message = self.messages.last, message.id == self.visibleLastMessageID,
+          self.lastReadClientAt.map({ message.clientCreatedAt > $0 }) ?? true else { return }
+        do {
+          try await self.repo.markRead(conversationID: self.conversationID, through: message.clientCreatedAt)
+          guard self.sessionID == token, self.readRequestID == requestID else { return }
+          self.lastReadClientAt = message.clientCreatedAt
+          self.readErrorMessage = nil
+        } catch {
+          guard self.sessionID == token, self.readRequestID == requestID else { return }
+          self.readErrorMessage = "No se pudo registrar la lectura. Toca Reintentar."
+          return
+        }
       }
     }
   }

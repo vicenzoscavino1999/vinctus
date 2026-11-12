@@ -118,6 +118,63 @@ final class ConversationViewModelTests: XCTestCase {
     vm.stop()
   }
 
+  func testMessagesBecomingVisibleDuringAReadAreAcknowledgedWithoutAnotherLayoutCallback() async {
+    let repo = FakeChatRepo()
+    let vm = ConversationViewModel(repo: repo, conversationID: "dm_a_b")
+    vm.start()
+    repo.messagesChanged?(page([1], hasMore: false))
+    repo.readHandler = { timestamp in
+      if timestamp == 1 {
+        repo.messagesChanged?(self.page([1, 2], hasMore: false))
+        XCTAssertNil(vm.updateReadingContext(isActive: true, visibleLastMessageID: "m2"))
+      }
+    }
+
+    await vm.updateReadingContext(isActive: true, visibleLastMessageID: "m1")?.value
+
+    XCTAssertEqual(repo.readTimestamps.compactMap { $0 }, [1, 2])
+    vm.stop()
+  }
+
+  func testArrivalsDuringAReadAreNotAcknowledgedUntilVisibleAndActive() async {
+    for isActive in [true, false] {
+      let repo = FakeChatRepo()
+      let vm = ConversationViewModel(repo: repo, conversationID: "dm_a_b")
+      vm.start()
+      repo.messagesChanged?(page([1], hasMore: false))
+      repo.readHandler = { _ in
+        repo.messagesChanged?(self.page([1, 2], hasMore: false))
+        vm.updateReadingContext(isActive: isActive, visibleLastMessageID: isActive ? "m1" : "m2")
+      }
+
+      await vm.updateReadingContext(isActive: true, visibleLastMessageID: "m1")?.value
+
+      XCTAssertEqual(repo.readTimestamps.compactMap { $0 }, [1])
+      vm.stop()
+    }
+  }
+
+  func testAReadFromThePreviousSessionCannotBlockOrShowErrorsInTheReopenedConversation() async {
+    let repo = FakeChatRepo()
+    let vm = ConversationViewModel(repo: repo, conversationID: "dm_a_b")
+    vm.start()
+    repo.messagesChanged?(page([1], hasMore: false))
+    repo.readHandler = { _ in
+      vm.stop()
+      vm.start()
+      repo.readHandler = nil
+      repo.messagesChanged?(self.page([1, 2], hasMore: false))
+      await vm.updateReadingContext(isActive: true, visibleLastMessageID: "m2")?.value
+      throw FakeError()
+    }
+
+    await vm.updateReadingContext(isActive: true, visibleLastMessageID: "m1")?.value
+
+    XCTAssertEqual(repo.readTimestamps.compactMap { $0 }, [2])
+    XCTAssertNil(vm.readErrorMessage)
+    vm.stop()
+  }
+
   func testRetryOfARestoredTextDraftReusesItsMessageID() async {
     let repo = FakeChatRepo()
     let vm = ConversationViewModel(repo: repo, conversationID: "dm_a_b")
@@ -333,6 +390,28 @@ final class ConversationViewModelTests: XCTestCase {
 
 @MainActor
 final class ConversationsViewModelTests: XCTestCase {
+  func testRefreshingIgnoresUpdatesAndErrorsFromThePreviousListener() {
+    let repo = FakeChatRepo()
+    let vm = ConversationsViewModel(repo: repo)
+    vm.start()
+    let oldChange = repo.conversationsChanged
+    let oldError = repo.conversationsFailed
+    vm.stop()
+    vm.start()
+    let current = ChatConversation(id: "dm_a_b", isGroup: false, title: "Bruno", photoURL: nil,
+      otherUserID: "b", groupID: nil, lastMessageText: "Hola", lastMessageSenderID: "b", updatedAt: Date())
+    repo.conversationsChanged?([current])
+
+    oldChange?([])
+    oldError?(FakeError())
+
+    XCTAssertEqual(vm.conversations, [current])
+    XCTAssertNil(vm.errorMessage)
+    vm.stop()
+    repo.conversationsChanged?([])
+    XCTAssertEqual(vm.conversations, [current])
+  }
+
   func testAListErrorKeepsExistingConversationsAndClearsOnRecovery() {
     let repo = FakeChatRepo()
     let vm = ConversationsViewModel(repo: repo)
