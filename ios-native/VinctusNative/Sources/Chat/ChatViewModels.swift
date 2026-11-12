@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import PhotosUI
+import SwiftUI
 
 // MARK: - Conversation list (Mensajes tab)
 

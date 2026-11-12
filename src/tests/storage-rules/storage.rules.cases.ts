@@ -182,7 +182,9 @@ describe('Storage Rules - upload security', () => {
         env
           .authenticatedContext('user_b')
           .storage()
-          .ref('conversations/dm_user_b_user_c/attachments/user_b/msg_media/media')
+          .ref(
+            `conversations/dm_user_b_user_c/attachments/user_b/msg_media/${contentType.replace('/', '-')}`,
+          )
           .putString('media-bytes', 'raw', { contentType })
           .then((snapshot) => snapshot),
       );
