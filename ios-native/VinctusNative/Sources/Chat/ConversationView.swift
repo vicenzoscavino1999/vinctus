@@ -11,6 +11,7 @@ struct ConversationView: View {
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
   @Environment(\.dismiss) private var dismiss
   @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.setBottomNavigationHidden) private var setBottomNavigationHidden
   @StateObject private var vm: ConversationViewModel
   @State private var reportTarget: ReportTarget?
   @State private var actionError: String?
@@ -224,10 +225,15 @@ struct ConversationView: View {
       ReportSheet(target: target, repo: blockedUsers.repo)
     }
     .onAppear {
+      setBottomNavigationHidden(true)
       vm.start()
       updateReadingContext()
     }
-    .onDisappear { vm.stop(); voice.cancel() }
+    .onDisappear {
+      setBottomNavigationHidden(false)
+      vm.stop()
+      voice.cancel()
+    }
     .onChange(of: scenePhase) { _, phase in
       if phase != .active { voice.finish() }
       if phase == .background { voice.cancel() }

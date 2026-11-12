@@ -13,6 +13,7 @@ struct MainTabView: View {
   /// Screenshot builds open a tab with `-VinctusTab <name>`.
   @State private var selectedTab = AppRepos.demoArgument("-VinctusTab") ?? "discover"
   @State private var isKeyboardVisible = false
+  @State private var isBottomNavigationHidden = false
 
   var body: some View {
     TabView(selection: $selectedTab) {
@@ -58,7 +59,7 @@ struct MainTabView: View {
     // The web's flat bottom bar instead of the system tab bar. It hides while typing, so it
     // never sits above the keyboard (for example over the chat composer).
     .safeAreaInset(edge: .bottom, spacing: 0) {
-      if !isKeyboardVisible {
+      if !isKeyboardVisible && !isBottomNavigationHidden {
         FlatTabBar(selection: $selectedTab)
       }
     }
@@ -71,6 +72,9 @@ struct MainTabView: View {
     .tint(VinctusTokens.Color.accent)
     .background(VinctusTokens.Color.background.ignoresSafeArea())
     .environmentObject(blockedUsers)
+    .environment(\.setBottomNavigationHidden) { hidden in
+      isBottomNavigationHidden = hidden
+    }
     .task {
       await blockedUsers.refresh()
     }

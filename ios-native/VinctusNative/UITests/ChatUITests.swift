@@ -30,6 +30,8 @@ final class ChatUITests: XCTestCase {
     openFromList()
     XCTAssertTrue(app.buttons["Adjuntar fotos o videos"].exists)
     XCTAssertTrue(app.buttons["Grabar nota de voz"].exists)
+    XCTAssertTrue(app.buttons["Grabar nota de voz"].isHittable)
+    XCTAssertFalse(app.buttons["Perfil"].exists)
     XCTAssertTrue(app.staticTexts["¿Viste la luna anoche?"].exists)
   }
 
