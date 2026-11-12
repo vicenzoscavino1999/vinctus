@@ -87,6 +87,18 @@ targets:
     dependencies:
       - target: VinctusNative
 
+  VinctusNativeChatUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: VinctusNative
+    dependencies:
+      - target: VinctusNative
+
   # Runs the Firebase repos against the local emulators (Auth, Firestore, Storage) and the repo's
   # firestore.rules / storage.rules. Needs `firebase emulators:exec`; see IntegrationTests/.
   VinctusNativeIntegrationTests:
@@ -102,6 +114,15 @@ targets:
       - target: VinctusNative
 
 schemes:
+  VinctusNative-ChatUI:
+    build:
+      targets:
+        VinctusNative: all
+    test:
+      config: ReleaseProd
+      targets:
+        - VinctusNativeChatUITests
+
   VinctusNative-Dev:
     build:
       targets:
