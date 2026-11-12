@@ -23,6 +23,31 @@ struct ChatMessage: Identifiable, Hashable {
   let text: String
   let hasAttachments: Bool
   let createdAt: Date
+  let clientCreatedAt: Int64
+
+  init(id: String, senderID: String, senderName: String?, text: String, hasAttachments: Bool,
+       createdAt: Date, clientCreatedAt: Int64? = nil) {
+    self.id = id
+    self.senderID = senderID
+    self.senderName = senderName
+    self.text = text
+    self.hasAttachments = hasAttachments
+    self.createdAt = createdAt
+    self.clientCreatedAt = clientCreatedAt ?? Int64(createdAt.timeIntervalSince1970 * 1000)
+  }
+}
+
+/// Both fields are needed when multiple messages have the same client timestamp.
+struct ChatMessageCursor: Equatable {
+  let clientCreatedAt: Int64
+  let messageID: String
+}
+
+struct ChatMessagePage {
+  let messages: [ChatMessage]
+  let oldestCursor: ChatMessageCursor?
+  let hasMore: Bool
+  var isFromCache = false
 }
 
 /// Cancels the Firestore listeners behind an observation when released or cancelled.
@@ -50,13 +75,21 @@ protocol ChatRepo {
   ) -> ChatSubscription
   func observeMessages(
     conversationID: String,
-    onChange: @escaping ([ChatMessage]) -> Void,
+    through cursor: ChatMessageCursor?,
+    onChange: @escaping (ChatMessagePage) -> Void,
     onError: @escaping (Error) -> Void
   ) -> ChatSubscription
+  func fetchOlderMessages(conversationID: String, before cursor: ChatMessageCursor) async throws -> ChatMessagePage
   func sendMessage(conversationID: String, text: String) async throws
-  func markRead(conversationID: String) async
+  func markRead(conversationID: String, through clientCreatedAt: Int64?) async
   func openDirectConversation(with otherUserID: String) async throws -> String
   func openGroupConversation(groupID: String) async throws -> String
+}
+
+extension ChatRepo {
+  func markRead(conversationID: String) async {
+    await markRead(conversationID: conversationID, through: nil)
+  }
 }
 
 enum ChatRepoError: LocalizedError {
@@ -125,27 +158,60 @@ final class FirebaseChatRepo: ChatRepo {
 
   func observeMessages(
     conversationID: String,
-    onChange: @escaping ([ChatMessage]) -> Void,
+    through cursor: ChatMessageCursor?,
+    onChange: @escaping (ChatMessagePage) -> Void,
     onError: @escaping (Error) -> Void
   ) -> ChatSubscription {
     guard FirebaseApp.app() != nil else {
       onError(ChatRepoError.firebaseNotConfigured)
       return ChatSubscription {}
     }
-    let registration = Firestore.firestore()
+    var query = messagesQuery(conversationID: conversationID)
+    if let cursor {
+      // Keep the entire opened window live, so new messages cannot push its oldest rows out.
+      query = query.end(at: [cursor.clientCreatedAt, cursor.messageID])
+    } else {
+      query = query.limit(to: Self.listLimit)
+    }
+    let registration = query.addSnapshotListener(includeMetadataChanges: true) { snapshot, error in
+      if let error {
+        onError(error)
+        return
+      }
+      guard let snapshot else { return }
+      onChange(Self.messagePage(documents: snapshot.documents, isFromCache: snapshot.metadata.isFromCache))
+    }
+    return ChatSubscription { registration.remove() }
+  }
+
+  func fetchOlderMessages(conversationID: String, before cursor: ChatMessageCursor) async throws -> ChatMessagePage {
+    _ = try context()
+    let snapshot = try await messagesQuery(conversationID: conversationID)
+      .start(after: [cursor.clientCreatedAt, cursor.messageID])
+      .limit(to: Self.listLimit)
+      .getDocuments(source: .server)
+    return Self.messagePage(documents: snapshot.documents)
+  }
+
+  private func messagesQuery(conversationID: String) -> Query {
+    Firestore.firestore()
       .collection(FirestoreCollections.conversations).document(conversationID)
       .collection(FirestoreSubcollections.messages)
       .order(by: "clientCreatedAt", descending: true)
-      .limit(to: Self.listLimit)
-      .addSnapshotListener { snapshot, error in
-        if let error {
-          onError(error)
-          return
-        }
-        let messages = (snapshot?.documents ?? []).compactMap(Self.message(from:))
-        onChange(messages.reversed())
-      }
-    return ChatSubscription { registration.remove() }
+      .order(by: FieldPath.documentID(), descending: true)
+  }
+
+  private static func messagePage(documents: [QueryDocumentSnapshot], isFromCache: Bool = false) -> ChatMessagePage {
+    let oldestCursor = documents.last.flatMap { document -> ChatMessageCursor? in
+      guard let timestamp = document.data()["clientCreatedAt"] as? NSNumber else { return nil }
+      return ChatMessageCursor(clientCreatedAt: timestamp.int64Value, messageID: document.documentID)
+    }
+    return ChatMessagePage(
+      messages: documents.compactMap(Self.message(from:)).reversed(),
+      oldestCursor: oldestCursor,
+      hasMore: documents.count >= Self.listLimit,
+      isFromCache: isFromCache
+    )
   }
 
   func sendMessage(conversationID: String, text: String) async throws {
@@ -190,13 +256,13 @@ final class FirebaseChatRepo: ChatRepo {
     try await batch.commit()
   }
 
-  func markRead(conversationID: String) async {
+  func markRead(conversationID: String, through clientCreatedAt: Int64?) async {
     guard let session = try? context() else { return }
     let (db, uid) = session
     try? await db.collection(FirestoreCollections.conversations).document(conversationID)
       .collection(FirestoreSubcollections.members).document(uid)
       .updateData([
-        "lastReadClientAt": Int64(Date().timeIntervalSince1970 * 1000),
+        "lastReadClientAt": clientCreatedAt ?? Int64(Date().timeIntervalSince1970 * 1000),
         "lastReadAt": FieldValue.serverTimestamp(),
       ])
   }
@@ -318,7 +384,8 @@ final class FirebaseChatRepo: ChatRepo {
       senderName: data["senderName"] as? String,
       text: data["text"] as? String ?? "",
       hasAttachments: !attachments.isEmpty,
-      createdAt: createdAt
+      createdAt: createdAt,
+      clientCreatedAt: (data["clientCreatedAt"] as? NSNumber)?.int64Value
     )
   }
 }
@@ -338,6 +405,8 @@ private final class ConversationListObserver {
   private var directIDs: Set<String> = []
   private var groupIDs: Set<String> = []
   private var titles: [String: (title: String, photoURL: String?)] = [:]
+  private var errors: [String: Error] = [:]
+  private var isStopped = false
 
   init(
     db: Firestore,
@@ -358,11 +427,13 @@ private final class ConversationListObserver {
         .order(by: "updatedAt", descending: true)
         .limit(to: limit)
         .addSnapshotListener { [weak self] snapshot, error in
-          guard let self else { return }
+          guard let self, !self.isStopped else { return }
           if let error {
-            self.onError(error)
+            self.errors["direct-index"] = error
+            self.emit()
             return
           }
+          self.errors.removeValue(forKey: "direct-index")
           var next: Set<String> = []
           for document in snapshot?.documents ?? [] where document.documentID.hasPrefix("dm_") {
             next.insert(document.documentID)
@@ -375,14 +446,15 @@ private final class ConversationListObserver {
     )
     indexListeners.append(
       user.collection(FirestoreSubcollections.memberships)
-        .order(by: "joinedAt", descending: true)
-        .limit(to: limit)
+        // Every membership matters: an older group may have the newest conversation.
         .addSnapshotListener { [weak self] snapshot, error in
-          guard let self else { return }
+          guard let self, !self.isStopped else { return }
           if let error {
-            self.onError(error)
+            self.errors["group-index"] = error
+            self.emit()
             return
           }
+          self.errors.removeValue(forKey: "group-index")
           let next = Set((snapshot?.documents ?? []).map { "grp_\($0.documentID)" })
           self.groupIDs = self.sync(ids: next, previous: self.groupIDs)
         }
@@ -390,6 +462,7 @@ private final class ConversationListObserver {
   }
 
   func stop() {
+    isStopped = true
     indexListeners.forEach { $0.remove() }
     indexListeners.removeAll()
     conversationListeners.values.forEach { $0.remove() }
@@ -401,6 +474,7 @@ private final class ConversationListObserver {
     for removed in previous.subtracting(next) {
       conversationListeners.removeValue(forKey: removed)?.remove()
       conversations.removeValue(forKey: removed)
+      errors.removeValue(forKey: removed)
     }
     for added in next.subtracting(previous) {
       listen(to: added)
@@ -411,9 +485,18 @@ private final class ConversationListObserver {
 
   private func listen(to conversationID: String) {
     conversationListeners[conversationID] = db.collection(FirestoreCollections.conversations).document(conversationID)
-      .addSnapshotListener { [weak self] snapshot, _ in
-        guard let self else { return }
-        guard let snapshot, snapshot.exists, let data = snapshot.data() else {
+      .addSnapshotListener { [weak self] snapshot, error in
+        guard let self, !self.isStopped else { return }
+        if let error {
+          self.errors[conversationID] = error
+          self.emit()
+          return
+        }
+        guard let snapshot else { return }
+        self.errors.removeValue(forKey: conversationID)
+        // A missing local cache entry is not proof that a known conversation was deleted.
+        if !snapshot.exists && snapshot.metadata.isFromCache { return }
+        guard snapshot.exists, let data = snapshot.data() else {
           self.conversations.removeValue(forKey: conversationID)
           self.emit()
           return
@@ -461,6 +544,7 @@ private final class ConversationListObserver {
       ? db.collection(FirestoreCollections.groups).document(id)
       : db.collection(FirestoreCollections.usersPublic).document(id)
     let data = (try? await path.getDocument().data()) ?? [:]
+    guard !isStopped else { return }
     let title = (isGroup ? data["name"] : data["displayName"]) as? String
     let photo = (isGroup ? data["iconUrl"] : data["photoURL"]) as? String
     titles[key] = (title ?? (isGroup ? "Grupo" : "Usuario"), photo)
@@ -480,6 +564,8 @@ private final class ConversationListObserver {
   }
 
   private func emit() {
+    guard !isStopped else { return }
     onChange(conversations.values.sorted { $0.updatedAt > $1.updatedAt })
+    if let error = errors.values.first { onError(error) }
   }
 }

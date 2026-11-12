@@ -31,20 +31,24 @@ struct SampleChatRepo: ChatRepo {
 
   func observeMessages(
     conversationID: String,
-    onChange: @escaping ([ChatMessage]) -> Void,
+    through cursor: ChatMessageCursor?,
+    onChange: @escaping (ChatMessagePage) -> Void,
     onError: @escaping (Error) -> Void
   ) -> ChatSubscription {
     let now = Date()
-    onChange([
+    onChange(ChatMessagePage(messages: [
       ChatMessage(id: "m1", senderID: "u2", senderName: "Mateo Rojas", text: "¿Viste la luna anoche?", hasAttachments: false, createdAt: now.addingTimeInterval(-900)),
       ChatMessage(id: "m2", senderID: "me", senderName: "Yo", text: "¡Sí! Se veía enorme 🌕", hasAttachments: false, createdAt: now.addingTimeInterval(-800)),
       ChatMessage(id: "m3", senderID: "u2", senderName: "Mateo Rojas", text: "¡Nos vemos en el observatorio el sábado!", hasAttachments: false, createdAt: now.addingTimeInterval(-300)),
-    ])
+    ], oldestCursor: nil, hasMore: false))
     return ChatSubscription {}
   }
 
   func sendMessage(conversationID: String, text: String) async throws {}
-  func markRead(conversationID: String) async {}
+  func fetchOlderMessages(conversationID: String, before cursor: ChatMessageCursor) async throws -> ChatMessagePage {
+    ChatMessagePage(messages: [], oldestCursor: nil, hasMore: false)
+  }
+  func markRead(conversationID: String, through clientCreatedAt: Int64?) async {}
   func openDirectConversation(with otherUserID: String) async throws -> String { "dm_me_\(otherUserID)" }
   func openGroupConversation(groupID: String) async throws -> String { "grp_\(groupID)" }
 }

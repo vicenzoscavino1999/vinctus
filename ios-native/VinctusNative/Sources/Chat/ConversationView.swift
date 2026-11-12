@@ -9,9 +9,16 @@ struct ConversationView: View {
   @EnvironmentObject private var authVM: AuthViewModel
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.scenePhase) private var scenePhase
   @StateObject private var vm: ConversationViewModel
   @State private var reportTarget: ReportTarget?
   @State private var actionError: String?
+  @State private var scrollPosition: String?
+  @State private var bottomPosition: ChatBottomPosition?
+  @State private var isAtBottom = true
+  @State private var bottomWasVisibleForMessageID: String?
+  @State private var didPositionInitialMessages = false
+  @State private var hasNewMessages = false
 
   init(repo: ChatRepo, profileRepo: ProfileRepo, conversationID: String, title: String, otherUserID: String?) {
     self.profileRepo = profileRepo
@@ -28,59 +35,96 @@ struct ConversationView: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      ScrollViewReader { proxy in
-        ScrollView {
-          LazyVStack(spacing: 8) {
-            if vm.isLoading {
-              ProgressView()
-                .padding(.top, 40)
-            } else if visibleMessages.isEmpty {
-              Text("Todavía no hay mensajes. ¡Escribe el primero!")
-                .font(.subheadline)
-                .foregroundStyle(VinctusTokens.Color.textMuted)
-                .padding(.top, 40)
-            }
-
-            ForEach(visibleMessages) { message in
-              MessageBubble(
-                message: message,
-                isMine: message.senderID == authVM.currentUserID,
-                showsSender: isGroup
-              )
-              .id(message.id)
-              .contextMenu {
-                if message.senderID != authVM.currentUserID {
-                  Button {
-                    reportTarget = .message(
-                      conversationID: vm.conversationID,
-                      messageID: message.id,
-                      authorID: message.senderID,
-                      excerpt: message.text
-                    )
-                  } label: {
-                    Label("Denunciar mensaje", systemImage: "flag")
-                  }
-                  Button(role: .destructive) {
-                    block(message.senderID)
-                  } label: {
-                    Label("Bloquear a \(message.senderName ?? "este usuario")", systemImage: "hand.raised")
-                  }
-                } else {
-                  Button {
-                    UIPasteboard.general.string = message.text
-                  } label: {
-                    Label("Copiar", systemImage: "doc.on.doc")
+      GeometryReader { viewport in
+        ScrollViewReader { proxy in
+          ScrollView {
+            VStack(spacing: 0) {
+              if vm.hasOlderMessages {
+                Button {
+                  Task { await vm.loadOlder() }
+                } label: {
+                  if vm.isLoadingOlder {
+                    ProgressView()
+                  } else {
+                    Text("Cargar mensajes anteriores")
                   }
                 }
+                .disabled(vm.isLoadingOlder)
+                .padding()
               }
+              LazyVStack(spacing: 8) {
+                if vm.isLoading {
+                  ProgressView()
+                    .padding(.top, 40)
+                } else if visibleMessages.isEmpty {
+                  Text("Todavía no hay mensajes. ¡Escribe el primero!")
+                    .font(.subheadline)
+                    .foregroundStyle(VinctusTokens.Color.textMuted)
+                    .padding(.top, 40)
+                }
+
+                ForEach(visibleMessages) { message in
+                  messageRow(message)
+                    .id(message.id)
+                }
+              }
+              .scrollTargetLayout()
+              .padding(.horizontal, VinctusTokens.Spacing.md)
+              .padding(.vertical, VinctusTokens.Spacing.sm)
+
+              Color.clear
+                .frame(height: 1)
+                .id("conversation-bottom")
+                .background {
+                  GeometryReader { geometry in
+                    Color.clear.preference(
+                      key: ChatBottomPositionKey.self,
+                      value: ChatBottomPosition(
+                        messageID: visibleMessages.last?.id,
+                        bottomY: geometry.frame(in: .named("conversation-scroll")).maxY
+                      )
+                    )
+                  }
+                }
             }
           }
-          .padding(.horizontal, VinctusTokens.Spacing.md)
-          .padding(.vertical, VinctusTokens.Spacing.sm)
-        }
-        .onChange(of: visibleMessages.last?.id) { _, lastID in
-          guard let lastID else { return }
-          withAnimation { proxy.scrollTo(lastID, anchor: .bottom) }
+          .coordinateSpace(name: "conversation-scroll")
+          .scrollPosition(id: $scrollPosition, anchor: .top)
+          .onPreferenceChange(ChatBottomPositionKey.self) { position in
+            bottomPosition = position
+            isAtBottom = position.map { $0.bottomY >= 0 && $0.bottomY <= viewport.size.height + 1 } ?? false
+            if isAtBottom {
+              hasNewMessages = false
+              bottomWasVisibleForMessageID = position?.messageID
+            } else if position?.messageID == bottomWasVisibleForMessageID {
+              bottomWasVisibleForMessageID = nil
+            }
+            updateReadingContext()
+          }
+          .onChange(of: visibleMessages.last?.id) { previousID, lastID in
+            guard lastID != nil else { return }
+            if !didPositionInitialMessages || isAtBottom ||
+              (previousID != nil && bottomWasVisibleForMessageID == previousID) ||
+              (visibleMessages.last?.senderID == authVM.currentUserID && vm.isSending) {
+              didPositionInitialMessages = true
+              withAnimation { proxy.scrollTo("conversation-bottom", anchor: .bottom) }
+            } else {
+              hasNewMessages = true
+            }
+          }
+          .overlay(alignment: .bottomTrailing) {
+            if hasNewMessages {
+              Button {
+                withAnimation { proxy.scrollTo("conversation-bottom", anchor: .bottom) }
+              } label: {
+                Label("Mensajes nuevos", systemImage: "arrow.down")
+                  .font(.subheadline)
+                  .padding(10)
+                  .background(VinctusTokens.Color.surface2, in: Capsule())
+              }
+              .padding()
+            }
+          }
         }
       }
 
@@ -90,6 +134,24 @@ struct ConversationView: View {
           .foregroundStyle(.red)
           .padding(.horizontal, VinctusTokens.Spacing.lg)
           .padding(.top, 6)
+      }
+
+      if vm.loadErrorMessage != nil {
+        Button("Reintentar carga") { vm.retryLoading() }
+          .padding(.vertical, 6)
+      }
+
+      ForEach(vm.failedMessages) { message in
+        HStack {
+          Text("No enviado: \(message.text)")
+            .font(.footnote)
+            .lineLimit(2)
+          Spacer()
+          Button("Reintentar") { vm.retry(message) }
+            .disabled(vm.isSending)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 6)
       }
 
       composer
@@ -118,8 +180,52 @@ struct ConversationView: View {
     .sheet(item: $reportTarget) { target in
       ReportSheet(target: target, repo: blockedUsers.repo)
     }
-    .onAppear { vm.start() }
+    .onAppear {
+      vm.start()
+      updateReadingContext()
+    }
     .onDisappear { vm.stop() }
+    .onChange(of: scenePhase) { _, _ in updateReadingContext() }
+  }
+
+  private func updateReadingContext() {
+    vm.updateReadingContext(
+      isActive: scenePhase == .active,
+      visibleLastMessageID: isAtBottom ? bottomPosition?.messageID : nil
+    )
+  }
+
+  private func messageRow(_ message: ChatMessage) -> some View {
+    MessageBubble(
+      message: message,
+      isMine: message.senderID == authVM.currentUserID,
+      showsSender: isGroup
+    )
+    .contextMenu {
+      if message.senderID != authVM.currentUserID {
+        Button {
+          reportTarget = .message(
+            conversationID: vm.conversationID,
+            messageID: message.id,
+            authorID: message.senderID,
+            excerpt: message.text
+          )
+        } label: {
+          Label("Denunciar mensaje", systemImage: "flag")
+        }
+        Button(role: .destructive) {
+          block(message.senderID)
+        } label: {
+          Label("Bloquear a \(message.senderName ?? "este usuario")", systemImage: "hand.raised")
+        }
+      } else {
+        Button {
+          UIPasteboard.general.string = message.text
+        } label: {
+          Label("Copiar", systemImage: "doc.on.doc")
+        }
+      }
+    }
   }
 
   private var composer: some View {
@@ -151,6 +257,19 @@ struct ConversationView: View {
         actionError = error.localizedDescription
       }
     }
+  }
+}
+
+private struct ChatBottomPosition: Equatable {
+  let messageID: String?
+  let bottomY: CGFloat
+}
+
+private struct ChatBottomPositionKey: PreferenceKey {
+  static let defaultValue: ChatBottomPosition? = nil
+
+  static func reduce(value: inout ChatBottomPosition?, nextValue: () -> ChatBottomPosition?) {
+    value = nextValue() ?? value
   }
 }
 
