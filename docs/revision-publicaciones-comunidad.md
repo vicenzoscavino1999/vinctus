@@ -48,9 +48,15 @@ Correcciones de esta etapa:
 - [x] Chromium y Firebase local (Auth, Firestore, Storage y Functions): un comentario
       conserva el borrador sin conexión, se reenvía al reconectar y llega a otra cuenta.
       Se comprobó que solo existe un documento con ese texto y el contador muestra uno.
-- [ ] Compilación ReleaseProd, pruebas unitarias y de integración nativas: ejecución
+- [x] Compilación ReleaseProd, pruebas unitarias y 24 pruebas de integración nativas:
+      ejecución
       [43442655918](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43442655918)
-      en curso sobre `dec69db`.
+      aprobada sobre `dec69db`. Los commits siguientes de esta etapa no cambian
+      el árbol `ios-native` que se verificó.
+- [x] CI completa (incluye reglas, dos flujos smoke en navegador y Lighthouse):
+      ejecución [43443770217](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43443770217)
+      aprobada sobre `87c48b3`. El ajuste posterior de sincronización de contadores
+      conserva las ocho pruebas del panel/hook aprobadas y se vuelve a comprobar en CI.
 
 Los tests de Swift se ejecutan en una Mac de GitHub; no equivalen a probar en
 un iPhone físico. La prueba local usa exclusivamente el proyecto emulado
