@@ -111,6 +111,16 @@ en el perfil propio. Pasaron 462 pruebas web con cobertura, 65 API/backend,
 la CI web completa con cuatro flujos smoke, ReleaseProd, las pruebas unitarias
 y 29 pruebas de integración nativas. El recorrido de navegador recupera commits
 aceptados cuya respuesta se pierde, conserva fechas y comprueba la lista del
-perfil, la recarga y otra cuenta. Los agregados del servidor para interacciones,
-los controles de Descubrir y la visibilidad siguen pendientes. Los cambios
+perfil, la recarga y otra cuenta. Los controles de Descubrir y la visibilidad
+siguen pendientes. Los cambios
 continúan en el PR; no se desplegaron ni se subió otro build de TestFlight.
+
+La quinta etapa corrige el backend compartido de likes, comentarios y karma:
+reconcilia los totales actuales, evita puntos duplicados por eventos tardíos y
+no recrea perfiles eliminados. Corrige el mapa de karma por categoría que leen
+ambas versiones y conserva el karma histórico al borrar una publicación.
+Incluye una auditoría acotada de solo lectura; no reconstruye puntos históricos
+sobrescritos ni aplica reparaciones generales. No modifica el código iOS: sigue
+vigente la validación nativa de la cuarta etapa. Consultar la revisión de
+Publicaciones para los resultados del backend y del navegador. El despliegue
+y la comprobación en dispositivo siguen pendientes.

@@ -59,6 +59,44 @@ test('@smoke likes and saves retry a lost acknowledgement without changing times
     expect(response.ok()).toBe(true);
     return (await response.json()).fields.createdAt.timestampValue as string;
   };
+  const expectServerCounters = async (likes: number) => {
+    if (process.env.VINCTUS_TEST_FUNCTIONS !== '1') return;
+    await expect
+      .poll(async () => {
+        const snapshots = await Promise.all(
+          ['posts/post_1', 'users/user_a', 'users_public/user_a'].map(async (path) => {
+            const response = await page.request.get(`${base}/${path}`, { headers: adminHeaders });
+            return (await response.json()).fields;
+          }),
+        );
+        const [post, user, publicUser] = snapshots;
+        const number = (field: { integerValue?: string; doubleValue?: number } | undefined) =>
+          field ? Number(field.integerValue ?? field.doubleValue) : null;
+        const karma = (fields: typeof user) => ({
+          global: number(fields.karmaGlobal),
+          reputation: number(fields.reputation),
+          science: number(fields.karmaByInterest?.mapValue?.fields?.science),
+          legacyField: 'karmaByInterest.science' in fields,
+        });
+        return {
+          likes: number(post.likeCount),
+          alias: number(post.likesCount),
+          user: karma(user),
+          publicUser: karma(publicUser),
+        };
+      })
+      .toEqual({
+        likes,
+        alias: likes,
+        user: { global: likes * 2, reputation: likes * 2, science: likes * 2, legacyField: false },
+        publicUser: {
+          global: likes * 2,
+          reputation: likes * 2,
+          science: likes * 2,
+          legacyField: false,
+        },
+      });
+  };
   await page.getByRole('button', { name: 'Me gusta', exact: true }).click();
   const retryLike = page.getByRole('button', { name: 'Reintentar me gusta', exact: true });
   await expect(retryLike).toBeEnabled({ timeout: 25000 });
@@ -84,6 +122,7 @@ test('@smoke likes and saves retry a lost acknowledgement without changing times
   ).toHaveAttribute('aria-pressed', 'true');
   expect(await timestamp('users/user_b/savedPosts/post_1')).toBe(saveDate);
   expect(injected).toEqual(['like', 'save']);
+  await expectServerCounters(1);
   await page.goto('/profile');
   const savedPanel = page.getByRole('region', { name: 'Publicaciones guardadas', exact: true });
   await expect(savedPanel.getByRole('link', { name: /Hola mundo desde el seed/ })).toBeVisible({
@@ -116,6 +155,15 @@ test('@smoke likes and saves retry a lost acknowledgement without changing times
     await expect(
       other.getByRole('button', { name: 'Guardar publicación', exact: true }),
     ).toHaveAttribute('aria-pressed', 'false');
+    if (process.env.VINCTUS_TEST_FUNCTIONS === '1') {
+      await other.goto('/user/user_a');
+      const reputation = other
+        .getByRole('heading', { name: 'Reputación', exact: true })
+        .locator('..');
+      await expect(reputation.getByText('2', { exact: true })).toBeVisible();
+      await expect(reputation).toContainText('Ciencia');
+      await other.screenshot({ path: info.outputPath('author-karma.png') });
+    }
   } finally {
     await otherContext.close();
   }
@@ -146,4 +194,5 @@ test('@smoke likes and saves retry a lost acknowledgement without changing times
       404,
     );
   }
+  await expectServerCounters(0);
 });

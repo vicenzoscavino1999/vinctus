@@ -70,10 +70,9 @@ un iPhone físico. La prueba local usa exclusivamente el proyecto emulado
   La tercera etapa corrige `postsCount`; su despliegue y la comprobación de los
   agregados de producción siguen pendientes.
   La cuarta etapa corrige la lectura de likes nativos y los toggles del feed y
-  detalle web. Los agregados de likes/karma y comentarios todavía aplican deltas
-  con mínimo cero: revisar eventos de borrado que lleguen antes que los de creación.
-  El handler de karma también hace `set(..., merge: true)` sin exigir que exista
-  la cuenta: comprobar que un evento tardío no recree perfiles borrados.
+  detalle web. La quinta etapa corrige los agregados de likes/karma y comentarios,
+  los eventos fuera de orden y la recreación de perfiles borrados. Su despliegue,
+  la auditoría de datos históricos y cualquier reparación siguen pendientes.
   Descubrir conserva sus controles anteriores del contexto y queda por revisar
   con ese módulo (incluidos el límite de 50 IDs y las preferencias anónimas).
 - Reglas y visibilidad: actualmente posts/comentarios tienen lectura pública;
@@ -285,3 +284,89 @@ Prueba física pendiente cuando esté disponible la versión nueva:
   elección original. Cerrar/reabrir consulta el estado real del servidor.
 - Cambiar de cuenta con una petición pendiente y comprobar que su respuesta no
   cambie la nueva cuenta ni permita consultar los guardados de la anterior.
+
+## Quinta etapa: contadores compartidos y karma por categoría
+
+Se reprodujo un error del servidor anterior: entregar primero el borrado y después
+la creación dejaba un like y un comentario contados, y dos puntos de karma, aunque
+las dos subcolecciones estuvieran vacías. Además, el karma por categoría se guardaba
+como un campo literal `karmaByInterest.science`, en lugar del mapa anidado que leen
+la web y la app nativa. Un evento tardío podía recrear perfiles eliminados.
+
+Correcciones:
+
+- Los cuatro triggers existentes de likes/comentarios consultan el total actual
+  dentro de una transacción y mantienen ambos nombres de cada contador. Repetir
+  una entrega o recibirla tarde no vuelve a aplicar el incremento del evento.
+- El karma cambia en la misma transacción que el contador de likes, únicamente por
+  la diferencia respecto a la contribución ya aplicada al post. Conserva otros
+  puntos y las categorías no afectadas; la reputación sigue limitada a 100.
+- Los perfiles privado y público se actualizan solo si existen. Un post borrado
+  no se recrea. Se conserva la política anterior de mantener el karma histórico
+  cuando se elimina toda la publicación.
+- Los campos literales antiguos pasan al mapa real durante la reconciliación del
+  autor, sin sumarlos otra vez si ya existe la categoría anidada. Se eliminan las
+  claves literales mediante `FieldPath`, también para categorías que contienen puntos.
+- Un error transitorio se propaga y los cuatro triggers habilitan reintentos.
+  Las entregas sin cambios no reescriben contadores ni perfiles.
+- La CI de navegador también inicia Functions en los PR. El recorrido de like con
+  confirmación perdida comprueba los contadores por REST y la reputación/categoría
+  en el perfil público de otra cuenta, además del estado de los botones.
+
+Hay una auditoría acotada de solo lectura en
+[`scripts/audit-post-engagement.mjs`](../scripts/audit-post-engagement.mjs). Requiere
+proyecto y autor explícitos; consulta hasta 100 posts por defecto (máximo 1000),
+incluye los totales reales de likes/comentarios, los alias almacenados, ambos
+perfiles, los campos antiguos y las diferencias de karma conocidas. Indica si
+el recorrido quedó incompleto. No es una instantánea transaccional ni aplica cambios.
+
+Ejemplo, después de instalar y compilar Functions y configurar las credenciales
+del proyecto que se quiera inspeccionar:
+
+```powershell
+node scripts/audit-post-engagement.mjs --project PROYECTO --uid AUTOR --max-posts 100 --output informe.json
+```
+
+El archivo de salida no se sobrescribe. Para usar emuladores hay que configurar
+`FIRESTORE_EMULATOR_HOST`; el informe identifica ese destino. Las pruebas de esta
+etapa solo consultan `vinctus-dev` local. No se ejecutó una auditoría de producción.
+
+Los errores antiguos pueden haber sobrescrito puntos por categoría. El historial
+de publicaciones eliminadas tampoco permite reconstruirlos exactamente. Por eso
+el informe compara los datos conocidos y conserva los valores históricos en vez de
+presentar un recálculo total como fiable; una reparación general necesita evidencia
+y una decisión separadas.
+
+Validación local de esta etapa:
+
+- [x] Compilación de Functions, TypeScript, lint de los archivos modificados y
+      contrato generado actualizado; 70 pruebas API/backend aprobadas.
+- [x] Once pruebas con Functions reales en emuladores: las tres de publicaciones
+      y ocho de interacciones/auditoría. Incluyen entregas fuera de orden y
+      repetidas, concurrencia entre autores/categorías, moderación, migración de
+      campos literales, conservación histórica y perfiles/publicaciones borrados.
+- [x] Cuatro recorridos Chromium sin reintentos con Auth, Firestore, Storage y
+      Functions locales. El de reacciones comprueba el contador y ambos perfiles,
+      reputación y categoría visibles desde otra cuenta, confirmaciones perdidas,
+      fechas estables y eliminación posterior del like/guardado.
+- [x] La auditoría detecta discrepancias y recorridos parciales sin cambiar la
+      fecha de actualización de ningún documento inspeccionado.
+- [x] El árbol `ios-native` sigue idéntico a `75350cc`; se conserva la prueba
+      ReleaseProd, unitaria y de 29 integraciones de la cuarta etapa. Esta
+      ampliación no supone una nueva prueba nativa ni una prueba en iPhone físico.
+
+Coste por evento de like: lectura inicial del post para conocer el autor, hasta dos
+lecturas de perfil, lectura transaccional del post y un agregado de likes. Por evento
+de comentario: lectura del post y un agregado de comentarios. El coste del agregado
+crece con las entradas del índice. Solo se escriben los documentos que cambian;
+la migración de campos antiguos añade una actualización por perfil afectado.
+Los autores con muchas reacciones comparten el bloqueo de su perfil y pueden
+necesitar reintentos ante contención.
+
+Antes del despliegue deben comprobarse en staging los cuatro triggers juntos
+(`onPostLikeCreated`, `onPostLikeDeleted`, `onPostCommentCreated`,
+`onPostCommentDeleted`), los eventos pendientes del código anterior y los informes
+históricos. Esta etapa no requiere reglas ni índices nuevos. El índice y los
+triggers de `postsCount` de la tercera etapa conservan sus requisitos de despliegue.
+Quedan la prueba física, staging y su periodo de observación. No se publicaron
+Functions, una versión web de producción ni otro build de TestFlight.
