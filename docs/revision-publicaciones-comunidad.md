@@ -181,6 +181,11 @@ Validación de esta etapa:
       borrado del cursor e inserción concurrente.
 - [ ] CI completa sobre el código de esta etapa.
 
+La primera CI de esta etapa falló antes de abrir el navegador: `ubuntu-latest`
+pasó a 26.04 y Playwright 1.57 del lockfile no soporta esa imagen. Los jobs de
+navegador y Lighthouse quedan fijados a Ubuntu 24.04 para ejecutar la versión
+ya instalada del proyecto.
+
 Despliegue posterior: crear primero el índice `posts(authorId ASC, status ASC)`
 y esperar a que esté listo antes de publicar estas Functions. Cada reconciliación
 usa dos agregados `count` por autor y dos lecturas de perfil, con hasta dos escrituras;

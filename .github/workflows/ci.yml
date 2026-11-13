@@ -123,7 +123,8 @@ jobs:
 
   e2e:
     name: e2e
-    runs-on: ubuntu-latest
+    # Playwright 1.57 (package-lock) does not support ubuntu-latest's 26.04 image.
+    runs-on: ubuntu-24.04
     needs: [lint, typecheck, test, rules, build]
     steps:
       - uses: actions/checkout@v4
@@ -159,7 +160,7 @@ jobs:
 
   lhci:
     name: lhci
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [lint, typecheck, test, rules, build]
     steps:
       - uses: actions/checkout@v4
