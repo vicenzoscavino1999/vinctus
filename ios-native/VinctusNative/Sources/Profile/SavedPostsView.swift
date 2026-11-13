@@ -14,7 +14,7 @@ struct SavedPostsView: View {
     List {
       if vm.isLoading && vm.items.isEmpty { ProgressView() }
       else if vm.items.isEmpty && vm.errorMessage == nil {
-        Text("Aún no tienes publicaciones guardadas.").foregroundStyle(.secondary)
+        Text(vm.canLoadMore ? "No hay publicaciones disponibles en esta página." : "Aún no tienes publicaciones guardadas.").foregroundStyle(.secondary)
       }
       ForEach(vm.items.filter { !blockedUsers.isBlocked($0.authorID) }) { item in
         NavigationLink {
@@ -28,9 +28,9 @@ struct SavedPostsView: View {
       }
       if let error = vm.errorMessage {
         Text(error).font(.footnote).foregroundStyle(.red)
-        if !vm.canLoadMore { Button("Reintentar") { Task { await vm.load() } } }
+        if vm.refreshFailed { Button("Reintentar") { Task { await vm.load() } } }
       }
-      if vm.canLoadMore {
+      if vm.canLoadMore && !vm.refreshFailed {
         Button { Task { await vm.loadMore() } } label: {
           HStack {
             if vm.isLoadingMore { ProgressView() }

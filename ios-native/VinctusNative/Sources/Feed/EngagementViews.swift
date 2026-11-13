@@ -17,7 +17,7 @@ struct PostReactionButton: View {
 
   var body: some View {
     PostReactionButtonSession(postID: postID, initialCount: initialCount, repo: repo, kind: kind)
-      .id("\(authVM.currentUserID ?? "anonymous")|\(postID)")
+      .id("\(authVM.currentUserID ?? "anonymous")|\(postID)|\(kind)")
   }
 }
 

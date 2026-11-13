@@ -59,6 +59,7 @@ final class SavedPostsViewModel: ObservableObject {
   @Published private(set) var isLoadingMore = false
   @Published private(set) var canLoadMore = false
   @Published private(set) var errorMessage: String?
+  @Published private(set) var refreshFailed = false
   private let repo: any SavedPostsRepo
   private var cursor: SavedPostsCursor?
   private var generation = 0
@@ -71,6 +72,7 @@ final class SavedPostsViewModel: ObservableObject {
     isLoading = true
     isLoadingMore = false
     errorMessage = nil
+    refreshFailed = false
     do {
       let page = try await repo.fetchSavedPosts(limit: 20, after: nil)
       guard request == generation else { return }
@@ -80,6 +82,7 @@ final class SavedPostsViewModel: ObservableObject {
     } catch {
       guard request == generation else { return }
       errorMessage = "No se pudieron cargar los guardados. Reintenta."
+      refreshFailed = true
     }
     guard request == generation else { return }
     isLoading = false
