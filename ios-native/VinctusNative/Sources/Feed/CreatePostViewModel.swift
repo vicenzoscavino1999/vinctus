@@ -1,5 +1,6 @@
 import Foundation
 import PhotosUI
+import SwiftUI
 
 @MainActor
 final class CreatePostViewModel: ObservableObject {
