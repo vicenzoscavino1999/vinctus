@@ -7,6 +7,7 @@ import {
   limit,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc as _setDoc,
   startAfter,
@@ -221,17 +222,32 @@ export async function addPostComment(
   authorId: string,
   authorSnapshot: { displayName: string; photoURL: string | null },
   text: string,
+  commentId?: string,
 ): Promise<string> {
-  const commentRef = doc(collection(db, COLLECTIONS.posts, postId, SUBCOLLECTIONS.comments));
-  await setDoc(commentRef, {
-    postId,
-    authorId,
-    authorSnapshot,
-    text,
-    createdAt: serverTimestamp(),
+  const comments = collection(db, COLLECTIONS.posts, postId, SUBCOLLECTIONS.comments);
+  const commentRef = commentId ? doc(comments, commentId) : doc(comments);
+  // A timeout can happen after the server accepted the write. Reuse the same
+  // document, without updating immutable comments or firing the counter twice.
+  const created = await runTransaction(db, async (transaction) => {
+    const existing = await transaction.get(commentRef);
+    if (existing.exists()) {
+      const data = existing.data();
+      if (data.authorId !== authorId || data.postId !== postId || data.text !== text) {
+        throw new Error('El comentario pendiente no coincide con este borrador.');
+      }
+      return false;
+    }
+    transaction.set(commentRef, {
+      postId,
+      authorId,
+      authorSnapshot,
+      text,
+      createdAt: serverTimestamp(),
+    });
+    return true;
   });
   try {
-    const post = await getPost(postId);
+    const post = created ? await getPost(postId) : null;
     if (post) {
       await createPostCommentActivity({
         postId,
@@ -241,6 +257,7 @@ export async function addPostComment(
         fromUid: authorId,
         fromUserName: authorSnapshot.displayName,
         fromUserPhoto: authorSnapshot.photoURL,
+        commentId: commentRef.id,
       });
     }
   } catch (error) {
@@ -385,10 +402,13 @@ export async function createPostCommentActivity(input: {
   fromUid: string;
   fromUserName: string | null;
   fromUserPhoto: string | null;
+  commentId?: string;
 }): Promise<string | null> {
   if (input.postAuthorId === input.fromUid) return null;
-  const ref = doc(notificationsCollection);
-  await setDoc(ref, {
+  const ref = input.commentId
+    ? doc(notificationsCollection, `comment_${input.postId}_${input.commentId}`)
+    : doc(notificationsCollection);
+  const payload = {
     type: 'post_comment',
     toUid: input.postAuthorId,
     fromUid: input.fromUid,
@@ -399,6 +419,7 @@ export async function createPostCommentActivity(input: {
     commentText: trimText(input.commentText, 220),
     createdAt: serverTimestamp(),
     read: false,
-  } as ActivityWriteModel);
+  } as ActivityWriteModel;
+  await setDoc(ref, payload);
   return ref.id;
 }

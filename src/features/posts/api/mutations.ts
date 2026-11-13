@@ -96,6 +96,7 @@ export const addPostComment = async (
   authorId: string,
   authorSnapshot: { displayName: string; photoURL: string | null },
   text: string,
+  commentId?: string,
 ): Promise<string> => {
   const safePostId = validate(postIdSchema, postId, { field: 'postId' });
   const safeAuthorId = validate(userIdSchema, authorId, { field: 'authorId' });
@@ -104,9 +105,12 @@ export const addPostComment = async (
   });
   const safeText = validate(commentTextSchema, text, { field: 'text' });
   ensureModeratedContent('posts.addPostComment', [safeText]);
+  const safeCommentId = validate(postIdSchema, commentId ?? getNewPostId(), {
+    field: 'commentId',
+  });
 
   return runWrite('posts.addPostComment', () =>
-    addPostCommentRaw(safePostId, safeAuthorId, safeAuthorSnapshot, safeText),
+    addPostCommentRaw(safePostId, safeAuthorId, safeAuthorSnapshot, safeText, safeCommentId),
   );
 };
 

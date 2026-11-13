@@ -18,7 +18,13 @@ struct PostCommentsPage {
 
 protocol PostCommentsRepo {
   func fetchComments(postID: String, limit: Int) async throws -> PostCommentsPage
-  func addComment(postID: String, text: String) async throws
+  func addComment(postID: String, text: String, commentID: String) async throws
+}
+
+extension PostCommentsRepo {
+  func addComment(postID: String, text: String) async throws {
+    try await addComment(postID: postID, text: text, commentID: UUID().uuidString)
+  }
 }
 
 enum PostCommentsRepoError: LocalizedError {
@@ -28,6 +34,8 @@ enum PostCommentsRepoError: LocalizedError {
   case emptyComment
   case commentTooLong(limit: Int)
   case missingSnapshot
+  case invalidCommentID
+  case draftMismatchForRetry
 
   var errorDescription: String? {
     switch self {
@@ -43,6 +51,10 @@ enum PostCommentsRepoError: LocalizedError {
       return "El comentario supera el límite de \(limit) caracteres."
     case .missingSnapshot:
       return "No se pudo cargar comentarios."
+    case .invalidCommentID:
+      return "No se pudo identificar el comentario."
+    case .draftMismatchForRetry:
+      return "El comentario pendiente no coincide con este borrador."
     }
   }
 }
@@ -94,11 +106,12 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     return PostCommentsPage(items: items, isFromCache: isFromCache || snapshot.metadata.isFromCache)
   }
 
-  func addComment(postID: String, text: String) async throws {
+  func addComment(postID: String, text: String, commentID: String) async throws {
     guard FirebaseApp.app() != nil else { throw PostCommentsRepoError.firebaseNotConfigured }
 
     let normalizedPostID = postID.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedPostID.isEmpty else { throw PostCommentsRepoError.invalidPostID }
+    guard !commentID.isEmpty, !commentID.contains("/") else { throw PostCommentsRepoError.invalidCommentID }
 
     let normalizedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedText.isEmpty else { throw PostCommentsRepoError.emptyComment }
@@ -114,7 +127,7 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     let commentRef = db.collection(FirestoreCollections.posts)
       .document(normalizedPostID)
       .collection(FirestoreSubcollections.comments)
-      .document()
+      .document(commentID)
 
     let authorSnapshotPayload: [String: Any] = [
       "displayName": authorSnapshot.displayName,
@@ -129,7 +142,21 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
       "createdAt": FieldValue.serverTimestamp(),
     ]
 
-    try await commentRef.setData(payload)
+    let uid = currentUser.uid
+    _ = try await db.runTransaction { transaction, errorPointer in
+      do {
+        let existing = try transaction.getDocument(commentRef)
+        if let data = existing.data() {
+          guard data["authorId"] as? String == uid,
+            data["postId"] as? String == normalizedPostID,
+            data["text"] as? String == normalizedText
+          else { throw PostCommentsRepoError.draftMismatchForRetry }
+        } else {
+          transaction.setData(payload, forDocument: commentRef)
+        }
+      } catch { errorPointer?.pointee = error as NSError }
+      return nil
+    }
   }
 
   private func resolveAuthorSnapshot(

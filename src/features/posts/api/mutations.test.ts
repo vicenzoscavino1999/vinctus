@@ -37,6 +37,7 @@ const postUpload = await import('@/shared/lib/firestore-post-upload');
 describe('posts api mutations', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(firestore.getNewPostId).mockReturnValue('comment_generated');
   });
 
   it('returns a validated post id', () => {
@@ -45,7 +46,7 @@ describe('posts api mutations', () => {
   });
 
   it('throws validation error when generated post id is invalid', () => {
-    vi.mocked(firestore.getNewPostId).mockReturnValueOnce('');
+    vi.mocked(firestore.getNewPostId).mockReturnValue('');
     const run = () => getNewPostId();
     expect(run).toThrowError(AppError);
     expect(run).toThrowError('Validation failed');
@@ -68,7 +69,29 @@ describe('posts api mutations', () => {
       'user_1',
       { displayName: 'Alice', photoURL: null },
       'hello world',
+      'comment_generated',
     );
+  });
+
+  it('reuses the comment id when an automatic retry follows a lost response', async () => {
+    vi.mocked(firestore.addPostComment)
+      .mockRejectedValueOnce(new AppError('Respuesta perdida', 'NETWORK'))
+      .mockResolvedValueOnce('pending_1');
+    await expect(
+      addPostComment('p1', 'u1', { displayName: 'Ana', photoURL: null }, 'Hola', 'pending_1'),
+    ).resolves.toBe('pending_1');
+    expect(firestore.addPostComment).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(firestore.addPostComment).mock.calls.map((call) => call[4])).toEqual([
+      'pending_1',
+      'pending_1',
+    ]);
+  });
+
+  it('rejects an invalid comment id before writing', async () => {
+    await expect(
+      addPostComment('p1', 'u1', { displayName: 'Ana', photoURL: null }, 'Hola', ''),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect(firestore.addPostComment).not.toHaveBeenCalled();
   });
 
   it('rejects blocked terms in comment text', async () => {

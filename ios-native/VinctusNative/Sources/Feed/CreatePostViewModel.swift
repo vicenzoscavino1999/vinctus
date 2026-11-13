@@ -42,11 +42,13 @@ final class CreatePostViewModel: ObservableObject {
       && pendingDraftText == normalizedText(draftText)
   }
 
-  func submit() {
+  @discardableResult
+  func submit() -> Task<Void, Never>? {
     publish(allowDuplicateCooldownBypass: false)
   }
 
-  func retryPendingSubmission() {
+  @discardableResult
+  func retryPendingSubmission() -> Task<Void, Never>? {
     publish(allowDuplicateCooldownBypass: true)
   }
 
@@ -57,8 +59,8 @@ final class CreatePostViewModel: ObservableObject {
     }
   }
 
-  private func publish(allowDuplicateCooldownBypass: Bool) {
-    guard !isSubmitting else { return }
+  private func publish(allowDuplicateCooldownBypass: Bool) -> Task<Void, Never>? {
+    guard !isSubmitting else { return nil }
 
     errorMessage = nil
     infoMessage = nil
@@ -66,16 +68,16 @@ final class CreatePostViewModel: ObservableObject {
     let normalizedDraft = normalizedText(draftText)
     guard !normalizedDraft.isEmpty else {
       errorMessage = "Escribe algo antes de publicar."
-      return
+      return nil
     }
     guard normalizedDraft.count <= characterLimit else {
       errorMessage = "El texto supera el límite de \(characterLimit) caracteres."
-      return
+      return nil
     }
 
     if !allowDuplicateCooldownBypass, isLikelyDuplicate(draft: normalizedDraft) {
       infoMessage = "Este texto ya se publicó hace unos segundos."
-      return
+      return nil
     }
 
     let postID: String
@@ -89,13 +91,13 @@ final class CreatePostViewModel: ObservableObject {
       }
     } catch {
       errorMessage = error.localizedDescription
-      return
+      return nil
     }
 
     isSubmitting = true
     AppLog.posts.info("createPost.submit.start")
 
-    Task {
+    return Task {
       do {
         try await repo.publishTextPost(text: normalizedDraft, postID: postID, groupID: groupID)
         AppLog.posts.info("createPost.submit.success postID=\(postID, privacy: .private)")
@@ -104,7 +106,7 @@ final class CreatePostViewModel: ObservableObject {
         pendingDraftText = nil
         lastPublishedDraftText = normalizedDraft
         lastPublishedAt = Date()
-        draftText = ""
+        if normalizedText(draftText) == normalizedDraft { draftText = "" }
         infoMessage = "Publicación enviada."
         isSubmitting = false
       } catch {

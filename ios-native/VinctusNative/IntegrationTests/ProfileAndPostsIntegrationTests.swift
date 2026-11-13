@@ -1,4 +1,5 @@
 import XCTest
+import FirebaseFirestore
 @testable import VinctusNative
 
 final class ProfileIntegrationTests: EmulatorTestCase {
@@ -60,6 +61,34 @@ final class ProfileIntegrationTests: EmulatorTestCase {
 }
 
 final class PostIntegrationTests: EmulatorTestCase {
+  func testCommentRetriesOnlyCreateOneImmutableDocument() async throws {
+    _ = try await makeUser("Lucía")
+    let postID = try await publishPost("Publicación con comentarios")
+    _ = try await makeUser("Bruno")
+    let repo = FirebasePostCommentsRepo()
+    let commentID = UUID().uuidString
+    try await repo.addComment(postID: postID, text: "Una sola vez", commentID: commentID)
+    let ref = Firestore.firestore().collection("posts").document(postID).collection("comments").document(commentID)
+    let before = try await ref.getDocument(source: .server)
+    try await repo.addComment(postID: postID, text: "Una sola vez", commentID: commentID)
+    let after = try await ref.getDocument(source: .server)
+    XCTAssertEqual(before.data()?["createdAt"] as? Timestamp, after.data()?["createdAt"] as? Timestamp)
+    let page = try await repo.fetchComments(postID: postID, limit: 20)
+    XCTAssertEqual(page.items.map(\.id), [commentID])
+
+    do {
+      try await repo.addComment(postID: postID, text: "Texto distinto", commentID: commentID)
+      XCTFail("A retry must not replace an immutable comment")
+    } catch { }
+    _ = try await makeUser("Ana")
+    do {
+      try await repo.addComment(postID: postID, text: "Una sola vez", commentID: commentID)
+      XCTFail("Another account must not claim an existing comment")
+    } catch { }
+    let unchanged = try await ref.getDocument(source: .server)
+    XCTAssertEqual(unchanged.data()?["text"] as? String, "Una sola vez")
+  }
+
   func testPublishAndFindItInTheFeed() async throws {
     _ = try await makeUser("Lucía")
 
