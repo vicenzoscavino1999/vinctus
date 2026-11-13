@@ -51,12 +51,13 @@ Correcciones de esta etapa:
 - [x] Compilación ReleaseProd, pruebas unitarias y 24 pruebas de integración nativas:
       ejecución
       [43442655918](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43442655918)
-      aprobada sobre `dec69db`. Los commits siguientes de esta etapa no cambian
-      el árbol `ios-native` que se verificó.
+      aprobada sobre `dec69db`. Hasta cerrar la primera etapa en `355cb61`, el
+      árbol `ios-native` seguía idéntico; la segunda etapa sí lo modifica.
 - [x] CI completa (incluye reglas, dos flujos smoke en navegador y Lighthouse):
       ejecución [43443770217](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43443770217)
       aprobada sobre `87c48b3`. El ajuste posterior de sincronización de contadores
-      conserva las ocho pruebas del panel/hook aprobadas y se vuelve a comprobar en CI.
+      conserva las ocho pruebas del panel/hook aprobadas y se revalidó en
+      [43446918133](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43446918133).
 
 Los tests de Swift se ejecutan en una Mac de GitHub; no equivalen a probar en
 un iPhone físico. La prueba local usa exclusivamente el proyecto emulado
@@ -64,18 +65,76 @@ un iPhone físico. La prueba local usa exclusivamente el proyecto emulado
 
 ## Pendiente para cerrar el módulo
 
-- Creación web: reintentos de publicación completa y recuperación de cargas de
-  adjuntos, incluidos errores después de confirmar el estado `ready`.
-- Comparación de las capacidades de fotos, videos, documentos y enlaces de ambas
-  versiones: el publicador nativo todavía crea texto y su detalle no muestra todos
-  los adjuntos que publica la web.
+- Validación nativa de la segunda etapa descrita más abajo y sus pruebas en un
+  iPhone físico.
 - Comentarios nativos: paginación más allá de los primeros 80 comentarios y orden
   compatible con los comentarios recientes de la web.
 - Likes/guardados, contadores de Cloud Functions y creación desde perfil/grupo.
 - Reglas y visibilidad: actualmente posts/comentarios tienen lectura pública;
   revisar el alcance esperado para grupos privados y bloqueos antes de cambiarlas.
 - Pruebas en dispositivo, despliegue y versión posterior de TestFlight.
+- Recuperación tras cerrar el editor o recargar la app y política de limpieza de
+  borradores incompletos y sus objetos de Storage. Esta etapa recupera el envío
+  mientras el editor conserva en memoria su selección.
 
 El PR puede generar una vista previa de Vercel automáticamente. Esta etapa no
 se ha promovido al dominio de producción ni subido a TestFlight, y el módulo
 sigue abierto.
+
+## Segunda etapa: crear publicaciones y recuperar sus adjuntos
+
+La web creaba un ID nuevo en cada intento y usaba la hora para nombrar los objetos
+de Storage. Además, una excepción de navegación o actualización de pantalla podía
+marcar como fallido un post ya confirmado y borrar sus archivos.
+
+Cambios:
+
+- Cada borrador conserva un ID de post y un ID por archivo. Si una subida falla a
+  mitad, el reintento comprueba metadatos y recupera los objetos completos sin
+  sobrescribirlos. Las reglas actuales prohíben sobrescrituras y no cambiaron.
+- Creación y finalización mediante transacciones en web e iOS: no se reinician
+  fechas, contadores ni archivos de un post existente; `ready` es terminal para
+  el flujo de subida. Los reintentos comprueban autor, texto, título y grupo.
+- Los errores de presentación quedan fuera de la confirmación. No se degradan ni
+  borran adjuntos de una publicación que pudo haberse guardado.
+- Formulario nativo con título, fotos, videos, documentos y enlace de YouTube;
+  hasta diez elementos en total y límites del contrato de Storage para posts
+  (imagen <10 MB, video <100 MB y documento <25 MB). Los videos no incluyen el
+  campo opcional `size` de Firestore, cuyo límite es menor que el de Storage.
+- Fotos convertidas a JPEG, archivos temporales propios, importación de videos por
+  archivo y progreso de envío. La selección se conserva ante fallos del envío.
+- El detalle nativo lee los adjuntos de la web, abre fotos/video/documentos y
+  ofrece YouTube mediante un enlace a su URL canónica. Los videos tienen también
+  enlace al archivo original. Feed/perfil muestran título y vista previa.
+- Feed, perfil y resúmenes de grupos nativos omiten posts `uploading`/`failed`.
+  El cursor se conserva sobre los documentos originales y las listas vacías con
+  páginas pendientes permiten continuar. Esto es filtrado de presentación, no un
+  cambio de las reglas de lectura pública pendientes de revisar.
+- La web admite posts de solo título, adjunto o YouTube y normaliza el título
+  opcional vacío. Los modales se montan en `document.body` para evitar que un
+  contenedor transformado los recorte; el panel de comentarios tiene altura de
+  ventana y contenido desplazable.
+
+Validación de esta etapa:
+
+- [x] Pruebas de reintento, doble envío, borradores modificados, cierre del editor,
+      errores de presentación, MIME/tamaños, objetos parciales y transacciones.
+- [x] Chromium/Firebase local: fallo 403 provocado al iniciar el video después
+      de subir una imagen, conservación del formulario y reintento. Se verifica una
+      sola publicación, su fecha original, tres adjuntos y una única subida de imagen;
+      otra cuenta recibe la foto, el MP4 reproducible y el enlace al documento.
+- [x] Repetición del navegador con la corrección de posición de los modales y
+      comprobación de que el panel queda dentro de la ventana.
+- [x] Reproducción real del MP4 (avanza su tiempo) y descarga del PDF con bytes
+      idénticos desde otra cuenta. El flujo de publicación se incorpora a `@smoke`.
+- [x] TypeScript, compilación web, 438 pruebas con cobertura y 65 pruebas de API/
+      backend. Incluyen posts de solo título y normalización de título vacío.
+- [x] ESLint de archivos cambiados, contrato generado, ciclos y listeners.
+- [ ] CI nativa después de corregir la importación del overlay SwiftUI que define
+      `PhotosPickerItem`; ejecución
+      [43460610836](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43460610836)
+      sobre `3ef67f4`. Se verifican también uploads y reintentos contra emuladores.
+
+La simulación valida transporte y permisos de archivos. El fixture de video de
+la integración nativa no valida códecs; el MP4 real se comprueba en el navegador.
+La selección y reproducción en un iPhone físico siguen pendientes.

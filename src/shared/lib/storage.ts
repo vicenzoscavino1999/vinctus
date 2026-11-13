@@ -9,6 +9,7 @@ import {
 import { storage } from './firebase';
 import { STORAGE_PATHS } from './firestore/firestoreContract';
 import { validateChatFile } from './chat-media';
+import { validatePostFile } from './post-media';
 
 type UploadProgress = {
   bytesTransferred: number;
@@ -174,12 +175,13 @@ export async function uploadPostImages(
   return successful.map((s) => ({ ...s.result, type: 'image' as const }));
 }
 
-type PostMediaUploadItem = {
+export type PostMediaUploadItem = {
+  id: string;
   kind: 'image' | 'video' | 'file';
   file: File;
 };
 
-type PostMediaUploadResult = {
+export type PostMediaUploadResult = {
   url: string;
   path: string;
   type: 'image' | 'video' | 'file';
@@ -193,9 +195,14 @@ const buildPostMediaPath = (
   userId: string,
   postId: string,
   fileName: string,
+  fileId: string,
 ): string => {
   const safeName = sanitizeFileName(fileName);
-  const params = { userId, postId, filename: `${Date.now()}_${safeName}` };
+  const params = {
+    userId,
+    postId,
+    filename: `${sanitizeFileName(fileId)}_${safeName.slice(-120)}`,
+  };
   if (kind === 'video') {
     return STORAGE_PATHS.postVideo(params);
   }
@@ -214,86 +221,49 @@ export async function uploadPostMedia(
   postId: string,
   onProgress?: (totalBytes: number, transferredBytes: number) => void,
 ): Promise<PostMediaUploadResult[]> {
-  const progressMap: { [key: number]: UploadProgress } = {};
-
-  const uploads = items.map(
-    (item, index) =>
-      new Promise<PostMediaUploadResult>((resolve, reject) => {
-        const storagePath = buildPostMediaPath(item.kind, userId, postId, item.file.name);
-        const storageRef = ref(storage, storagePath);
-        const uploadTask = uploadBytesResumableWithCache(
-          storageRef,
-          item.file,
-          'application/octet-stream',
-        );
-
-        uploadTask.on(
+  const total = items.reduce((sum, item) => sum + item.file.size, 0);
+  const results: PostMediaUploadResult[] = [];
+  let completed = 0;
+  for (const item of items) {
+    const contentType = validatePostFile(item.file, item.kind);
+    const path = buildPostMediaPath(item.kind, userId, postId, item.file.name, item.id);
+    if (path.length > 300) throw new Error('El nombre del archivo es demasiado largo.');
+    const target = ref(storage, path);
+    try {
+      const metadata = await getMetadata(target);
+      if (metadata.size !== item.file.size || metadata.contentType !== contentType) {
+        throw new Error('El archivo pendiente no coincide con esta selecci?n.');
+      }
+    } catch (error) {
+      if ((error as { code?: string }).code !== 'storage/object-not-found') throw error;
+      const task = uploadBytesResumable(target, item.file, {
+        contentType,
+        cacheControl: IMMUTABLE_CACHE_CONTROL,
+      });
+      await new Promise<void>((resolve, reject) =>
+        task.on(
           'state_changed',
-          (snapshot) => {
-            progressMap[index] = {
-              bytesTransferred: snapshot.bytesTransferred,
-              totalBytes: snapshot.totalBytes,
-            };
-            if (onProgress) {
-              const totalBytes = Object.values(progressMap).reduce(
-                (sum, p) => sum + p.totalBytes,
-                0,
-              );
-              const transferredBytes = Object.values(progressMap).reduce(
-                (sum, p) => sum + p.bytesTransferred,
-                0,
-              );
-              onProgress(totalBytes, transferredBytes);
-            }
-          },
-          (error) => {
-            console.error('Upload failed:', error);
-            reject(new Error('Error al subir el archivo'));
-          },
-          async () => {
-            try {
-              const url = await getDownloadURL(uploadTask.snapshot.ref);
-              const result: PostMediaUploadResult = {
-                url,
-                path: uploadTask.snapshot.ref.fullPath,
-                type: item.kind,
-                contentType: item.file.type || 'application/octet-stream',
-              };
-              if (item.kind === 'file') {
-                result.fileName = item.file.name;
-                result.size = item.file.size;
-              }
-              resolve(result);
-            } catch (error) {
-              reject(error);
-            }
-          },
-        );
-      }),
-  );
-
-  const results = await Promise.allSettled(uploads);
-  const failed = results.filter((r) => r.status === 'rejected');
-  const successful = results
-    .map((r, index) => (r.status === 'fulfilled' ? { result: r.value, index } : null))
-    .filter((x): x is { result: PostMediaUploadResult; index: number } => x !== null);
-
-  if (failed.length > 0) {
-    await Promise.all(
-      successful.map(async (s) => {
-        try {
-          await deleteObject(ref(storage, s.result.path));
-        } catch (cleanupError) {
-          console.error(`Cleanup failed for media ${s.index}:`, cleanupError);
-        }
-      }),
-    );
-    const firstError = failed[0];
-    throw firstError.status === 'rejected' ? firstError.reason : new Error('Upload failed');
+          (snapshot) => onProgress?.(total, completed + snapshot.bytesTransferred),
+          reject,
+          () => resolve(),
+        ),
+      );
+    }
+    results.push({
+      url: await getDownloadURL(target),
+      path,
+      type: item.kind,
+      contentType,
+      ...(item.kind === 'file'
+        ? { fileName: item.file.name.slice(0, 120), size: item.file.size }
+        : {}),
+    });
+    completed += item.file.size;
+    onProgress?.(total, completed);
   }
-
-  const ordered = successful.sort((a, b) => a.index - b.index).map((s) => s.result);
-  return ordered;
+  // Keep completed objects on failure: the same stable paths recover them on
+  // retry. A failed acknowledgement may belong to an already-published post.
+  return results;
 }
 
 /**

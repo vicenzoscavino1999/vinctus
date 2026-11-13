@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronLeft, Heart, Loader2, MessageCircle, User, FileText } from 'lucide-react';
 
 import { useAuth } from '@/context/auth';
@@ -41,12 +42,13 @@ type ReportTarget =
 const PostCommentsModal = (props: PostCommentsModalProps) => {
   const { user } = useAuth();
   if (!props.isOpen || !props.post) return null;
-  return (
+  return createPortal(
     <PostCommentsSession
       key={`${props.post.postId}:${user?.uid ?? 'anonymous'}`}
       {...props}
       post={props.post}
-    />
+    />,
+    document.body,
   );
 };
 
@@ -176,8 +178,13 @@ const PostCommentsSession = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-5xl mx-4 bg-bg border border-neutral-900 rounded-2xl overflow-hidden max-h-[90vh] flex flex-col">
-        <div className="flex-1 overflow-y-auto">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Comentarios de la publicación"
+        className="relative w-full max-w-5xl mx-4 bg-bg border border-neutral-900 rounded-2xl overflow-hidden max-h-[90dvh] flex flex-col"
+      >
+        <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="px-6 md:px-12 py-6 pb-10">
             <div className="flex items-center justify-between mb-6">
               <button
@@ -417,7 +424,7 @@ const PostCommentsSession = ({
           </div>
         </div>
 
-        <div className="border-t border-neutral-800/60 bg-bg/95">
+        <div className="shrink-0 border-t border-neutral-800/60 bg-bg/95">
           {isComposerOpen ? (
             <form onSubmit={handleSubmit} className="p-6 space-y-3">
               <div className="flex items-center justify-between">

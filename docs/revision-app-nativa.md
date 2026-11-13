@@ -78,10 +78,18 @@ Revisar en ambas versiones:
 2. Likes, comentarios y contadores.
 3. Paginación, conexión lenta, errores y reintentos.
 4. Permisos y visibilidad.
-5. Comparar las capacidades de adjuntos. El publicador nativo actual publica texto; concretar las ampliaciones tras revisar el flujo existente.
+5. Comparar las capacidades de adjuntos. La segunda etapa añade fotos, videos,
+   documentos y YouTube al publicador nativo y comprueba la recuperación de
+   subidas parciales web. Falta cerrar la validación nativa y física.
 
 Primera etapa: envío fiable de comentarios en ambas versiones, aislamiento del
 panel web por cuenta/publicación, conservación de borradores nativos y protección
 del feed nativo ante páginas antiguas que terminan después de actualizar. Consultar
 [la revisión de Publicaciones](revision-publicaciones-comunidad.md) para el alcance,
 los resultados de las pruebas y el trabajo que queda. El módulo sigue abierto.
+
+La segunda etapa cubre creación y adjuntos en ambas versiones, con IDs/rutas
+estables y protección de publicaciones ya confirmadas. La web tiene 438 pruebas
+aprobadas y un flujo de navegador que recupera una subida parcial sin duplicar
+el post ni sobrescribir la imagen. La compilación y pruebas nativas de esta
+ampliación siguen en CI; todavía no se publicó una versión nueva.

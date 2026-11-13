@@ -173,6 +173,36 @@ describe('posts api mutations', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('allows title-only posts and rejects a wholly empty post', async () => {
+    const input = {
+      postId: 'p1',
+      authorId: 'u1',
+      authorSnapshot: { displayName: 'Ana', photoURL: null },
+      title: ' Solo título ',
+      text: '',
+    };
+    await expect(createPostUploading(input)).resolves.toBeUndefined();
+    expect(postUpload.createPostUploading).toHaveBeenLastCalledWith(
+      expect.objectContaining({ title: 'Solo título', text: '' }),
+    );
+    await expect(createPostUploading({ ...input, title: '  ' })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+    });
+  });
+
+  it('normalizes a blank optional title to null for Firestore', async () => {
+    await createPostUploading({
+      postId: 'p1',
+      authorId: 'u1',
+      authorSnapshot: { displayName: 'Ana', photoURL: null },
+      title: '  ',
+      text: 'Hola',
+    });
+    expect(postUpload.createPostUploading).toHaveBeenLastCalledWith(
+      expect.objectContaining({ title: null, text: 'Hola' }),
+    );
+  });
+
   it('rejects blocked terms in createPostUploading payload', async () => {
     await expect(
       createPostUploading({

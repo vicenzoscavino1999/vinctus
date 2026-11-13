@@ -56,15 +56,31 @@ export const createStoryInputSchema = z.object({
   visibility: z.literal('friends').optional(),
 });
 
-export const createPostUploadingInputSchema = z.object({
-  postId: idSchema,
-  authorId: idSchema,
-  authorSnapshot: authorSnapshotSchema,
-  title: z.string().trim().max(LIMITS.posts.titleMaxLength).nullable().optional(),
-  text: z.string().trim().min(1).max(LIMITS.posts.textMaxLength),
-  groupId: idSchema.nullable().optional(),
-  categoryId: z.string().trim().min(1).max(LIMITS.posts.categoryIdMaxLength).nullable().optional(),
-});
+export const createPostUploadingInputSchema = z
+  .object({
+    postId: idSchema,
+    authorId: idSchema,
+    authorSnapshot: authorSnapshotSchema,
+    title: z
+      .string()
+      .trim()
+      .max(LIMITS.posts.titleMaxLength)
+      .transform((title) => title || null)
+      .nullable()
+      .optional(),
+    text: z.string().trim().max(LIMITS.posts.textMaxLength),
+    groupId: idSchema.nullable().optional(),
+    categoryId: z
+      .string()
+      .trim()
+      .min(1)
+      .max(LIMITS.posts.categoryIdMaxLength)
+      .nullable()
+      .optional(),
+  })
+  .refine((input) => Boolean(input.text || input.title?.trim()), {
+    message: 'Escribe un título o una descripción.',
+  });
 
 export const updatePostPatchSchema = z
   .record(z.string(), z.unknown())
