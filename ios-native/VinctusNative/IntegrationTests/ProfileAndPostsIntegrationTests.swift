@@ -159,6 +159,49 @@ final class PostIntegrationTests: EmulatorTestCase {
     XCTAssertEqual(unchanged.data()?["text"] as? String, "Una sola vez")
   }
 
+  func testCommentPaginationKeepsTiedTimestampsAndSurvivesADeletedCursor() async throws {
+    let user = try await makeUser("Ana")
+    let postID = try await publishPost("Más de ochenta comentarios")
+    let db = Firestore.firestore()
+    let comments = db.collection("posts").document(postID).collection("comments")
+    let batch = db.batch()
+    let ids = (0..<105).map { String(format: "c%03d", $0) }
+    for id in ids {
+      batch.setData([
+        "postId": postID, "authorId": user.uid,
+        "authorSnapshot": ["displayName": "Ana", "photoURL": NSNull()],
+        "text": id, "createdAt": FieldValue.serverTimestamp(),
+      ], forDocument: comments.document(id))
+    }
+    try await batch.commit()
+
+    let repo = FirebasePostCommentsRepo()
+    var page = try await repo.fetchComments(postID: postID, limit: 20)
+    XCTAssertFalse(page.isFromCache)
+    XCTAssertEqual(page.items.map(\.id), Array(ids.reversed().prefix(20)))
+    let cursor = try XCTUnwrap(page.nextCursor)
+    // The batch gives every comment exactly the same timestamp, so ID is essential.
+    let timestamps = Set(page.items.compactMap(\.createdAt))
+    XCTAssertEqual(timestamps.count, 1)
+    try await comments.document(cursor.commentID).delete()
+    // A new comment must not shift/duplicate older pages.
+    try await repo.addComment(postID: postID, text: "Más reciente", commentID: "new")
+    var loaded = page.items.map(\.id)
+    var pageCount = 1
+    while page.hasMore && pageCount < 10 {
+      page = try await repo.fetchComments(postID: postID, limit: 20, after: page.nextCursor)
+      loaded.append(contentsOf: page.items.map(\.id))
+      pageCount += 1
+    }
+    XCTAssertEqual(pageCount, 6)
+    XCTAssertFalse(page.hasMore)
+    XCTAssertEqual(loaded, Array(ids.reversed()))
+    XCTAssertEqual(Set(loaded).count, 105)
+    let refreshed = try await repo.fetchComments(postID: postID, limit: 20)
+    XCTAssertEqual(refreshed.items.first?.id, "new")
+    XCTAssertFalse(refreshed.items.contains { $0.id == cursor.commentID })
+  }
+
   func testPublishAndFindItInTheFeed() async throws {
     _ = try await makeUser("Lucía")
 

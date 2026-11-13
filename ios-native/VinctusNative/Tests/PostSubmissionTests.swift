@@ -1,3 +1,4 @@
+import FirebaseFirestore
 import XCTest
 @testable import VinctusNative
 
@@ -6,8 +7,10 @@ private final class PendingCommentsRepo: PostCommentsRepo {
   var fails = false
   var sendHandler: (() async throws -> Void)?
   var fetchHandler: (() async throws -> PostCommentsPage)?
+  var fetchedCursors: [PostCommentsCursor?] = []
 
-  func fetchComments(postID: String, limit: Int) async throws -> PostCommentsPage {
+  func fetchComments(postID: String, limit: Int, after cursor: PostCommentsCursor?) async throws -> PostCommentsPage {
+    fetchedCursors.append(cursor)
     if let fetchHandler { return try await fetchHandler() }
     return PostCommentsPage(items: [], isFromCache: false)
   }
@@ -188,5 +191,86 @@ final class PostSubmissionTests: XCTestCase {
     XCTAssertEqual(vm.comments.map(\.id), ["fresh"])
     XCTAssertFalse(vm.isShowingCachedData)
     XCTAssertFalse(vm.isLoadingComments)
+  }
+
+  func testOlderCommentsDeduplicateAndRetryTheSameCursorAfterFailure() async {
+    let repo = PendingCommentsRepo()
+    let vm = PostDetailViewModel(postID: "p1", repo: repo)
+    let cursor = PostCommentsCursor(createdAt: Timestamp(date: Date()), commentID: "c2")
+    let newest = PostComment(id: "c3", authorID: "a", authorName: "Ana", text: "Reciente", createdAt: nil)
+    let older = PostComment(id: "c2", authorID: "a", authorName: "Ana", text: "Anterior", createdAt: nil)
+    repo.fetchHandler = {
+      PostCommentsPage(items: [newest], isFromCache: false, nextCursor: cursor, hasMore: true)
+    }
+    await vm.refreshComments()
+    repo.fetchHandler = { throw FakeError() }
+    await vm.loadMoreComments()
+    XCTAssertEqual(vm.comments.map(\.id), ["c3"])
+    XCTAssertTrue(vm.canLoadMoreComments)
+    XCTAssertNotNil(vm.loadMoreErrorMessage)
+    XCTAssertFalse(vm.isLoadingMoreComments)
+
+    repo.fetchHandler = { PostCommentsPage(items: [newest, older], isFromCache: true) }
+    await vm.loadMoreComments()
+    XCTAssertEqual(repo.fetchedCursors.compactMap { $0?.commentID }, ["c2", "c2"])
+    XCTAssertEqual(vm.comments.map(\.id), ["c3", "c2"])
+    XCTAssertNil(vm.loadMoreErrorMessage)
+    XCTAssertTrue(vm.isShowingCachedData)
+    XCTAssertFalse(vm.canLoadMoreComments)
+    await vm.loadMoreComments()
+    XCTAssertEqual(repo.fetchedCursors.count, 3)
+  }
+
+  func testRefreshInvalidatesAnOlderCommentsPageAndBlocksDoubleLoad() async {
+    let repo = PendingCommentsRepo()
+    let vm = PostDetailViewModel(postID: "p1", repo: repo)
+    let cursor = PostCommentsCursor(createdAt: Timestamp(date: Date()), commentID: "old")
+    repo.fetchHandler = { PostCommentsPage(items: [], isFromCache: false, nextCursor: cursor, hasMore: true) }
+    await vm.refreshComments()
+    let started = expectation(description: "Older comments page")
+    var release: CheckedContinuation<PostCommentsPage, Never>?
+    repo.fetchHandler = {
+      await withCheckedContinuation { release = $0; started.fulfill() }
+    }
+    let old = Task { await vm.loadMoreComments() }
+    await fulfillment(of: [started], timeout: 2)
+    await vm.loadMoreComments()
+    XCTAssertEqual(repo.fetchedCursors.count, 2)
+    repo.fetchHandler = {
+      PostCommentsPage(items: [PostComment(id: "fresh", authorID: "a", authorName: "Ana", text: "Nuevo", createdAt: nil)], isFromCache: false)
+    }
+    await vm.refreshComments()
+    release?.resume(returning: PostCommentsPage(items: [], isFromCache: true, nextCursor: cursor, hasMore: true))
+    await old.value
+    XCTAssertEqual(vm.comments.map(\.id), ["fresh"])
+    XCTAssertFalse(vm.canLoadMoreComments)
+    XCTAssertFalse(vm.isShowingCachedData)
+    XCTAssertFalse(vm.isLoadingMoreComments)
+  }
+
+  func testSendingWhileAnOlderPageIsLoadingRefreshesToTheNewComment() async {
+    let repo = PendingCommentsRepo()
+    let vm = PostDetailViewModel(postID: "p1", repo: repo)
+    let cursor = PostCommentsCursor(createdAt: Timestamp(date: Date()), commentID: "old")
+    repo.fetchHandler = { PostCommentsPage(items: [], isFromCache: false, nextCursor: cursor, hasMore: true) }
+    await vm.refreshComments()
+    let started = expectation(description: "Older comments page")
+    var release: CheckedContinuation<PostCommentsPage, Never>?
+    repo.fetchHandler = {
+      await withCheckedContinuation { release = $0; started.fulfill() }
+    }
+    let old = Task { await vm.loadMoreComments() }
+    await fulfillment(of: [started], timeout: 2)
+    repo.fetchHandler = {
+      PostCommentsPage(items: [PostComment(id: "sent", authorID: "a", authorName: "Ana", text: "Nuevo", createdAt: nil)], isFromCache: false)
+    }
+    vm.draftComment = "Nuevo"
+    await vm.submitComment()?.value
+    release?.resume(returning: PostCommentsPage(items: [], isFromCache: true, nextCursor: cursor, hasMore: true))
+    await old.value
+    XCTAssertEqual(vm.comments.map(\.id), ["sent"])
+    XCTAssertEqual(vm.submittedCommentCount, 1)
+    XCTAssertFalse(vm.canLoadMoreComments)
+    XCTAssertFalse(vm.isLoadingMoreComments)
   }
 }

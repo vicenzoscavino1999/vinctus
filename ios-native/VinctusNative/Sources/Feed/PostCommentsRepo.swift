@@ -11,17 +11,28 @@ struct PostComment: Identifiable, Hashable {
   let createdAt: Date?
 }
 
+struct PostCommentsCursor {
+  let createdAt: Timestamp
+  let commentID: String
+}
+
 struct PostCommentsPage {
   let items: [PostComment]
   let isFromCache: Bool
+  var nextCursor: PostCommentsCursor? = nil
+  var hasMore = false
 }
 
 protocol PostCommentsRepo {
-  func fetchComments(postID: String, limit: Int) async throws -> PostCommentsPage
+  func fetchComments(postID: String, limit: Int, after cursor: PostCommentsCursor?) async throws -> PostCommentsPage
   func addComment(postID: String, text: String, commentID: String) async throws
 }
 
 extension PostCommentsRepo {
+  func fetchComments(postID: String, limit: Int) async throws -> PostCommentsPage {
+    try await fetchComments(postID: postID, limit: limit, after: nil)
+  }
+
   func addComment(postID: String, text: String) async throws {
     try await addComment(postID: postID, text: text, commentID: UUID().uuidString)
   }
@@ -69,7 +80,7 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     self.auth = auth
   }
 
-  func fetchComments(postID: String, limit: Int) async throws -> PostCommentsPage {
+  func fetchComments(postID: String, limit: Int, after cursor: PostCommentsCursor?) async throws -> PostCommentsPage {
     guard FirebaseApp.app() != nil else { throw PostCommentsRepoError.firebaseNotConfigured }
 
     let normalizedPostID = postID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -78,14 +89,22 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     let db = self.db ?? Firestore.firestore()
     let pageSize = max(1, min(120, limit))
 
-    let query = db.collection(FirestoreCollections.posts)
+    var query = db.collection(FirestoreCollections.posts)
       .document(normalizedPostID)
       .collection(FirestoreSubcollections.comments)
-      .order(by: "createdAt", descending: false)
-      .limit(to: pageSize)
+      .order(by: "createdAt", descending: true)
+      .order(by: FieldPath.documentID(), descending: true)
+      .limit(to: pageSize + 1)
+
+    if let cursor {
+      // Keep Timestamp precision and break ties by ID, including if the anchor
+      // document is deleted between pages. This matches the web's implicit ID order.
+      query = query.start(after: [cursor.createdAt, cursor.commentID])
+    }
 
     let (snapshot, isFromCache) = try await getDocumentsWithFallback(query)
-    let items = snapshot.documents.map { doc in
+    let documents = Array(snapshot.documents.prefix(pageSize))
+    let items = documents.map { doc in
       let data = doc.data()
       let authorSnapshot = data["authorSnapshot"] as? [String: Any]
       let authorName = FirestoreValue.string(authorSnapshot?["displayName"])
@@ -103,7 +122,16 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
       )
     }
 
-    return PostCommentsPage(items: items, isFromCache: isFromCache || snapshot.metadata.isFromCache)
+    let nextCursor = documents.last.flatMap { doc -> PostCommentsCursor? in
+      guard let createdAt = doc.data()["createdAt"] as? Timestamp else { return nil }
+      return PostCommentsCursor(createdAt: createdAt, commentID: doc.documentID)
+    }
+    return PostCommentsPage(
+      items: items,
+      isFromCache: isFromCache || snapshot.metadata.isFromCache,
+      nextCursor: nextCursor,
+      hasMore: snapshot.documents.count > pageSize && nextCursor != nil
+    )
   }
 
   func addComment(postID: String, text: String, commentID: String) async throws {

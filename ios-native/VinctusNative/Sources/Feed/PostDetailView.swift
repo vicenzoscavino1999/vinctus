@@ -110,6 +110,24 @@ struct PostDetailView: View {
               .listRowSeparator(.hidden)
           }
         }
+
+        if let error = vm.loadMoreErrorMessage {
+          Text(error)
+            .font(.footnote)
+            .foregroundStyle(.red)
+        }
+
+        if vm.canLoadMoreComments {
+          Button {
+            Task { await vm.loadMoreComments() }
+          } label: {
+            HStack {
+              if vm.isLoadingMoreComments { ProgressView() }
+              Text(vm.loadMoreErrorMessage == nil ? "Cargar comentarios anteriores" : "Reintentar carga")
+            }
+          }
+          .disabled(vm.isLoadingComments || vm.isLoadingMoreComments)
+        }
       }
 
       Section("Agregar comentario") {
@@ -185,6 +203,9 @@ struct PostDetailView: View {
     .onChange(of: vm.comments.count) { _, newCount in
       syncCommentCountToFeed(newCount)
     }
+    .onChange(of: vm.submittedCommentCount) { _, _ in
+      syncCommentCountToFeed()
+    }
     .onDisappear {
       syncCommentCountToFeed()
     }
@@ -196,11 +217,11 @@ struct PostDetailView: View {
   }
 
   private var displayCommentCount: Int {
-    max(item.commentCount, vm.comments.count)
+    max(item.commentCount + vm.submittedCommentCount, vm.comments.count)
   }
 
   private func syncCommentCountToFeed(_ count: Int? = nil) {
-    let resolvedCount = max(item.commentCount, count ?? vm.comments.count)
+    let resolvedCount = max(item.commentCount + vm.submittedCommentCount, count ?? vm.comments.count)
     onCommentCountChange?(resolvedCount)
   }
 

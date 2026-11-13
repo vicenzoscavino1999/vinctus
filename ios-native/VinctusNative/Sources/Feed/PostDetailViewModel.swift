@@ -4,10 +4,14 @@ import Foundation
 final class PostDetailViewModel: ObservableObject {
   @Published private(set) var comments: [PostComment] = []
   @Published private(set) var isLoadingComments = false
+  @Published private(set) var isLoadingMoreComments = false
+  @Published private(set) var canLoadMoreComments = false
+  @Published private(set) var submittedCommentCount = 0
   @Published private(set) var isSubmittingComment = false
   @Published private(set) var isShowingCachedData = false
   @Published var errorMessage: String?
   @Published var infoMessage: String?
+  @Published private(set) var loadMoreErrorMessage: String?
   @Published var draftComment = ""
 
   private let commentLimit = Limits.Comments.textMaxLength
@@ -15,6 +19,8 @@ final class PostDetailViewModel: ObservableObject {
   private let repo: any PostCommentsRepo
   private var pendingComment: (text: String, id: String)?
   private var commentsRequest = 0
+  private var nextCursor: PostCommentsCursor?
+  private let pageSize = 20
 
   init(postID: String, repo: any PostCommentsRepo) {
     self.postID = postID
@@ -33,12 +39,16 @@ final class PostDetailViewModel: ObservableObject {
     commentsRequest += 1
     let request = commentsRequest
     isLoadingComments = true
+    isLoadingMoreComments = false
     errorMessage = nil
+    loadMoreErrorMessage = nil
 
     do {
-      let page = try await repo.fetchComments(postID: postID, limit: 80)
+      let page = try await repo.fetchComments(postID: postID, limit: pageSize, after: nil)
       guard request == commentsRequest else { return }
       comments = page.items
+      nextCursor = page.nextCursor
+      canLoadMoreComments = page.hasMore && page.nextCursor != nil
       isShowingCachedData = page.isFromCache
     } catch {
       guard request == commentsRequest else { return }
@@ -46,6 +56,32 @@ final class PostDetailViewModel: ObservableObject {
     }
 
     isLoadingComments = false
+  }
+
+  func loadMoreComments() async {
+    guard !isLoadingComments, !isLoadingMoreComments, canLoadMoreComments,
+      let cursor = nextCursor
+    else { return }
+    let request = commentsRequest
+    isLoadingMoreComments = true
+    loadMoreErrorMessage = nil
+
+    do {
+      let page = try await repo.fetchComments(postID: postID, limit: pageSize, after: cursor)
+      guard request == commentsRequest else { return }
+      var seen = Set(comments.map(\.id))
+      comments.append(contentsOf: page.items.filter { seen.insert($0.id).inserted })
+      nextCursor = page.nextCursor
+      canLoadMoreComments = page.hasMore && page.nextCursor != nil
+      isShowingCachedData = isShowingCachedData || page.isFromCache
+    } catch {
+      guard request == commentsRequest else { return }
+      // Keep both the visible rows and the cursor so retry loads the same page.
+      loadMoreErrorMessage = "No se pudieron cargar más comentarios. Puedes reintentar."
+    }
+
+    guard request == commentsRequest else { return }
+    isLoadingMoreComments = false
   }
 
   @discardableResult
@@ -76,6 +112,7 @@ final class PostDetailViewModel: ObservableObject {
         try await repo.addComment(postID: postID, text: normalizedDraft, commentID: commentID)
         AppLog.posts.info("comment.submit.success")
         pendingComment = nil
+        submittedCommentCount += 1
         if normalizedText(draftComment) == normalizedDraft { draftComment = "" }
         infoMessage = "Comentario enviado."
         await refreshComments()
