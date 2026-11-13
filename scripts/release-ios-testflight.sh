@@ -31,10 +31,12 @@ installed_profiles=()
 cleanup() {
   security default-keychain -d user -s "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1 || true
   security delete-keychain "$keychain_path" >/dev/null 2>&1 || true
-  for installed_profile in "${installed_profiles[@]}"; do
-    rm -f -- "$installed_profile"
+  for installed_profile in "${installed_profiles[@]:-}"; do
+    if [[ -n "$installed_profile" ]]; then
+      rm -f -- "$installed_profile"
+    fi
   done
-  rm -f -- "$release_dir/AuthKey.p8" "$release_dir/distribution.p12" "$release_dir/distribution.mobileprovision" "$firebase_path" "$prod_local_path"
+  rm -f -- "$release_dir/AuthKey.p8" "$release_dir/distribution.p12" "$release_dir/distribution.mobileprovision" "$firebase_path" "$prod_local_path" "$app_dir/.release-project.json"
 }
 trap cleanup EXIT
 export RELEASE_DIR="$release_dir"
@@ -90,6 +92,7 @@ security cms -D -i "$release_dir/distribution.mobileprovision" > "$release_dir/p
 python3 - <<'PY'
 import datetime
 import hashlib
+import json
 import os
 import pathlib
 import plistlib
@@ -127,6 +130,17 @@ with (release / 'ExportOptions.plist').open('wb') as file:
         'manageAppVersionAndBuildNumber': False,
         'uploadSymbols': True,
     }, file)
+spec = {
+    'include': ['project.yml'],
+    'targets': {'VinctusNative': {'settings': {'configs': {'ReleaseProd': {
+        'CODE_SIGN_STYLE': 'Manual',
+        'CODE_SIGN_IDENTITY': identity,
+        'PROVISIONING_PROFILE_SPECIFIER': profile_uuid,
+        'DEVELOPMENT_TEAM': team,
+        'CURRENT_PROJECT_VERSION': os.environ['BUILD_NUMBER'],
+    }}}}},
+}
+(pathlib.Path(os.environ['APP_DIR']) / '.release-project.json').write_text(json.dumps(spec), encoding='utf-8')
 PY
 
 profile_uuid="$(cat "$release_dir/profile-uuid.txt")"
@@ -148,7 +162,7 @@ auth=(
   -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 )
 cd "$app_dir"
-xcodegen generate
+xcodegen generate --spec .release-project.json
 xcodebuild archive \
   -project VinctusNative.xcodeproj \
   -scheme VinctusNative-Prod \
@@ -156,11 +170,6 @@ xcodebuild archive \
   -destination 'generic/platform=iOS' \
   -archivePath "$release_dir/VinctusNative.xcarchive" \
   -clonedSourcePackagesDirPath "$release_dir/spm" \
-  CODE_SIGN_STYLE=Manual \
-  CODE_SIGN_IDENTITY="$certificate_identity" \
-  PROVISIONING_PROFILE_SPECIFIER="$profile_uuid" \
-  DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-  CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
   -quiet
 xcodebuild -exportArchive \
   -archivePath "$release_dir/VinctusNative.xcarchive" \

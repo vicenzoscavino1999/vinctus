@@ -33,6 +33,10 @@ on:
         description: 'Build nuevo, mayor que los ya subidos para esta versión (ejemplo: 2)'
         type: string
         default: ''
+      validated_test_run:
+        description: 'Opcional: ejecución previa con ambas pruebas nativas aprobadas; se verifica que el código siga idéntico'
+        type: string
+        default: ''
 
 concurrency:
   group: ios-native-${{ github.ref }}
@@ -42,7 +46,25 @@ permissions:
   contents: read
 
 jobs:
+  source-validation:
+    if: github.event_name == 'workflow_dispatch' && inputs.upload_to_testflight && inputs.validated_test_run != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify native test evidence against unchanged source
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VINCTUS_VALIDATED_TEST_RUN: ${{ inputs.validated_test_run }}
+        run: node scripts/check-ios-release-proof.mjs
+
   build:
+    if: github.event_name != 'workflow_dispatch' || !inputs.upload_to_testflight || inputs.validated_test_run == ''
     name: ios-native
     runs-on: macos-26
     timeout-minutes: 60
@@ -97,6 +119,7 @@ jobs:
   # Unlike the build job, the app is signed ("Sign to Run Locally", no team): Firebase Auth keeps
   # the signed-in user in the keychain, and an unsigned app gets errSecMissingEntitlement (-34018).
   integration:
+    if: github.event_name != 'workflow_dispatch' || !inputs.upload_to_testflight || inputs.validated_test_run == ''
     name: ios-native-integration
     runs-on: macos-26
     timeout-minutes: 60
@@ -176,8 +199,10 @@ jobs:
 
   testflight:
     name: Upload to TestFlight
-    if: github.event_name == 'workflow_dispatch' && inputs.upload_to_testflight
-    needs: [build, integration]
+    if: >-
+      always() && !cancelled() && github.event_name == 'workflow_dispatch' && inputs.upload_to_testflight &&
+      (needs.source-validation.result == 'success' || (needs.build.result == 'success' && needs.integration.result == 'success'))
+    needs: [source-validation, build, integration]
     runs-on: macos-26
     timeout-minutes: 60
     environment: ios-release

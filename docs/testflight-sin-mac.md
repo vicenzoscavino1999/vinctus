@@ -1,8 +1,8 @@
 # Subir Vinctus a TestFlight sin una Mac propia
 
 El workflow existente **iOS native** puede compilar, firmar y subir la app desde
-una Mac temporal de GitHub. La subida es manual y solo se ejecuta después de que
-pasen la compilación y las pruebas nativas del mismo commit. No envía la app a
+una Mac temporal de GitHub. La subida es manual y requiere pruebas nativas
+aprobadas para el mismo código de la app. No envía la app a
 revisión de App Store ni la publica para todos los usuarios.
 
 Estado: credenciales de Apple y Firebase configuradas en GitHub; pendiente de
@@ -27,6 +27,8 @@ preparados. El perfil incluye Sign in with Apple y Declared Age Range. Al usar
 distribución, no hace falta registrar el UDID de un iPhone para archivar la app.
 El intento inicial con firma automática buscó un perfil de desarrollo y falló
 porque la cuenta no tenía dispositivos registrados.
+La configuración de firma se aplica únicamente al target `VinctusNative`, en
+`ReleaseProd`, mediante un spec temporal de XcodeGen.
 
 ## Configuración en GitHub
 
@@ -72,6 +74,15 @@ gh workflow run ios-native.yml --repo vicenzoscavino1999/vinctus --ref fix/ios-c
 
 Sustituye `2` por un build nuevo mayor que los existentes para la versión
 `1.0.0`. Revisa y aprueba el commit exacto en el entorno `ios-release`.
+
+Para una corrección exclusiva del script de publicación, se puede añadir
+`-f validated_test_run=43407892324`. El workflow verifica por API que compilación
+y pruebas nativas de esa ejecución pasaron, que el commit es un ancestro y que
+los archivos nativos, contrato compartido, reglas, configuración de Firebase y
+definiciones de pruebas siguen idénticos. Si algo cambió, rechaza esa evidencia
+y se debe ejecutar la modalidad normal con todas las pruebas. La firma y subida
+siempre se ejecutan de nuevo sobre el commit solicitado.
+
 Las claves privadas se escriben solo en la Mac temporal y se eliminan al terminar;
 el workflow no sube archivos de configuración ni credenciales como artefactos.
 

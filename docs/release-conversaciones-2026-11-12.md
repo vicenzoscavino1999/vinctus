@@ -68,7 +68,13 @@ este requisito: la integración de `main` publica automáticamente.
   Apple y Declared Age Range, y ausencia de dispositivos en el perfil App Store.
 - Certificado, contraseña y perfil guardados como secretos de `ios-release`.
   El workflow usa firma manual de distribución para no depender de un iPhone
-  registrado en Apple Developer. Pendiente verificar el archivo y la subida.
+  registrado en Apple Developer. En
+  [43407892324](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43407892324)
+  pasaron nuevamente compilación y pruebas nativas. La importación del certificado
+  y la validación del perfil funcionaron; el archivo detectó que el perfil global
+  se heredaba a los recursos de las dependencias. La configuración se corrigió
+  para aplicarse solo a `VinctusNative/ReleaseProd`, mediante un include temporal
+  de XcodeGen. Pendiente verificar el archivo y la subida con esa corrección.
 - Todavía no se ha confirmado una nueva versión en TestFlight ni App Store.
 
 Configuración y ejecución: [TestFlight sin Mac](testflight-sin-mac.md).
