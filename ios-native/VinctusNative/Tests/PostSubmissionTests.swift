@@ -21,11 +21,13 @@ private final class PendingCommentsRepo: PostCommentsRepo {
 
 private final class PendingPostsRepo: CreatePostRepo {
   var sentIDs: [String] = []
+  var drafts: [NativePostDraft] = []
   var fails = false
   var sendHandler: (() async throws -> Void)?
   func makePostID() -> String { UUID().uuidString }
-  func publishTextPost(text: String, postID: String, groupID: String?) async throws {
+  func publishPost(_ draft: NativePostDraft, postID: String, groupID: String?, onProgress: @escaping (Double) -> Void) async throws {
     sentIDs.append(postID)
+    drafts.append(draft)
     if let sendHandler { try await sendHandler() }
     if fails { throw FakeError() }
   }
@@ -41,6 +43,41 @@ private final class PendingFeedRepo: FeedRepo {
 
 @MainActor
 final class PostSubmissionTests: XCTestCase {
+  func testMediaOnlyPostKeepsItsSelectionAndIDAfterFailure() async throws {
+    let repo = PendingPostsRepo()
+    repo.fails = true
+    let vm = CreatePostViewModel(repo: repo)
+    let url = ChatPendingAttachment.temporaryURL(extension: "pdf")
+    try Data("%PDF-1.4".utf8).write(to: url)
+    let file = ChatPendingAttachment(fileURL: url, fileName: "Notas.pdf", contentType: "application/pdf", size: 8, kind: .document)
+    try vm.addAttachment(file)
+    XCTAssertTrue(vm.canSubmit)
+    await vm.submit()?.value
+    XCTAssertEqual(vm.attachments.map(\.id), [file.id])
+    XCTAssertTrue(vm.canRetryPendingSubmission)
+    repo.fails = false
+    await vm.retryPendingSubmission()?.value
+    XCTAssertEqual(Set(repo.sentIDs).count, 1)
+    XCTAssertEqual(repo.drafts.last?.normalizedTitle, "Publicación")
+    XCTAssertTrue(vm.attachments.isEmpty)
+  }
+
+  func testInvalidYouTubeLinkAndTooManyMediaSlotsAreRejected() throws {
+    let vm = CreatePostViewModel(repo: PendingPostsRepo())
+    vm.youtubeURL = "https://example.com/video"
+    XCTAssertFalse(vm.canSubmit)
+    XCTAssertNil(vm.submit())
+    XCTAssertNotNil(vm.errorMessage)
+    vm.youtubeURL = "https://youtu.be/dQw4w9WgXcQ"
+    XCTAssertTrue(vm.canSubmit)
+    for _ in 0..<9 {
+      let url = ChatPendingAttachment.temporaryURL(extension: "jpg")
+      try Data([1]).write(to: url)
+      try vm.addAttachment(ChatPendingAttachment(fileURL: url, fileName: "Foto.jpg", contentType: "image/jpeg", size: 1, kind: .image))
+    }
+    let extra = ChatPendingAttachment(fileURL: URL(fileURLWithPath: "/unused"), fileName: "Foto.jpg", contentType: "image/jpeg", size: 1, kind: .image)
+    XCTAssertThrowsError(try vm.addAttachment(extra))
+  }
   func testRefreshInvalidatesAPendingFeedPage() async {
     let repo = PendingFeedRepo()
     let vm = FeedViewModel(repo: repo)

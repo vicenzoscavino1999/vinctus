@@ -1,5 +1,6 @@
 import XCTest
 import FirebaseFirestore
+import FirebaseStorage
 @testable import VinctusNative
 
 final class ProfileIntegrationTests: EmulatorTestCase {
@@ -61,6 +62,65 @@ final class ProfileIntegrationTests: EmulatorTestCase {
 }
 
 final class PostIntegrationTests: EmulatorTestCase {
+  func testNativePhotoVideoDocumentAndYouTubePostRetriesWithoutOverwriting() async throws {
+    _ = try await makeUser("Lucía")
+    let repo = FirebaseCreatePostRepo()
+    let postID = try repo.makePostID()
+    let cases: [(String, String, ChatMediaKind, Data)] = [
+      ("jpg", "image/jpeg", .image, Self.jpegData()),
+      // Transport/permissions fixture; real movie decoding remains a device check.
+      ("mp4", "video/mp4", .video, Data([0, 1, 2, 3])),
+      ("pdf", "application/pdf", .document, Data("%PDF-1.4".utf8)),
+    ]
+    var files: [ChatPendingAttachment] = []
+    for (suffix, type, kind, data) in cases {
+      let url = ChatPendingAttachment.temporaryURL(extension: suffix)
+      try data.write(to: url)
+      files.append(ChatPendingAttachment(fileURL: url, fileName: "test.\(suffix)", contentType: type, size: data.count, kind: kind))
+    }
+    let draft = NativePostDraft(title: "Adjuntos entre plataformas", text: "", files: files, youtubeVideoID: "dQw4w9WgXcQ")
+    try await repo.publishPost(draft, postID: postID, groupID: nil, onProgress: { _ in })
+    let ref = Firestore.firestore().collection("posts").document(postID)
+    let first = try await ref.getDocument(source: .server)
+    try await repo.publishPost(draft, postID: postID, groupID: nil, onProgress: { _ in })
+    let second = try await ref.getDocument(source: .server)
+    XCTAssertEqual(first.data()?["updatedAt"] as? Timestamp, second.data()?["updatedAt"] as? Timestamp)
+    XCTAssertEqual(second.data()?["status"] as? String, "ready")
+    let wire = try XCTUnwrap(second.data()?["media"] as? [[String: Any]])
+    XCTAssertEqual(wire.compactMap { $0["type"] as? String }, ["image", "video", "file", "video"])
+    for (index, file) in files.enumerated() {
+      let path = try XCTUnwrap(wire[index]["path"] as? String)
+      let received = try await Storage.storage().reference(withPath: path).data(maxSize: 1024 * 1024)
+      XCTAssertEqual(received, try Data(contentsOf: file.fileURL))
+    }
+    let feed = try await FirebaseFeedRepo().fetchFeedPage(limit: 30, after: nil)
+    let item = try XCTUnwrap(feed.items.first { $0.id == postID })
+    XCTAssertEqual(item.media.count, 4)
+    XCTAssertEqual(item.title, "Adjuntos entre plataformas")
+    let profile = try await FirebaseProfileContentRepo().fetchPosts(uid: try XCTUnwrap(second.data()?["authorId"] as? String), limit: 30, after: nil)
+    XCTAssertTrue(profile.items.contains { $0.id == postID && $0.media.count == 4 })
+  }
+
+  func testPendingPostsStayOutOfTheFeedAndTextRetriesCheckTheGroup() async throws {
+    let user = try await makeUser("Ana")
+    let repo = FirebaseCreatePostRepo()
+    let postID = try repo.makePostID()
+    let db = Firestore.firestore()
+    try await db.collection("posts").document(postID).setData([
+      "postId": postID, "authorId": user.uid,
+      "authorSnapshot": ["displayName": "Ana", "photoURL": NSNull()],
+      "title": NSNull(), "text": "Pendiente", "status": "uploading", "media": [],
+      "createdAt": FieldValue.serverTimestamp(), "updatedAt": NSNull(),
+      "groupId": NSNull(), "categoryId": NSNull(), "likeCount": 0, "commentCount": 0,
+    ])
+    let feed = try await FirebaseFeedRepo().fetchFeedPage(limit: 30, after: nil)
+    XCTAssertFalse(feed.items.contains { $0.id == postID })
+    try await repo.publishTextPost(text: "Pendiente", postID: postID, groupID: nil)
+    do {
+      try await repo.publishTextPost(text: "Pendiente", postID: postID, groupID: "otro-grupo")
+      XCTFail("The original group cannot change during a retry")
+    } catch { }
+  }
   func testCommentRetriesOnlyCreateOneImmutableDocument() async throws {
     _ = try await makeUser("Lucía")
     let postID = try await publishPost("Publicación con comentarios")

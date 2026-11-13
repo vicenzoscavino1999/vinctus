@@ -17,6 +17,8 @@ struct FeedItem: Identifiable, Hashable {
   var videoThumbnailURL: String? = nil
   /// Name of the first attached file, when the post only has files.
   var fileName: String? = nil
+  var title: String? = nil
+  var media: [PostMediaItem] = []
 
   /// What the posts grid shows: the photo, or else the video's thumbnail.
   var previewImageURL: String? { imageURL ?? videoThumbnailURL }
@@ -24,6 +26,7 @@ struct FeedItem: Identifiable, Hashable {
   /// Reads the `media` array of a post (`PostMedia` in `src/shared/lib/firestore/posts.ts`).
   mutating func applyMedia(_ value: Any?) {
     guard let items = value as? [[String: Any]] else { return }
+    media = items.compactMap(PostMediaItem.init(fields:))
     for item in items {
       guard let url = FirestoreValue.string(item["url"]) else { continue }
       switch item["type"] as? String {
@@ -107,7 +110,7 @@ final class FirebaseFeedRepo: FeedRepo {
     let pageDocs = Array(docs.prefix(pageSize))
     let hasMore = docs.count > pageSize
 
-    let items = pageDocs.map(Self.feedItem(from:))
+    let items = pageDocs.filter(Self.isPublished).map(Self.feedItem(from:))
 
     let nextCursor: FeedCursor?
     if hasMore, let lastVisible = pageDocs.last {
@@ -125,6 +128,11 @@ final class FirebaseFeedRepo: FeedRepo {
   }
 
   /// A post document as a feed item. Also used for a user's posts on their profile.
+  static func isPublished(_ doc: QueryDocumentSnapshot) -> Bool {
+    let status = doc.data()["status"] as? String
+    return status == nil || status == "ready"
+  }
+
   static func feedItem(from doc: QueryDocumentSnapshot) -> FeedItem {
     let data = doc.data()
 
@@ -147,6 +155,7 @@ final class FirebaseFeedRepo: FeedRepo {
       commentCount: max(0, FirestoreValue.int(data["commentCount"]) ?? FirestoreValue.int(data["commentsCount"]) ?? 0)
     )
     item.applyMedia(data["media"])
+    item.title = FirestoreValue.string(data["title"])
     return item
   }
 }

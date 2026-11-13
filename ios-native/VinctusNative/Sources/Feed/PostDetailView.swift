@@ -45,15 +45,20 @@ struct PostDetailView: View {
               )
             }
 
+            if let title = item.title {
+              Text(title).font(.title3.weight(.semibold))
+            }
             if !item.text.isEmpty {
               Text(item.text)
                 .font(.body)
                 .multilineTextAlignment(.leading)
-            } else {
+            } else if item.media.isEmpty && item.title == nil {
               Text("Sin texto")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             }
+
+            PostMediaView(items: item.media)
 
             HStack(spacing: 12) {
               LikeButton(postID: item.id, initialCount: item.likeCount)

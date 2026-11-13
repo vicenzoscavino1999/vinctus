@@ -64,6 +64,12 @@ struct FeedView: View {
             Text("Cuando haya publicaciones recientes, aparecerán aquí.")
               .font(.footnote)
               .foregroundStyle(VinctusTokens.Color.textMuted)
+            if vm.canLoadMore {
+              VButton(vm.isLoadingMore ? "Cargando…" : "Cargar más publicaciones", variant: .secondary) {
+                vm.triggerLoadMoreFromFooter()
+              }
+              .disabled(vm.isLoadingMore)
+            }
           }
         }
         .listRowSeparator(.hidden)
@@ -209,12 +215,20 @@ private struct FeedCard: View {
           )
         }
 
+        if let title = item.title {
+          Text(title).font(.headline)
+        }
         if !item.text.isEmpty {
           Text(item.text)
             .font(.body)
             .lineLimit(6)
             .multilineTextAlignment(.leading)
             .foregroundStyle(VinctusTokens.Color.textPrimary)
+        }
+
+        if item.previewImageURL == nil {
+          if item.hasVideo { Label("Video adjunto", systemImage: "play.rectangle").font(.caption) }
+          if let name = item.fileName { Label(name, systemImage: "doc").font(.caption).lineLimit(1) }
         }
 
         if let preview = item.previewImageURL, let url = URL(string: preview) {

@@ -206,7 +206,7 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
       .order(by: "createdAt", descending: true)
     let snapshot = try await page(query, limit: limit, after: cursor).getDocuments()
     return ProfileListPage(
-      items: snapshot.documents.map(FirebaseFeedRepo.feedItem(from:)),
+      items: snapshot.documents.filter(FirebaseFeedRepo.isPublished).map(FirebaseFeedRepo.feedItem(from:)),
       next: Self.nextCursor(snapshot, limit: limit)
     )
   }

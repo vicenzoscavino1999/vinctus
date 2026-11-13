@@ -219,7 +219,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
       )
     }
 
-    let recentPosts = recentPostsSnapshot.documents.map { doc in
+    let recentPosts = recentPostsSnapshot.documents.filter(FirebaseFeedRepo.isPublished).map { doc in
       let data = doc.data()
       let title = FirestoreValue.string(data["title"]) ?? FirestoreValue.string(data["text"]) ?? FirestoreValue.string(data["content"]) ?? "Publicacion"
 
@@ -263,7 +263,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
       visibility: visibility,
       iconURL: FirestoreValue.string(groupData["iconUrl"]),
       memberCount: FirestoreValue.int(groupData["memberCount"]) ?? max(memberDocs.count, 0),
-      postsPerWeek: max(weeklyPostsSnapshot.documents.count, 0),
+      postsPerWeek: weeklyPostsSnapshot.documents.filter(FirebaseFeedRepo.isPublished).count,
       createdAt: FirestoreValue.date(groupData["createdAt"]),
       updatedAt: FirestoreValue.date(groupData["updatedAt"]),
       recentPosts: recentPosts,
