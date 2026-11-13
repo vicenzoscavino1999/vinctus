@@ -56,6 +56,7 @@ private struct PostReactionButtonSession: View {
     }
     }
     .task { await vm.load() }
+    .onChange(of: initialCount) { _, value in vm.syncCount(value) }
   }
 
   private var actionLabel: String {

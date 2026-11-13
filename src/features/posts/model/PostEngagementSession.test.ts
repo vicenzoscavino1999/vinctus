@@ -128,4 +128,19 @@ describe('post/account reaction sessions', () => {
     expect(io.read).not.toHaveBeenCalled();
     expect(io.write).not.toHaveBeenCalled();
   });
+
+  it('accepts a new server total after local taps but preserves an unconfirmed choice', async () => {
+    await session.load('like', 2);
+    await session.act('like');
+    session.syncCount(4);
+    expect(session.getSnapshot().like.count).toBe(4);
+    vi.mocked(io.write).mockRejectedValueOnce(new Error('timeout'));
+    await session.act('like');
+    session.syncCount(3);
+    expect(session.getSnapshot().like).toMatchObject({ count: 4, pending: false });
+    await session.act('like');
+    expect(session.getSnapshot().like).toMatchObject({ count: 3, value: false });
+    session.syncCount(5);
+    expect(session.getSnapshot().like.count).toBe(5);
+  });
 });

@@ -122,6 +122,25 @@ final class PostReactionViewModelTests: XCTestCase {
     XCTAssertTrue(vm.isSelected)
     XCTAssertEqual(repo.saveWrites, [true, true])
   }
+
+  func testNewServerCountsReconcileLocalChangesWithoutReplacingAPendingChoice() async {
+    let repo = FakeEngagementRepo()
+    let vm = PostReactionViewModel(postID: "p1", repo: repo)
+    await vm.load()
+    await vm.toggle(initialCount: 2)
+    vm.syncCount(4)
+    XCTAssertEqual(vm.displayedCount(initialCount: 2), 4)
+    repo.fails = true
+    await vm.toggle(initialCount: 4)
+    vm.syncCount(3)
+    XCTAssertEqual(vm.displayedCount(initialCount: 3), 4)
+    XCTAssertEqual(vm.pendingValue, false)
+    repo.fails = false
+    await vm.toggle(initialCount: 3)
+    XCTAssertEqual(vm.displayedCount(initialCount: 3), 3)
+    vm.syncCount(5)
+    XCTAssertEqual(vm.displayedCount(initialCount: 3), 5)
+  }
 }
 
 @MainActor

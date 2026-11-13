@@ -43,6 +43,11 @@ final class PostReactionViewModel: ObservableObject {
     max(0, count ?? initialCount)
   }
 
+  func syncCount(_ serverCount: Int) {
+    guard isLoaded, !isLoading, !isSaving, pendingValue == nil else { return }
+    count = max(0, serverCount)
+  }
+
   func toggle(initialCount: Int) async {
     guard !isSaving, !isLoading else { return }
     guard isLoaded else { await load(); return }

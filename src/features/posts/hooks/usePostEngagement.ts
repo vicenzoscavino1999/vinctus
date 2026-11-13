@@ -37,6 +37,7 @@ export function usePostEngagement(
     return () => session.close();
   }, [session]);
   useEffect(() => {
+    session.syncCount(count);
     void session.load('like', count);
     void session.load('save', 0);
   }, [session, count]);

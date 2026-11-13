@@ -26,6 +26,7 @@ export class PostEngagementSession {
   private listeners = new Set<() => void>();
   private active = false;
   private epoch = 0;
+  private inputCount: number | undefined;
 
   constructor(
     private readonly postId: string | undefined,
@@ -44,6 +45,7 @@ export class PostEngagementSession {
   open() {
     this.active = true;
     this.epoch++;
+    this.inputCount = undefined;
     this.state = { like: empty(), save: empty() };
     this.listeners.forEach((listener) => listener());
   }
@@ -56,7 +58,23 @@ export class PostEngagementSession {
     this.listeners.forEach((listener) => listener());
   }
 
+  syncCount(count: number) {
+    const previousInput = this.inputCount;
+    this.inputCount = count;
+    const like = this.state.like;
+    if (
+      previousInput !== undefined &&
+      previousInput !== count &&
+      like.loaded &&
+      !like.loading &&
+      like.pending === undefined
+    ) {
+      this.update('like', { ...like, count: Math.max(0, count) });
+    }
+  }
+
   async load(kind: ReactionKind, count: number, force = false) {
+    if (kind === 'like' && this.inputCount === undefined) this.inputCount = count;
     const previous = this.state[kind];
     if (
       !this.active ||
