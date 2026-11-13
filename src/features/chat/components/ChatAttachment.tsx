@@ -6,15 +6,17 @@ export function ChatMediaContent({ url, type, name }: { url: string; type: strin
   const media = useRef<HTMLMediaElement | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
+    // React clears callback refs before passive effect cleanup on unmount.
+    const player = media.current;
     const pause = () => {
-      if (document.hidden) media.current?.pause();
+      if (document.hidden) player?.pause();
     };
     document.addEventListener('visibilitychange', pause);
     return () => {
       document.removeEventListener('visibilitychange', pause);
-      media.current?.pause();
+      player?.pause();
     };
-  }, []);
+  }, [url, type]);
   return (
     <div className="space-y-2 max-w-full">
       {type.startsWith('image/') ? (
