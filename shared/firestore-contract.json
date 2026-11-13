@@ -303,6 +303,16 @@
         "doc": "Story videos.",
         "rules": "isUnderStoryVideoSizeLimit"
       },
+      "chatVideo": {
+        "megabytes": 25,
+        "doc": "Videos attached to a conversation.",
+        "rules": "isUnderChatVideoSizeLimit"
+      },
+      "chatAudio": {
+        "megabytes": 10,
+        "doc": "Voice notes and audio attached to a conversation.",
+        "rules": "isUnderChatAudioSizeLimit"
+      },
       "file": {
         "megabytes": 25,
         "doc": "Files: post and chat files, collection and contribution files. Also the largest file size that contributions, collection items and post media store in Firestore.",
@@ -363,6 +373,11 @@
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         ]
+      },
+      "chatAudio": {
+        "doc": "Audio attached to a conversation, including AAC voice notes in an MP4 container.",
+        "rules": "isValidChatAudioType",
+        "values": ["audio/mp4", "audio/aac", "audio/mpeg", "audio/wav", "audio/ogg", "audio/webm"]
       }
     },
     "paths": {
@@ -443,6 +458,14 @@
           {
             "contentTypes": "chatFile",
             "maxBytes": "file"
+          },
+          {
+            "contentTypes": "video",
+            "maxBytes": "chatVideo"
+          },
+          {
+            "contentTypes": "chatAudio",
+            "maxBytes": "chatAudio"
           }
         ]
       },

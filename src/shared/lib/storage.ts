@@ -3,15 +3,54 @@ import {
   uploadBytesResumable,
   uploadBytes,
   getDownloadURL,
+  getMetadata,
   deleteObject,
 } from 'firebase/storage';
 import { storage } from './firebase';
 import { STORAGE_PATHS } from './firestore/firestoreContract';
+import { validateChatFile } from './chat-media';
 
 type UploadProgress = {
   bytesTransferred: number;
   totalBytes: number;
 };
+
+/** A stable object path permits retry after upload or acknowledgement failures. */
+export async function uploadChatAttachment(
+  file: File,
+  conversationId: string,
+  userId: string,
+  messageId: string,
+  fileId: string,
+  onProgress?: (fraction: number) => void,
+): Promise<{ url: string; path: string }> {
+  const contentType = validateChatFile(file);
+  const path = STORAGE_PATHS.conversationAttachment({
+    conversationId,
+    userId,
+    messageId,
+    filename: `${fileId}_${sanitizeFileName(file.name)}`,
+  });
+  const target = ref(storage, path);
+  try {
+    await getMetadata(target);
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'storage/object-not-found') throw error;
+    const task = uploadBytesResumable(target, file, {
+      contentType,
+      cacheControl: IMMUTABLE_CACHE_CONTROL,
+    });
+    await new Promise<void>((resolve, reject) => {
+      task.on(
+        'state_changed',
+        (snapshot) => onProgress?.(snapshot.bytesTransferred / Math.max(1, snapshot.totalBytes)),
+        reject,
+        () => resolve(),
+      );
+    });
+  }
+  return { url: await getDownloadURL(target), path };
+}
 
 const IMMUTABLE_CACHE_CONTROL = 'public,max-age=31536000,immutable';
 

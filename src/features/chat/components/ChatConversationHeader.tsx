@@ -19,6 +19,8 @@ const ChatConversationHeader = ({
   return (
     <div className="flex items-center gap-4 py-4 border-b border-neutral-800/50">
       <button
+        type="button"
+        aria-label="Volver a conversaciones"
         onClick={onBack}
         className="p-2 -ml-2 text-neutral-400 hover:text-white transition-colors"
       >

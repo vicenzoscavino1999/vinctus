@@ -173,6 +173,83 @@ describe('Storage Rules - upload security', () => {
     );
   });
 
+  it.each(['image/jpeg', 'video/mp4', 'video/quicktime', 'audio/mp4', 'audio/mpeg', 'audio/webm'])(
+    'allows a conversation member to upload %s',
+    async (contentType) => {
+      await seedDirectConversation();
+      const env = await getRulesTestEnv();
+      await assertSucceeds(
+        env
+          .authenticatedContext('user_b')
+          .storage()
+          .ref(
+            `conversations/dm_user_b_user_c/attachments/user_b/msg_media/${contentType.replace('/', '-')}`,
+          )
+          .putString('media-bytes', 'raw', { contentType })
+          .then((snapshot) => snapshot),
+      );
+    },
+  );
+
+  it.each([
+    ['video/mp4', 25],
+    ['audio/mp4', 10],
+    ['image/jpeg', 10],
+  ] as const)(
+    'rejects chat %s at its %i MB size limit',
+    async (contentType, megabytes) => {
+      await seedDirectConversation();
+      const env = await getRulesTestEnv();
+      await assertFails(
+        env
+          .authenticatedContext('user_b')
+          .storage()
+          .ref('conversations/dm_user_b_user_c/attachments/user_b/msg_large/media')
+          .put(new Uint8Array(megabytes * 1024 * 1024), { contentType })
+          .then((snapshot) => snapshot),
+      );
+    },
+    30000,
+  );
+
+  it('rejects unsupported media, owner spoofing, outsiders and anonymous uploads', async () => {
+    await seedDirectConversation();
+    const env = await getRulesTestEnv();
+    const base = 'conversations/dm_user_b_user_c/attachments';
+    await assertFails(
+      env
+        .authenticatedContext('user_b')
+        .storage()
+        .ref(`${base}/user_b/msg_invalid/media`)
+        .putString('x', 'raw', { contentType: 'application/javascript' })
+        .then((snapshot) => snapshot),
+    );
+    await assertFails(
+      env
+        .authenticatedContext('user_b')
+        .storage()
+        .ref(`${base}/user_c/msg_spoof/media`)
+        .putString('x', 'raw', { contentType: 'audio/mp4' })
+        .then((snapshot) => snapshot),
+    );
+    await assertFails(
+      env
+        .authenticatedContext('user_a')
+        .storage()
+        .ref(`${base}/user_a/msg_outside/media`)
+        .putString('x', 'raw', { contentType: 'video/mp4' })
+        .then((snapshot) => snapshot),
+    );
+    await assertFails(
+      env
+        .unauthenticatedContext()
+        .storage()
+        .ref(`${base}/user_b/msg_anon/media`)
+        .putString('x', 'raw', { contentType: 'image/jpeg' })
+        .then((snapshot) => snapshot),
+    );
+  });
+
   it('denies story media read for non-friend users', async () => {
     await seedStory('story_friend_only', 'user_b');
     await seedStorageFile('stories/user_b/story_friend_only/original/story.jpg', 'image/jpeg');

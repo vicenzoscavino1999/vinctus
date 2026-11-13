@@ -11,7 +11,10 @@ import {
   persistentLocalCache,
   persistentMultipleTabManager,
 } from 'firebase/firestore';
-import { getFirestore as getFirestoreLite } from 'firebase/firestore/lite';
+import {
+  getFirestore as getFirestoreLite,
+  connectFirestoreEmulator as connectFirestoreLiteEmulator,
+} from 'firebase/firestore/lite';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
@@ -135,6 +138,7 @@ if (useEmulators) {
       disableWarnings: true,
     });
     connectFirestoreEmulator(db, emulatorHost, emulatorPorts.firestore);
+    connectFirestoreLiteEmulator(dbLite, emulatorHost, emulatorPorts.firestore);
     connectFunctionsEmulator(functions, emulatorHost, emulatorPorts.functions);
     connectStorageEmulator(storage, emulatorHost, emulatorPorts.storage);
     globalState[globalKey] = true;
