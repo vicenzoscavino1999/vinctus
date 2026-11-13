@@ -72,6 +72,8 @@ un iPhone físico. La prueba local usa exclusivamente el proyecto emulado
   La cuarta etapa corrige la lectura de likes nativos y los toggles del feed y
   detalle web. Los agregados de likes/karma y comentarios todavía aplican deltas
   con mínimo cero: revisar eventos de borrado que lleguen antes que los de creación.
+  El handler de karma también hace `set(..., merge: true)` sin exigir que exista
+  la cuenta: comprobar que un evento tardío no recree perfiles borrados.
   Descubrir conserva sus controles anteriores del contexto y queda por revisar
   con ese módulo (incluidos el límite de 50 IDs y las preferencias anónimas).
 - Reglas y visibilidad: actualmente posts/comentarios tienen lectura pública;
@@ -243,9 +245,23 @@ Validación:
 
 - [x] TypeScript y lint de los archivos modificados; pruebas de estados, sesiones,
       reintentos, fechas, índices incompletos y páginas vacías de guardados.
-- [ ] Resultado final de cobertura, CI completa y flujo de navegador que pierde la
-      respuesta de un commit aceptado, reintenta, comprueba fechas y cambia de cuenta.
-- [ ] Compilación, pruebas unitarias y 29 pruebas de integración nativas en CI.
+- [x] 462 pruebas web con cobertura aprobada: statements 93,03 %, ramas 89,10 %,
+      funciones 90,72 % y líneas 94,67 % sobre `75350cc`.
+- [x] Navegador con Functions locales: se pierde la respuesta de commits de like
+      y guardado ya aceptados; el reintento conserva fechas y selección. Se comprueban
+      el perfil, la recarga, otra cuenta y la eliminación de ambas reacciones. El
+      recorrido final sobre `c63c4bf` pasó sin reintentos; el ajuste posterior de
+      contadores tiene pruebas específicas en ambas versiones.
+- [x] CI completa aprobada en
+      [43513648601](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43513648601)
+      sobre `75350cc`: 462 pruebas web, 65 API/backend, tres pruebas de contadores,
+      cuatro flujos smoke sin reintentos, reglas, lint, tipos, build, Lighthouse y
+      cost gates. Incluye el recorrido nuevo de likes/guardados.
+- [x] ReleaseProd, pruebas unitarias y 29 pruebas de integración nativas aprobadas en
+      [43513648513](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43513648513)
+      sobre `75350cc`. Incluyen consulta fallida, doble toque, confirmación perdida,
+      reintento de guardado, contador actualizado, reparación del índice, fechas
+      inmutables, paginación sobre posts borrados y aislamiento de los guardados por cuenta.
 
 El escenario de navegador provoca el error después de que Firestore haya aceptado
 el commit. Comprueba por REST local que el documento existe y que el reintento no
@@ -259,3 +275,13 @@ de guardados consulta hasta 13 entradas del índice, hasta 12 posts y los bloque
 iOS usa 21 entradas y hasta 20 posts. Los cursores evitan recorrer todo el historial.
 No se modifican en esta etapa los agregados de likes/karma/comentarios ni sus reglas
 de visibilidad pública. Tampoco se publica producción ni otra versión de TestFlight.
+
+Prueba física pendiente cuando esté disponible la versión nueva:
+
+- Dar/quitar like, esperar la actualización del contador y recargar ambas versiones.
+- Guardar desde web, abrirlo en la lista del iPhone y quitarlo desde allí; repetir
+  el recorrido empezando en iOS y comprobar que solo aparezca en la cuenta correcta.
+- Cambiar una reacción sin conexión, reconectar y reintentar: debe conservar la
+  elección original. Cerrar/reabrir consulta el estado real del servidor.
+- Cambiar de cuenta con una petición pendiente y comprobar que su respuesta no
+  cambie la nueva cuenta ni permita consultar los guardados de la anterior.

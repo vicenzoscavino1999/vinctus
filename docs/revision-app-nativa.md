@@ -107,5 +107,10 @@ con borrado del cursor e inserción entre páginas. Los cambios del servidor y s
 La cuarta etapa revisa likes y guardados en web e iOS: consulta confirmada de
 estado, bloqueo de doble toque, reintento del mismo valor y conservación de las
 fechas. Ambas versiones incorporan la lista paginada de publicaciones guardadas
-en el perfil propio. La validación final de esta etapa está en curso; los contadores
-de interacciones y la visibilidad siguen pendientes.
+en el perfil propio. Pasaron 462 pruebas web con cobertura, 65 API/backend,
+la CI web completa con cuatro flujos smoke, ReleaseProd, las pruebas unitarias
+y 29 pruebas de integración nativas. El recorrido de navegador recupera commits
+aceptados cuya respuesta se pierde, conserva fechas y comprueba la lista del
+perfil, la recarga y otra cuenta. Los agregados del servidor para interacciones,
+los controles de Descubrir y la visibilidad siguen pendientes. Los cambios
+continúan en el PR; no se desplegaron ni se subió otro build de TestFlight.
