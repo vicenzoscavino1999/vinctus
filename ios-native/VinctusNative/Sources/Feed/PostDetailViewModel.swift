@@ -16,16 +16,22 @@ final class PostDetailViewModel: ObservableObject {
 
   private let commentLimit = Limits.Comments.textMaxLength
   private let postID: String
+  private let initialCommentCount: Int
   private let repo: any PostCommentsRepo
   private var pendingComment: (text: String, id: String)?
   private var commentsRequest = 0
   private var nextCursor: PostCommentsCursor?
   private let pageSize = 20
 
-  init(postID: String, repo: any PostCommentsRepo) {
+  init(postID: String, repo: any PostCommentsRepo, initialCommentCount: Int = 0) {
     self.postID = postID
     self.repo = repo
+    self.initialCommentCount = max(0, initialCommentCount)
   }
+
+  // Capture the baseline once. The parent receives this value back and may
+  // redraw with its updated count; adding the delta to that prop would double it.
+  var commentCount: Int { max(initialCommentCount + submittedCommentCount, comments.count) }
 
   var remainingCharacters: Int {
     commentLimit - normalizedText(draftComment).count

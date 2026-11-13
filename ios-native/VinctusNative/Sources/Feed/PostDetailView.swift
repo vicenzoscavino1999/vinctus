@@ -17,7 +17,7 @@ struct PostDetailView: View {
     self.item = item
     self.profileRepo = profileRepo
     self.onCommentCountChange = onCommentCountChange
-    _vm = StateObject(wrappedValue: PostDetailViewModel(postID: item.id, repo: commentsRepo))
+    _vm = StateObject(wrappedValue: PostDetailViewModel(postID: item.id, repo: commentsRepo, initialCommentCount: item.commentCount))
   }
 
   var body: some View {
@@ -200,8 +200,8 @@ struct PostDetailView: View {
       await vm.refreshComments()
       syncCommentCountToFeed()
     }
-    .onChange(of: vm.comments.count) { _, newCount in
-      syncCommentCountToFeed(newCount)
+    .onChange(of: vm.comments.count) { _, _ in
+      syncCommentCountToFeed()
     }
     .onChange(of: vm.submittedCommentCount) { _, _ in
       syncCommentCountToFeed()
@@ -217,12 +217,11 @@ struct PostDetailView: View {
   }
 
   private var displayCommentCount: Int {
-    max(item.commentCount + vm.submittedCommentCount, vm.comments.count)
+    max(item.commentCount, vm.commentCount)
   }
 
-  private func syncCommentCountToFeed(_ count: Int? = nil) {
-    let resolvedCount = max(item.commentCount + vm.submittedCommentCount, count ?? vm.comments.count)
-    onCommentCountChange?(resolvedCount)
+  private func syncCommentCountToFeed() {
+    onCommentCountChange?(displayCommentCount)
   }
 
   @ViewBuilder

@@ -107,16 +107,18 @@ final class PostSubmissionTests: XCTestCase {
   func testCommentRetryKeepsItsIDAndDraftUntilSuccess() async {
     let repo = PendingCommentsRepo()
     repo.fails = true
-    let vm = PostDetailViewModel(postID: "p1", repo: repo)
+    let vm = PostDetailViewModel(postID: "p1", repo: repo, initialCommentCount: 100)
     vm.draftComment = "Hola"
     await vm.submitComment()?.value
     XCTAssertEqual(vm.draftComment, "Hola")
     XCTAssertNotNil(vm.errorMessage)
+    XCTAssertEqual(vm.commentCount, 100)
     repo.fails = false
     await vm.submitComment()?.value
     XCTAssertEqual(repo.sent.count, 2)
     XCTAssertEqual(repo.sent.first?.id, repo.sent.last?.id)
     XCTAssertEqual(vm.draftComment, "")
+    XCTAssertEqual(vm.commentCount, 101)
   }
 
   func testChangedFailedCommentGetsAnotherID() async {
