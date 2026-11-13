@@ -94,3 +94,10 @@ aprobadas y un flujo de navegador que recupera una subida parcial sin duplicar
 el post ni sobrescribir la imagen. La compilación, las pruebas unitarias y 26
 pruebas de integración nativas de esta ampliación pasaron en CI; también pasó la
 CI web completa con tres flujos smoke. Todavía no se publicó una versión nueva.
+
+La tercera etapa añade comentarios nativos recientes con páginas de 20 y reintentos
+que conservan el historial. Corrige además el contador de publicaciones del servidor:
+los archivos pendientes o fallidos ya no cuentan y los eventos repetidos o tardíos
+reconcilian el estado actual. Las tres pruebas nuevas con Functions locales pasaron;
+la validación nativa y la CI completa de esta etapa siguen en curso. Los cambios
+del servidor y su índice todavía no están desplegados.

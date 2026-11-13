@@ -66,12 +66,9 @@ un iPhone físico. La prueba local usa exclusivamente el proyecto emulado
 ## Pendiente para cerrar el módulo
 
 - Pruebas de la segunda etapa en un iPhone físico.
-- Comentarios nativos: paginación más allá de los primeros 80 comentarios y orden
-  compatible con los comentarios recientes de la web.
-- Likes/guardados, contadores de Cloud Functions y creación desde perfil/grupo.
-  `onPostCreated` incrementa `postsCount` al crear el documento, incluido el
-  estado `uploading`; las listas filtran ese estado. Revisar qué debe contar el
-  perfil y las transiciones antes de cerrar este punto.
+- Likes/guardados, contadores de likes/comentarios y creación desde perfil/grupo.
+  La tercera etapa corrige `postsCount`; su despliegue y la comprobación de los
+  agregados de producción siguen pendientes.
 - Reglas y visibilidad: actualmente posts/comentarios tienen lectura pública;
   revisar el alcance esperado para grupos privados y bloqueos antes de cambiarlas.
 - Pruebas en dispositivo, despliegue y versión posterior de TestFlight.
@@ -147,3 +144,47 @@ Validación de esta etapa:
 La simulación valida transporte y permisos de archivos. El fixture de video de
 la integración nativa no valida códecs; el MP4 real se comprueba en el navegador.
 La selección y reproducción en un iPhone físico siguen pendientes.
+
+## Tercera etapa: historial de comentarios y contador de publicaciones
+
+La app nativa cargaba únicamente los 80 comentarios más antiguos. Ahora consulta
+primero los recientes, en páginas de 20, y ofrece cargar los anteriores. El cursor
+conserva la precisión de `Timestamp` y el ID para separar comentarios con la misma
+fecha, incluso si se borra el documento que servía de referencia. La web ya usa
+el mismo orden descendente.
+
+Una carga fallida conserva las filas y el cursor para reintentar. La actualización
+o el envío de un comentario invalida las páginas anteriores pendientes; no pueden
+mezclarse con los resultados nuevos. Los comentarios se deduplican por ID y la
+interfaz distingue una carga inicial de una carga de anteriores. El contador del
+detalle suma los envíos confirmados aunque haya más comentarios que filas cargadas.
+
+El servidor incrementaba `postsCount` al crear cualquier documento, incluido
+`uploading`, y no lo corregía al completar o fallar la subida. La reconciliación
+nueva cuenta los datos actuales dentro de una transacción: total del autor menos
+estados distintos de `ready`. Conserva posts antiguos sin estado o con estado
+nulo. Se ejecuta al crear, borrar o cambiar estado/autor; los cambios de likes o
+texto no vuelven a contar. Los eventos repetidos o fuera de orden no aplican deltas.
+Si falta la cuenta no se recrea; tampoco se recrea un perfil público eliminado.
+Los contadores iguales no se vuelven a escribir y los errores permiten reintentar
+el evento.
+
+Validación de esta etapa:
+
+- [x] Compilación TypeScript de Cloud Functions y 65 pruebas API/backend.
+- [x] Tres pruebas nuevas con Cloud Functions y Firebase locales: estados de
+      subida/fallo/listo, posts antiguos, eventos tardíos/repetidos, autores distintos,
+      borrados y cuentas eliminadas. Se ejecutan con `npm run test:post-counts` y
+      se incorporan como job obligatorio de CI.
+- [ ] Compilación y pruebas nativas en la Mac de CI: tres pruebas de estado y
+      una integración con 105 comentarios de la misma fecha, seis páginas,
+      borrado del cursor e inserción concurrente.
+- [ ] CI completa sobre el código de esta etapa.
+
+Despliegue posterior: crear primero el índice `posts(authorId ASC, status ASC)`
+y esperar a que esté listo antes de publicar estas Functions. Cada reconciliación
+usa dos agregados `count` por autor y dos lecturas de perfil, con hasta dos escrituras;
+el coste de los agregados crece con las entradas del índice del autor. No se hace
+un barrido de cuentas: el siguiente evento de publicación corrige el autor afectado.
+Una reparación general de contadores existentes necesita su propia comprobación.
+No se desplegaron Functions, índices ni una versión nueva de la app en esta etapa.

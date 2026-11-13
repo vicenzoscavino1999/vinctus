@@ -16,6 +16,7 @@ import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { messageReportKey, moderateUserText, newlyMatchedTerms } from './moderation';
 import { clearLastMessagePreview } from './moderationActions';
+import { reconcileUserPostCount } from './postCounts';
 import { COLLECTIONS, SERVER_COLLECTIONS, SUBCOLLECTIONS } from './firestoreContract';
 
 // Initialize Firebase Admin
@@ -1223,11 +1224,12 @@ export const onEventDeleted = functions.firestore
   });
 
 /**
- * Increment postsCount when a post is created
+ * Reconcile postsCount when a post is created (unfinished uploads do not count).
  * Trigger: onCreate posts/{postId}
  */
-export const onPostCreated = functions.firestore
-  .document(`${COLLECTIONS.posts}/{postId}`)
+export const onPostCreated = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}`)
   .onCreate(async (snap, context) => {
     const { postId } = context.params;
     const eventId = context.eventId;
@@ -1241,14 +1243,15 @@ export const onPostCreated = functions.firestore
 
     try {
       functions.logger.info('Post created', { postId, authorId, eventId });
-      await deduplicatedUserCounterUpdate(eventId, authorId, 'postsCount', 1);
+      await reconcileUserPostCount(db, authorId);
     } catch (error) {
-      functions.logger.error('Failed to increment postsCount', {
+      functions.logger.error('Failed to reconcile postsCount on create', {
         postId,
         authorId,
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
     }
 
     try {
@@ -1260,6 +1263,20 @@ export const onPostCreated = functions.firestore
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+  });
+
+/** Reconcile publication status transitions, including successful upload retries. */
+export const onPostUpdatedCount = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}`)
+  .onUpdate(async (change) => {
+    const before = change.before.data();
+    const after = change.after.data();
+    if (before.status === after.status && before.authorId === after.authorId) return;
+    const authors = new Set([before.authorId, after.authorId]);
+    for (const authorId of authors) {
+      if (typeof authorId === 'string' && authorId) await reconcileUserPostCount(db, authorId);
     }
   });
 
@@ -1306,8 +1323,9 @@ export const onPostUpdatedModeration = functions.firestore
  * - Deletes comments subcollection (future-proofing)
  * Trigger: onDelete posts/{postId}
  */
-export const onPostDeleted = functions.firestore
-  .document(`${COLLECTIONS.posts}/{postId}`)
+export const onPostDeleted = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}`)
   .onDelete(async (snap, context) => {
     const { postId } = context.params;
     const eventId = context.eventId;
@@ -1316,14 +1334,15 @@ export const onPostDeleted = functions.firestore
 
     if (authorId) {
       try {
-        await deduplicatedUserCounterUpdate(eventId, authorId, 'postsCount', -1);
+        await reconcileUserPostCount(db, authorId);
       } catch (error) {
-        functions.logger.error('Failed to decrement postsCount', {
+        functions.logger.error('Failed to reconcile postsCount on delete', {
           postId,
           authorId,
           eventId,
           error: error instanceof Error ? error.message : String(error),
         });
+        throw error;
       }
     }
 
@@ -1555,7 +1574,13 @@ export const onMessageCreatedModeration = functions.firestore
 
 type ReportQueuePriority = 'low' | 'medium' | 'high';
 type ReportQueueTargetType =
-  'user' | 'group' | 'post' | 'comment' | 'message' | 'story' | 'unknown';
+  | 'user'
+  | 'group'
+  | 'post'
+  | 'comment'
+  | 'message'
+  | 'story'
+  | 'unknown';
 
 function inferQueuePriority(reason: unknown): ReportQueuePriority {
   if (reason === 'abuse' || reason === 'harassment') return 'high';

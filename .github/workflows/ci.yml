@@ -79,10 +79,27 @@ jobs:
       - run: npm ci --include=optional
       - run: npm run test:rules
 
+  post-counts:
+    name: post-counts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --include=optional
+      - run: npm ci --prefix functions --include=optional
+      - run: npm run test:post-counts
+
   build:
     name: build
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test, rules]
+    needs: [lint, typecheck, test, rules, post-counts]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
