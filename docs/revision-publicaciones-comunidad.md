@@ -69,6 +69,11 @@ un iPhone físico. La prueba local usa exclusivamente el proyecto emulado
 - Likes/guardados, contadores de likes/comentarios y creación desde perfil/grupo.
   La tercera etapa corrige `postsCount`; su despliegue y la comprobación de los
   agregados de producción siguen pendientes.
+  La lectura inicial de likes nativos convierte cualquier error en `false`;
+  en web, los toggles del feed no bloquean solicitudes simultáneas. Los agregados
+  de likes/karma y comentarios todavía aplican deltas con mínimo cero: revisar
+  eventos de borrado que lleguen antes que los de creación. Estos puntos no se
+  modificaron en la tercera etapa.
 - Reglas y visibilidad: actualmente posts/comentarios tienen lectura pública;
   revisar el alcance esperado para grupos privados y bloqueos antes de cambiarlas.
 - Pruebas en dispositivo, despliegue y versión posterior de TestFlight.
@@ -176,10 +181,19 @@ Validación de esta etapa:
       subida/fallo/listo, posts antiguos, eventos tardíos/repetidos, autores distintos,
       borrados y cuentas eliminadas. Se ejecutan con `npm run test:post-counts` y
       se incorporan como job obligatorio de CI.
-- [ ] Compilación y pruebas nativas en la Mac de CI: tres pruebas de estado y
-      una integración con 105 comentarios de la misma fecha, seis páginas,
-      borrado del cursor e inserción concurrente.
-- [ ] CI completa sobre el código de esta etapa.
+- [x] Compilación ReleaseProd, pruebas unitarias y 27 pruebas de integración
+      nativas aprobadas en
+      [43495734828](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43495734828)
+      sobre `c65e5f4`. Incluyen tres pruebas de estado y una integración con
+      105 comentarios de la misma fecha, seis páginas, borrado del cursor e
+      inserción concurrente. El total usa una base estable para no duplicar el
+      incremento al actualizar el feed.
+- [x] Chromium con Functions locales: recuperación de una subida parcial y
+      reenvío de comentarios, ambos flujos aprobados.
+- [x] CI completa aprobada en
+      [43495734877](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43495734877)
+      sobre `c65e5f4`: 438 pruebas web, 65 API/backend, tres pruebas nuevas del
+      contador, tres flujos smoke, reglas, tipos, lint, build, Lighthouse y cost gates.
 
 La primera CI de esta etapa falló antes de abrir el navegador: `ubuntu-latest`
 pasó a 26.04 y Playwright 1.57 del lockfile no soporta esa imagen. Los jobs de
@@ -187,7 +201,8 @@ navegador y Lighthouse quedan fijados a Ubuntu 24.04 para ejecutar la versión
 ya instalada del proyecto.
 
 Despliegue posterior: crear primero el índice `posts(authorId ASC, status ASC)`
-y esperar a que esté listo antes de publicar estas Functions. Cada reconciliación
+y esperar a que esté listo antes de publicar `onPostCreated`, `onPostDeleted` y
+`onPostUpdatedCount`. Cada reconciliación
 usa dos agregados `count` por autor y dos lecturas de perfil, con hasta dos escrituras;
 el coste de los agregados crece con las entradas del índice del autor. No se hace
 un barrido de cuentas: el siguiente evento de publicación corrige el autor afectado.

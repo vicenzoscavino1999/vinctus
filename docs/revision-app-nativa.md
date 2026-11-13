@@ -98,6 +98,8 @@ CI web completa con tres flujos smoke. Todavía no se publicó una versión nuev
 La tercera etapa añade comentarios nativos recientes con páginas de 20 y reintentos
 que conservan el historial. Corrige además el contador de publicaciones del servidor:
 los archivos pendientes o fallidos ya no cuentan y los eventos repetidos o tardíos
-reconcilian el estado actual. Las tres pruebas nuevas con Functions locales pasaron;
-la validación nativa y la CI completa de esta etapa siguen en curso. Los cambios
-del servidor y su índice todavía no están desplegados.
+reconcilian el estado actual. Pasaron las tres pruebas nuevas con Functions locales
+y en CI, la CI web completa, ReleaseProd, las pruebas unitarias y 27 pruebas de
+integración nativas. La prueba nueva recorre 105 comentarios de la misma fecha,
+con borrado del cursor e inserción entre páginas. Los cambios del servidor y su
+índice todavía no están desplegados; tampoco se subió otra versión a TestFlight.
