@@ -35,7 +35,9 @@ export const safeChatURL = (value: string): string | null => {
   try {
     const url = new URL(value);
     return url.protocol === 'https:' ||
-      (url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
+      (import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true' &&
+        url.protocol === 'http:' &&
+        ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
       ? url.href
       : null;
   } catch {

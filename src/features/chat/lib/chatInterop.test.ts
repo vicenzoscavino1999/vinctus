@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   chatFileLimit,
   encodeVoiceWav,
@@ -67,7 +67,11 @@ describe('web/native chat contract', () => {
       'http://evil.example/x',
     ])
       expect(safeChatURL(url)).toBeNull();
+    vi.stubEnv('VITE_USE_FIREBASE_EMULATOR', 'false');
+    expect(safeChatURL('http://127.0.0.1:9199/v0/b/test')).toBeNull();
+    vi.stubEnv('VITE_USE_FIREBASE_EMULATOR', 'true');
     expect(safeChatURL('http://127.0.0.1:9199/v0/b/test')).not.toBeNull();
+    vi.unstubAllEnvs();
   });
   it.each([
     ['dm_user_a_user_b', 'user_a', 'user_b'],
