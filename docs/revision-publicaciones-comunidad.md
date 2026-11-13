@@ -39,9 +39,22 @@ Correcciones de esta etapa:
 
 ## Validación
 
-Las pruebas y sus resultados se actualizarán al terminar esta etapa. La
-compilación y los tests de Swift se ejecutan en una Mac de GitHub; no equivalen
-a probar en un iPhone físico.
+- [x] TypeScript y compilación web de producción.
+- [x] Más de 400 pruebas web y cobertura aprobada; 26 pruebas específicas de API,
+      transacciones, sesión de comentarios y montaje del panel.
+- [x] 65 pruebas de API/backend existentes.
+- [x] ESLint del proyecto activo (`--ignore-pattern .claude/**` para excluir otro
+      checkout local), contrato generado, dependencias sin ciclos y guardrail de listeners.
+- [x] Chromium y Firebase local (Auth, Firestore, Storage y Functions): un comentario
+      conserva el borrador sin conexión, se reenvía al reconectar y llega a otra cuenta.
+      Se comprobó que solo existe un documento con ese texto y el contador muestra uno.
+- [ ] Compilación ReleaseProd, pruebas unitarias y de integración nativas: ejecución
+      [43442655918](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43442655918)
+      en curso sobre `dec69db`.
+
+Los tests de Swift se ejecutan en una Mac de GitHub; no equivalen a probar en
+un iPhone físico. La prueba local usa exclusivamente el proyecto emulado
+`vinctus-dev` y no escribe datos de producción.
 
 ## Pendiente para cerrar el módulo
 
