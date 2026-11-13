@@ -2,7 +2,7 @@ import {
   collection,
   doc,
   getCountFromServer as _getCountFromServer,
-  getDoc as _getDoc,
+  getDocFromServer,
   getDocs as _getDocs,
   limit,
   orderBy,
@@ -101,11 +101,6 @@ const toDate = (value: unknown): Date | undefined => {
   return undefined;
 };
 
-const getDoc = ((...args: unknown[]) => {
-  trackFirestoreRead('firestore.getDoc');
-  return (_getDoc as (...innerArgs: unknown[]) => unknown)(...args);
-}) as typeof _getDoc;
-
 const getDocs = ((...args: unknown[]) => {
   const result = (_getDocs as (...innerArgs: unknown[]) => unknown)(...args);
 
@@ -142,7 +137,7 @@ const setDoc = ((...args: unknown[]) => {
 }) as typeof _setDoc;
 
 /**
- * Like a post - offline-first with writeBatch
+ * Set the desired state without rewriting a previously confirmed like.
  * Cloud Function should handle likesCount increment on onCreate
  *
  * Source of truth: posts/{postId}/likes/{uid}
@@ -152,33 +147,24 @@ export const likePostWithSync = async (postId: string, uid: string): Promise<voi
   const likeRef = doc(db, COLLECTIONS.posts, postId, SUBCOLLECTIONS.likes, uid);
   const userLikeRef = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.likes, postId);
 
-  const batch = writeBatch(db);
-
-  // Source of truth (for counting/triggers)
-  batch.set(
-    likeRef,
-    {
-      uid,
-      postId,
-      createdAt: serverTimestamp(),
-    } as PostLikeWriteModel,
-    { merge: false },
-  );
-
-  // User index (for quick "my likes" queries)
-  batch.set(
-    userLikeRef,
-    {
-      postId,
-      createdAt: serverTimestamp(),
-    } as UserLikeWriteModel,
-    { merge: false },
-  );
-
-  await batch.commit();
+  const created = await runTransaction(db, async (tx) => {
+    const [post, like, index] = await Promise.all([
+      tx.get(doc(db, COLLECTIONS.posts, postId)),
+      tx.get(likeRef),
+      tx.get(userLikeRef),
+    ]);
+    if (!post.exists() || (post.data().status && post.data().status !== 'ready')) {
+      throw new Error('La publicación ya no está disponible.');
+    }
+    if (!like.exists())
+      tx.set(likeRef, { uid, postId, createdAt: serverTimestamp() } as PostLikeWriteModel);
+    if (!index.exists())
+      tx.set(userLikeRef, { postId, createdAt: serverTimestamp() } as UserLikeWriteModel);
+    return !like.exists();
+  });
 
   try {
-    const post = await getPost(postId);
+    const post = created ? await getPost(postId) : null;
     if (!post) return;
     if (post.authorId === uid) return;
     const profile = await getUserProfile(uid);
@@ -213,7 +199,10 @@ export const unlikePostWithSync = async (postId: string, uid: string): Promise<v
  * Check if user liked a post
  */
 export const isPostLiked = async (postId: string, uid: string): Promise<boolean> => {
-  const docSnap = await getDoc(doc(db, COLLECTIONS.posts, postId, SUBCOLLECTIONS.likes, uid));
+  trackFirestoreRead('firestore.getDocFromServer');
+  const docSnap = await getDocFromServer(
+    doc(db, COLLECTIONS.posts, postId, SUBCOLLECTIONS.likes, uid),
+  );
   return docSnap.exists();
 };
 

@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import PostCard from '@/features/posts/components/PostCard';
 import { AppStateProvider } from '@/context/app-state';
+import { ToastProvider } from '@/shared/ui/Toast';
 
 // Mock useAuth to return null user (anonymous)
 vi.mock('@/app/providers/AuthContext', async () => {
@@ -49,7 +50,9 @@ vi.mock('@/features/profile/api', () => ({
 // Wrapper con providers necesarios
 const Wrapper = ({ children }: { children: ReactNode }) => (
   <BrowserRouter>
-    <AppStateProvider>{children}</AppStateProvider>
+    <ToastProvider>
+      <AppStateProvider>{children}</AppStateProvider>
+    </ToastProvider>
   </BrowserRouter>
 );
 

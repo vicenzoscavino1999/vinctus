@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bookmark, Heart, Link2, MessageCircle, Film, FileText } from 'lucide-react';
+import { Link2, MessageCircle, Film, FileText } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/auth';
-import { useAppState } from '@/context/app-state';
 import { formatRelativeTime } from '@/shared/lib/formatUtils';
-import { triggerSelectionHaptic } from '@/shared/lib/haptics';
 import { useToast } from '@/shared/ui/Toast';
 import PostCommentsModal from '@/features/posts/components/PostCommentsModal';
+import FeedPostActions from '@/features/posts/components/FeedPostActions';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
 import { FEED_CACHE_INVALIDATED_EVENT } from '@/features/posts/model/feedCache';
 import { type PostSummary, toPostSummary } from '@/features/posts/model/postSummary';
@@ -14,10 +13,6 @@ import {
   getBlockedUsers,
   getGlobalFeed,
   getPost,
-  likePostWithSync,
-  savePostWithSync,
-  unlikePostWithSync,
-  unsavePostWithSync,
   type PostCursor,
   type PostRead,
 } from '@/features/posts/api';
@@ -47,7 +42,6 @@ const isReadyPost = (post: PostRead): boolean => !post.status || post.status ===
 const FeedPage = () => {
   const location = useLocation();
   const { user } = useAuth();
-  const { likedPosts, savedPosts } = useAppState();
   const { showToast } = useToast();
   const [posts, setPosts] = useState<PostRead[]>([]);
   const [cursor, setCursor] = useState<PostCursor>(null);
@@ -56,8 +50,6 @@ const FeedPage = () => {
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
-  const [likedByUser, setLikedByUser] = useState<Record<string, boolean>>({});
-  const [savedByUser, setSavedByUser] = useState<Record<string, boolean>>({});
   const [activePost, setActivePost] = useState<PostSummary | null>(null);
   const postFromSearch = new URLSearchParams(location.search).get('post');
   const [blockedUsers, setBlockedUsers] = useState<Set<string>>(new Set());
@@ -236,43 +228,6 @@ const FeedPage = () => {
   }, [cursor, hasMore, loadMore, loadingInitial, supportsIntersectionObserver]);
 
   useEffect(() => {
-    if (!user) {
-      setLikedByUser({});
-      setSavedByUser({});
-      return;
-    }
-
-    const likedSet = new Set(likedPosts);
-    const savedSet = new Set(savedPosts);
-
-    setLikedByUser((prev) => {
-      const next: Record<string, boolean> = {};
-      let changed = Object.keys(prev).length !== posts.length;
-      posts.forEach((post) => {
-        const value = likedSet.has(post.postId);
-        next[post.postId] = value;
-        if (prev[post.postId] !== value) {
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
-    });
-
-    setSavedByUser((prev) => {
-      const next: Record<string, boolean> = {};
-      let changed = Object.keys(prev).length !== posts.length;
-      posts.forEach((post) => {
-        const value = savedSet.has(post.postId);
-        next[post.postId] = value;
-        if (prev[post.postId] !== value) {
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
-    });
-  }, [likedPosts, posts, savedPosts, user]);
-
-  useEffect(() => {
     if (posts.length === 0) return;
 
     setLikeCounts((prev) => {
@@ -300,61 +255,11 @@ const FeedPage = () => {
     });
   }, [posts]);
 
-  const handleToggleLike = async (postId: string) => {
-    if (!user) {
-      showToast('Inicia sesion para dar like', 'info');
-      return;
-    }
-
-    void triggerSelectionHaptic();
-
-    const currentlyLiked = likedByUser[postId] ?? false;
-    const delta = currentlyLiked ? -1 : 1;
-
-    setLikedByUser((prev) => ({ ...prev, [postId]: !currentlyLiked }));
-    setLikeCounts((prev) => ({
-      ...prev,
-      [postId]: Math.max(0, (prev[postId] ?? 0) + delta),
-    }));
-
-    try {
-      if (currentlyLiked) {
-        await unlikePostWithSync(postId, user.uid);
-      } else {
-        await likePostWithSync(postId, user.uid);
-      }
-    } catch (error) {
-      setLikedByUser((prev) => ({ ...prev, [postId]: currentlyLiked }));
-      setLikeCounts((prev) => ({
-        ...prev,
-        [postId]: Math.max(0, (prev[postId] ?? 0) - delta),
-      }));
-      logPostError('Error toggling like:', error);
-      showToast('No se pudo actualizar el like', 'error');
-    }
-  };
-
-  const handleToggleSave = async (postId: string) => {
-    if (!user) {
-      showToast('Inicia sesion para guardar posts', 'info');
-      return;
-    }
-
-    const currentlySaved = savedByUser[postId] ?? false;
-    setSavedByUser((prev) => ({ ...prev, [postId]: !currentlySaved }));
-
-    try {
-      if (currentlySaved) {
-        await unsavePostWithSync(postId, user.uid);
-      } else {
-        await savePostWithSync(postId, user.uid);
-      }
-    } catch (error) {
-      setSavedByUser((prev) => ({ ...prev, [postId]: currentlySaved }));
-      logPostError('Error toggling save:', error);
-      showToast('No se pudo actualizar el guardado', 'error');
-    }
-  };
+  const handleLikeCount = useCallback((postId: string, count: number) => {
+    setLikeCounts((previous) =>
+      previous[postId] === count ? previous : { ...previous, [postId]: count },
+    );
+  }, []);
 
   const handleCopyLink = async (postId: string) => {
     const url = `${window.location.origin}/feed?post=${postId}`;
@@ -433,8 +338,6 @@ const FeedPage = () => {
               const authorInitial = authorName.charAt(0).toUpperCase();
               const imageUrl = summary.imageUrl;
               const timeLabel = formatRelativeTime(post.createdAt);
-              const isLiked = likedByUser[post.postId] ?? false;
-              const isSaved = savedByUser[post.postId] ?? false;
               const hasVideo = (summary.media ?? []).some((item) => item.type === 'video');
               const fileCount = (summary.media ?? []).filter((item) => item.type === 'file').length;
               const blockNumber = Math.floor(index / FEED_BLOCK_SIZE) + 1;
@@ -536,40 +439,13 @@ const FeedPage = () => {
                       </div>
                     </div>
 
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-4 z-10">
-                      <button
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleToggleLike(post.postId);
-                        }}
-                        className="flex flex-col items-center gap-1 text-neutral-200/80 hover:text-white transition-colors"
-                        aria-label="Dar like"
-                      >
-                        <Heart size={20} fill={isLiked ? 'currentColor' : 'none'} />
-                        <span className="text-xs">{likeCount}</span>
-                      </button>
-                      <button
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setActivePost(summary);
-                        }}
-                        className="flex flex-col items-center gap-1 text-neutral-200/80 hover:text-white transition-colors"
-                        aria-label="Comentarios"
-                      >
-                        <MessageCircle size={20} />
-                        <span className="text-xs">{commentCount}</span>
-                      </button>
-                      <button
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleToggleSave(post.postId);
-                        }}
-                        className={`flex flex-col items-center gap-1 transition-colors ${isSaved ? 'text-amber-300' : 'text-neutral-200/80 hover:text-white'}`}
-                        aria-label="Guardar"
-                      >
-                        <Bookmark size={20} fill={isSaved ? 'currentColor' : 'none'} />
-                      </button>
-                    </div>
+                    <FeedPostActions
+                      postId={post.postId}
+                      initialCount={Math.max(0, post.likeCount || 0)}
+                      commentCount={commentCount}
+                      onComments={() => setActivePost(summary)}
+                      onLikeCount={handleLikeCount}
+                    />
                   </div>
                 </div>
               );

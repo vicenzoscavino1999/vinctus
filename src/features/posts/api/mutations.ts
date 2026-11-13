@@ -19,6 +19,7 @@ import { moderateUserText } from '@/shared/lib/contentModeration';
 import { AppError, toAppError } from '@/shared/lib/errors';
 import { withRetry, withTimeout } from '@/shared/lib/firebase-helpers';
 import { validate } from '@/shared/lib/validators';
+import { publishPostReaction } from '@/features/posts/model/postEngagementEvents';
 import {
   authorSnapshotSchema,
   commentTextSchema,
@@ -161,23 +162,27 @@ export const updatePost = async (postId: string, patch: Record<string, unknown>)
 export const likePostWithSync = async (postId: string, uid: string): Promise<void> => {
   const safePostId = validate(postIdSchema, postId, { field: 'postId' });
   const safeUid = validate(userIdSchema, uid, { field: 'uid' });
-  return runWrite('posts.likePostWithSync', () => likePostWithSyncRaw(safePostId, safeUid));
+  await runWrite('posts.likePostWithSync', () => likePostWithSyncRaw(safePostId, safeUid));
+  publishPostReaction({ uid: safeUid, postId: safePostId, kind: 'like', value: true });
 };
 
 export const unlikePostWithSync = async (postId: string, uid: string): Promise<void> => {
   const safePostId = validate(postIdSchema, postId, { field: 'postId' });
   const safeUid = validate(userIdSchema, uid, { field: 'uid' });
-  return runWrite('posts.unlikePostWithSync', () => unlikePostWithSyncRaw(safePostId, safeUid));
+  await runWrite('posts.unlikePostWithSync', () => unlikePostWithSyncRaw(safePostId, safeUid));
+  publishPostReaction({ uid: safeUid, postId: safePostId, kind: 'like', value: false });
 };
 
 export const savePostWithSync = async (postId: string, uid: string): Promise<void> => {
   const safePostId = validate(postIdSchema, postId, { field: 'postId' });
   const safeUid = validate(userIdSchema, uid, { field: 'uid' });
-  return runWrite('posts.savePostWithSync', () => savePostWithSyncRaw(safePostId, safeUid));
+  await runWrite('posts.savePostWithSync', () => savePostWithSyncRaw(safePostId, safeUid));
+  publishPostReaction({ uid: safeUid, postId: safePostId, kind: 'save', value: true });
 };
 
 export const unsavePostWithSync = async (postId: string, uid: string): Promise<void> => {
   const safePostId = validate(postIdSchema, postId, { field: 'postId' });
   const safeUid = validate(userIdSchema, uid, { field: 'uid' });
-  return runWrite('posts.unsavePostWithSync', () => unsavePostWithSyncRaw(safePostId, safeUid));
+  await runWrite('posts.unsavePostWithSync', () => unsavePostWithSyncRaw(safePostId, safeUid));
+  publishPostReaction({ uid: safeUid, postId: safePostId, kind: 'save', value: false });
 };

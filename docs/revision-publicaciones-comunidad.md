@@ -69,11 +69,11 @@ un iPhone físico. La prueba local usa exclusivamente el proyecto emulado
 - Likes/guardados, contadores de likes/comentarios y creación desde perfil/grupo.
   La tercera etapa corrige `postsCount`; su despliegue y la comprobación de los
   agregados de producción siguen pendientes.
-  La lectura inicial de likes nativos convierte cualquier error en `false`;
-  en web, los toggles del feed no bloquean solicitudes simultáneas. Los agregados
-  de likes/karma y comentarios todavía aplican deltas con mínimo cero: revisar
-  eventos de borrado que lleguen antes que los de creación. Estos puntos no se
-  modificaron en la tercera etapa.
+  La cuarta etapa corrige la lectura de likes nativos y los toggles del feed y
+  detalle web. Los agregados de likes/karma y comentarios todavía aplican deltas
+  con mínimo cero: revisar eventos de borrado que lleguen antes que los de creación.
+  Descubrir conserva sus controles anteriores del contexto y queda por revisar
+  con ese módulo (incluidos el límite de 50 IDs y las preferencias anónimas).
 - Reglas y visibilidad: actualmente posts/comentarios tienen lectura pública;
   revisar el alcance esperado para grupos privados y bloqueos antes de cambiarlas.
 - Pruebas en dispositivo, despliegue y versión posterior de TestFlight.
@@ -208,3 +208,54 @@ el coste de los agregados crece con las entradas del índice del autor. No se ha
 un barrido de cuentas: el siguiente evento de publicación corrige el autor afectado.
 Una reparación general de contadores existentes necesita su propia comprobación.
 No se desplegaron Functions, índices ni una versión nueva de la app en esta etapa.
+
+## Cuarta etapa: likes y publicaciones guardadas en ambas versiones
+
+La app nativa convertía errores al consultar un like en `false` y permitía cambiarlo
+antes de conocer el estado. El feed y el detalle web permitían escrituras simultáneas
+y podían deshacer una selección más reciente al fallar una solicitud antigua. La
+tarjeta web también sumaba uno a un total que ya podía incluir el like del usuario.
+
+Cambios de esta etapa:
+
+- Lecturas de estado desde el servidor, con estado sin confirmar, carga y reintento
+  explícitos. Una consulta fallida no significa que el like/guardado no exista.
+- Flujo por cuenta/publicación en web y en los botones nativos: una operación por
+  reacción, bloqueo de doble toque y conservación del valor deseado si falla la
+  confirmación. Reintentar repite ese valor; no lo invierte. El rollback visual
+  restaura el total exacto anterior, incluso cero.
+- Creación de likes y guardados mediante transacciones que conservan `createdAt`.
+  Se repara un índice privado de likes ausente sin sobrescribir el like original.
+  No se añaden reacciones a posts inexistentes o pendientes. Quitar sigue siendo
+  una operación idempotente sobre el documento y su índice.
+- Feed, detalle y tarjetas web usan el mismo flujo. Las confirmaciones actualizan
+  el contexto compartido de la cuenta y sobreviven a una consulta de arranque que
+  termine tarde. Las solicitudes de otra cuenta/publicación no alteran la sesión nueva.
+- La app nativa permite guardar/quitar desde el feed y el detalle. El perfil propio
+  abre una lista paginada de publicaciones guardadas. La web incorpora esa lista
+  en su perfil: antes solo mostraba debates guardados de Arena.
+- Ambas listas avanzan sobre el índice original aunque los posts referidos se hayan
+  borrado o sigan pendientes; una página vacía puede tener páginas posteriores.
+  Conservan las filas y el cursor al fallar, descartan respuestas de una ventana
+  anterior y filtran los autores bloqueados en la presentación.
+
+Validación:
+
+- [x] TypeScript y lint de los archivos modificados; pruebas de estados, sesiones,
+      reintentos, fechas, índices incompletos y páginas vacías de guardados.
+- [ ] Resultado final de cobertura, CI completa y flujo de navegador que pierde la
+      respuesta de un commit aceptado, reintenta, comprueba fechas y cambia de cuenta.
+- [ ] Compilación, pruebas unitarias y 29 pruebas de integración nativas en CI.
+
+El escenario de navegador provoca el error después de que Firestore haya aceptado
+el commit. Comprueba por REST local que el documento existe y que el reintento no
+cambia su fecha. Las transacciones necesitan conexión; sin confirmación se conserva
+la elección en la pantalla para reintentar. Cerrar la pantalla aún pierde ese estado
+en memoria; la lectura siguiente consulta el estado que realmente tiene el servidor.
+
+Coste de lectura: dos consultas de documento por post visible para conocer like y
+guardado (24 para una página web de 12 posts), sin listeners nuevos. Una página web
+de guardados consulta hasta 13 entradas del índice, hasta 12 posts y los bloqueos;
+iOS usa 21 entradas y hasta 20 posts. Los cursores evitan recorrer todo el historial.
+No se modifican en esta etapa los agregados de likes/karma/comentarios ni sus reglas
+de visibilidad pública. Tampoco se publica producción ni otra versión de TestFlight.

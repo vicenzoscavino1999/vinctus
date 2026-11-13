@@ -103,3 +103,9 @@ y en CI, la CI web completa, ReleaseProd, las pruebas unitarias y 27 pruebas de
 integración nativas. La prueba nueva recorre 105 comentarios de la misma fecha,
 con borrado del cursor e inserción entre páginas. Los cambios del servidor y su
 índice todavía no están desplegados; tampoco se subió otra versión a TestFlight.
+
+La cuarta etapa revisa likes y guardados en web e iOS: consulta confirmada de
+estado, bloqueo de doble toque, reintento del mismo valor y conservación de las
+fechas. Ambas versiones incorporan la lista paginada de publicaciones guardadas
+en el perfil propio. La validación final de esta etapa está en curso; los contadores
+de interacciones y la visibilidad siguen pendientes.

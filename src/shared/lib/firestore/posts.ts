@@ -216,7 +216,7 @@ const toPostMediaArray = (value: unknown): PostMedia[] => {
   });
 };
 
-const normalizePostRead = (id: string, data: Record<string, unknown>): PostRead => {
+export const normalizePostRead = (id: string, data: Record<string, unknown>): PostRead => {
   const rawAuthorSnapshot =
     typeof data.authorSnapshot === 'object' && data.authorSnapshot !== null
       ? (data.authorSnapshot as Record<string, unknown>)

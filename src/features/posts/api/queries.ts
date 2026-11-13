@@ -1,3 +1,4 @@
+import { getSavedPostsRaw } from './savedPosts';
 import type { DocumentSnapshot } from 'firebase/firestore';
 import {
   getBlockedUsers as getBlockedUsersRaw,
@@ -67,6 +68,16 @@ export const getFollowingIds = async (uid: string): Promise<string[]> => {
 export const getPost = async (postId: string): Promise<PostRead | null> => {
   const safePostId = validate(postIdSchema, postId, { field: 'postId' });
   return runRead('posts.getPost', () => getPostRaw(safePostId));
+};
+
+export const getSavedPosts = async (
+  uid: string,
+  pageSize: number = 12,
+  lastDoc?: DocumentSnapshot,
+): Promise<PaginatedResult<PostRead>> => {
+  const safeUid = validate(userIdSchema, uid, { field: 'uid' });
+  const safePageSize = safeLimit(pageSize, 30);
+  return runRead('posts.getSavedPosts', () => getSavedPostsRaw(safeUid, safePageSize, lastDoc));
 };
 
 export const getPostComments = async (
