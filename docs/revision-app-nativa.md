@@ -40,7 +40,7 @@ Funciones incorporadas o corregidas:
 Validación local de esta ampliación:
 
 - [x] TypeScript, lint de archivos modificados y compilación de producción.
-- [x] 401 pruebas unitarias de la web; umbrales de cobertura aprobados.
+- [x] Más de 400 pruebas unitarias de la web; umbrales de cobertura aprobados. Incluyen la pausa del reproductor al salir del chat o pasar a segundo plano.
 - [x] Contrato generado actualizado, dependencias sin ciclos y guardrail de listeners.
 - [x] Navegador y Firebase local: foto PNG, video MP4 y audio WAV enviados y recibidos entre dos cuentas, con imagen y metadatos de reproducción válidos.
 - [x] Grabación real mediante MediaRecorder con entrada de micrófono sintética de Chromium, preparación WAV y envío sin texto.

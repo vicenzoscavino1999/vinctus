@@ -12,6 +12,9 @@ test.describe('Critical flows', () => {
   });
 
   test('@smoke login -> feed -> post -> chat -> groups', async ({ page }) => {
+    // Each hard navigation reconnects Firestore; leave the group assertions their
+    // own budget after the preceding login, feed, post and idempotent chat send.
+    test.setTimeout(60000);
     await loginWithSeedUser(page, 'alice');
     await waitForAuthenticatedShell(page);
 
