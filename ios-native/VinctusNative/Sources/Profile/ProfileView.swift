@@ -237,6 +237,11 @@ struct ProfileView: View {
         StoriesBar()
         ProfileCollectionsLink()
           .id("collections")
+        NavigationLink {
+          SavedPostsView(profileRepo: repo)
+        } label: {
+          Label("Publicaciones guardadas", systemImage: "bookmark")
+        }
         ProfileCategoriesSection(repo: contentRepo)
           .id("categories")
         ProfileSavedDebatesSection(repo: contentRepo)

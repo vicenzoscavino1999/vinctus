@@ -236,4 +236,65 @@ final class PostIntegrationTests: EmulatorTestCase {
     let seenByAuthor = try await comments.fetchComments(postID: postID, limit: 10)
     XCTAssertEqual(seenByAuthor.items.count, 1)
   }
+
+  func testLikeAndSaveRetriesKeepDatesAndRepairTheLikeIndex() async throws {
+    _ = try await makeUser("Ana")
+    let postID = try await publishPost("Reacciones compartidas")
+    let user = try await makeUser("Bruno")
+    let repo = FirebaseEngagementRepo()
+    let db = Firestore.firestore()
+    let like = db.collection("posts").document(postID).collection("likes").document(user.uid)
+    let index = db.collection("users").document(user.uid).collection("likes").document(postID)
+    let saved = db.collection("users").document(user.uid).collection("savedPosts").document(postID)
+    try await repo.setPostLiked(true, postID: postID)
+    try await repo.setPostSaved(true, postID: postID)
+    let originalLike = try await like.getDocument(source: .server)
+    let originalSaved = try await saved.getDocument(source: .server)
+    try await index.delete()
+    try await repo.setPostLiked(true, postID: postID)
+    try await repo.setPostSaved(true, postID: postID)
+    let retriedLike = try await like.getDocument(source: .server)
+    let retriedSaved = try await saved.getDocument(source: .server)
+    let repairedIndex = try await index.getDocument(source: .server)
+    XCTAssertEqual(originalLike.data()?["createdAt"] as? Timestamp, retriedLike.data()?["createdAt"] as? Timestamp)
+    XCTAssertEqual(originalSaved.data()?["createdAt"] as? Timestamp, retriedSaved.data()?["createdAt"] as? Timestamp)
+    XCTAssertTrue(repairedIndex.exists)
+    try await repo.setPostLiked(false, postID: postID)
+    try await repo.setPostLiked(false, postID: postID)
+    try await repo.setPostSaved(false, postID: postID)
+    try await repo.setPostSaved(false, postID: postID)
+    let unliked = try await repo.isPostLiked(postID: postID)
+    let unsaved = try await repo.isPostSaved(postID: postID)
+    XCTAssertFalse(unliked)
+    XCTAssertFalse(unsaved)
+  }
+
+  func testSavedPostsAdvanceOverDeletedItemsAndBelongOnlyToTheCurrentAccount() async throws {
+    let user = try await makeUser("Ana")
+    let postID = try await publishPost("Una publicación conservada")
+    let engagement = FirebaseEngagementRepo()
+    try await engagement.setPostSaved(true, postID: postID)
+    let db = Firestore.firestore()
+    let index = db.collection("users").document(user.uid).collection("savedPosts")
+    let batch = db.batch()
+    for i in 0..<20 {
+      let id = "orphan-\(i)"
+      batch.setData(["postId": id, "createdAt": FieldValue.serverTimestamp()], forDocument: index.document(id))
+    }
+    try await batch.commit()
+    let repo = FirebaseSavedPostsRepo()
+    let first = try await repo.fetchSavedPosts(limit: 20, after: nil)
+    XCTAssertTrue(first.items.isEmpty)
+    XCTAssertNotNil(first.next)
+    let second = try await repo.fetchSavedPosts(limit: 20, after: first.next)
+    XCTAssertEqual(second.items.map(\.id), [postID])
+    XCTAssertNil(second.next)
+    _ = try await makeUser("Bruno")
+    let other = try await repo.fetchSavedPosts(limit: 20, after: nil)
+    XCTAssertTrue(other.items.isEmpty)
+    do {
+      _ = try await index.getDocuments(source: .server)
+      XCTFail("Another account must not read the saved index")
+    } catch { }
+  }
 }

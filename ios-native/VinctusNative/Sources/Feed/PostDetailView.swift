@@ -61,7 +61,8 @@ struct PostDetailView: View {
             PostMediaView(items: item.media)
 
             HStack(spacing: 12) {
-              LikeButton(postID: item.id, initialCount: item.likeCount)
+              PostReactionButton(postID: item.id, initialCount: item.likeCount)
+              PostReactionButton(postID: item.id, kind: .save)
               Label("\(displayCommentCount)", systemImage: "text.bubble")
             }
             .font(.caption)

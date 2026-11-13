@@ -1,23 +1,42 @@
 import Foundation
 
-/// State of a post's like button. Updates right away and rolls back if the write fails.
+enum PostReactionKind { case like, save }
+
+/// A failed confirmation retains the intended value; retry never toggles it back.
 @MainActor
-final class LikeViewModel: ObservableObject {
-  @Published private(set) var isLiked = false
+final class PostReactionViewModel: ObservableObject {
+  @Published private(set) var isSelected = false
   /// The count after the user's own taps; nil until the first tap, so the post's count shows.
   @Published private(set) var count: Int?
   @Published private(set) var isSaving = false
+  @Published private(set) var isLoading = false
+  @Published private(set) var isLoaded = false
+  @Published private(set) var errorMessage: String?
+  @Published private(set) var pendingValue: Bool?
 
   private let postID: String
   private let repo: EngagementRepo
+  private let kind: PostReactionKind
 
-  init(postID: String, repo: EngagementRepo) {
+  init(postID: String, repo: EngagementRepo, kind: PostReactionKind = .like) {
     self.postID = postID
     self.repo = repo
+    self.kind = kind
   }
 
   func load() async {
-    isLiked = (try? await repo.isPostLiked(postID: postID)) ?? false
+    guard !isLoading, !isSaving, pendingValue == nil else { return }
+    isLoading = true
+    isLoaded = false
+    errorMessage = nil
+    defer { isLoading = false }
+    do {
+      if kind == .like { isSelected = try await repo.isPostLiked(postID: postID) }
+      else { isSelected = try await repo.isPostSaved(postID: postID) }
+      isLoaded = true
+    } catch {
+      errorMessage = "No se pudo consultar. Reintenta."
+    }
   }
 
   func displayedCount(initialCount: Int) -> Int {
@@ -25,18 +44,25 @@ final class LikeViewModel: ObservableObject {
   }
 
   func toggle(initialCount: Int) async {
-    guard !isSaving else { return }
-    let wasLiked = isLiked
+    guard !isSaving, !isLoading else { return }
+    guard isLoaded else { await load(); return }
+    let wasLiked = isSelected
     let previousCount = count ?? initialCount
-    isLiked = !wasLiked
-    count = previousCount + (wasLiked ? -1 : 1)
+    let desired = pendingValue ?? !wasLiked
+    pendingValue = desired
+    isSelected = desired
+    count = max(0, previousCount + (desired == wasLiked ? 0 : desired ? 1 : -1))
     isSaving = true
+    errorMessage = nil
     defer { isSaving = false }
     do {
-      try await repo.setPostLiked(!wasLiked, postID: postID)
+      if kind == .like { try await repo.setPostLiked(desired, postID: postID) }
+      else { try await repo.setPostSaved(desired, postID: postID) }
+      pendingValue = nil
     } catch {
-      isLiked = wasLiked
+      isSelected = wasLiked
       count = previousCount
+      errorMessage = "No se confirmó el cambio. Reintenta."
     }
   }
 }

@@ -128,13 +128,13 @@ final class FirebaseFeedRepo: FeedRepo {
   }
 
   /// A post document as a feed item. Also used for a user's posts on their profile.
-  static func isPublished(_ doc: QueryDocumentSnapshot) -> Bool {
-    let status = doc.data()["status"] as? String
-    return status == nil || status == "ready"
+  static func isPublished(_ doc: DocumentSnapshot) -> Bool {
+    let status = doc.data()?["status"] as? String
+    return doc.exists && (status == nil || status == "ready")
   }
 
-  static func feedItem(from doc: QueryDocumentSnapshot) -> FeedItem {
-    let data = doc.data()
+  static func feedItem(from doc: DocumentSnapshot) -> FeedItem {
+    let data = doc.data() ?? [:]
 
     let authorSnapshot = data["authorSnapshot"] as? [String: Any]
     let authorName = FirestoreValue.string(authorSnapshot?["displayName"])

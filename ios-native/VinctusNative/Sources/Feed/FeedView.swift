@@ -257,7 +257,9 @@ private struct FeedCard: View {
         }
 
         HStack(spacing: 12) {
-          LikeButton(postID: item.id, initialCount: item.likeCount)
+          PostReactionButton(postID: item.id, initialCount: item.likeCount)
+            .font(.caption)
+          PostReactionButton(postID: item.id, kind: .save)
             .font(.caption)
 
           Label("\(item.commentCount)", systemImage: "text.bubble")
