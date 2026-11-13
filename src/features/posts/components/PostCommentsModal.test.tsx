@@ -47,6 +47,7 @@ describe('comments modal identity', () => {
     });
     view.rerender(<PostCommentsModal {...props} post={{ ...first, commentCount: 21 }} />);
     expect(screen.getByPlaceholderText('Escribe tu comentario...')).toHaveValue('Mi borrador');
+    expect(screen.getByRole('heading', { name: 'Comentarios (21)' })).toBeVisible();
     await waitFor(() => expect(getPostComments).toHaveBeenCalledTimes(1));
   });
 

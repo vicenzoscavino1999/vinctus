@@ -35,6 +35,12 @@ export function usePostComments({ postId, user, initialCount, onCommentAdded }: 
   const cursor = useRef<PaginatedResult<PostCommentRead>['lastDoc']>(null);
   const pending = useRef<{ text: string; id: string } | null>(null);
 
+  useEffect(() => {
+    // Reconcile a new parent/server count without resetting the editor or the
+    // loaded pages. A reload with the same count must keep the local increment.
+    setCommentTotal(initialCount);
+  }, [initialCount]);
+
   const loadComments = useCallback(
     async (more = false) => {
       if (more && loadingPage.current) return;

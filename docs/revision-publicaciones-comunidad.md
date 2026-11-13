@@ -40,7 +40,7 @@ Correcciones de esta etapa:
 ## Validación
 
 - [x] TypeScript y compilación web de producción.
-- [x] Más de 400 pruebas web y cobertura aprobada; 26 pruebas específicas de API,
+- [x] 414 pruebas web y cobertura aprobada; 26 pruebas específicas de API,
       transacciones, sesión de comentarios y montaje del panel.
 - [x] 65 pruebas de API/backend existentes.
 - [x] ESLint del proyecto activo (`--ignore-pattern .claude/**` para excluir otro
@@ -70,4 +70,6 @@ un iPhone físico. La prueba local usa exclusivamente el proyecto emulado
   revisar el alcance esperado para grupos privados y bloqueos antes de cambiarlas.
 - Pruebas en dispositivo, despliegue y versión posterior de TestFlight.
 
-No se ha desplegado esta etapa ni marcado el módulo como terminado.
+El PR puede generar una vista previa de Vercel automáticamente. Esta etapa no
+se ha promovido al dominio de producción ni subido a TestFlight, y el módulo
+sigue abierto.
