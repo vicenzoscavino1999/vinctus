@@ -49,7 +49,7 @@ enum CreatePostRepoError: LocalizedError {
     case .draftMismatchForRetry:
       return "El borrador cambió. Intenta publicar de nuevo."
     case .titleTooLong:
-      return "El t?tulo supera el l?mite de 120 caracteres."
+      return "El título supera el límite de 120 caracteres."
     case .missingSnapshot:
       return "No se pudo leer el estado del post."
     }
