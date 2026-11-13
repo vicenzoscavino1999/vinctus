@@ -9,6 +9,7 @@ on:
       - 'ios-native/**'
       - '!ios-native/**/*.md'
       - '.github/workflows/ios-native.yml'
+      - 'scripts/release-ios-testflight.sh'
       # The integration job checks the app's writes against these rules.
       - 'firestore.rules'
       - 'storage.rules'
@@ -18,10 +19,20 @@ on:
       - 'ios-native/**'
       - '!ios-native/**/*.md'
       - '.github/workflows/ios-native.yml'
+      - 'scripts/release-ios-testflight.sh'
       - 'firestore.rules'
       - 'storage.rules'
       - 'firebase.json'
   workflow_dispatch:
+    inputs:
+      upload_to_testflight:
+        description: 'Firmar y subir a TestFlight después de las pruebas (requiere ios-release)'
+        type: boolean
+        default: false
+      build_number:
+        description: 'Build nuevo, mayor que los ya subidos para esta versión (ejemplo: 2)'
+        type: string
+        default: ''
 
 concurrency:
   group: ios-native-${{ github.ref }}
@@ -162,3 +173,29 @@ jobs:
         with:
           name: integration-xcresult
           path: ${{ runner.temp }}/integration.xcresult
+
+  testflight:
+    name: Upload to TestFlight
+    if: github.event_name == 'workflow_dispatch' && inputs.upload_to_testflight
+    needs: [build, integration]
+    runs-on: macos-26
+    timeout-minutes: 60
+    environment: ios-release
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Archive, cloud-sign and upload
+        shell: bash
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          IOS_FIREBASE_PLIST_BASE64: ${{ secrets.IOS_FIREBASE_PLIST_BASE64 }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+        run: bash scripts/release-ios-testflight.sh

@@ -64,6 +64,8 @@ Las reglas de Storage se desplegaron en producción (`vinctus-daf32`) el 12 de n
 
 Los cambios de la app y de la web se mantienen en el PR; comprobar su estado antes de publicar. La validación local no equivale a un despliegue web de producción ni a una versión de App Store.
 
+Preparación de publicación del 12 de noviembre: [candidato web y bloqueos de release](release-conversaciones-2026-11-12.md). El candidato web compiló con configuración de producción sin cambiar el dominio público. Falta completar el staging aislado y sus 24 horas de observación exigidas por el runbook. Para iOS se preparó la [subida manual a TestFlight sin Mac propia](testflight-sin-mac.md); requiere credenciales de Apple en GitHub y validar la primera firma y subida. La prueba física sigue pendiente.
+
 ## Próximo módulo: Publicaciones / Comunidad
 
 Revisar en ambas versiones:
