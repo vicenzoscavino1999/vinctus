@@ -5,9 +5,10 @@ una Mac temporal de GitHub. La subida es manual y requiere pruebas nativas
 aprobadas para el mismo código de la app. No envía la app a
 revisión de App Store ni la publica para todos los usuarios.
 
-Estado: credenciales de Apple y Firebase configuradas en GitHub; pendiente de
-completar la primera firma y subida. Una compilación de simulador no prueba estos
-pasos.
+Estado verificado el 13 de noviembre de 2026: **Vinctus 1.0.0 (2)** archivada,
+firmada y subida desde GitHub. Apple terminó el procesamiento (`VALID`) y la
+marcó `READY_FOR_BETA_TESTING`. Está asignada al grupo interno **Vinctus QA**,
+con notas de prueba en español. La instalación y prueba física siguen pendientes.
 
 ## Configuración en Apple (desde Windows)
 
@@ -86,11 +87,12 @@ siempre se ejecutan de nuevo sobre el commit solicitado.
 Las claves privadas se escriben solo en la Mac temporal y se eliminan al terminar;
 el workflow no sube archivos de configuración ni credenciales como artefactos.
 
-Cuando Apple termine de procesar el build, agrégalo a tu grupo interno de
-TestFlight e instálalo en el iPhone. Valida los cuatro puntos de
+El build 2 ya está procesado y asignado al grupo **Vinctus QA**. Agrega tu cuenta
+como probador interno y usa la app TestFlight en el iPhone para instalarlo.
+Valida los cuatro puntos de
 `docs/revision-app-nativa.md`: voz audible y grabación, videos de la fototeca,
 interrupciones/salida de audio y permisos de Safari. La reproducción en un
 simulador no sustituye esa comprobación.
 
-Referencias: [firma en la nube de Apple](https://developer.apple.com/videos/play/wwdc2021/10204/)
+Referencias: [perfil de distribución App Store](https://developer.apple.com/help/account/provisioning-profiles/create-an-app-store-provisioning-profile)
 y [subida de builds](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds/).

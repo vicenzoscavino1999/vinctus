@@ -4,6 +4,12 @@ Fecha base: 2026-02-11
 Ultima actualizacion: 2026-02-12  
 Objetivo: concentrar checklist por guideline de Apple y evidencia tecnica real.
 
+Actualización del 13 de noviembre de 2026: firma y subida nativa resueltas desde
+GitHub Actions. Vinctus 1.0.0 (2) está procesada y lista para pruebas internas en
+TestFlight, grupo Vinctus QA. Las pruebas en iPhone y el envío público a App
+Store siguen pendientes. Consultar `testflight-sin-mac.md` y
+`release-conversaciones-2026-11-12.md` para el estado actual de publicación.
+
 ## Punto actual del plan maestro (hoy)
 
 - Semanas 0-3 de migracion (gobernanza + hardening backend + compliance base): completadas.

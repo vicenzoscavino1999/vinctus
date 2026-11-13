@@ -74,8 +74,20 @@ este requisito: la integración de `main` publica automáticamente.
   y la validación del perfil funcionaron; el archivo detectó que el perfil global
   se heredaba a los recursos de las dependencias. La configuración se corrigió
   para aplicarse solo a `VinctusNative/ReleaseProd`, mediante un include temporal
-  de XcodeGen. Pendiente verificar el archivo y la subida con esa corrección.
-- Todavía no se ha confirmado una nueva versión en TestFlight ni App Store.
+  de XcodeGen.
+- **Resultado confirmado:** [43411018403](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43411018403)
+  aprobó la evidencia de pruebas sobre código idéntico, archivó, firmó y subió
+  **Vinctus 1.0.0 (2)** desde `cd39dbf`. Apple confirmó `processingState=VALID` e
+  `internalBuildState=READY_FOR_BETA_TESTING`. ID del build:
+  `82bb716c-e872-4bd6-b1f0-09ca969d5473`.
+- Grupo interno **Vinctus QA** creado y build 2 asignado, con notas de prueba
+  en español. No se habilitó enlace público. Pendientes el alta del probador,
+  instalación y las pruebas físicas descritas en la lista de revisión.
+- Xcode avisó de dSYM ausentes en binarios de FirebaseFirestoreInternal y
+  dependencias gRPC/absl. Limitan la simbolicación de fallos dentro de esos SDK;
+  Apple aceptó y procesó el build. También hay un aviso previo de aislamiento de
+  actor en `StoriesViews.swift`, a revisar en el módulo Historias.
+- La versión pública de App Store y la promoción web no se han realizado.
 
 Configuración y ejecución: [TestFlight sin Mac](testflight-sin-mac.md).
 La prueba de audio, videos reales, interrupciones y permisos en iPhone permanece
