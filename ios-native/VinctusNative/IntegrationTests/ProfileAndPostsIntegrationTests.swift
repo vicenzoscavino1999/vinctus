@@ -63,7 +63,7 @@ final class ProfileIntegrationTests: EmulatorTestCase {
 
 final class PostIntegrationTests: EmulatorTestCase {
   func testNativePhotoVideoDocumentAndYouTubePostRetriesWithoutOverwriting() async throws {
-    _ = try await makeUser("Lucía")
+    let user = try await makeUser("Lucía")
     let repo = FirebaseCreatePostRepo()
     let postID = try repo.makePostID()
     let cases: [(String, String, ChatMediaKind, Data)] = [
@@ -78,8 +78,18 @@ final class PostIntegrationTests: EmulatorTestCase {
       try data.write(to: url)
       files.append(ChatPendingAttachment(fileURL: url, fileName: "test.\(suffix)", contentType: type, size: data.count, kind: kind))
     }
+    // Simulate a previous attempt that uploaded the image but never finalized
+    // the post. Storage rules reject overwrites, so the repo must recover it.
+    let firstPath = PostFiles.path(files[0], userID: user.uid, postID: postID)
+    let firstObject = Storage.storage().reference(withPath: firstPath)
+    let metadata = StorageMetadata()
+    metadata.contentType = files[0].contentType
+    _ = try await firstObject.putDataAsync(try Data(contentsOf: files[0].fileURL), metadata: metadata)
+    let beforeRetry = try await firstObject.getMetadata()
     let draft = NativePostDraft(title: "Adjuntos entre plataformas", text: "", files: files, youtubeVideoID: "dQw4w9WgXcQ")
     try await repo.publishPost(draft, postID: postID, groupID: nil, onProgress: { _ in })
+    let recovered = try await firstObject.getMetadata()
+    XCTAssertEqual(recovered.generation, beforeRetry.generation)
     let ref = Firestore.firestore().collection("posts").document(postID)
     let first = try await ref.getDocument(source: .server)
     try await repo.publishPost(draft, postID: postID, groupID: nil, onProgress: { _ in })
