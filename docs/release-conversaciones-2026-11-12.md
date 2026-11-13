@@ -1,6 +1,7 @@
 # Candidato de publicación de Conversaciones
 
-Fecha: 12 de noviembre de 2026 (America/Lima).
+Registro iniciado el 12 de noviembre de 2026 (America/Lima).
+Última actualización: 13 de noviembre de 2026.
 
 ## Web
 
@@ -48,10 +49,27 @@ este requisito: la integración de `main` publica automáticamente.
   de las pruebas del mismo commit y del entorno protegido `ios-release`.
 - Entorno `ios-release` creado en GitHub con revisión del propietario y ramas
   restringidas a `main` y `fix/ios-conversations`. Configuración Firebase cargada
-  como secreto del entorno. Faltan los cuatro valores de Apple descritos en la guía.
+  como secreto del entorno. Los cuatro valores de Apple también se configuraron;
+  la autenticación reconoce la app Vinctus en App Store Connect.
 - Sintaxis Bash, actionlint y rechazo de secretos ausentes comprobados localmente.
-- Firma, archivo para dispositivo y subida a Apple pendientes de la primera
-  ejecución con credenciales. No hay una nueva versión en TestFlight ni App Store.
+- Apple confirmó por API que el contrato actualizado ya permite acceder a
+  certificados e identificadores. La ficha de Vinctus no tenía builds previos.
+- Iniciada la subida del build 2 en
+  [43363559194](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43363559194),
+  commit `7f62ad2`. En el primer intento pasaron compilación y pruebas unitarias;
+  la integración tuvo 22 pruebas aprobadas y un fallo de disponibilidad inicial
+  del emulador Firestore. Se relanzó solo la parte fallida y la integración pasó
+  en el intento 2. La ejecución continuó al entorno protegido `ios-release` con
+  aprobación para el build 2 del commit revisado. El archivo falló porque Xcode
+  buscó un perfil de desarrollo y la cuenta no tenía dispositivos registrados.
+- Preparados certificado Apple Distribution y perfil `Vinctus AppStore CI`,
+  exclusivamente para la distribución de `app.vinctus.social`. Se verificaron la
+  coincidencia de clave/certificado, equipo, Bundle ID, permisos de Sign in with
+  Apple y Declared Age Range, y ausencia de dispositivos en el perfil App Store.
+- Certificado, contraseña y perfil guardados como secretos de `ios-release`.
+  El workflow usa firma manual de distribución para no depender de un iPhone
+  registrado en Apple Developer. Pendiente verificar el archivo y la subida.
+- Todavía no se ha confirmado una nueva versión en TestFlight ni App Store.
 
 Configuración y ejecución: [TestFlight sin Mac](testflight-sin-mac.md).
 La prueba de audio, videos reales, interrupciones y permisos en iPhone permanece

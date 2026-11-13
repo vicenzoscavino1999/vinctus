@@ -189,7 +189,7 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Archive, cloud-sign and upload
+      - name: Archive, sign and upload
         shell: bash
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -197,5 +197,8 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
           IOS_FIREBASE_PLIST_BASE64: ${{ secrets.IOS_FIREBASE_PLIST_BASE64 }}
+          IOS_DISTRIBUTION_P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 }}
+          IOS_DISTRIBUTION_P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
           BUILD_NUMBER: ${{ inputs.build_number }}
         run: bash scripts/release-ios-testflight.sh

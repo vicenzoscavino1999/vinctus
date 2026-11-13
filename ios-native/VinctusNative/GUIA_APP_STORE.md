@@ -2,7 +2,7 @@
 
 Esta guia es para compilar la app nativa (`ios-native/VinctusNative`) en una Mac, probarla con TestFlight y enviarla a revision de Apple.
 
-> **Sin Mac propia:** cada cambio en `ios-native/` se compila y se prueba en una Mac de GitHub. El workflow **iOS native** también permite la subida manual a TestFlight con firma de Apple en la nube; sigue [TestFlight sin Mac](../../docs/testflight-sin-mac.md). Requiere configurar las credenciales de Apple en GitHub y comprobar la primera subida.
+> **Sin Mac propia:** cada cambio en `ios-native/` se compila y se prueba en una Mac de GitHub. El workflow **iOS native** también permite la subida manual a TestFlight con un certificado y perfil de distribución; sigue [TestFlight sin Mac](../../docs/testflight-sin-mac.md). Requiere configurar las credenciales de Apple en GitHub y comprobar la primera subida.
 
 > La app de Capacitor que habia en `ios/` se borro del repo porque no se podia publicar: en ella no funcionaba el inicio de sesion con Google y Apple, y Apple suele rechazar apps que solo muestran una web (regla 4.2). Esta app nativa la reemplaza.
 

@@ -5,8 +5,9 @@ una Mac temporal de GitHub. La subida es manual y solo se ejecuta después de qu
 pasen la compilación y las pruebas nativas del mismo commit. No envía la app a
 revisión de App Store ni la publica para todos los usuarios.
 
-Estado: proceso preparado; firma y subida pendientes de credenciales y validación
-con la cuenta de Apple. Una compilación de simulador no prueba estos pasos.
+Estado: credenciales de Apple y Firebase configuradas en GitHub; pendiente de
+completar la primera firma y subida. Una compilación de simulador no prueba estos
+pasos.
 
 ## Configuración en Apple (desde Windows)
 
@@ -21,23 +22,34 @@ con la cuenta de Apple. Una compilación de simulador no prueba estos pasos.
    `.p8`, el **Key ID** y el **Issuer ID**. La clave de Sign in with Apple que usa
    Firebase es distinta y no sirve para este proceso.
 
-Xcode usa la API para gestionar los certificados y perfiles necesarios. Los
-límites de certificados y las capacidades autorizadas por Apple pueden requerir
-un ajuste en el portal; la primera ejecución debe comprobarse.
+La firma usa un certificado Apple Distribution y un perfil de App Store ya
+preparados. El perfil incluye Sign in with Apple y Declared Age Range. Al usar
+distribución, no hace falta registrar el UDID de un iPhone para archivar la app.
+El intento inicial con firma automática buscó un perfil de desarrollo y falló
+porque la cuenta no tenía dispositivos registrados.
 
 ## Configuración en GitHub
 
 El entorno **ios-release** ya se creó en **Settings > Environments**, con revisión
 del propietario y ramas limitadas a `main` y `fix/ios-conversations`. La
-configuración Firebase ya está cargada. Faltan los cuatro valores de Apple:
+configuración Firebase, los cuatro valores de Apple y los tres secretos de firma
+de distribución ya están cargados:
 
-| Secreto                     | Valor                                            |
-| --------------------------- | ------------------------------------------------ |
-| `APPLE_TEAM_ID`             | Team ID de Apple Developer                       |
-| `ASC_KEY_ID`                | Key ID de la clave de equipo                     |
-| `ASC_ISSUER_ID`             | Issuer ID de App Store Connect                   |
-| `ASC_PRIVATE_KEY`           | Contenido completo del archivo `.p8`             |
-| `IOS_FIREBASE_PLIST_BASE64` | Configuración Firebase Prod codificada en base64 |
+| Secreto                           | Valor                                                                |
+| --------------------------------- | -------------------------------------------------------------------- |
+| `APPLE_TEAM_ID`                   | Team ID de Apple Developer                                           |
+| `ASC_KEY_ID`                      | Key ID de la clave de equipo                                         |
+| `ASC_ISSUER_ID`                   | Issuer ID de App Store Connect                                       |
+| `ASC_PRIVATE_KEY`                 | Contenido completo del archivo `.p8`                                 |
+| `IOS_FIREBASE_PLIST_BASE64`       | Configuración Firebase Prod codificada en base64                     |
+| `IOS_DISTRIBUTION_P12_BASE64`     | Certificado y clave de distribución en PKCS12, codificados en base64 |
+| `IOS_DISTRIBUTION_P12_PASSWORD`   | Contraseña del contenedor PKCS12                                     |
+| `IOS_PROVISIONING_PROFILE_BASE64` | Perfil de App Store de Vinctus, codificado en base64                 |
+
+Los archivos de firma se conservan fuera del repositorio, en
+`C:\Users\ASROCK\AppleKeys\Vinctus`. La Mac temporal importa el certificado a
+un llavero propio, comprueba que coincide con el perfil y usa firma manual de
+distribución. El llavero y los archivos privados temporales se eliminan al terminar.
 
 Para cargar el archivo Firebase que ya está preparado localmente, desde
 PowerShell en la raíz del proyecto, sin mostrar su contenido:
@@ -60,7 +72,7 @@ gh workflow run ios-native.yml --repo vicenzoscavino1999/vinctus --ref fix/ios-c
 
 Sustituye `2` por un build nuevo mayor que los existentes para la versión
 `1.0.0`. Revisa y aprueba el commit exacto en el entorno `ios-release`.
-La clave privada se escribe solo en la Mac temporal y se elimina al terminar;
+Las claves privadas se escriben solo en la Mac temporal y se eliminan al terminar;
 el workflow no sube archivos de configuración ni credenciales como artefactos.
 
 Cuando Apple termine de procesar el build, agrégalo a tu grupo interno de
