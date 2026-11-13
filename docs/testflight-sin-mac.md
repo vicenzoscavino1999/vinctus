@@ -87,10 +87,10 @@ siempre se ejecutan de nuevo sobre el commit solicitado.
 Las claves privadas se escriben solo en la Mac temporal y se eliminan al terminar;
 el workflow no sube archivos de configuración ni credenciales como artefactos.
 
-El build 2 ya está procesado y asignado al grupo **Vinctus QA**. Agrega tu cuenta
-como probador interno y usa la app TestFlight en el iPhone para instalarlo.
-La invitación solicitada por el propietario ya se envió y figura como `INVITED`;
-solo falta aceptarla desde el iPhone.
+El build 2 ya está procesado y asignado al grupo **Vinctus QA**, y la cuenta
+autorizada por el propietario ya está agregada como probador interno. Apple
+confirmó la invitación como `INVITED`. Abre el correo en el iPhone y usa la app
+TestFlight para aceptar e instalar Vinctus.
 Valida los cuatro puntos de
 `docs/revision-app-nativa.md`: voz audible y grabación, videos de la fototeca,
 interrupciones/salida de audio y permisos de Safari. La reproducción en un
