@@ -65,11 +65,13 @@ un iPhone físico. La prueba local usa exclusivamente el proyecto emulado
 
 ## Pendiente para cerrar el módulo
 
-- Validación nativa de la segunda etapa descrita más abajo y sus pruebas en un
-  iPhone físico.
+- Pruebas de la segunda etapa en un iPhone físico.
 - Comentarios nativos: paginación más allá de los primeros 80 comentarios y orden
   compatible con los comentarios recientes de la web.
 - Likes/guardados, contadores de Cloud Functions y creación desde perfil/grupo.
+  `onPostCreated` incrementa `postsCount` al crear el documento, incluido el
+  estado `uploading`; las listas filtran ese estado. Revisar qué debe contar el
+  perfil y las transiciones antes de cerrar este punto.
 - Reglas y visibilidad: actualmente posts/comentarios tienen lectura pública;
   revisar el alcance esperado para grupos privados y bloqueos antes de cambiarlas.
 - Pruebas en dispositivo, despliegue y versión posterior de TestFlight.
@@ -130,10 +132,17 @@ Validación de esta etapa:
 - [x] TypeScript, compilación web, 438 pruebas con cobertura y 65 pruebas de API/
       backend. Incluyen posts de solo título y normalización de título vacío.
 - [x] ESLint de archivos cambiados, contrato generado, ciclos y listeners.
-- [ ] CI nativa después de corregir la importación del overlay SwiftUI que define
-      `PhotosPickerItem`; ejecución
-      [43460610836](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43460610836)
-      sobre `3ef67f4`. Se verifican también uploads y reintentos contra emuladores.
+- [x] CI nativa: ReleaseProd, pruebas unitarias y 26 pruebas de integración con
+      Firebase aprobadas en
+      [43463134003](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43463134003)
+      sobre `1d2cbc5`. La integración empieza con una imagen ya subida y comprueba
+      que su generación no cambie al recuperar el post; también descarga los bytes y
+      verifica cuatro adjuntos en feed/perfil. El import del overlay SwiftUI que
+      define `PhotosPickerItem` quedó corregido antes de esta ejecución.
+- [x] CI web completa aprobada en
+      [43463154984](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43463154984),
+      incluido el nuevo flujo smoke: 438 pruebas web, 65 de API/backend, tres flujos
+      smoke, build, reglas, lint, tipos, Lighthouse y cost gates.
 
 La simulación valida transporte y permisos de archivos. El fixture de video de
 la integración nativa no valida códecs; el MP4 real se comprueba en el navegador.

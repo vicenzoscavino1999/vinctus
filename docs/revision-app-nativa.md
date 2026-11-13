@@ -80,7 +80,7 @@ Revisar en ambas versiones:
 4. Permisos y visibilidad.
 5. Comparar las capacidades de adjuntos. La segunda etapa añade fotos, videos,
    documentos y YouTube al publicador nativo y comprueba la recuperación de
-   subidas parciales web. Falta cerrar la validación nativa y física.
+   subidas parciales. La validación automatizada pasó; falta la prueba física.
 
 Primera etapa: envío fiable de comentarios en ambas versiones, aislamiento del
 panel web por cuenta/publicación, conservación de borradores nativos y protección
@@ -91,5 +91,6 @@ los resultados de las pruebas y el trabajo que queda. El módulo sigue abierto.
 La segunda etapa cubre creación y adjuntos en ambas versiones, con IDs/rutas
 estables y protección de publicaciones ya confirmadas. La web tiene 438 pruebas
 aprobadas y un flujo de navegador que recupera una subida parcial sin duplicar
-el post ni sobrescribir la imagen. La compilación y pruebas nativas de esta
-ampliación siguen en CI; todavía no se publicó una versión nueva.
+el post ni sobrescribir la imagen. La compilación, las pruebas unitarias y 26
+pruebas de integración nativas de esta ampliación pasaron en CI; también pasó la
+CI web completa con tres flujos smoke. Todavía no se publicó una versión nueva.
