@@ -27,18 +27,8 @@ import {
 } from '@/features/chat/api';
 import CreateGroupModal from '@/features/groups/components/CreateGroupModal';
 import { LEGAL_COPY, LEGAL_LINKS } from '@/shared/constants';
+import { directParticipants } from '@/features/chat/lib/conversationIds';
 import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
-
-// Helper to parse otherUserId from conversation ID
-const parseOtherUserId = (conversationId: string, currentUid: string): string | null => {
-  if (!conversationId.startsWith('dm_')) return null;
-  const parts = conversationId.slice(3).split('_');
-  if (parts.length < 2) return null;
-
-  // Find the ID that is not the current user
-  const otherId = parts.find((id) => id !== currentUid);
-  return otherId ?? null;
-};
 
 const REPORT_REASON_OPTIONS: Array<{ value: UserReportReason; label: string }> = [
   { value: 'spam', label: 'Spam o publicidad' },
@@ -87,7 +77,7 @@ export default function ConversationDetailsPage() {
     }
 
     // Parse otherUserId
-    const otherId = parseOtherUserId(conversationId, user.uid);
+    const otherId = directParticipants(conversationId, user.uid)?.find((id) => id !== user.uid);
 
     // Guard 3: Validate otherUserId was parsed successfully
     if (!otherId) {
@@ -97,12 +87,14 @@ export default function ConversationDetailsPage() {
       return;
     }
 
+    let active = true;
     // Load other user's public profile
     const loadProfile = async () => {
       try {
         setLoading(true);
         setError(null);
         const profile = await getUserProfile(otherId);
+        if (!active) return;
 
         if (!profile) {
           setError('Usuario no encontrado.');
@@ -112,13 +104,16 @@ export default function ConversationDetailsPage() {
         setOtherUserProfile(profile);
       } catch (err) {
         console.error('[ConversationDetailsPage] Error loading profile:', err);
-        setError('No se pudo cargar el perfil del usuario.');
+        if (active) setError('No se pudo cargar el perfil del usuario.');
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     void loadProfile();
+    return () => {
+      active = false;
+    };
   }, [conversationId, user, navigate]);
 
   // Load member data for mute state

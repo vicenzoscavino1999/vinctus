@@ -1,7 +1,30 @@
+import AVFoundation
 import XCTest
 @testable import VinctusNative
 
 final class ChatMediaDataTests: XCTestCase {
+  func testSharedMessagesAndWebVoiceRecordingArePlayableOnNative() async throws {
+    let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "chat-interop", withExtension: "json"))
+    let fixture = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+    for key in ["nativeMessage", "webMessage"] {
+      let fields = try XCTUnwrap(fixture[key] as? [String: Any])
+      let message = try XCTUnwrap(FirebaseChatRepo.message(id: key, data: fields))
+      XCTAssertFalse(message.text.isEmpty)
+      XCTAssertEqual(message.attachments.count, key == "nativeMessage" ? 3 : 1)
+      XCTAssertTrue(message.attachments.allSatisfy { $0.remoteURL != nil })
+      XCTAssertEqual(message.attachments.last?.mediaKind, .audio)
+    }
+    let audio = try XCTUnwrap(Data(base64Encoded: try XCTUnwrap(fixture["webVoiceWavBase64"] as? String)))
+    let local = ChatPendingAttachment.temporaryURL(extension: "wav")
+    defer { try? FileManager.default.removeItem(at: local) }
+    try audio.write(to: local)
+    let playable = try await AVURLAsset(url: local).load(.isPlayable)
+    XCTAssertTrue(playable, "The exact web WAV encoding must be playable by the native AVPlayer")
+    let video = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "chat-video", withExtension: "mp4"))
+    let playableVideo = try await AVURLAsset(url: video).load(.isPlayable)
+    XCTAssertTrue(playableVideo, "The MP4 sent in the web integration test must play on native")
+  }
+
   func testParsesMediaWithoutHidingTheTextOrDiscardingAttachmentFields() {
     let attachment = ChatAttachment(kind: "image", url: "https://example.com/photo.jpg", path: "conversations/c/attachments/a/m/photo.jpg",
       fileName: "Foto.jpg", contentType: "image/jpeg", size: 100)

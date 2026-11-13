@@ -120,6 +120,26 @@ describe('chat api mutations', () => {
     expect(firestore.sendMessage).not.toHaveBeenCalled();
   });
 
+  it('reuses the same generated ID across automatic write retries', async () => {
+    vi.mocked(firestore.sendMessage)
+      .mockRejectedValueOnce({ code: 'unavailable' })
+      .mockResolvedValueOnce();
+    await sendMessage('dm_user_1_user_2', 'user_1', 'hola');
+    const calls = vi.mocked(firestore.sendMessage).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0][6]).toBeTruthy();
+    expect(calls[0][6]).toBe(calls[1][6]);
+  });
+
+  it('validates the visible read timestamp before writing', async () => {
+    await expect(markConversationRead('dm_user_1_user_2', 'user_1', -1)).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+    });
+    expect(firestore.markConversationRead).not.toHaveBeenCalled();
+    await markConversationRead('dm_user_1_user_2', 'user_1', 123);
+    expect(firestore.markConversationRead).toHaveBeenCalledWith('dm_user_1_user_2', 'user_1', 123);
+  });
+
   it('forwards group conversation writes', async () => {
     vi.mocked(firestore.getOrCreateGroupConversation).mockResolvedValueOnce('grp_group_1');
     vi.mocked(firestore.leaveGroupWithSync).mockResolvedValueOnce();
