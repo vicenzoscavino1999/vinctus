@@ -81,8 +81,9 @@ este requisito: la integración de `main` publica automáticamente.
   `internalBuildState=READY_FOR_BETA_TESTING`. ID del build:
   `82bb716c-e872-4bd6-b1f0-09ca969d5473`.
 - Grupo interno **Vinctus QA** creado y build 2 asignado, con notas de prueba
-  en español. No se habilitó enlace público. Pendientes el alta del probador,
-  instalación y las pruebas físicas descritas en la lista de revisión.
+  en español. No se habilitó enlace público. El probador indicado por el
+  propietario ya está asociado al grupo y Apple confirmó el estado `INVITED`.
+  Pendientes la aceptación, instalación y las pruebas físicas de la lista.
 - Xcode avisó de dSYM ausentes en binarios de FirebaseFirestoreInternal y
   dependencias gRPC/absl. Limitan la simbolicación de fallos dentro de esos SDK;
   Apple aceptó y procesó el build. También hay un aviso previo de aislamiento de

@@ -89,6 +89,8 @@ el workflow no sube archivos de configuración ni credenciales como artefactos.
 
 El build 2 ya está procesado y asignado al grupo **Vinctus QA**. Agrega tu cuenta
 como probador interno y usa la app TestFlight en el iPhone para instalarlo.
+La invitación solicitada por el propietario ya se envió y figura como `INVITED`;
+solo falta aceptarla desde el iPhone.
 Valida los cuatro puntos de
 `docs/revision-app-nativa.md`: voz audible y grabación, videos de la fototeca,
 interrupciones/salida de audio y permisos de Safari. La reproducción en un
