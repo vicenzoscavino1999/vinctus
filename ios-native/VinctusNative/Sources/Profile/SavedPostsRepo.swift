@@ -4,8 +4,7 @@ import FirebaseFirestore
 import Foundation
 
 struct SavedPostsCursor {
-  let createdAt: Timestamp
-  let postID: String
+  let token: String
 }
 
 struct SavedPostsPage {
@@ -20,29 +19,12 @@ protocol SavedPostsRepo {
 final class FirebaseSavedPostsRepo: SavedPostsRepo {
   func fetchSavedPosts(limit: Int, after cursor: SavedPostsCursor?) async throws -> SavedPostsPage {
     guard FirebaseApp.app() != nil else { throw EngagementRepoError.firebaseNotConfigured }
-    guard let uid = Auth.auth().currentUser?.uid else { throw EngagementRepoError.userNotAuthenticated }
-    let db = Firestore.firestore()
-    let pageSize = max(1, min(30, limit))
-    var query = db.collection(FirestoreCollections.users).document(uid)
-      .collection(FirestoreSubcollections.savedPosts)
-      .order(by: "createdAt", descending: true)
-      .order(by: FieldPath.documentID(), descending: true)
-      .limit(to: pageSize + 1)
-    if let cursor { query = query.start(after: [cursor.createdAt, cursor.postID]) }
-    let snapshot = try await query.getDocuments(source: .server)
-    let documents = Array(snapshot.documents.prefix(pageSize))
-    var items: [FeedItem] = []
-    // Advance over the saved index, even when the referenced post was removed.
-    for saved in documents {
-      let post = try await db.collection(FirestoreCollections.posts).document(saved.documentID)
-        .getDocument(source: .server)
-      if FirebaseFeedRepo.isPublished(post) { items.append(FirebaseFeedRepo.feedItem(from: post)) }
-    }
-    let next: SavedPostsCursor? = snapshot.documents.count > pageSize ? documents.last.flatMap {
-      guard let date = $0.data()["createdAt"] as? Timestamp else { return nil }
-      return SavedPostsCursor(createdAt: date, postID: $0.documentID)
-    } : nil
-    return SavedPostsPage(items: items, next: next)
+    guard Auth.auth().currentUser != nil else { throw EngagementRepoError.userNotAuthenticated }
+    let result = try await PostReadClient.read(view: "saved", limit: max(1, min(30, limit)), cursor: cursor?.token)
+    return SavedPostsPage(
+      items: result.items.map { FirebaseFeedRepo.feedItem(id: $0.id, data: $0.fields) },
+      next: result.cursor.map { SavedPostsCursor(token: $0) }
+    )
   }
 }
 

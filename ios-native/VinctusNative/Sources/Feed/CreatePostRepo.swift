@@ -131,15 +131,14 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
       } catch let error as NSError where error.domain == StorageErrorDomain && error.code == StorageErrorCode.objectNotFound.rawValue {
         let metadata = StorageMetadata()
         metadata.contentType = file.contentType
-        metadata.cacheControl = "public,max-age=31536000,immutable"
+        metadata.cacheControl = "private,no-store,max-age=0"
         let previous = completed
         _ = try await target.putFileAsync(from: file.fileURL, metadata: metadata) { progress in
           onProgress(Double(previous + Int(progress?.completedUnitCount ?? 0)) / Double(total))
         }
       }
-      let url = try await target.downloadURL()
       let kind = PostFiles.kind(contentType: file.contentType) ?? "file"
-      media.append(PostMediaItem(type: kind, url: url.absoluteString, path: path, contentType: file.contentType,
+      media.append(PostMediaItem(type: kind, url: "post-media:\(path)", path: path, contentType: file.contentType,
         fileName: kind == "file" ? file.fileName : nil, size: kind == "file" ? file.size : nil))
       completed += file.size
       onProgress(Double(completed) / Double(total))

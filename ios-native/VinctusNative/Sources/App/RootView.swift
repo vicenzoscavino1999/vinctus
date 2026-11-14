@@ -11,6 +11,7 @@ struct RootView: View {
         AgeGate {
           MainTabView()
         }
+        .id(authVM.currentUserID)
       } else {
         AuthGateView()
       }

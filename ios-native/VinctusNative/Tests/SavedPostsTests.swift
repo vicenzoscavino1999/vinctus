@@ -15,7 +15,7 @@ private final class FakeSavedPostsRepo: SavedPostsRepo {
 final class SavedPostsTests: XCTestCase {
   func testEmptyPagesKeepTheirCursorAndFailedPagesCanRetry() async {
     let repo = FakeSavedPostsRepo()
-    let cursor = SavedPostsCursor(createdAt: Timestamp(date: Date()), postID: "gone")
+    let cursor = SavedPostsCursor(token: "gone")
     repo.handler = { SavedPostsPage(items: [], next: cursor) }
     let vm = SavedPostsViewModel(repo: repo)
     await vm.load()
@@ -35,7 +35,7 @@ final class SavedPostsTests: XCTestCase {
 
   func testRefreshDiscardsAnOldPageAndFailureRetainsVisiblePosts() async {
     let repo = FakeSavedPostsRepo()
-    let cursor = SavedPostsCursor(createdAt: Timestamp(date: Date()), postID: "gone")
+    let cursor = SavedPostsCursor(token: "gone")
     repo.handler = { SavedPostsPage(items: [], next: cursor) }
     let vm = SavedPostsViewModel(repo: repo)
     await vm.load()

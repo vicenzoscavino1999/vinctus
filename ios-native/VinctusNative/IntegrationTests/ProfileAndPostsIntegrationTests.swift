@@ -180,10 +180,11 @@ final class PostIntegrationTests: EmulatorTestCase {
     XCTAssertFalse(page.isFromCache)
     XCTAssertEqual(page.items.map(\.id), Array(ids.reversed().prefix(20)))
     let cursor = try XCTUnwrap(page.nextCursor)
+    let cursorCommentID = try XCTUnwrap(page.items.last?.id)
     // The batch gives every comment exactly the same timestamp, so ID is essential.
     let timestamps = Set(page.items.compactMap(\.createdAt))
     XCTAssertEqual(timestamps.count, 1)
-    try await comments.document(cursor.commentID).delete()
+    try await comments.document(cursorCommentID).delete()
     // A new comment must not shift/duplicate older pages.
     try await repo.addComment(postID: postID, text: "Más reciente", commentID: "new")
     var loaded = page.items.map(\.id)
@@ -199,7 +200,7 @@ final class PostIntegrationTests: EmulatorTestCase {
     XCTAssertEqual(Set(loaded).count, 105)
     let refreshed = try await repo.fetchComments(postID: postID, limit: 20)
     XCTAssertEqual(refreshed.items.first?.id, "new")
-    XCTAssertFalse(refreshed.items.contains { $0.id == cursor.commentID })
+    XCTAssertFalse(refreshed.items.contains { $0.id == cursorCommentID })
   }
 
   func testPublishAndFindItInTheFeed() async throws {

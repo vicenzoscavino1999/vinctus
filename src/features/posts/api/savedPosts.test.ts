@@ -1,64 +1,32 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import {
-  doc,
-  getDocFromServer,
-  getDocsFromServer,
-  startAfter,
-  type DocumentSnapshot,
-} from 'firebase/firestore';
 import { getSavedPostsRaw } from './savedPosts';
+import { readPostRecords } from '@/shared/lib/post-reads-client';
 
-vi.mock('firebase/firestore', async (original) => ({
-  ...(await original<typeof import('firebase/firestore')>()),
-  collection: vi.fn(),
-  doc: vi.fn(),
-  getDocFromServer: vi.fn(),
-  getDocsFromServer: vi.fn(),
-  query: vi.fn((...args) => args[0]),
-  orderBy: vi.fn(),
-  limit: vi.fn(),
-  startAfter: vi.fn(),
+vi.mock('@/shared/lib/firebase', () => ({ auth: { currentUser: { uid: 'ana' } } }));
+vi.mock('@/shared/lib/post-reads-client', () => ({ readPostRecords: vi.fn() }));
+vi.mock('@/shared/lib/firestore/posts', () => ({
+  normalizePostRead: (id: string, data: Record<string, unknown>) => ({ ...data, postId: id }),
 }));
+const page = { items: [], lastDoc: null, hasMore: false, weeklyPosts: 0 };
+beforeEach(() => vi.clearAllMocks());
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  vi.mocked(doc).mockImplementation(((...args: unknown[]) => ({
-    id: args[args.length - 1],
-  })) as typeof doc);
-});
-
-it('uses the original saved index cursor even if every post in a page was removed', async () => {
-  const removed = { id: 'removed' };
-  const remaining = { id: 'p1' };
-  vi.mocked(getDocsFromServer).mockResolvedValueOnce({
-    docs: [removed, remaining],
-    size: 2,
-  } as never);
-  vi.mocked(getDocFromServer).mockResolvedValueOnce({ exists: () => false } as never);
+it('advances an opaque cursor even when a page has no visible saved posts', async () => {
+  const cursor = 'a'.repeat(32);
+  vi.mocked(readPostRecords).mockResolvedValueOnce({ ...page, lastDoc: cursor, hasMore: true });
   const first = await getSavedPostsRaw('ana', 1);
-  expect(first.items).toEqual([]);
-  expect(first.hasMore).toBe(true);
-  expect(first.lastDoc).toBe(removed);
-  vi.mocked(getDocsFromServer).mockResolvedValueOnce({ docs: [remaining], size: 1 } as never);
-  vi.mocked(getDocFromServer).mockResolvedValueOnce({
-    id: 'p1',
-    exists: () => true,
-    data: () => ({ content: 'Hola', authorId: 'a', createdAt: new Date() }),
-  } as never);
-  const second = await getSavedPostsRaw('ana', 1, first.lastDoc as DocumentSnapshot);
+  expect(first).toEqual({ items: [], lastDoc: cursor, hasMore: true });
+  vi.mocked(readPostRecords).mockResolvedValueOnce({
+    ...page,
+    items: [{ id: 'p1', authorId: 'a', content: 'Hola' }],
+  });
+  const second = await getSavedPostsRaw('ana', 1, first.lastDoc!);
   expect(second.items.map((post) => post.postId)).toEqual(['p1']);
-  expect(second.hasMore).toBe(false);
-  expect(startAfter).toHaveBeenCalledWith(removed);
+  expect(readPostRecords).toHaveBeenLastCalledWith({ view: 'saved', limit: 1, cursor });
 });
 
-it('hides unfinished posts and propagates lookup failures instead of silently dropping them', async () => {
-  vi.mocked(getDocsFromServer).mockResolvedValue({ docs: [{ id: 'p1' }], size: 1 } as never);
-  vi.mocked(getDocFromServer).mockResolvedValueOnce({
-    id: 'p1',
-    exists: () => true,
-    data: () => ({ status: 'failed' }),
-  } as never);
-  expect((await getSavedPostsRaw('ana')).items).toEqual([]);
-  vi.mocked(getDocFromServer).mockRejectedValueOnce(new Error('permission-denied'));
+it('does not request another account and does not fall back to direct Firestore after an error', async () => {
+  await expect(getSavedPostsRaw('other')).rejects.toThrow();
+  expect(readPostRecords).not.toHaveBeenCalled();
+  vi.mocked(readPostRecords).mockRejectedValueOnce(new Error('permission-denied'));
   await expect(getSavedPostsRaw('ana')).rejects.toThrow('permission-denied');
 });

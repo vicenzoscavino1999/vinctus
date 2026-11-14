@@ -6,6 +6,7 @@ import UIKit
 @MainActor
 final class AuthViewModel: ObservableObject {
   @Published private(set) var isSignedIn = false
+  @Published private(set) var sessionUserID: String?
   @Published var errorMessage: String?
   @Published var infoMessage: String?
 
@@ -14,7 +15,7 @@ final class AuthViewModel: ObservableObject {
 
   var currentUserID: String? {
     if AppRepos.isDemo { return AppRepos.demoUserID }
-    return repo.currentUser?.uid
+    return sessionUserID
   }
 
   /// Whether the account can sign in with Apple, so deleting it must also revoke the Apple tokens.
@@ -27,6 +28,7 @@ final class AuthViewModel: ObservableObject {
     profileBootstrap: UserProfileBootstrapRepo = AppRepos.profileBootstrap()
   ) {
     self.repo = repo
+    self.sessionUserID = repo.currentUser?.uid
     self.profileBootstrap = profileBootstrap
     self.isSignedIn = repo.currentUser != nil
     if isSignedIn {
@@ -42,6 +44,7 @@ final class AuthViewModel: ObservableObject {
   }
 
   private func sessionChanged(signedIn: Bool) {
+    sessionUserID = signedIn ? repo.currentUser?.uid : nil
     guard !signedIn, isSignedIn else { return }
     AppLog.auth.info("session.endedByFirebase")
     isSignedIn = false
@@ -55,6 +58,7 @@ final class AuthViewModel: ObservableObject {
       do {
         AppLog.auth.info("signIn.email.start")
         try await repo.signIn(email: email, password: password)
+        sessionUserID = repo.currentUser?.uid
         isSignedIn = true
         ensureUserProfile()
         AppLog.auth.info("signIn.email.success")
@@ -72,6 +76,7 @@ final class AuthViewModel: ObservableObject {
       do {
         AppLog.auth.info("createAccount.email.start")
         try await repo.createAccount(email: email, password: password)
+        sessionUserID = repo.currentUser?.uid
         isSignedIn = true
         ensureUserProfile()
         AppLog.auth.info("createAccount.email.success")
@@ -91,6 +96,7 @@ final class AuthViewModel: ObservableObject {
       do {
         AppLog.auth.info("signIn.google.start")
         try await repo.signInWithGoogle(presentingViewController: presentingViewController)
+        sessionUserID = repo.currentUser?.uid
         isSignedIn = true
         ensureUserProfile()
         AppLog.auth.info("signIn.google.success")
@@ -119,6 +125,7 @@ final class AuthViewModel: ObservableObject {
           rawNonce: rawNonce,
           fullName: fullName
         )
+        sessionUserID = repo.currentUser?.uid
         isSignedIn = true
         ensureUserProfile()
         AppLog.auth.info("signIn.apple.success")
@@ -191,6 +198,7 @@ final class AuthViewModel: ObservableObject {
       do {
         AppLog.auth.info("signInAnonymously.start")
         try await repo.signInAnonymously()
+        sessionUserID = repo.currentUser?.uid
         isSignedIn = true
         AppLog.auth.info("signInAnonymously.success")
       } catch {
@@ -221,6 +229,7 @@ final class AuthViewModel: ObservableObject {
     infoMessage = nil
     do {
       try repo.signOut()
+      sessionUserID = nil
       isSignedIn = false
     } catch {
       AppLog.auth.error("signOut.failed errorType=\(AppLog.errorType(error), privacy: .public)")

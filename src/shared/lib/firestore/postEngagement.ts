@@ -1,7 +1,6 @@
 import {
   collection,
   doc,
-  getCountFromServer as _getCountFromServer,
   getDocFromServer,
   getDocs as _getDocs,
   limit,
@@ -19,12 +18,12 @@ import {
 } from 'firebase/firestore';
 import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
+import { readPostRecords, type PostPage } from '@/shared/lib/post-reads-client';
 import { getPost } from '@/shared/lib/firestore/posts';
 import { getUserProfile } from '@/shared/lib/firestore/profile';
 import { COLLECTIONS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 const DEFAULT_LIMIT = 30;
-const ACTIVITY_SNIPPET_LIMIT = 160;
 
 type ActivityTypeModel = 'post_like' | 'post_comment' | 'follow';
 
@@ -86,15 +85,6 @@ export interface PostCommentRead {
 
 const notificationsCollection = collection(db, COLLECTIONS.notifications);
 
-const trimText = (
-  value: string | null | undefined,
-  limit = ACTIVITY_SNIPPET_LIMIT,
-): string | null => {
-  if (!value) return null;
-  if (value.length <= limit) return value;
-  return `${value.slice(0, limit).trim()}...`;
-};
-
 const toDate = (value: unknown): Date | undefined => {
   if (value instanceof Timestamp) return value.toDate();
   if (value instanceof Date) return value;
@@ -125,11 +115,6 @@ const getDocs = ((...args: unknown[]) => {
   trackFirestoreRead('firestore.getDocs', Math.max(1, safeSize));
   return result;
 }) as typeof _getDocs;
-
-const getCountFromServer = ((...args: unknown[]) => {
-  trackFirestoreRead('firestore.getCountFromServer');
-  return (_getCountFromServer as (...innerArgs: unknown[]) => unknown)(...args);
-}) as typeof _getCountFromServer;
 
 const setDoc = ((...args: unknown[]) => {
   trackFirestoreWrite('firestore.setDoc');
@@ -257,58 +242,38 @@ export async function addPostComment(
 
 export async function getPostComments(
   postId: string,
-  limitCount: number = 50,
-  lastDoc?: DocumentSnapshot,
-): Promise<PaginatedResultModel<PostCommentRead>> {
-  let q = query(
-    collection(db, COLLECTIONS.posts, postId, SUBCOLLECTIONS.comments),
-    orderBy('createdAt', 'desc'),
-    limit(limitCount + 1),
-  );
-
-  if (lastDoc) {
-    q = query(q, startAfter(lastDoc));
-  }
-
-  const snapshot = await getDocs(q);
-  const hasMore = snapshot.docs.length > limitCount;
-  const docs = hasMore ? snapshot.docs.slice(0, limitCount) : snapshot.docs;
-
-  const items = docs.map((docSnap) => {
-    const data = docSnap.data();
-    const createdAt = toDate(data.createdAt) || new Date();
-    return {
-      id: docSnap.id,
-      postId: data.postId || postId,
-      authorId: data.authorId || '',
-      authorSnapshot: {
-        displayName: data.authorSnapshot?.displayName || 'Usuario',
-        photoURL: data.authorSnapshot?.photoURL || null,
-      },
-      text: data.text || '',
-      createdAt,
-    } as PostCommentRead;
+  limitCount = 30,
+  lastDoc?: string,
+): Promise<PostPage<PostCommentRead>> {
+  const page = await readPostRecords({
+    view: 'comments',
+    id: postId,
+    limit: limitCount,
+    ...(lastDoc ? { cursor: lastDoc } : {}),
   });
-
-  return {
-    items,
-    lastDoc: docs[docs.length - 1] || null,
-    hasMore,
-  };
+  const items = page.items.map((data): PostCommentRead => {
+    const author = data.authorSnapshot as { displayName?: string; photoURL?: string | null } | null;
+    return {
+      id: String(data.id),
+      postId,
+      authorId: typeof data.authorId === 'string' ? data.authorId : '',
+      authorSnapshot: {
+        displayName: author?.displayName || 'Usuario',
+        photoURL: author?.photoURL || null,
+      },
+      text: typeof data.text === 'string' ? data.text : '',
+      createdAt: toDate(data.createdAt) || new Date(),
+    };
+  });
+  return { items, lastDoc: page.lastDoc, hasMore: page.hasMore };
 }
 
 export async function getPostCommentCount(postId: string): Promise<number> {
-  const snapshot = await getCountFromServer(
-    collection(db, COLLECTIONS.posts, postId, SUBCOLLECTIONS.comments),
-  );
-  return snapshot.data().count;
+  return (await getPost(postId))?.commentCount ?? 0;
 }
 
 export async function getPostLikeCount(postId: string): Promise<number> {
-  const snapshot = await getCountFromServer(
-    collection(db, COLLECTIONS.posts, postId, SUBCOLLECTIONS.likes),
-  );
-  return snapshot.data().count;
+  return (await getPost(postId))?.likeCount ?? 0;
 }
 
 export async function getUserActivity(
@@ -374,7 +339,7 @@ export async function createPostLikeActivity(input: {
       fromUserName: input.fromUserName ?? null,
       fromUserPhoto: input.fromUserPhoto ?? null,
       postId: input.postId,
-      postSnippet: trimText(input.postContent),
+      postSnippet: null,
       commentText: null,
       createdAt: serverTimestamp(),
       read: false,
@@ -404,8 +369,8 @@ export async function createPostCommentActivity(input: {
     fromUserName: input.fromUserName ?? null,
     fromUserPhoto: input.fromUserPhoto ?? null,
     postId: input.postId,
-    postSnippet: trimText(input.postContent),
-    commentText: trimText(input.commentText, 220),
+    postSnippet: null,
+    commentText: null,
     createdAt: serverTimestamp(),
     read: false,
   } as ActivityWriteModel;

@@ -84,6 +84,7 @@ test('@smoke recovers a partial photo/video/document upload without duplicate po
   const list = async () => {
     const response = await page.request.get(
       `http://127.0.0.1:8080/v1/projects/${project}/databases/(default)/documents/posts`,
+      { headers: { Authorization: 'Bearer owner' } },
     );
     expect(response.ok()).toBe(true);
     const data = await response.json();
@@ -135,13 +136,14 @@ test('@smoke recovers a partial photo/video/document upload without duplicate po
       .poll(() => player.evaluate((node: HTMLVideoElement) => node.currentTime))
       .toBeGreaterThan(0);
     await player.evaluate((node: HTMLVideoElement) => node.pause());
-    await expect(modal.getByRole('link', { name: /notes.pdf/ })).toHaveAttribute(
-      'href',
-      media[2].url.stringValue,
-    );
-    const downloaded = await bob.request.get(media[2].url.stringValue);
-    expect(downloaded.ok()).toBe(true);
-    expect(await downloaded.body()).toEqual(document.buffer);
+    expect(media[2].url.stringValue).toMatch(/^post-media:posts\//);
+    const downloadEvent = bob.waitForEvent('download');
+    await modal.getByRole('link', { name: /notes.pdf/ }).click();
+    const downloaded = await downloadEvent;
+    const downloadPath = await downloaded.path();
+    expect(downloadPath).toBeTruthy();
+    const { readFile } = await import('node:fs/promises');
+    expect(await readFile(downloadPath!)).toEqual(document.buffer);
     const screenshot = info.outputPath('post-media-after-retry.png');
     await bob.screenshot({ path: screenshot });
     await info.attach('post-media-after-retry', { path: screenshot, contentType: 'image/png' });

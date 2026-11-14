@@ -198,7 +198,7 @@ final class PostSubmissionTests: XCTestCase {
   func testOlderCommentsDeduplicateAndRetryTheSameCursorAfterFailure() async {
     let repo = PendingCommentsRepo()
     let vm = PostDetailViewModel(postID: "p1", repo: repo)
-    let cursor = PostCommentsCursor(createdAt: Timestamp(date: Date()), commentID: "c2")
+    let cursor = PostCommentsCursor(token: "c2")
     let newest = PostComment(id: "c3", authorID: "a", authorName: "Ana", text: "Reciente", createdAt: nil)
     let older = PostComment(id: "c2", authorID: "a", authorName: "Ana", text: "Anterior", createdAt: nil)
     repo.fetchHandler = {
@@ -226,7 +226,7 @@ final class PostSubmissionTests: XCTestCase {
   func testRefreshInvalidatesAnOlderCommentsPageAndBlocksDoubleLoad() async {
     let repo = PendingCommentsRepo()
     let vm = PostDetailViewModel(postID: "p1", repo: repo)
-    let cursor = PostCommentsCursor(createdAt: Timestamp(date: Date()), commentID: "old")
+    let cursor = PostCommentsCursor(token: "old")
     repo.fetchHandler = { PostCommentsPage(items: [], isFromCache: false, nextCursor: cursor, hasMore: true) }
     await vm.refreshComments()
     let started = expectation(description: "Older comments page")
@@ -253,7 +253,7 @@ final class PostSubmissionTests: XCTestCase {
   func testSendingWhileAnOlderPageIsLoadingRefreshesToTheNewComment() async {
     let repo = PendingCommentsRepo()
     let vm = PostDetailViewModel(postID: "p1", repo: repo)
-    let cursor = PostCommentsCursor(createdAt: Timestamp(date: Date()), commentID: "old")
+    let cursor = PostCommentsCursor(token: "old")
     repo.fetchHandler = { PostCommentsPage(items: [], isFromCache: false, nextCursor: cursor, hasMore: true) }
     await vm.refreshComments()
     let started = expectation(description: "Older comments page")

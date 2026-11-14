@@ -1,24 +1,23 @@
 import { z } from 'zod';
-import type { DocumentSnapshot } from 'firebase/firestore';
 import type { CreatePostUploadingInput } from '@/shared/lib/firestore-post-upload';
 import type { CreateStoryInput, StoryMediaType, StoryRead } from '@/shared/lib/firestore/stories';
 import type { PostCommentRead } from '@/shared/lib/firestore/postEngagement';
 import type { PostRead } from '@/shared/lib/firestore/posts';
-import type { PaginatedResult } from '@/shared/lib/firestore/sharedTypes';
+import type { PostPage, PostReadCursor } from '@/shared/lib/post-reads-client';
 import { idSchema, limitSchema, urlSchema } from '@/shared/lib/validators';
 import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 export type {
   CreatePostUploadingInput,
   CreateStoryInput,
-  PaginatedResult,
   PostCommentRead,
   PostRead,
   StoryMediaType,
   StoryRead,
 };
 
-export type PostCursor = DocumentSnapshot | undefined | null;
+export type PaginatedResult<T> = PostPage<T>;
+export type PostCursor = PostReadCursor | undefined | null;
 
 export const postIdSchema = idSchema;
 export const storyIdSchema = idSchema;

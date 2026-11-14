@@ -1,3 +1,5 @@
+import { useAuth } from '@/context/auth';
+import { PostImage } from '@/features/posts/components/ProtectedPostMedia';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Film, Image as ImageIcon, Loader2 } from 'lucide-react';
@@ -46,8 +48,10 @@ const isReadyPost = (post: ProfilePost): boolean => {
   return !post.status || post.status === 'ready';
 };
 
-const ProfilePostsGrid = ({ userId, canView = true }: ProfilePostsGridProps) => {
+const ProfilePostsSession = ({ userId, canView = true }: ProfilePostsGridProps) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [loadedReader, setLoadedReader] = useState<string | null | undefined>(undefined);
   const [posts, setPosts] = useState<ProfilePost[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -71,16 +75,20 @@ const ProfilePostsGrid = ({ userId, canView = true }: ProfilePostsGridProps) => 
 
     const loadInitial = async () => {
       setLoading(true);
+      setPosts([]);
+      setLoadedReader(undefined);
       setError(null);
       try {
         const result = await getPostsByUser(userId, PAGE_SIZE);
         if (!active) return;
         const visible = result.items.filter((item) => isReadyPost(item as ProfilePost));
         setPosts(visible as ProfilePost[]);
+        setLoadedReader(user?.uid ?? null);
         setCursor(result.lastDoc);
         setHasMore(result.hasMore);
       } catch (err) {
         if (!active) return;
+        setLoadedReader(user?.uid ?? null);
         const message = err instanceof Error ? err.message : 'No se pudieron cargar publicaciones.';
         setError(message);
       } finally {
@@ -93,7 +101,7 @@ const ProfilePostsGrid = ({ userId, canView = true }: ProfilePostsGridProps) => 
     return () => {
       active = false;
     };
-  }, [userId, canView]);
+  }, [userId, canView, user?.uid]);
 
   const loadMore = async () => {
     if (!userId || !hasMore || loadingMore) return;
@@ -131,7 +139,7 @@ const ProfilePostsGrid = ({ userId, canView = true }: ProfilePostsGridProps) => 
     <section>
       <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-6">Publicaciones</h2>
 
-      {loading ? (
+      {loading || loadedReader !== (user?.uid ?? null) ? (
         <div className="flex items-center gap-2 text-sm text-neutral-500">
           <Loader2 size={16} className="animate-spin" />
           Cargando publicaciones...
@@ -169,7 +177,7 @@ const ProfilePostsGrid = ({ userId, canView = true }: ProfilePostsGridProps) => 
                   className="group relative aspect-square overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900/40 text-left"
                 >
                   {image ? (
-                    <img
+                    <PostImage
                       src={image.url}
                       alt={displayText || 'Publicacion'}
                       className="absolute inset-0 w-full h-full object-cover"
@@ -243,4 +251,13 @@ const ProfilePostsGrid = ({ userId, canView = true }: ProfilePostsGridProps) => 
   );
 };
 
+const ProfilePostsGrid = (props: ProfilePostsGridProps) => {
+  const { user } = useAuth();
+  return (
+    <ProfilePostsSession
+      key={JSON.stringify([user?.uid ?? null, props.userId, props.canView])}
+      {...props}
+    />
+  );
+};
 export default ProfilePostsGrid;

@@ -10,6 +10,8 @@ struct PostMediaView: View {
           Label("Ver en YouTube", systemImage: "play.rectangle")
             .padding(.vertical, 12)
         }
+      } else if item.url.hasPrefix(PostMediaDownload.prefix) {
+        ProtectedPostAttachment(item: item)
       } else {
         ChatAttachmentView(attachment: ChatAttachment(
           kind: item.type == "image" ? "image" : "file", url: item.url, path: item.path,

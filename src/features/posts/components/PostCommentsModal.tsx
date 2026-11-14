@@ -1,3 +1,4 @@
+import { PostDownload, PostImage, PostVideo } from '@/features/posts/components/ProtectedPostMedia';
 import { useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, Heart, Loader2, MessageCircle, User, FileText } from 'lucide-react';
@@ -209,7 +210,7 @@ const PostCommentsSession = ({
                     {post.media
                       .filter((item) => item.type === 'image')
                       .map((item, index) => (
-                        <img
+                        <PostImage
                           key={`${item.path}-${index}`}
                           src={item.url}
                           alt="Adjunto"
@@ -243,7 +244,7 @@ const PostCommentsSession = ({
                         }
 
                         return (
-                          <video
+                          <PostVideo
                             key={`${item.path}-${index}`}
                             src={item.url}
                             controls
@@ -260,9 +261,10 @@ const PostCommentsSession = ({
                     {post.media
                       .filter((item) => item.type === 'file')
                       .map((item, index) => (
-                        <a
+                        <PostDownload
                           key={`${item.path}-${index}`}
                           href={item.url}
+                          download={item.fileName || 'archivo'}
                           target="_blank"
                           rel="noreferrer"
                           className="flex items-center justify-between gap-3 bg-neutral-900/60 border border-neutral-800 rounded-lg px-3 py-2 hover:border-neutral-700 transition-colors"
@@ -274,7 +276,7 @@ const PostCommentsSession = ({
                           <div className="flex items-center gap-2 text-xs text-neutral-500">
                             {item.size ? formatBytes(item.size) : ''}
                           </div>
-                        </a>
+                        </PostDownload>
                       ))}
                   </div>
                 )}
@@ -303,7 +305,7 @@ const PostCommentsSession = ({
 
             {!hasMedia && post.imageUrl && (
               <div className="relative rounded-xl overflow-hidden mb-8 aspect-video bg-surface-overlay">
-                <img src={post.imageUrl} alt="Post" className="w-full h-full object-cover" />
+                <PostImage src={post.imageUrl} alt="Post" className="w-full h-full object-cover" />
               </div>
             )}
 

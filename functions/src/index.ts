@@ -18,6 +18,12 @@ import { messageReportKey, moderateUserText, newlyMatchedTerms } from './moderat
 import { clearLastMessagePreview } from './moderationActions';
 import { reconcileUserPostCount } from './postCounts';
 import { reconcilePostLikes, reconcilePostComments } from './postEngagementCounts';
+export {
+  readPosts,
+  readPostMedia,
+  onPostMediaFinalized,
+  onPostMediaMetadataUpdated,
+} from './postReadEndpoints';
 import { COLLECTIONS, SERVER_COLLECTIONS, SUBCOLLECTIONS } from './firestoreContract';
 
 // Initialize Firebase Admin

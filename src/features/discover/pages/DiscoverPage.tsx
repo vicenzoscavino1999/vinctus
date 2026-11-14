@@ -1,3 +1,4 @@
+import { PostImage } from '@/features/posts/components/ProtectedPostMedia';
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
@@ -404,7 +405,7 @@ const getTrendPreviewForCategory = async (
   }
 };
 
-const DiscoverPage = () => {
+const DiscoverSession = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchQuery = searchParams.get('q') || '';
@@ -462,6 +463,7 @@ const DiscoverPage = () => {
   const [communityHasMore, setCommunityHasMore] = useState(true);
   const [communityLoading, setCommunityLoading] = useState(false);
   const [communityReady, setCommunityReady] = useState(false);
+  const [communityReader, setCommunityReader] = useState<string | null | undefined>(undefined);
   const [youtubeQueryInput, setYoutubeQueryInput] = useState(YOUTUBE_FALLBACK_QUERY);
   const [youtubeQuery, setYoutubeQuery] = useState(YOUTUBE_FALLBACK_QUERY);
   const [youtubePublications, setYoutubePublications] = useState<PublicationStreamItem[]>([]);
@@ -604,12 +606,17 @@ const DiscoverPage = () => {
 
   // Grow the rendered feed only once pending loads settle, and only by appending: items the user
   // already scrolled past never move, so scrolling back up shows the same feed.
+  const publicationScope = JSON.stringify([user?.uid ?? null, youtubeQuery]);
   const publicationSourcesSettled =
-    communityReady && !communityLoading && youtubeResultsQuery === youtubeQuery && !youtubeLoading;
+    communityReader === (user?.uid ?? null) &&
+    communityReady &&
+    !communityLoading &&
+    youtubeResultsQuery === youtubeQuery &&
+    !youtubeLoading;
   if (publicationSourcesSettled) {
     const nextShownPublications = appendToStream(
       shownPublications,
-      youtubeQuery,
+      publicationScope,
       candidatePublicationStream,
       publicationTargetCount,
       getPublicationDedupeKey,
@@ -618,7 +625,8 @@ const DiscoverPage = () => {
       setShownPublications(nextShownPublications);
     }
   }
-  const publicationStream = shownPublications.scope === youtubeQuery ? shownPublications.items : [];
+  const publicationStream =
+    shownPublications.scope === publicationScope ? shownPublications.items : [];
 
   const hasMoreEditorial = visiblePublicationCount < PUBLICATION_MAX_ITEMS;
   const hasMorePublications = communityHasMore || youtubeHasMore || hasMoreEditorial;
@@ -627,18 +635,24 @@ const DiscoverPage = () => {
     let active = true;
 
     const loadInitialCommunityPublications = async () => {
+      setCommunityReader(undefined);
       setCommunityLoading(true);
+      setCommunityPublications([]);
+      setCommunityCursor(null);
+      setCommunityHasMore(false);
       try {
         const result = await getGlobalFeed(PUBLICATION_BATCH_SIZE);
         if (!active) return;
         const mapped = result.items.map((post, index) => buildCommunityPublication(post, index));
         setCommunityPublications(mapped);
+        setCommunityReader(user?.uid ?? null);
         setCommunityCursor(result.lastDoc ?? null);
         setCommunityHasMore(result.hasMore);
       } catch (error) {
         console.error('Error loading community publications for Discover:', error);
         if (!active) return;
         setCommunityPublications([]);
+        setCommunityReader(user?.uid ?? null);
         setCommunityCursor(null);
         setCommunityHasMore(false);
       } finally {
@@ -653,7 +667,7 @@ const DiscoverPage = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [user?.uid]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -1376,7 +1390,7 @@ const DiscoverPage = () => {
           onClick={() => openPublicationFromDiscover(publication)}
           className="group relative block w-full text-left"
         >
-          <img
+          <PostImage
             src={publication.image}
             alt={publication.title}
             className="h-[280px] w-full object-cover md:h-[360px] transition-transform duration-700 group-hover:scale-[1.02]"
@@ -2137,4 +2151,8 @@ const DiscoverPage = () => {
   );
 };
 
+const DiscoverPage = () => {
+  const { user } = useAuth();
+  return <DiscoverSession key={user?.uid ?? 'anonymous'} />;
+};
 export default DiscoverPage;

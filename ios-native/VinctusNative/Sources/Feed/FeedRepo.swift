@@ -45,7 +45,7 @@ struct FeedItem: Identifiable, Hashable {
 }
 
 struct FeedCursor {
-  fileprivate let lastDocument: QueryDocumentSnapshot
+  let token: String
 }
 
 struct FeedPage {
@@ -74,56 +74,13 @@ enum FeedRepoError: LocalizedError {
 }
 
 final class FirebaseFeedRepo: FeedRepo {
-  private let db: Firestore?
-
-  init(db: Firestore? = nil) {
-    self.db = db
-  }
-
   func fetchFeedPage(limit: Int, after cursor: FeedCursor?) async throws -> FeedPage {
-    guard FirebaseApp.app() != nil else { throw FeedRepoError.firebaseNotConfigured }
-
-    let db = self.db ?? Firestore.firestore()
-    let pageSize = max(1, min(30, limit))
-
-    var query = db.collection(FirestoreCollections.posts)
-      .order(by: "createdAt", descending: true)
-      .limit(to: pageSize + 1)
-
-    if let cursor {
-      query = query.start(afterDocument: cursor.lastDocument)
-    }
-
-    do {
-      let snapshot = try await query.getDocuments()
-      return buildPage(snapshot: snapshot, pageSize: pageSize)
-    } catch {
-      // Only first page tries cache fallback. Paginated requests should fail fast.
-      guard cursor == nil else { throw error }
-      let cacheSnapshot = try await query.getDocuments(source: .cache)
-      return buildPage(snapshot: cacheSnapshot, pageSize: pageSize)
-    }
-  }
-
-  private func buildPage(snapshot: QuerySnapshot, pageSize: Int) -> FeedPage {
-    let docs = snapshot.documents
-    let pageDocs = Array(docs.prefix(pageSize))
-    let hasMore = docs.count > pageSize
-
-    let items = pageDocs.filter(Self.isPublished).map(Self.feedItem(from:))
-
-    let nextCursor: FeedCursor?
-    if hasMore, let lastVisible = pageDocs.last {
-      nextCursor = FeedCursor(lastDocument: lastVisible)
-    } else {
-      nextCursor = nil
-    }
-
+    let result = try await PostReadClient.read(view: "feed", limit: max(1, min(30, limit)), cursor: cursor?.token)
     return FeedPage(
-      items: items,
-      nextCursor: nextCursor,
-      hasMore: hasMore,
-      isFromCache: snapshot.metadata.isFromCache
+      items: result.items.map { Self.feedItem(id: $0.id, data: $0.fields) },
+      nextCursor: result.cursor.map { FeedCursor(token: $0) },
+      hasMore: result.hasMore,
+      isFromCache: false
     )
   }
 
@@ -134,8 +91,10 @@ final class FirebaseFeedRepo: FeedRepo {
   }
 
   static func feedItem(from doc: DocumentSnapshot) -> FeedItem {
-    let data = doc.data() ?? [:]
+    feedItem(id: doc.documentID, data: doc.data() ?? [:])
+  }
 
+  static func feedItem(id: String, data: [String: Any]) -> FeedItem {
     let authorSnapshot = data["authorSnapshot"] as? [String: Any]
     let authorName = FirestoreValue.string(authorSnapshot?["displayName"])
       ?? FirestoreValue.string(data["authorName"])
@@ -146,7 +105,7 @@ final class FirebaseFeedRepo: FeedRepo {
       ?? ""
 
     var item = FeedItem(
-      id: doc.documentID,
+      id: id,
       authorID: FirestoreValue.string(data["authorId"]) ?? FirestoreValue.string(data["authorID"]),
       authorName: authorName,
       text: text,

@@ -428,3 +428,100 @@ hay un grupo, también comprueban su documento y la membresía. No añaden liste
 ni campos o índices nuevos. Deben desplegarse tras validar juntos los clientes
 web/iOS y los casos de grupo en staging. No se desplegaron reglas ni otra versión
 de producción o TestFlight.
+
+## Séptima etapa: privacidad de lecturas y adjuntos
+
+`readPosts` aplica la misma política a feed, categorías, perfil, grupo, guardados,
+post individual, comentarios y resumen semanal. Una publicación debe estar
+publicada, tener un perfil de autor existente y cumplir **ambas** restricciones:
+una cuenta privada requiere autor o seguidor aprobado; un grupo privado exige
+propietario o documento real de miembro. Los perfiles eliminados no conservan
+permisos privados. Los bloqueos se comprueban en ambas direcciones para la cuenta
+autenticada. El contenido de cuentas y grupos públicos conserva lectura anónima;
+un bloqueo no puede ocultar contenido público a alguien que cierre sesión.
+
+Las reglas deniegan listas directas de posts, comentarios y likes. Las lecturas
+individuales aplican la política; se conservan las lecturas propias necesarias
+para reintentos y limpieza de publicaciones/comentarios/reacciones. Los índices
+personales de guardados siguen siendo privados. Esta etapa protege el contenido
+de publicaciones: no cambia el directorio de grupos, perfiles públicos ni fotos
+de perfil. YouTube sigue siendo contenido alojado por un tercero.
+
+Los listados web e iOS usan el callable, sin recurrir a la caché Firestore si el
+servidor falla. El cambio de cuenta reinicia pantallas y descarta respuestas
+tardías. Los cursores son identificadores aleatorios, guardados solo en el servidor
+en `_post_read_cursors`, vinculados a usuario, vista, filtro y tamaño de página.
+Caducan a los 30 minutos y tienen TTL configurado. No exponen IDs ni fechas de filas
+ocultas. Pueden avanzar sobre páginas sin contenido visible; el cliente debe
+conservar el cursor aunque la página esté vacía. Los guardados avanzan por su
+índice original aunque se hayan eliminado los posts.
+
+Los archivos nuevos se guardan como `post-media:posts/...` y las reglas rechazan
+URLs de descarga persistidas, excepto los embeds canónicos de YouTube. La respuesta
+del servidor reconstruye esos marcadores desde rutas del mismo autor/post; omite
+medios sin una ruta válida. `readPostMedia` exige que la ruta esté listada en el
+post y reautoriza cada HEAD y GET. Usa bearer en cabecera, ETag, generación fija,
+rangos máximos de 8 MiB, comprobación de tamaño y `private,no-store`. No entrega
+URLs firmadas ni tokens de Storage. Las lecturas directas de objetos de posts se
+limitan al autor; los demás lectores pasan por el proxy. Los tokens de cuentas
+suspendidas o revocados se rechazan. La web cancela descargas y revoca Blob URLs
+al cambiar de cuenta/salir; iOS usa archivos temporales, los elimina al cerrar y
+pausa el video al salir o pasar a segundo plano. Las notificaciones nuevas de
+interacciones llevan `postSnippet` y `commentText` nulos.
+
+Coste: una página devuelve hasta 50 elementos y recorre como máximo 150 filas
+(guardados: tamaño solicitado más una fila de sondeo). Cada petición reutiliza
+sus lecturas de perfiles, bloqueos, grupos y membresías, nunca entre peticiones.
+Las comprobaciones se realizan en lotes de diez. Un cursor añade una escritura y
+una lectura en la página siguiente; TTL añade su eliminación. El resumen semanal
+inspecciona hasta 200 posts, por lo que es un conteo acotado, no un agregado exacto
+para grupos con mayor actividad. Cada fragmento multimedia vuelve a leer permisos
+y metadatos y consume transferencia de Functions/Storage. Descargar videos completos
+antes de reproducirlos aumenta latencia y memoria temporal; el máximo es 100 MiB.
+
+Validación local: 474 pruebas web, 70 API/backend, 77 reglas y ocho pruebas nuevas
+con Auth/Firestore/Storage/Functions reales en emuladores. Cubren privacidad
+combinada, revocación, bloqueos, cuentas suspendidas, cursores caducados/cruzados,
+105 comentarios con fechas iguales y borrado del cursor, guardados huérfanos,
+denegación de consultas directas, descargas de 9 MiB, ETag/rangos y revocación entre
+fragmentos. Se incorporan pruebas del decodificador Swift, lectura nativa tras
+expulsión y un recorrido Chromium de privacidad; consultar el PR para el resultado
+final de CI y de esas plataformas.
+
+### Despliegue coordinado pendiente
+
+No desplegar solo las reglas ni solo uno de los clientes: los clientes antiguos
+consultan directamente Firestore y usan URLs públicas. Preparar staging aislado,
+compilar Functions, crear índices/TTL y actualizar juntos web/iOS, Functions y
+reglas. Los triggers nuevos `onPostMediaFinalized` y `onPostMediaMetadataUpdated`
+eliminan `firebaseStorageDownloadTokens` y marcan objetos nuevos con no-store.
+Un trigger es asíncrono: no corrige por sí solo los objetos anteriores.
+
+Auditar explícitamente el proyecto y bucket antes de declarar confidencialidad:
+
+```sh
+node scripts/migrate-post-read-privacy.mjs --project PROJECT --bucket BUCKET
+```
+
+El comando es de solo lectura por defecto, requiere credenciales del proyecto,
+rechaza buckets con IAM público y muestra solo contadores. Recorre objetos (incluidas versiones anteriores) y
+documentos en páginas de 200. El modo de aplicación requiere `--apply
+--acknowledge-client-upgrade`; revoca tokens anteriores, cambia caché, convierte
+URLs válidas en marcadores y borra fragmentos antiguos de notificaciones. Las
+escrituras usan precondiciones para no pisar cambios concurrentes. No se ha
+ejecutado contra producción. Un resultado `unsupportedMedia > 0` sale con código
+2: resolver esos registros antes de publicar. Repetir la auditoría tras aplicar
+y comprobar con otra cuenta que los enlaces viejos no sirven y que perder el
+seguimiento/membresía impide nuevas lecturas y descargas. Verificar además las
+políticas de acceso y versiones antiguas de objetos del bucket, si existen.
+
+El emulador de Storage conserva tokens en un campo interno y regenera el último
+al borrarlo. Solo en loopback y `vinctus-dev`, el trigger rota una vez y marca la
+operación para evitar recursión. Las pruebas confirman la revocación del token
+anterior; la ausencia total de tokens debe verificarse en staging/producción.
+El código de producción aplica una eliminación de metadatos con precondición.
+
+Las copias ya descargadas, capturas y cachés de contenido que antes era público
+no pueden revocarse retroactivamente. La retirada se aplica a nuevas peticiones;
+no se promete borrar de una pantalla contenido ya autorizado. Falta staging y su
+periodo de observación, despliegue coordinado, nuevo TestFlight y prueba física.

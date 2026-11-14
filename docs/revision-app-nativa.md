@@ -132,3 +132,11 @@ borrado y añade pruebas de integración nativas para estos permisos. La privaci
 de lectura del feed y de los adjuntos sigue pendiente; esta etapa no convierte
 las publicaciones de grupos privados en contenido confidencial. Las reglas
 continúan sin desplegarse.
+
+La séptima etapa adapta las lecturas de publicaciones y comentarios a un servicio
+compartido que aplica privacidad de cuentas, membresía real y bloqueos. La web y
+la app nativa usan cursores opacos y descargan adjuntos con autorización por cada
+parte, sin entregar enlaces públicos. Incluye migración de enlaces antiguos y
+fragmentos de notificaciones. Las pruebas locales y la CI se documentan en el
+PR; la protección no está activa en producción hasta completar el despliegue
+coordinado y la migración. El módulo y la prueba en iPhone real siguen abiertos.

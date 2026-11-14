@@ -40,7 +40,10 @@ struct ProfileUserSummary: Identifiable, Hashable {
 
 /// Where the next page of a profile list starts. Opaque outside the repo.
 struct ProfileListCursor {
-  fileprivate let lastDocument: DocumentSnapshot
+  fileprivate let lastDocument: DocumentSnapshot?
+  fileprivate let postToken: String?
+  init(lastDocument: DocumentSnapshot) { self.lastDocument = lastDocument; self.postToken = nil }
+  init(postToken: String) { self.lastDocument = nil; self.postToken = postToken }
 }
 
 /// One page of a profile list; `next` is nil on the last page.
@@ -201,14 +204,10 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
 
   /// Mirrors `getPostsByUser` in `src/shared/lib/firestore/posts.ts`.
   func fetchPosts(uid: String, limit: Int, after cursor: ProfileListCursor?) async throws -> ProfileListPage<FeedItem> {
-    let query = try database().collection(FirestoreCollections.posts)
-      .whereField("authorId", isEqualTo: uid)
-      .order(by: "createdAt", descending: true)
-    let snapshot = try await page(query, limit: limit, after: cursor).getDocuments()
-    return ProfileListPage(
-      items: snapshot.documents.filter(FirebaseFeedRepo.isPublished).map(FirebaseFeedRepo.feedItem(from:)),
-      next: Self.nextCursor(snapshot, limit: limit)
-    )
+    if let cursor, cursor.postToken == nil { throw PostReadError.invalidResponse }
+    let result = try await PostReadClient.read(view: "author", id: uid, limit: limit, cursor: cursor?.postToken)
+    return ProfileListPage(items: result.items.map { FirebaseFeedRepo.feedItem(id: $0.id, data: $0.fields) },
+      next: result.cursor.map { ProfileListCursor(postToken: $0) })
   }
 
   // MARK: Follows
@@ -386,10 +385,11 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
 
   // MARK: Helpers
 
-  private func page(_ query: Query, limit: Int, after cursor: ProfileListCursor?) -> Query {
+  private func page(_ query: Query, limit: Int, after cursor: ProfileListCursor?) throws -> Query {
     let limited = query.limit(to: limit)
     guard let cursor else { return limited }
-    return limited.start(afterDocument: cursor.lastDocument)
+    guard let document = cursor.lastDocument else { throw PostReadError.invalidResponse }
+    return limited.start(afterDocument: document)
   }
 
   /// A full page may have more after it; a short one is the last.

@@ -231,17 +231,11 @@ private struct FeedCard: View {
           if let name = item.fileName { Label(name, systemImage: "doc").font(.caption).lineLimit(1) }
         }
 
-        if let preview = item.previewImageURL, let url = URL(string: preview) {
+        if let preview = item.previewImageURL {
           SwiftUI.Color.clear
             .aspectRatio(4 / 3, contentMode: .fit)
             .overlay {
-              AsyncImage(url: url) { phase in
-                if case .success(let image) = phase {
-                  image.resizable().scaledToFill()
-                } else {
-                  VinctusTokens.Color.surface2
-                }
-              }
+              PostImageView(source: preview)
             }
             .overlay {
               if item.hasVideo {

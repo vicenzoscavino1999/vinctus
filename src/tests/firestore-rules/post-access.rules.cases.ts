@@ -26,6 +26,9 @@ async function seed(post: Record<string, unknown> = {}, group?: 'public' | 'priv
   const env = await getRulesTestEnv();
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
+    for (const uid of [author, viewer, 'owner']) {
+      await db.doc(`users_public/${uid}`).set({ displayName: uid, accountVisibility: 'public' });
+    }
     await db.doc('posts/post').set({ authorId: author, groupId: null, ...post });
     if (group) await db.doc('groups/group').set({ ownerId: 'owner', visibility: group });
   });
@@ -63,6 +66,59 @@ describe('Post write authorization at the server boundary', () => {
   }, 30000);
   beforeEach(clearRulesTestData);
   afterAll(cleanupRulesTestEnv);
+
+  it('protects direct reads as private-group membership and private-account followers change', async () => {
+    const db = await seed({ groupId: 'group' }, 'private');
+    await adminWrite(`users_public/${author}`, { accountVisibility: 'private' });
+    await assertFails(db.doc('posts/post').get());
+    await adminWrite(`groups/group/members/${viewer}`, { uid: viewer });
+    await assertFails(db.doc('posts/post').get());
+    await adminWrite(`users/${author}/followers/${viewer}`, { uid: viewer });
+    await assertSucceeds(db.doc('posts/post').get());
+    await adminWrite(`users_public/${viewer}`, null);
+    await assertFails(db.doc('posts/post').get());
+    await adminWrite(`users_public/${viewer}`, { accountVisibility: 'public' });
+    await adminWrite(`groups/group/members/${viewer}`, null);
+    await assertFails(db.doc('posts/post').get());
+    await assertFails(db.collection('posts').where('groupId', '==', 'group').get());
+  });
+
+  it('accepts protected media markers and canonical YouTube but denies persisted download tokens', async () => {
+    const db = await seed();
+    await assertSucceeds(db.doc('posts/new').set(draft('new')));
+    const path = `posts/${viewer}/new/images/test.png`;
+    const media = {
+      type: 'image',
+      path,
+      url: `https://example.test/image?token=secret`,
+      contentType: 'image/png',
+    };
+    await assertFails(
+      db.doc('posts/new').update({ status: 'ready', media: [media], updatedAt: timestamp() }),
+    );
+    await assertSucceeds(
+      db.doc('posts/new').update({
+        status: 'ready',
+        media: [{ ...media, url: `post-media:${path}` }],
+        updatedAt: timestamp(),
+      }),
+    );
+    await assertSucceeds(db.doc('posts/youtube').set(draft('youtube')));
+    await assertSucceeds(
+      db.doc('posts/youtube').update({
+        status: 'ready',
+        media: [
+          {
+            type: 'video',
+            path: `posts/${viewer}/youtube/videos/youtube-dQw4w9WgXcQ`,
+            url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+            contentType: 'video/youtube',
+          },
+        ],
+        updatedAt: timestamp(),
+      }),
+    );
+  });
 
   it.each(['public', 'private'] as const)(
     'requires actual membership to publish in a %s group',

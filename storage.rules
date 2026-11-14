@@ -138,7 +138,9 @@ service firebase.storage {
     
     // Post images: posts/{userId}/{postId}/images/{filename}
     match /posts/{userId}/{postId}/images/{filename} {
-      allow read: if true;
+      // Readers use the authorized media endpoint. The uploader retains access
+      // for resumable uploads/metadata checks; download tokens are revoked server-side.
+      allow read: if isAuthenticated() && isOwner(userId);
       
       allow create: if isAuthenticated()
         && isOwner(userId)
@@ -152,7 +154,7 @@ service firebase.storage {
     
     // Post videos: posts/{userId}/{postId}/videos/{filename}
     match /posts/{userId}/{postId}/videos/{filename} {
-      allow read: if true;
+      allow read: if isAuthenticated() && isOwner(userId);
       
       allow create: if isAuthenticated()
         && isOwner(userId)
@@ -166,7 +168,7 @@ service firebase.storage {
 
     // Post files: posts/{userId}/{postId}/files/{filename}
     match /posts/{userId}/{postId}/files/{filename} {
-      allow read: if true;
+      allow read: if isAuthenticated() && isOwner(userId);
 
       allow create: if isAuthenticated()
         && isOwner(userId)

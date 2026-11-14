@@ -177,30 +177,18 @@ final class FirebaseGroupsRepo: GroupsRepo {
     let postsLimit = max(1, min(10, recentPostLimit))
     let membersLimit = max(1, min(12, topMemberLimit))
 
-    let recentPostsQuery = db.collection(FirestoreCollections.posts)
-      .whereField("groupId", isEqualTo: normalizedGroupID)
-      .order(by: "createdAt", descending: true)
-      .limit(to: postsLimit)
-
     let membersQuery = db.collection(FirestoreCollections.groups)
       .document(normalizedGroupID)
       .collection(FirestoreSubcollections.members)
       .order(by: "joinedAt", descending: true)
       .limit(to: membersLimit)
 
-    let weekAgo = Timestamp(date: Date().addingTimeInterval(-7 * 24 * 60 * 60))
-    let weeklyPostsQuery = db.collection(FirestoreCollections.posts)
-      .whereField("groupId", isEqualTo: normalizedGroupID)
-      .whereField("createdAt", isGreaterThanOrEqualTo: weekAgo)
-      .limit(to: 200)
-
-    async let recentPostsResult = getDocumentsWithFallback(recentPostsQuery)
+    async let recentResult = PostReadClient.read(view: "group", id: normalizedGroupID, limit: postsLimit)
+    async let weeklyResult = PostReadClient.read(view: "groupSummary", id: normalizedGroupID)
     async let membersResult = getDocumentsWithFallback(membersQuery)
-    async let weeklyPostsResult = getDocumentsWithFallback(weeklyPostsQuery)
-
-    let (recentPostsSnapshot, recentPostsFromCache) = try await recentPostsResult
+    let recent = try await recentResult
+    let weekly = try await weeklyResult
     let (membersSnapshot, membersFromCache) = try await membersResult
-    let (weeklyPostsSnapshot, weeklyPostsFromCache) = try await weeklyPostsResult
 
     let memberDocs = membersSnapshot.documents
     let memberProfiles = try await fetchMemberProfiles(db: db, memberDocs: memberDocs)
@@ -219,8 +207,8 @@ final class FirebaseGroupsRepo: GroupsRepo {
       )
     }
 
-    let recentPosts = recentPostsSnapshot.documents.filter(FirebaseFeedRepo.isPublished).map { doc in
-      let data = doc.data()
+    let recentPosts = recent.items.map { row in
+      let data = row.fields
       let title = FirestoreValue.string(data["title"]) ?? FirestoreValue.string(data["text"]) ?? FirestoreValue.string(data["content"]) ?? "Publicacion"
 
       let authorName: String = {
@@ -234,7 +222,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
       }()
 
       return GroupPostPreview(
-        id: doc.documentID,
+        id: row.id,
         title: normalizedPostTitle(title),
         authorID: FirestoreValue.string(data["authorId"]) ?? FirestoreValue.string(data["authorID"]),
         authorName: authorName,
@@ -246,13 +234,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
       ? ProfileAccountVisibility.private
       : ProfileAccountVisibility.public
 
-    let isFromCache = groupFromCache
-      || recentPostsFromCache
-      || membersFromCache
-      || weeklyPostsFromCache
-      || recentPostsSnapshot.metadata.isFromCache
-      || membersSnapshot.metadata.isFromCache
-      || weeklyPostsSnapshot.metadata.isFromCache
+    let isFromCache = groupFromCache || membersFromCache || membersSnapshot.metadata.isFromCache
 
     return GroupDetail(
       id: groupDoc.documentID,
@@ -263,7 +245,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
       visibility: visibility,
       iconURL: FirestoreValue.string(groupData["iconUrl"]),
       memberCount: FirestoreValue.int(groupData["memberCount"]) ?? max(memberDocs.count, 0),
-      postsPerWeek: weeklyPostsSnapshot.documents.filter(FirebaseFeedRepo.isPublished).count,
+      postsPerWeek: weekly.weeklyPosts,
       createdAt: FirestoreValue.date(groupData["createdAt"]),
       updatedAt: FirestoreValue.date(groupData["updatedAt"]),
       recentPosts: recentPosts,

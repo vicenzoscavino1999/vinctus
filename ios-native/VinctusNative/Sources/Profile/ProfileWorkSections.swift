@@ -83,14 +83,8 @@ private struct PostGridTile: View {
     SwiftUI.Color.clear
       .aspectRatio(1, contentMode: .fit)
       .overlay {
-        if let preview = post.previewImageURL, let url = URL(string: preview) {
-          AsyncImage(url: url) { phase in
-            if case .success(let image) = phase {
-              image.resizable().scaledToFill()
-            } else {
-              emptyBackground
-            }
-          }
+        if let preview = post.previewImageURL {
+          PostImageView(source: preview)
         } else {
           emptyBackground
         }

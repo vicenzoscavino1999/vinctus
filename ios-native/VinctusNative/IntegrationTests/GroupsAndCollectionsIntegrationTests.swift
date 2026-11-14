@@ -3,6 +3,33 @@ import XCTest
 @testable import VinctusNative
 
 final class GroupsIntegrationTests: EmulatorTestCase {
+  func testPrivatePostAndCommentsAreReauthorizedAfterMembershipRevocation() async throws {
+    let owner = try await makeUser("Owner")
+    let groupID = try await makeGroup(name: "Private reading", visibility: .private)
+    let posts = FirebaseCreatePostRepo()
+    let postID = try posts.makePostID()
+    try await posts.publishTextPost(text: "Members only", postID: postID, groupID: groupID)
+    try await FirebasePostCommentsRepo().addComment(postID: postID, text: "Private comment")
+    let member = try await makeUser("Reader")
+    let before = try await PostReadClient.read(view: "ids", ids: [postID])
+    XCTAssertTrue(before.items.isEmpty)
+    try await signIn(owner)
+    let membership = Firestore.firestore().collection("groups").document(groupID).collection("members").document(member.uid)
+    try await membership.setData(["uid": member.uid, "groupId": groupID, "role": "member", "joinedAt": FieldValue.serverTimestamp()])
+    try await signIn(member)
+    let allowed = try await PostReadClient.read(view: "ids", ids: [postID])
+    XCTAssertEqual(allowed.items.map(\.id), [postID])
+    let comments = try await FirebasePostCommentsRepo().fetchComments(postID: postID, limit: 50)
+    XCTAssertEqual(comments.items.map(\.text), ["Private comment"])
+    try await signIn(owner)
+    try await membership.delete()
+    try await signIn(member)
+    let revoked = try await PostReadClient.read(view: "ids", ids: [postID])
+    XCTAssertTrue(revoked.items.isEmpty)
+    let hiddenComments = try await FirebasePostCommentsRepo().fetchComments(postID: postID, limit: 50)
+    XCTAssertTrue(hiddenComments.items.isEmpty)
+  }
+
   func testPublishingRequiresRealGroupMembershipAndStopsAfterLeaving() async throws {
     let owner = try await makeUser("Bruno")
     let groupID = try await makeGroup(name: "Publicaciones privadas", visibility: .private)

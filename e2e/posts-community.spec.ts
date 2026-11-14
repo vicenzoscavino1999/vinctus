@@ -32,6 +32,7 @@ test('comment survives an offline attempt, retries once, and is visible to the a
   const project = process.env.FIREBASE_PROJECT_ID || 'vinctus-dev';
   const stored = await page.request.get(
     `http://127.0.0.1:8080/v1/projects/${project}/databases/(default)/documents/posts/post_1/comments`,
+    { headers: { Authorization: 'Bearer owner' } },
   );
   expect(stored.ok()).toBe(true);
   const data = await stored.json();

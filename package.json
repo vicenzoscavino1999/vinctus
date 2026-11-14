@@ -22,6 +22,8 @@
     "test:rules": "firebase emulators:exec --project vinctus-dev --only auth,firestore,storage \"npm run test:rules:run\"",
     "test:post-counts:run": "node --test --test-concurrency=1 scripts/post-counts.integration.test.mjs scripts/post-engagement.integration.test.mjs",
     "test:post-counts": "npm run functions:build && firebase emulators:exec --project vinctus-dev --only auth,firestore,storage,functions \"npm run test:post-counts:run\"",
+    "test:post-reads:run": "node --test --test-concurrency=1 scripts/post-reads.integration.test.mjs",
+    "test:post-reads": "npm run functions:build && firebase emulators:exec --project vinctus-dev --only auth,firestore,storage,functions \"npm run test:post-reads:run\"",
     "test:delete-account:harness": "firebase emulators:exec --project vinctus-dev --only auth,firestore,storage,functions \"node scripts/delete-account-v2-harness.mjs\"",
     "preflight:appstore": "node scripts/app-store-preflight.mjs",
     "preflight:appcheck": "node scripts/app-check-preflight.mjs",

@@ -1,3 +1,4 @@
+import { PostImage } from '@/features/posts/components/ProtectedPostMedia';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link2, MessageCircle, Film, FileText } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
@@ -18,18 +19,7 @@ import {
 } from '@/features/posts/api';
 
 const FEED_PAGE_SIZE = 12;
-const FEED_INITIAL_CACHE_TTL_MS = 30_000;
 const FEED_BLOCK_SIZE = 6;
-
-type FeedInitialCacheEntry = {
-  posts: PostRead[];
-  cursor: PostCursor;
-  hasMore: boolean;
-  fetchedAt: number;
-};
-
-let feedInitialCache: FeedInitialCacheEntry | null = null;
-let feedInitialPromise: Promise<FeedInitialCacheEntry> | null = null;
 
 const logPostError = (message: string, error: unknown) => {
   if (import.meta.env.DEV) {
@@ -39,11 +29,12 @@ const logPostError = (message: string, error: unknown) => {
 
 const isReadyPost = (post: PostRead): boolean => !post.status || post.status === 'ready';
 
-const FeedPage = () => {
+const FeedSession = () => {
   const location = useLocation();
   const { user } = useAuth();
   const { showToast } = useToast();
   const [posts, setPosts] = useState<PostRead[]>([]);
+  const [loadedReader, setLoadedReader] = useState<string | null | undefined>(undefined);
   const [cursor, setCursor] = useState<PostCursor>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -62,8 +53,6 @@ const FeedPage = () => {
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const handleCacheInvalidated = () => {
-      feedInitialCache = null;
-      feedInitialPromise = null;
       setCacheRevision((prev) => prev + 1);
     };
 
@@ -75,64 +64,35 @@ const FeedPage = () => {
 
   useEffect(() => {
     let cancelled = false;
-
+    setLoadedReader(undefined);
+    setPosts([]);
+    setCursor(null);
+    setHasMore(false);
+    setLoadingInitial(true);
+    setActivePost(null);
     const loadInitial = async () => {
       try {
-        const now = Date.now();
-        if (feedInitialCache && now - feedInitialCache.fetchedAt <= FEED_INITIAL_CACHE_TTL_MS) {
-          if (!cancelled) {
-            setPosts(feedInitialCache.posts);
-            setCursor(feedInitialCache.cursor);
-            setHasMore(feedInitialCache.hasMore);
-          }
-          return;
-        }
-
-        if (!feedInitialPromise) {
-          feedInitialPromise = (async () => {
-            const result = await getGlobalFeed(FEED_PAGE_SIZE);
-            const visible = result.items.filter(isReadyPost);
-            const entry: FeedInitialCacheEntry = {
-              posts: visible,
-              cursor: result.hasMore ? result.lastDoc : null,
-              hasMore: result.hasMore,
-              fetchedAt: Date.now(),
-            };
-            feedInitialCache = entry;
-            return entry;
-          })()
-            .catch((error) => {
-              feedInitialCache = null;
-              throw error;
-            })
-            .finally(() => {
-              feedInitialPromise = null;
-            });
-        }
-
-        const entry = await feedInitialPromise;
-        if (!cancelled) {
-          setPosts(entry.posts);
-          setCursor(entry.cursor);
-          setHasMore(entry.hasMore);
-        }
+        const result = await getGlobalFeed(FEED_PAGE_SIZE);
+        if (cancelled) return;
+        setPosts(result.items.filter(isReadyPost));
+        setLoadedReader(user?.uid ?? null);
+        setCursor(result.lastDoc);
+        setHasMore(result.hasMore);
       } catch (error) {
-        logPostError('Error loading posts:', error);
         if (!cancelled) {
+          setLoadedReader(user?.uid ?? null);
+          logPostError('Error loading posts:', error);
           showToast('No se pudo cargar el feed.', 'warning');
         }
       } finally {
-        if (!cancelled) {
-          setLoadingInitial(false);
-        }
+        if (!cancelled) setLoadingInitial(false);
       }
     };
-
     void loadInitial();
     return () => {
       cancelled = true;
     };
-  }, [cacheRevision, showToast]);
+  }, [cacheRevision, showToast, user?.uid]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -283,6 +243,14 @@ const FeedPage = () => {
     }
   };
 
+  if (loadedReader !== (user?.uid ?? null)) {
+    return (
+      <div role="status" className="p-8 text-neutral-400">
+        Cargando publicaciones...
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 md:p-8">
       <div className="max-w-3xl mx-auto mb-8">
@@ -358,7 +326,7 @@ const FeedPage = () => {
                     className="relative overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900/50 cursor-pointer"
                   >
                     {imageUrl ? (
-                      <img
+                      <PostImage
                         src={imageUrl}
                         alt={headline}
                         className="absolute inset-0 w-full h-full object-cover"
@@ -475,7 +443,7 @@ const FeedPage = () => {
       )}
 
       <PostCommentsModal
-        isOpen={!!activePost}
+        isOpen={loadedReader === (user?.uid ?? null) && !!activePost}
         post={activePost}
         onClose={() => setActivePost(null)}
         onCommentAdded={(postId) => {
@@ -497,4 +465,8 @@ const FeedPage = () => {
   );
 };
 
+const FeedPage = () => {
+  const { user } = useAuth();
+  return <FeedSession key={user?.uid ?? 'anonymous'} />;
+};
 export default FeedPage;

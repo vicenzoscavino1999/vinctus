@@ -39,7 +39,9 @@ export async function uploadChatAttachment(
     if ((error as { code?: string }).code !== 'storage/object-not-found') throw error;
     const task = uploadBytesResumable(target, file, {
       contentType,
-      cacheControl: IMMUTABLE_CACHE_CONTROL,
+      cacheControl: path.startsWith('posts/')
+        ? 'private,no-store,max-age=0'
+        : IMMUTABLE_CACHE_CONTROL,
     });
     await new Promise<void>((resolve, reject) => {
       task.on(
@@ -50,7 +52,10 @@ export async function uploadChatAttachment(
       );
     });
   }
-  return { url: await getDownloadURL(target), path };
+  return {
+    url: path.startsWith('posts/') ? `post-media:${path}` : await getDownloadURL(target),
+    path,
+  };
 }
 
 const IMMUTABLE_CACHE_CONTROL = 'public,max-age=31536000,immutable';
@@ -58,19 +63,20 @@ const IMMUTABLE_CACHE_CONTROL = 'public,max-age=31536000,immutable';
 const resolveContentType = (file: File, fallback: string): string =>
   file.type && file.type.trim().length > 0 ? file.type : fallback;
 
-const buildUploadMetadata = (file: File, fallback: string) => ({
+const buildUploadMetadata = (file: File, fallback: string, path = '') => ({
   contentType: resolveContentType(file, fallback),
-  cacheControl: IMMUTABLE_CACHE_CONTROL,
+  cacheControl: path.startsWith('posts/') ? 'private,no-store,max-age=0' : IMMUTABLE_CACHE_CONTROL,
 });
 
 const uploadBytesResumableWithCache = (
   storageRef: ReturnType<typeof ref>,
   file: File,
   fallback: string,
-) => uploadBytesResumable(storageRef, file, buildUploadMetadata(file, fallback));
+) =>
+  uploadBytesResumable(storageRef, file, buildUploadMetadata(file, fallback, storageRef.fullPath));
 
 const uploadBytesWithCache = (storageRef: ReturnType<typeof ref>, file: File, fallback: string) =>
-  uploadBytes(storageRef, file, buildUploadMetadata(file, fallback));
+  uploadBytes(storageRef, file, buildUploadMetadata(file, fallback, storageRef.fullPath));
 
 /**
  * Upload single image with progress tracking
@@ -104,7 +110,7 @@ export function uploadPostImage(
       },
       async () => {
         try {
-          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          const url = `post-media:${uploadTask.snapshot.ref.fullPath}`;
           resolve({
             url,
             path: uploadTask.snapshot.ref.fullPath,
@@ -238,7 +244,7 @@ export async function uploadPostMedia(
       if ((error as { code?: string }).code !== 'storage/object-not-found') throw error;
       const task = uploadBytesResumable(target, item.file, {
         contentType,
-        cacheControl: IMMUTABLE_CACHE_CONTROL,
+        cacheControl: 'private,no-store,max-age=0',
       });
       await new Promise<void>((resolve, reject) =>
         task.on(
@@ -250,7 +256,7 @@ export async function uploadPostMedia(
       );
     }
     results.push({
-      url: await getDownloadURL(target),
+      url: `post-media:${path}`,
       path,
       type: item.kind,
       contentType,

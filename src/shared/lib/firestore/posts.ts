@@ -2,33 +2,20 @@ import {
   collection,
   deleteDoc as _deleteDoc,
   doc,
-  getDoc as _getDoc,
-  getDocs as _getDocs,
-  limit,
-  orderBy,
-  query,
   serverTimestamp,
   setDoc as _setDoc,
-  startAfter,
   Timestamp,
   updateDoc as _updateDoc,
-  where,
-  type DocumentSnapshot,
   type FieldValue,
 } from 'firebase/firestore';
-import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
+import { trackFirestoreWrite } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
+import { readPostRecords, type PostPage } from '@/shared/lib/post-reads-client';
 import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 const DEFAULT_LIMIT = 30;
 const DEFAULT_AUTHOR_NAME = 'Usuario';
 const POST_STATUS_VALUES = ['ready', 'uploading', 'failed'] as const;
-
-interface PaginatedResult<T> {
-  items: T[];
-  lastDoc: DocumentSnapshot | null;
-  hasMore: boolean;
-}
 
 /**
  * Media attachment for posts
@@ -97,36 +84,6 @@ interface PostWrite {
   createdAt: FieldValue;
   updatedAt: FieldValue | null;
 }
-
-const getDoc = ((...args: unknown[]) => {
-  trackFirestoreRead('firestore.getDoc');
-  return (_getDoc as (...innerArgs: unknown[]) => unknown)(...args);
-}) as typeof _getDoc;
-
-const getDocs = ((...args: unknown[]) => {
-  const result = (_getDocs as (...innerArgs: unknown[]) => unknown)(...args);
-
-  if (
-    typeof result === 'object' &&
-    result !== null &&
-    'then' in result &&
-    typeof (result as Promise<unknown>).then === 'function'
-  ) {
-    return (result as Promise<unknown>).then((snapshot) => {
-      const size = (snapshot as { size?: unknown }).size;
-      const safeSize =
-        typeof size === 'number' && Number.isFinite(size) && size >= 0 ? Math.floor(size) : 1;
-      trackFirestoreRead('firestore.getDocs', Math.max(1, safeSize));
-      return snapshot;
-    });
-  }
-
-  const size = (result as { size?: unknown }).size;
-  const safeSize =
-    typeof size === 'number' && Number.isFinite(size) && size >= 0 ? Math.floor(size) : 1;
-  trackFirestoreRead('firestore.getDocs', Math.max(1, safeSize));
-  return result;
-}) as typeof _getDocs;
 
 const setDoc = ((...args: unknown[]) => {
   trackFirestoreWrite('firestore.setDoc');
@@ -315,11 +272,8 @@ export async function createPost(
  * Get a single post by ID
  */
 export async function getPost(postId: string): Promise<PostRead | null> {
-  const docSnap = await getDoc(doc(postsCollection, postId));
-  if (!docSnap.exists()) return null;
-
-  const data = docSnap.data() as Record<string, unknown>;
-  return normalizePostRead(docSnap.id, data);
+  const page = await readPostRecords({ view: 'ids', ids: [postId] });
+  return page.items[0] ? normalizePostRead(postId, page.items[0]) : null;
 }
 
 /**
@@ -327,31 +281,10 @@ export async function getPost(postId: string): Promise<PostRead | null> {
  */
 export async function getPostsByGroup(
   groupId: string,
-  pageSize: number = DEFAULT_LIMIT,
-  lastDoc?: DocumentSnapshot,
-): Promise<PaginatedResult<PostRead>> {
-  let q = query(
-    postsCollection,
-    where('groupId', '==', groupId),
-    orderBy('createdAt', 'desc'),
-    limit(pageSize + 1),
-  );
-
-  if (lastDoc) {
-    q = query(q, startAfter(lastDoc));
-  }
-
-  const snapshot = await getDocs(q);
-  const hasMore = snapshot.docs.length > pageSize;
-  const docs = hasMore ? snapshot.docs.slice(0, pageSize) : snapshot.docs;
-
-  const items = docs.map((d) => normalizePostRead(d.id, d.data() as Record<string, unknown>));
-
-  return {
-    items,
-    lastDoc: docs[docs.length - 1] || null,
-    hasMore,
-  };
+  pageSize = DEFAULT_LIMIT,
+  lastDoc?: string,
+): Promise<PostPage<PostRead>> {
+  return readPage('group', groupId, pageSize, lastDoc);
 }
 
 /**
@@ -359,31 +292,10 @@ export async function getPostsByGroup(
  */
 export async function getPostsByUser(
   userId: string,
-  pageSize: number = DEFAULT_LIMIT,
-  lastDoc?: DocumentSnapshot,
-): Promise<PaginatedResult<PostRead>> {
-  let q = query(
-    postsCollection,
-    where('authorId', '==', userId),
-    orderBy('createdAt', 'desc'),
-    limit(pageSize + 1),
-  );
-
-  if (lastDoc) {
-    q = query(q, startAfter(lastDoc));
-  }
-
-  const snapshot = await getDocs(q);
-  const hasMore = snapshot.docs.length > pageSize;
-  const docs = hasMore ? snapshot.docs.slice(0, pageSize) : snapshot.docs;
-
-  const items = docs.map((d) => normalizePostRead(d.id, d.data() as Record<string, unknown>));
-
-  return {
-    items,
-    lastDoc: docs[docs.length - 1] || null,
-    hasMore,
-  };
+  pageSize = DEFAULT_LIMIT,
+  lastDoc?: string,
+): Promise<PostPage<PostRead>> {
+  return readPage('author', userId, pageSize, lastDoc);
 }
 
 /**
@@ -391,56 +303,38 @@ export async function getPostsByUser(
  */
 export async function getPostsByCategory(
   categoryId: string,
-  pageSize: number = DEFAULT_LIMIT,
-  lastDoc?: DocumentSnapshot,
-): Promise<PaginatedResult<PostRead>> {
-  let q = query(
-    postsCollection,
-    where('categoryId', '==', categoryId),
-    orderBy('createdAt', 'desc'),
-    limit(pageSize + 1),
-  );
-
-  if (lastDoc) {
-    q = query(q, startAfter(lastDoc));
-  }
-
-  const snapshot = await getDocs(q);
-  const hasMore = snapshot.docs.length > pageSize;
-  const docs = hasMore ? snapshot.docs.slice(0, pageSize) : snapshot.docs;
-
-  const items = docs.map((d) => normalizePostRead(d.id, d.data() as Record<string, unknown>));
-
-  return {
-    items,
-    lastDoc: docs[docs.length - 1] || null,
-    hasMore,
-  };
+  pageSize = DEFAULT_LIMIT,
+  lastDoc?: string,
+): Promise<PostPage<PostRead>> {
+  return readPage('category', categoryId, pageSize, lastDoc);
 }
 
 /**
  * Get global feed (paginated) - posts from all groups
  */
 export async function getGlobalFeed(
-  pageSize: number = DEFAULT_LIMIT,
-  lastDoc?: DocumentSnapshot,
-): Promise<PaginatedResult<PostRead>> {
-  let q = query(postsCollection, orderBy('createdAt', 'desc'), limit(pageSize + 1));
+  pageSize = DEFAULT_LIMIT,
+  lastDoc?: string,
+): Promise<PostPage<PostRead>> {
+  return readPage('feed', undefined, pageSize, lastDoc);
+}
 
-  if (lastDoc) {
-    q = query(q, startAfter(lastDoc));
-  }
-
-  const snapshot = await getDocs(q);
-  const hasMore = snapshot.docs.length > pageSize;
-  const docs = hasMore ? snapshot.docs.slice(0, pageSize) : snapshot.docs;
-
-  const items = docs.map((d) => normalizePostRead(d.id, d.data() as Record<string, unknown>));
-
+async function readPage(
+  view: 'feed' | 'author' | 'group' | 'category',
+  id: string | undefined,
+  limit: number,
+  cursor: string | undefined,
+): Promise<PostPage<PostRead>> {
+  const page = await readPostRecords({
+    view,
+    limit,
+    ...(id ? { id } : {}),
+    ...(cursor ? { cursor } : {}),
+  });
   return {
-    items,
-    lastDoc: docs[docs.length - 1] || null,
-    hasMore,
+    items: page.items.map((item) => normalizePostRead(String(item.id), item)),
+    lastDoc: page.lastDoc,
+    hasMore: page.hasMore,
   };
 }
 

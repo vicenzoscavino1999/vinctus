@@ -1,3 +1,4 @@
+import { PostDownload, PostImage, PostVideo } from '@/features/posts/components/ProtectedPostMedia';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -47,6 +48,8 @@ const PostDetailSession = () => {
   const { showToast } = useToast();
 
   const [post, setPost] = useState<PostRead | null>(null);
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
+  const readScope = JSON.stringify([user?.uid ?? null, postId]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [commentCount, setCommentCount] = useState(0);
@@ -79,6 +82,7 @@ const PostDetailSession = () => {
 
     const loadPost = async () => {
       setLoading(true);
+      setPost(null);
       setError(null);
       try {
         const data = await getPost(postId);
@@ -89,6 +93,7 @@ const PostDetailSession = () => {
           return;
         }
         setPost(data);
+        setLoadedScope(readScope);
         setCommentCount(typeof data.commentCount === 'number' ? Math.max(0, data.commentCount) : 0);
       } catch (loadError) {
         if (!active) return;
@@ -104,7 +109,7 @@ const PostDetailSession = () => {
     return () => {
       active = false;
     };
-  }, [postId]);
+  }, [postId, readScope]);
 
   useEffect(() => {
     if (!postId) return;
@@ -157,7 +162,7 @@ const PostDetailSession = () => {
     }
   };
 
-  if (loading) {
+  if (loading || (post !== null && loadedScope !== readScope)) {
     return (
       <div className="page-category pb-32 text-center pt-20">
         <Loader2 size={32} className="animate-spin text-amber-500 mx-auto" />
@@ -218,10 +223,14 @@ const PostDetailSession = () => {
                 className="w-full h-full"
               />
             ) : (
-              <video src={primaryVideo.url} controls className="w-full h-full object-cover" />
+              <PostVideo src={primaryVideo.url} controls className="w-full h-full object-cover" />
             )
           ) : (
-            <img src={primaryImage?.url} alt={titleText} className="w-full h-full object-cover" />
+            <PostImage
+              src={primaryImage?.url}
+              alt={titleText}
+              className="w-full h-full object-cover"
+            />
           )}
           {media.length > 1 && (
             <div className="absolute top-3 right-3 rounded-full bg-black/60 text-white text-xs px-2 py-1">
@@ -237,9 +246,10 @@ const PostDetailSession = () => {
             const label = file.fileName ?? file.url;
             const ext = getFileExtension(label) ?? 'ARCHIVO';
             return (
-              <a
+              <PostDownload
                 key={file.url}
                 href={file.url}
+                download={file.fileName || 'archivo'}
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-3 rounded-lg border border-neutral-800 bg-neutral-900/50 px-4 py-3 text-neutral-200 hover:border-neutral-600 transition-colors"
@@ -249,7 +259,7 @@ const PostDetailSession = () => {
                   <p className="text-sm font-medium truncate">{label}</p>
                   <p className="text-xs text-neutral-500">{ext}</p>
                 </div>
-              </a>
+              </PostDownload>
             );
           })}
         </div>

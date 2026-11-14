@@ -12,8 +12,7 @@ struct PostComment: Identifiable, Hashable {
 }
 
 struct PostCommentsCursor {
-  let createdAt: Timestamp
-  let commentID: String
+  let token: String
 }
 
 struct PostCommentsPage {
@@ -86,52 +85,18 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     let normalizedPostID = postID.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedPostID.isEmpty else { throw PostCommentsRepoError.invalidPostID }
 
-    let db = self.db ?? Firestore.firestore()
-    let pageSize = max(1, min(120, limit))
-
-    var query = db.collection(FirestoreCollections.posts)
-      .document(normalizedPostID)
-      .collection(FirestoreSubcollections.comments)
-      .order(by: "createdAt", descending: true)
-      .order(by: FieldPath.documentID(), descending: true)
-      .limit(to: pageSize + 1)
-
-    if let cursor {
-      // Keep Timestamp precision and break ties by ID, including if the anchor
-      // document is deleted between pages. This matches the web's implicit ID order.
-      query = query.start(after: [cursor.createdAt, cursor.commentID])
-    }
-
-    let (snapshot, isFromCache) = try await getDocumentsWithFallback(query)
-    let documents = Array(snapshot.documents.prefix(pageSize))
-    let items = documents.map { doc in
-      let data = doc.data()
-      let authorSnapshot = data["authorSnapshot"] as? [String: Any]
-      let authorName = FirestoreValue.string(authorSnapshot?["displayName"])
-        ?? FirestoreValue.string(data["authorName"])
-        ?? FirestoreValue.string(data["authorId"])
-        ?? "Usuario"
-      let text = FirestoreValue.string(data["text"]) ?? ""
-
+    let result = try await PostReadClient.read(view: "comments", id: normalizedPostID, limit: max(1, min(50, limit)), cursor: cursor?.token)
+    let items = result.items.map { row -> PostComment in
+      let data = row.fields
+      let snapshot = data["authorSnapshot"] as? [String: Any]
       return PostComment(
-        id: doc.documentID,
-        authorID: FirestoreValue.string(data["authorId"]),
-        authorName: authorName,
-        text: text,
-        createdAt: FirestoreValue.date(data["createdAt"])
+        id: row.id, authorID: FirestoreValue.string(data["authorId"]),
+        authorName: FirestoreValue.string(snapshot?["displayName"]) ?? "Usuario",
+        text: data["text"] as? String ?? "", createdAt: FirestoreValue.date(data["createdAt"])
       )
     }
-
-    let nextCursor = documents.last.flatMap { doc -> PostCommentsCursor? in
-      guard let createdAt = doc.data()["createdAt"] as? Timestamp else { return nil }
-      return PostCommentsCursor(createdAt: createdAt, commentID: doc.documentID)
-    }
-    return PostCommentsPage(
-      items: items,
-      isFromCache: isFromCache || snapshot.metadata.isFromCache,
-      nextCursor: nextCursor,
-      hasMore: snapshot.documents.count > pageSize && nextCursor != nil
-    )
+    return PostCommentsPage(items: items, isFromCache: false,
+      nextCursor: result.cursor.map { PostCommentsCursor(token: $0) }, hasMore: result.hasMore)
   }
 
   func addComment(postID: String, text: String, commentID: String) async throws {
@@ -215,13 +180,4 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     return nil
   }
 
-  private func getDocumentsWithFallback(_ query: Query) async throws -> (QuerySnapshot, Bool) {
-    do {
-      let snapshot = try await query.getDocuments(source: .server)
-      return (snapshot, false)
-    } catch {
-      let cachedSnapshot = try await query.getDocuments(source: .cache)
-      return (cachedSnapshot, true)
-    }
-  }
 }
