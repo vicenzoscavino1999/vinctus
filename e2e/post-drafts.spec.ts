@@ -25,12 +25,14 @@ test('@smoke local post drafts stay with their account when users sign out and b
   const alice = await open(page);
   await alice.getByLabel('Titulo (opcional)').fill('Borrador privado de Alice');
   await alice.getByRole('button', { name: 'Cerrar', exact: true }).click();
+  await expect(alice).toBeHidden();
   await signOut(page);
   await loginWithSeedUser(page, 'bob');
   const bob = await open(page);
   await expect(bob.getByLabel('Titulo (opcional)')).toHaveValue('');
   await bob.getByLabel('Titulo (opcional)').fill('Borrador de Bob');
   await bob.getByRole('button', { name: 'Cerrar', exact: true }).click();
+  await expect(bob).toBeHidden();
   await signOut(page);
   await loginWithSeedUser(page, 'alice');
   const restored = await open(page);

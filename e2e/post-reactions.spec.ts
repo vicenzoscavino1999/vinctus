@@ -185,6 +185,10 @@ test('@smoke likes and saves retry a lost acknowledgement without changing times
   await expect(
     page.getByRole('button', { name: 'Guardar publicación', exact: true }),
   ).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('button', { name: 'Me gusta', exact: true })).toBeEnabled();
+  await expect(
+    page.getByRole('button', { name: 'Guardar publicación', exact: true }),
+  ).toBeEnabled();
   for (const path of [
     'posts/post_1/likes/user_b',
     'users/user_b/likes/post_1',
