@@ -34,11 +34,11 @@ type StoredPost = {
   };
 };
 
-test('@smoke recovers a partial photo/video/document upload without duplicate posts or object overwrites', async ({
+test('@smoke restores closed and reloaded drafts, partial media uploads and lost accepted acknowledgements without duplicates', async ({
   page,
   browser,
 }, info) => {
-  test.setTimeout(90000);
+  test.setTimeout(150000);
   await prepareOnboardingState(page);
   await loginWithSeedUser(page, 'alice');
   await page
@@ -52,6 +52,22 @@ test('@smoke recovers a partial photo/video/document upload without duplicate po
   await expect(dialog.locator('img[src^="blob:"]')).toHaveCount(1, { timeout: 10000 });
   await dialog.getByLabel('Seleccionar videos de la publicación').setInputFiles(video);
   await dialog.getByLabel('Seleccionar documentos de la publicación').setInputFiles(document);
+  await expect(dialog.getByRole('status')).toHaveText('Borrador guardado en este dispositivo');
+  const reopen = async () => {
+    await page
+      .getByLabel(/Crear publicaci/i)
+      .first()
+      .click();
+    await expect(dialog.getByLabel('Titulo (opcional)')).toHaveValue(title);
+    await expect(dialog.locator('img[src^="blob:"]')).toHaveCount(1);
+    await expect(dialog.getByText('clip.mp4', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('notes.pdf', { exact: true })).toBeVisible();
+    await expect(dialog.getByRole('status')).toHaveText('Borrador guardado en este dispositivo');
+  };
+  await dialog.getByRole('button', { name: 'Cerrar', exact: true }).click();
+  await reopen();
+  await page.reload();
+  await reopen();
   let rejected = false;
   let imageStarts = 0;
   await page.route('http://127.0.0.1:9199/**', async (route) => {
@@ -95,8 +111,37 @@ test('@smoke recovers a partial photo/video/document upload without duplicate po
   const pending = await list();
   expect(pending).toHaveLength(1);
   expect(pending[0].fields.status.stringValue).toBe('uploading');
+  await page.reload();
+  await reopen();
+  let lostAcknowledgement = false;
+  await page.route('http://127.0.0.1:8080/**', async (route) => {
+    const request = route.request();
+    const body = request.postData() ?? '';
+    if (
+      !lostAcknowledgement &&
+      request.url().includes(':commit') &&
+      body.includes(pending[0].name) &&
+      body.includes('ready')
+    ) {
+      const response = await route.fetch();
+      expect(response.ok()).toBe(true);
+      lostAcknowledgement = true;
+      await route.fulfill({
+        status: 403,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: {
+            code: 403,
+            status: 'PERMISSION_DENIED',
+            message: 'Lost accepted acknowledgement',
+          },
+        }),
+      });
+    } else await route.continue();
+  });
   await dialog.getByRole('button', { name: 'Publicar', exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20000 });
+  await expect(dialog.getByRole('alert')).toBeVisible({ timeout: 20000 });
+  expect(lostAcknowledgement).toBe(true);
   const accepted = await list();
   expect(accepted).toHaveLength(1);
   expect(accepted[0].name).toBe(pending[0].name);
@@ -106,6 +151,12 @@ test('@smoke recovers a partial photo/video/document upload without duplicate po
   expect(accepted[0].fields.status.stringValue).toBe('ready');
   const media = accepted[0].fields.media.arrayValue.values!.map((value) => value.mapValue.fields);
   expect(media.map((item) => item.type.stringValue)).toEqual(['image', 'video', 'file']);
+  await page.reload();
+  await reopen();
+  await dialog.getByRole('button', { name: 'Publicar', exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20000 });
+  const resumed = await list();
+  expect(resumed).toEqual(accepted);
   expect(imageStarts).toBe(1);
   const id = accepted[0].name.split('/').pop();
   const second = await browser.newContext();

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/auth';
 import { getNewPostId } from '@/features/posts/api';
+import { usePostDraft } from './usePostDraft';
+import { postDraftAttemptKey, hasPostDraft } from '@/features/posts/model/postDraftStore';
 import { PostSubmission } from '@/features/posts/model/PostSubmission';
 import { notifyFeedCacheInvalidated } from '@/features/posts/model/feedCache';
 import { compressToWebp, validateImage } from '@/shared/lib/compression';
@@ -46,14 +48,6 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
-const revokePreviewUrls = (items: CreatePostAttachment[]) => {
-  items.forEach((item) => {
-    if (item.previewUrl) {
-      URL.revokeObjectURL(item.previewUrl);
-    }
-  });
-};
-
 const buildAttachmentId = () => `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 export const useCreatePost = ({
@@ -67,13 +61,15 @@ export const useCreatePost = ({
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [title, setTitle] = useState('');
-  const [text, setText] = useState('');
-  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const scope = { uid: user?.uid ?? '', groupId, categoryId };
+  const draftStore = usePostDraft(scope);
+  const { title, text, youtubeUrl, files: attachments } = draftStore.draft;
+  const setTitle = (title: string) => draftStore.edit({ title });
+  const setText = (text: string) => draftStore.edit({ text });
+  const setYoutubeUrl = (youtubeUrl: string) => draftStore.edit({ youtubeUrl });
   const [youtubeDetails, setYoutubeDetails] = useState<YouTubeVideoDetails | null>(null);
   const [youtubeLoading, setYoutubeLoading] = useState(false);
   const [youtubeError, setYoutubeError] = useState<string | null>(null);
-  const [attachments, setAttachments] = useState<CreatePostAttachment[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<CreatePostProgress>({
@@ -85,13 +81,24 @@ export const useCreatePost = ({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const latestAttachmentsRef = useRef<CreatePostAttachment[]>([]);
   const pending = useRef<{ key: string; submission: PostSubmission } | null>(null);
+  const confirmedId = useRef<string | null>(null);
   const sending = useRef(false);
   const alive = useRef(false);
   const epoch = useRef(0);
   const [isPreparingMedia, setIsPreparingMedia] = useState(false);
   const preparing = useRef(false);
+
+  useEffect(() => {
+    const leaving = (event: BeforeUnloadEvent) => {
+      if (preparing.current) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', leaving);
+    return () => window.removeEventListener('beforeunload', leaving);
+  }, []);
 
   const youtubeMeta = useMemo(() => parseYouTubeUrl(youtubeUrl), [youtubeUrl]);
   const usedMediaSlots = attachments.length + (youtubeMeta ? 1 : 0);
@@ -113,15 +120,20 @@ export const useCreatePost = ({
   );
   const canSubmit =
     !isSubmitting &&
+    !draftStore.restoring &&
+    !draftStore.error &&
     !isPreparingMedia &&
-    (!!text.trim() || !!title.trim() || !!youtubeUrl.trim() || attachments.length > 0);
+    (!!confirmedId.current ||
+      !!text.trim() ||
+      !!title.trim() ||
+      !!youtubeUrl.trim() ||
+      attachments.length > 0);
 
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
       epoch.current += 1;
-      revokePreviewUrls(latestAttachmentsRef.current);
     };
   }, []);
 
@@ -132,18 +144,12 @@ export const useCreatePost = ({
       sending.current = false;
       preparing.current = false;
       setIsPreparingMedia(false);
-      setTitle('');
-      setText('');
-      setYoutubeUrl('');
       setYoutubeDetails(null);
       setYoutubeLoading(false);
       setYoutubeError(null);
       setError(null);
       setIsSubmitting(false);
       setProgress({ percent: 0, transferred: 0, total: 0 });
-      revokePreviewUrls(latestAttachmentsRef.current);
-      latestAttachmentsRef.current = [];
-      setAttachments([]);
     }
   }, [isOpen]);
 
@@ -188,13 +194,12 @@ export const useCreatePost = ({
   const openFilePicker = () => fileInputRef.current?.click();
 
   const addAttachment = (item: CreatePostAttachment) => {
-    if (latestAttachmentsRef.current.length + (youtubeMeta ? 1 : 0) >= MAX_ATTACHMENTS) {
+    if (draftStore.peek().files.length + (youtubeMeta ? 1 : 0) >= MAX_ATTACHMENTS) {
       setError('Maximo 10 adjuntos por publicacion.');
       if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
       return;
     }
-    latestAttachmentsRef.current = [...latestAttachmentsRef.current, item];
-    setAttachments(latestAttachmentsRef.current);
+    draftStore.edit({ files: [...draftStore.peek().files, item] });
   };
 
   const handleImageSelect = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -295,18 +300,30 @@ export const useCreatePost = ({
 
   const removeAttachment = (id: string) => {
     if (sending.current) return;
-    latestAttachmentsRef.current = latestAttachmentsRef.current.filter((item) => item.id !== id);
-    setAttachments((prev) => {
-      const removed = prev.find((item) => item.id === id);
-      if (removed?.previewUrl) {
-        URL.revokeObjectURL(removed.previewUrl);
-      }
-      return prev.filter((item) => item.id !== id);
-    });
+    const files = draftStore.peek().files;
+    const removed = files.find((item) => item.id === id);
+    if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+    draftStore.edit({ files: files.filter((item) => item.id !== id) });
   };
 
+  const present = (publishedId: string) => {
+    notifyFeedCacheInvalidated();
+    onCreated?.(publishedId);
+    if (hasPostDraft(draftStore.peek())) return;
+    onClose();
+    if (redirectTo) navigate(redirectTo);
+  };
   const handleSubmit = async () => {
-    if (sending.current || preparing.current) return;
+    if (sending.current || preparing.current || draftStore.restoring) return;
+    if (confirmedId.current && !hasPostDraft(draftStore.peek())) {
+      try {
+        present(confirmedId.current);
+      } catch {
+        /* The confirmed post remains terminal. */
+      }
+      return;
+    }
+    const { title, text, youtubeUrl, files: attachments } = draftStore.peek();
     if (!user) {
       setError('Debes iniciar sesion');
       return;
@@ -354,34 +371,31 @@ export const useCreatePost = ({
     setError(null);
     setProgress({ percent: 0, transferred: 0, total: 0 });
 
-    let publishedId: string;
+    const key = postDraftAttemptKey(scope, draftStore.peek());
     try {
-      const key = JSON.stringify([
-        user.uid,
-        groupId,
-        categoryId,
-        trimmedTitle,
-        trimmedText,
-        parsedYouTube?.videoId,
-        attachments.map((item) => item.id),
-      ]);
       if (pending.current?.key !== key) {
-        const postId = getNewPostId();
+        const cached = draftStore.peek().pending;
+        const postId = cached?.key === key ? cached.input.postId : getNewPostId();
+        const input =
+          cached?.key === key
+            ? cached.input
+            : {
+                postId,
+                authorId: user.uid,
+                authorSnapshot: {
+                  displayName: user.displayName || 'Usuario',
+                  photoURL: user.photoURL || null,
+                },
+                title: autoTitle || null,
+                text: trimmedText,
+                groupId,
+                categoryId,
+              };
+        draftStore.edit({ pending: { key, input } });
         pending.current = {
           key,
           submission: new PostSubmission(
-            {
-              postId,
-              authorId: user.uid,
-              authorSnapshot: {
-                displayName: user.displayName || 'Usuario',
-                photoURL: user.photoURL || null,
-              },
-              title: autoTitle || null,
-              text: trimmedText,
-              groupId,
-              categoryId,
-            },
+            input,
             attachments.map((item) => ({ id: item.id, kind: item.kind, file: item.file })),
             parsedYouTube
               ? [
@@ -402,7 +416,12 @@ export const useCreatePost = ({
           ),
         };
       }
-      publishedId = await pending.current.submission.publish((total, transferred) => {
+      if (draftStore.peek().pending?.key !== key) {
+        draftStore.edit({ pending: { key, input: pending.current.submission.input } });
+      }
+      await draftStore.flush();
+      if (!current()) return;
+      const publishedId = await pending.current.submission.publish((total, transferred) => {
         if (current())
           setProgress({
             percent: total > 0 ? Math.round((transferred / total) * 100) : 0,
@@ -410,6 +429,22 @@ export const useCreatePost = ({
             transferred,
           });
       });
+      confirmedId.current = publishedId;
+      try {
+        await draftStore.complete(key);
+      } catch {
+        if (current())
+          setError('La publicación se guardó, pero no se pudo actualizar el borrador local.');
+        return;
+      }
+      if (!current()) return;
+      // Presentation callbacks cannot roll back a confirmed post or delete its files.
+      try {
+        present(publishedId);
+      } catch (error) {
+        logCreatePostError('Post saved, screen update failed:', error);
+        setError('La publicación ya se guardó, pero no se pudo actualizar la pantalla.');
+      }
     } catch (error) {
       logCreatePostError('Error creating post:', error);
       if (current())
@@ -421,22 +456,39 @@ export const useCreatePost = ({
         setIsSubmitting(false);
       }
     }
-    if (!current()) return;
-    // Presentation callbacks cannot roll back a confirmed post or delete its files.
-    try {
-      notifyFeedCacheInvalidated();
-      onCreated?.(publishedId);
-      onClose();
-      if (redirectTo) navigate(redirectTo);
-    } catch (error) {
-      logCreatePostError('Post saved, screen update failed:', error);
-      if (current())
-        setError('La publicación ya se guardó, pero no se pudo actualizar la pantalla.');
-    }
   };
 
   return {
     user,
+    draftRestoring: draftStore.restoring,
+    draftSaving: draftStore.saving,
+    draftError: draftStore.error,
+    retryDraftSave: draftStore.retry,
+    discardDraft: async () => {
+      if (!sending.current && !preparing.current && !draftStore.restoring) {
+        await draftStore.discard();
+        onClose();
+      }
+    },
+    closeEditor: async () => {
+      if (sending.current || preparing.current) return;
+      if (draftStore.restoring) {
+        if (draftStore.error) onClose();
+        return;
+      }
+      try {
+        await draftStore.flush();
+      } catch (error) {
+        if (
+          !window.confirm(
+            'No se pudieron guardar estos cambios. Cópialos antes de cerrar. ¿Cerrar sin guardar?',
+          )
+        )
+          throw error;
+      }
+      onClose();
+    },
+    isPublished: !!confirmedId.current && !hasPostDraft(draftStore.peek()),
     title,
     setTitle,
     text,

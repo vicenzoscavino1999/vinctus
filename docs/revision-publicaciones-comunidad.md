@@ -578,3 +578,40 @@ otros usos, pero ya no deciden estas acciones. Continúan pendientes la recupera
 tras cerrar/recargar el editor, la limpieza de subidas incompletas y los requisitos
 de despliegue/prueba física de la etapa anterior. No hubo despliegue de producción
 ni otro build de TestFlight.
+
+## Novena etapa: borradores locales recuperables en web e iOS
+
+El editor conserva título, texto sin recortar, enlace de YouTube y copias de los
+adjuntos preparados, con sus IDs originales. La web usa IndexedDB; iOS usa una
+carpeta privada de Application Support con protección de archivos y excluida de
+copias de seguridad. Cada cuenta y grupo tiene su propio borrador; la web separa
+también la categoría. Son borradores del dispositivo, sin sincronización entre
+la web y el iPhone. Se eliminan al publicar o al descartarlos explícitamente.
+
+El identificador pendiente y los archivos se guardan antes del primer envío al
+servidor. Al reabrir, el reintento usa el mismo ID y las mismas rutas; si el post
+ya está confirmado, no vuelve a subir ni finalizar sus archivos. Descartar el
+borrador solo borra las copias locales: nunca elimina un post o archivo remoto
+que podría haber sido aceptado aunque su respuesta se perdiera. Las revisiones
+persistentes, incluidos registros vacíos tras publicar/descartar, impiden que un
+editor antiguo sobrescriba o resucite el borrador de otra ventana. El texto nuevo
+escrito mientras se envía otra versión se conserva. Los errores de lectura o
+guardado se muestran y bloquean el envío hasta resolverlos; no se sustituye un
+borrador ilegible por otro vacío.
+
+La validación incluye cierre y reapertura, recarga, recuperación de foto/video/PDF
+tras una subida parcial, pérdida de la respuesta de un commit ya aceptado,
+separación de cuentas y conflicto entre ventanas con IndexedDB y Firebase reales.
+Las pruebas unitarias comprueban el guardado previo al envío, errores de espacio,
+conservación de cambios nuevos e IDs estables. Las pruebas nativas añaden archivos
+duraderos tras perder el temporal original, grupos/cuentas separados, revisiones,
+archivos ausentes y cambio de cuenta; una integración recupera un envío aceptado
+en un editor nuevo y verifica fechas y generación del objeto. Consultar el PR
+para los resultados de la compilación y pruebas en la Mac de CI.
+
+No hay garantía de recuperar cambios anteriores a completar la preparación o el
+guardado local, ni después de borrar los datos del navegador/desinstalar la app.
+La web avisa al salir con cambios pendientes o imágenes en preparación. La
+limpieza de subidas remotas abandonadas sigue pendiente, junto al despliegue
+coordinado, migración, nuevo TestFlight y prueba en iPhone real. Esta etapa no
+despliega reglas ni cambia el requisito de sesión para leer publicaciones.

@@ -27,7 +27,7 @@ const media = {
 describe('immutable post submission', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(createPostUploading).mockResolvedValue();
+    vi.mocked(createPostUploading).mockResolvedValue(false);
     vi.mocked(updatePost).mockResolvedValue();
     vi.mocked(uploadPostMedia).mockResolvedValue([media]);
   });
@@ -51,6 +51,14 @@ describe('immutable post submission', () => {
     await submission.publish(vi.fn());
     expect(createPostUploading).toHaveBeenCalledTimes(1);
     expect(updatePost).toHaveBeenCalledTimes(1);
+  });
+
+  it('a restored attempt already ready on the server does not upload or finalize again', async () => {
+    vi.mocked(createPostUploading).mockResolvedValueOnce(true);
+    const submission = new PostSubmission(input, [file]);
+    await expect(submission.publish(vi.fn())).resolves.toBe('p1');
+    expect(uploadPostMedia).not.toHaveBeenCalled();
+    expect(updatePost).not.toHaveBeenCalled();
   });
 
   it('an upload failure keeps the same post and never marks or deletes a confirmed post', async () => {

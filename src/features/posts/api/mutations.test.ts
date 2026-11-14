@@ -160,7 +160,7 @@ describe('posts api mutations', () => {
   });
 
   it('validates createPostUploading input', async () => {
-    vi.mocked(postUpload.createPostUploading).mockResolvedValueOnce();
+    vi.mocked(postUpload.createPostUploading).mockResolvedValueOnce(false);
 
     await expect(
       createPostUploading({
@@ -170,7 +170,7 @@ describe('posts api mutations', () => {
         text: 'New post',
         title: null,
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
   });
 
   it('allows title-only posts and rejects a wholly empty post', async () => {

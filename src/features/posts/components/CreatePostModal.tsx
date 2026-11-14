@@ -61,6 +61,13 @@ const CreatePostSession = ({
     error,
     progress,
     canSubmit,
+    draftRestoring,
+    draftSaving,
+    draftError,
+    retryDraftSave,
+    discardDraft,
+    closeEditor,
+    isPublished,
     imageInputRef,
     videoInputRef,
     fileInputRef,
@@ -94,8 +101,8 @@ const CreatePostSession = ({
         <div className="flex items-center justify-between p-4 border-b border-neutral-800">
           <h2 className="text-lg font-medium text-white">Crear Publicacion</h2>
           <button
-            onClick={onClose}
-            disabled={isSubmitting}
+            onClick={() => void closeEditor().catch(() => {})}
+            disabled={isSubmitting || isPreparingMedia || (draftRestoring && !draftError)}
             className="text-neutral-400 hover:text-white transition-colors disabled:opacity-50"
             aria-label="Cerrar"
           >
@@ -104,6 +111,44 @@ const CreatePostSession = ({
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
+          <div className="mb-4 text-xs text-neutral-400">
+            <p role="status">
+              {draftError
+                ? 'Borrador pendiente de recuperar o guardar'
+                : draftRestoring
+                  ? 'Recuperando borrador…'
+                  : draftSaving
+                    ? 'Guardando borrador…'
+                    : 'Borrador guardado en este dispositivo'}
+            </p>
+            {draftError && (
+              <div role="alert" className="mt-2 text-amber-300">
+                <p>{draftError} No cierres el editor si tienes cambios sin guardar.</p>
+                <button
+                  type="button"
+                  onClick={() => void retryDraftSave().catch(() => {})}
+                  className="mt-1 underline"
+                >
+                  Reintentar guardado
+                </button>
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={isSubmitting || isPreparingMedia || draftRestoring}
+              className="mt-2 text-neutral-500 underline disabled:opacity-50"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    '¿Descartar este borrador y sus adjuntos guardados en este dispositivo?',
+                  )
+                )
+                  void discardDraft().catch(() => {});
+              }}
+            >
+              Descartar borrador
+            </button>
+          </div>
           <div className="flex items-center gap-3 mb-4">
             {user?.photoURL ? (
               <img
@@ -137,7 +182,7 @@ const CreatePostSession = ({
               placeholder="Escribe un titulo breve"
               className="w-full bg-neutral-900/40 border border-neutral-800 rounded-lg px-4 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
               maxLength={LIMITS.posts.titleMaxLength}
-              disabled={isSubmitting}
+              disabled={isSubmitting || draftRestoring}
             />
             <div className="text-right text-xs text-neutral-600 mt-1">
               {title.length}/{LIMITS.posts.titleMaxLength}
@@ -145,6 +190,7 @@ const CreatePostSession = ({
           </div>
 
           <textarea
+            disabled={draftRestoring}
             aria-label="Descripción de la publicación"
             value={text}
             onChange={(event) => setText(event.target.value)}
@@ -152,7 +198,6 @@ const CreatePostSession = ({
             className="w-full h-32 bg-transparent text-white placeholder-neutral-500 resize-none focus:outline-none text-base leading-relaxed"
             maxLength={LIMITS.posts.textMaxLength}
             autoFocus
-            disabled={isSubmitting}
           />
 
           <div className="text-right text-neutral-500 text-sm">
@@ -178,7 +223,7 @@ const CreatePostSession = ({
                 onChange={(event) => setYoutubeUrl(event.target.value)}
                 placeholder="https://www.youtube.com/watch?v=..."
                 className="w-full bg-neutral-900/40 border border-neutral-800 rounded-lg pl-10 pr-4 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-                disabled={isSubmitting}
+                disabled={isSubmitting || draftRestoring}
               />
             </div>
             {youtubeUrl.trim() && (
@@ -368,7 +413,12 @@ const CreatePostSession = ({
             />
             <button
               onClick={openImagePicker}
-              disabled={isSubmitting || isPreparingMedia || usedMediaSlots >= MAX_ATTACHMENTS}
+              disabled={
+                isSubmitting ||
+                isPreparingMedia ||
+                draftRestoring ||
+                usedMediaSlots >= MAX_ATTACHMENTS
+              }
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-300 hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ImageIcon size={20} />
@@ -376,7 +426,12 @@ const CreatePostSession = ({
             </button>
             <button
               onClick={openVideoPicker}
-              disabled={isSubmitting || isPreparingMedia || usedMediaSlots >= MAX_ATTACHMENTS}
+              disabled={
+                isSubmitting ||
+                isPreparingMedia ||
+                draftRestoring ||
+                usedMediaSlots >= MAX_ATTACHMENTS
+              }
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-300 hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Film size={20} />
@@ -384,7 +439,12 @@ const CreatePostSession = ({
             </button>
             <button
               onClick={openFilePicker}
-              disabled={isSubmitting || isPreparingMedia || usedMediaSlots >= MAX_ATTACHMENTS}
+              disabled={
+                isSubmitting ||
+                isPreparingMedia ||
+                draftRestoring ||
+                usedMediaSlots >= MAX_ATTACHMENTS
+              }
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-300 hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <FileText size={20} />
@@ -408,6 +468,8 @@ const CreatePostSession = ({
                 <Loader2 size={18} className="animate-spin" />
                 Publicando...
               </>
+            ) : isPublished ? (
+              'Abrir publicación'
             ) : (
               'Publicar'
             )}

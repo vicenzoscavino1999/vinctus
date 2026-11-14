@@ -148,3 +148,13 @@ los primeros 50 índices, su recarga y otra cuenta. En iOS se revisaron las acci
 equivalentes del feed/detalle, que ya usan consultas individuales y conservan la
 validación nativa anterior; Descubrir nativo aún no incluye publicaciones. No se
 modifica Swift en esta etapa ni se publica otra versión.
+
+La novena etapa añade recuperación local de borradores en web e iOS, con copias
+duraderas de adjuntos e identificador de envío guardado antes de publicar. Los
+borradores se separan por cuenta/grupo y conservan los cambios nuevos mientras
+otro envío termina. Incluye descarte explícito, errores de guardado visibles y
+protección frente a editores antiguos. Una integración nativa recupera un post
+aceptado cuya respuesta se perdió y comprueba que el reintento conserva el objeto
+y las fechas. Consultar el PR para la compilación y las pruebas nativas de esta
+etapa. Son borradores de cada dispositivo; no se sincronizan entre web e iPhone.
+La limpieza remota, el despliegue y la prueba física siguen pendientes.

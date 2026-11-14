@@ -143,7 +143,7 @@ export const createStory = async (input: CreateStoryInput): Promise<string> => {
   return runWrite('posts.createStory', () => createStoryRaw(safeInput));
 };
 
-export const createPostUploading = async (input: CreatePostUploadingInput): Promise<void> => {
+export const createPostUploading = async (input: CreatePostUploadingInput): Promise<boolean> => {
   const safeInput = validate(createPostUploadingInputSchema, input, { field: 'input' });
   ensureModeratedContent('posts.createPostUploading', [safeInput.title ?? null, safeInput.text]);
   return runWrite('posts.createPostUploading', () => createPostUploadingRaw(safeInput));

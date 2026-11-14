@@ -28,10 +28,10 @@ export type CreatePostUploadingInput = {
 /**
  * Create post with "uploading" status (Phase 1 of 3)
  */
-export async function createPostUploading(input: CreatePostUploadingInput): Promise<void> {
+export async function createPostUploading(input: CreatePostUploadingInput): Promise<boolean> {
   const ref = doc(db, COLLECTIONS.posts, input.postId);
 
-  await runTransaction(db, async (transaction) => {
+  return runTransaction(db, async (transaction) => {
     const existing = await transaction.get(ref);
     if (existing.exists()) {
       const data = existing.data();
@@ -44,7 +44,7 @@ export async function createPostUploading(input: CreatePostUploadingInput): Prom
       ) {
         throw new Error('La publicación pendiente no coincide con este borrador.');
       }
-      return;
+      return data.status === 'ready';
     }
     transaction.set(ref, {
       postId: input.postId,
@@ -62,6 +62,7 @@ export async function createPostUploading(input: CreatePostUploadingInput): Prom
       groupId: input.groupId ?? null,
       categoryId: input.categoryId ?? null,
     });
+    return false;
   });
 }
 

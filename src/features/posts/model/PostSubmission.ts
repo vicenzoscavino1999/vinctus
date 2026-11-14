@@ -22,7 +22,10 @@ export class PostSubmission {
 
   async publish(onProgress: (total: number, transferred: number) => void): Promise<string> {
     if (!this.ready) {
-      await createPostUploading(this.input);
+      if (await createPostUploading(this.input)) {
+        this.ready = true;
+        return this.input.postId;
+      }
       this.uploaded ??= await uploadPostMedia(
         this.files,
         this.input.authorId,
