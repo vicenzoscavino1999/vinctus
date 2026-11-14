@@ -106,6 +106,7 @@ final class PostDraftTests: XCTestCase {
     vm.draftText = "Keep this"
     let file = try file(); try FileManager.default.removeItem(at: file.fileURL)
     try vm.addAttachment(file)
+    await vm.flushDraft()
     await vm.submit()?.value
     XCTAssertTrue(repo.ids.isEmpty)
     XCTAssertEqual(vm.draftText, "Keep this")
