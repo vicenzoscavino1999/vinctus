@@ -29,7 +29,7 @@ final class SavedPostsTests: XCTestCase {
     }
     await vm.loadMore()
     XCTAssertEqual(vm.items.map(\.id), ["p1"])
-    XCTAssertEqual(repo.cursors.compactMap { $0?.postID }, ["gone", "gone"])
+    XCTAssertEqual(repo.cursors.compactMap { $0?.token }, ["gone", "gone"])
     XCTAssertFalse(vm.canLoadMore)
   }
 
