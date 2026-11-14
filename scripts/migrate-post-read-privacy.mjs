@@ -44,6 +44,10 @@ async function scan(query, visit) {
 }
 
 try {
+  const [bucketMetadata] = await bucket.getMetadata();
+  const uniformAccess = bucketMetadata.iamConfiguration?.uniformBucketLevelAccess?.enabled === true;
+  const hasPublicACL = (entries) =>
+    entries.some((entry) => ['allUsers', 'allAuthenticatedUsers'].includes(entry.entity));
   const [iam] = await bucket.iam.getPolicy({ requestedPolicyVersion: 3 });
   assert.ok(
     !(iam.bindings ?? []).some((binding) =>
@@ -51,6 +55,14 @@ try {
     ),
     'Remove public bucket IAM access before continuing.',
   );
+  if (!uniformAccess) {
+    const [bucketACL] = await bucket.acl.get();
+    const [defaultACL] = await bucket.acl.default.get();
+    assert.ok(
+      !hasPublicACL(bucketACL) && !hasPublicACL(defaultACL),
+      'Remove public bucket/default ACL access before continuing.',
+    );
+  }
   // Revoke old bearer URLs first. Preconditions prevent overwriting concurrent metadata.
   let pageToken;
   do {
@@ -63,6 +75,10 @@ try {
     });
     for (const file of files) {
       stats.objects++;
+      if (!uniformAccess) {
+        const [objectACL] = await file.acl.get();
+        assert.ok(!hasPublicACL(objectACL), 'Remove public object ACL access before continuing.');
+      }
       const [metadata] = await file.getMetadata();
       if (
         metadata.metadata?.firebaseStorageDownloadTokens ||

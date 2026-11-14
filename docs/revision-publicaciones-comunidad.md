@@ -504,7 +504,7 @@ node scripts/migrate-post-read-privacy.mjs --project PROJECT --bucket BUCKET
 ```
 
 El comando es de solo lectura por defecto, requiere credenciales del proyecto,
-rechaza buckets con IAM público y muestra solo contadores. Recorre objetos (incluidas versiones anteriores) y
+rechaza IAM o ACL públicos (incluidos ACL de objetos si el bucket no usa acceso uniforme) y muestra solo contadores. Recorre objetos (incluidas versiones anteriores) y
 documentos en páginas de 200. El modo de aplicación requiere `--apply
 --acknowledge-client-upgrade`; revoca tokens anteriores, cambia caché, convierte
 URLs válidas en marcadores y borra fragmentos antiguos de notificaciones. Las
