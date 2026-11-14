@@ -214,7 +214,7 @@ final class PostSubmissionTests: XCTestCase {
 
     repo.fetchHandler = { PostCommentsPage(items: [newest, older], isFromCache: true) }
     await vm.loadMoreComments()
-    XCTAssertEqual(repo.fetchedCursors.compactMap { $0?.commentID }, ["c2", "c2"])
+    XCTAssertEqual(repo.fetchedCursors.compactMap { $0?.token }, ["c2", "c2"])
     XCTAssertEqual(vm.comments.map(\.id), ["c3", "c2"])
     XCTAssertNil(vm.loadMoreErrorMessage)
     XCTAssertTrue(vm.isShowingCachedData)
