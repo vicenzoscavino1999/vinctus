@@ -61,7 +61,7 @@ const getPostTitle = (title: string | null | undefined, content: string): string
   return `${firstLine.slice(0, 87)}...`;
 };
 
-export const GroupDetailContainer = () => {
+const GroupDetailSession = () => {
   const { groupId } = useParams<{ groupId: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -532,4 +532,9 @@ export const GroupDetailContainer = () => {
   );
 };
 
+export const GroupDetailContainer = () => {
+  const { user } = useAuth();
+  const { groupId } = useParams<{ groupId: string }>();
+  return <GroupDetailSession key={JSON.stringify([user?.uid ?? null, groupId])} />;
+};
 export default GroupDetailContainer;
