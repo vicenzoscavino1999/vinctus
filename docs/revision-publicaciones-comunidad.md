@@ -77,6 +77,8 @@ un iPhone físico. La prueba local usa exclusivamente el proyecto emulado
   con ese módulo (incluidos el límite de 50 IDs y las preferencias anónimas).
 - Reglas y visibilidad: actualmente posts/comentarios tienen lectura pública;
   revisar el alcance esperado para grupos privados y bloqueos antes de cambiarlas.
+  La sexta etapa refuerza la autorización de escrituras, pero no cierra la
+  privacidad de lectura del feed, perfiles, comentarios ni enlaces de adjuntos.
 - Pruebas en dispositivo, despliegue y versión posterior de TestFlight.
 - Recuperación tras cerrar el editor o recargar la app y política de limpieza de
   borradores incompletos y sus objetos de Storage. Esta etapa recupera el envío
@@ -370,3 +372,59 @@ históricos. Esta etapa no requiere reglas ni índices nuevos. El índice y los
 triggers de `postsCount` de la tercera etapa conservan sus requisitos de despliegue.
 Quedan la prueba física, staging y su periodo de observación. No se publicaron
 Functions, una versión web de producción ni otro build de TestFlight.
+
+## Sexta etapa: autorización de escrituras de publicaciones e interacciones
+
+Las reglas anteriores aceptaban publicaciones en un `groupId` arbitrario,
+incluidos grupos privados sin membresía. También aceptaban likes, índices
+personales, guardados y comentarios de posts inexistentes, pendientes o fallidos.
+Los bloqueos entre el autor y quien interactúa solo se comprobaban en la interfaz
+de algunas pantallas. Los índices y likes permitían cambiar fechas o añadir campos.
+
+Se añadieron reglas comunes que exigen:
+
+- Para crear, editar o terminar de publicar en un grupo: grupo existente y
+  propiedad o membresía en `groups/{groupId}/members/{uid}`. El índice personal
+  `users/{uid}/memberships` no concede acceso. Un grupo público tampoco permite
+  publicar sin unirse primero.
+- Para nuevas interacciones y sus índices: post existente y publicado (`ready`
+  o sin estado, incluidos los antiguos con estado nulo), sin bloqueo en ninguna
+  dirección entre autor y usuario. En grupos privados se exige propiedad o
+  membresía; en grupos públicos se permiten interacciones de visitantes.
+- Likes e índices con estructura exacta, identidad vinculada a la ruta y fecha
+  del servidor al crearse. Un reenvío idéntico conserva los datos; no permite
+  cambiar fecha, post ni añadir campos. Los clientes actuales usan transacciones
+  que no vuelven a escribir una reacción existente.
+
+Se permite quitar likes, sus índices, guardados y comentarios propios aunque
+el post se borre o cambien los permisos. Un autor expulsado puede marcar como
+fallida una subida incompleta y borrar su post; no puede publicarlo, editarlo ni
+usar esa excepción para degradar a `failed` una publicación ya confirmada.
+
+Validación local: 75 pruebas de reglas aprobadas, incluidas 27 nuevas de
+autorización. Antes del cambio, 16 de los 24 casos iniciales aceptaban escrituras
+que debían denegar. Los casos cubren grupos públicos/privados, propietario sin
+índice de miembro, índice personal falsificado, expulsión, grupo eliminado,
+estados de publicación, bloqueos en ambas direcciones, identidad, fechas,
+reenvíos y limpieza propia. El lote normal de like/índice/guardado se prueba
+con las reglas activas para comprobar el presupuesto de accesos.
+
+Se añaden pruebas de integración con los repositorios reales de iOS para
+publicar antes/después de la membresía y rechazar like/guardado/comentario tras
+un bloqueo. El caso de guardados huérfanos ahora guarda posts reales y después
+los elimina: crear un índice que apunta a un post inexistente ya no es válido.
+
+Alcance pendiente de privacidad: las lecturas de posts, likes, comentarios y
+archivos siguen públicas en las reglas actuales. El feed global, las categorías
+y los perfiles consultan todos los posts y los filtran después; es necesario
+adaptar esas consultas y los consumidores web/iOS antes de imponer acceso privado
+en el servidor. Las reglas de Firestore no filtran resultados de una consulta.
+También hay que revisar los enlaces de descarga existentes y las transiciones
+de visibilidad/membresía para no dejar acceso por otra ruta. Esta etapa no afirma
+que un post de un grupo privado sea confidencial.
+
+Las nuevas comprobaciones leen el post y los dos documentos de bloqueo; cuando
+hay un grupo, también comprueban su documento y la membresía. No añaden listeners
+ni campos o índices nuevos. Deben desplegarse tras validar juntos los clientes
+web/iOS y los casos de grupo en staging. No se desplegaron reglas ni otra versión
+de producción o TestFlight.

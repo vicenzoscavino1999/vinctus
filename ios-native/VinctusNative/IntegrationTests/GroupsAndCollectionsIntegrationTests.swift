@@ -3,6 +3,40 @@ import XCTest
 @testable import VinctusNative
 
 final class GroupsIntegrationTests: EmulatorTestCase {
+  func testPublishingRequiresRealGroupMembershipAndStopsAfterLeaving() async throws {
+    let owner = try await makeUser("Bruno")
+    let groupID = try await makeGroup(name: "Publicaciones privadas", visibility: .private)
+    let posts = FirebaseCreatePostRepo()
+    let ownerPost = try posts.makePostID()
+    try await posts.publishTextPost(text: "Del propietario", postID: ownerPost, groupID: groupID)
+    let member = try await makeUser("Ana")
+    let deniedPost = try posts.makePostID()
+    do {
+      try await posts.publishTextPost(text: "Sin permiso", postID: deniedPost, groupID: groupID)
+      XCTFail("A non-member must not publish in a private group")
+    } catch {
+      XCTAssertEqual((error as NSError).code, FirestoreErrorCode.permissionDenied.rawValue)
+    }
+
+    try await signIn(owner)
+    try await Firestore.firestore().collection("groups").document(groupID)
+      .collection("members").document(member.uid).setData([
+        "uid": member.uid, "groupId": groupID, "role": "member",
+        "joinedAt": FieldValue.serverTimestamp(),
+      ])
+    try await signIn(member)
+    let acceptedPost = try posts.makePostID()
+    try await posts.publishTextPost(text: "Soy miembro", postID: acceptedPost, groupID: groupID)
+    try await FirebaseGroupsRepo().leaveGroup(groupID: groupID, uid: member.uid)
+    let afterLeaving = try posts.makePostID()
+    do {
+      try await posts.publishTextPost(text: "Ya salí", postID: afterLeaving, groupID: groupID)
+      XCTFail("A former member must not publish")
+    } catch {
+      XCTAssertEqual((error as NSError).code, FirestoreErrorCode.permissionDenied.rawValue)
+    }
+  }
+
   func testJoinAPublicGroupOpenItsChatAndLeave() async throws {
     let bruno = try await makeUser("Bruno")
     let groupID = try await makeGroup(name: "Astronomía", visibility: .public)

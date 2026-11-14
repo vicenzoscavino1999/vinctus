@@ -377,6 +377,7 @@ describe('Firestore Rules - critical access controls', () => {
   });
 
   it('allows writing saved posts for own user', async () => {
+    await seedPost('post_x');
     const env = await getRulesTestEnv();
     const db = env.authenticatedContext('user_a').firestore();
 

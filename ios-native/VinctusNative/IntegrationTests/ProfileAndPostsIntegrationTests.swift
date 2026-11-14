@@ -269,6 +269,41 @@ final class PostIntegrationTests: EmulatorTestCase {
     XCTAssertFalse(unsaved)
   }
 
+  func testBlocksStopNewLikesSavesAndCommentsButAllowRemovingExistingReactions() async throws {
+    let author = try await makeUser("Ana")
+    let postID = try await publishPost("Publicación con bloqueo")
+    let reader = try await makeUser("Bruno")
+    let engagement = FirebaseEngagementRepo()
+    try await engagement.setPostLiked(true, postID: postID)
+    try await engagement.setPostSaved(true, postID: postID)
+
+    try await signIn(author)
+    try await Firestore.firestore().collection("users").document(author.uid)
+      .collection("blockedUsers").document(reader.uid).setData([
+        "blockedUid": reader.uid, "status": "active", "blockedAt": FieldValue.serverTimestamp(),
+      ])
+    try await signIn(reader)
+    try await engagement.setPostLiked(false, postID: postID)
+    try await engagement.setPostSaved(false, postID: postID)
+    let attempts: [() async throws -> Void] = [
+      { try await engagement.setPostLiked(true, postID: postID) },
+      { try await engagement.setPostSaved(true, postID: postID) },
+      { try await FirebasePostCommentsRepo().addComment(postID: postID, text: "Sin permiso") },
+    ]
+    for attempt in attempts {
+      do {
+        try await attempt()
+        XCTFail("A block must deny the new interaction at the server")
+      } catch {
+        XCTAssertEqual((error as NSError).code, FirestoreErrorCode.permissionDenied.rawValue)
+      }
+    }
+    let liked = try await engagement.isPostLiked(postID: postID)
+    let saved = try await engagement.isPostSaved(postID: postID)
+    XCTAssertFalse(liked)
+    XCTAssertFalse(saved)
+  }
+
   func testSavedPostsAdvanceOverDeletedItemsAndBelongOnlyToTheCurrentAccount() async throws {
     let user = try await makeUser("Ana")
     let postID = try await publishPost("Una publicación conservada")
@@ -276,17 +311,18 @@ final class PostIntegrationTests: EmulatorTestCase {
     try await engagement.setPostSaved(true, postID: postID)
     let db = Firestore.firestore()
     let index = db.collection("users").document(user.uid).collection("savedPosts")
-    let batch = db.batch()
-    for i in 0..<20 {
-      let id = "orphan-\(i)"
-      batch.setData(["postId": id, "createdAt": FieldValue.serverTimestamp()], forDocument: index.document(id))
+    // Real saved posts can become orphaned when their author deletes them.
+    // Creating an index for a post that never existed is now denied by the rules.
+    for i in 0..<3 {
+      let id = try await publishPost("Publicación que se borrará \(i)")
+      try await engagement.setPostSaved(true, postID: id)
+      try await db.collection("posts").document(id).delete()
     }
-    try await batch.commit()
     let repo = FirebaseSavedPostsRepo()
-    let first = try await repo.fetchSavedPosts(limit: 20, after: nil)
+    let first = try await repo.fetchSavedPosts(limit: 3, after: nil)
     XCTAssertTrue(first.items.isEmpty)
     XCTAssertNotNil(first.next)
-    let second = try await repo.fetchSavedPosts(limit: 20, after: first.next)
+    let second = try await repo.fetchSavedPosts(limit: 3, after: first.next)
     XCTAssertEqual(second.items.map(\.id), [postID])
     XCTAssertNil(second.next)
     _ = try await makeUser("Bruno")

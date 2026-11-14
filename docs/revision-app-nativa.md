@@ -124,3 +124,11 @@ sobrescritos ni aplica reparaciones generales. No modifica el código iOS: sigue
 vigente la validación nativa de la cuarta etapa. Consultar la revisión de
 Publicaciones para los resultados del backend y del navegador. El despliegue
 y la comprobación en dispositivo siguen pendientes.
+
+La sexta etapa exige permisos de escritura en el servidor compartido: membresía
+real para publicar en grupos, post publicado y ausencia de bloqueos para nuevas
+interacciones. Conserva la retirada de reacciones propias tras un bloqueo o un
+borrado y añade pruebas de integración nativas para estos permisos. La privacidad
+de lectura del feed y de los adjuntos sigue pendiente; esta etapa no convierte
+las publicaciones de grupos privados en contenido confidencial. Las reglas
+continúan sin desplegarse.
