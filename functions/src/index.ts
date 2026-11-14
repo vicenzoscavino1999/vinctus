@@ -16,6 +16,14 @@ import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { messageReportKey, moderateUserText, newlyMatchedTerms } from './moderation';
 import { clearLastMessagePreview } from './moderationActions';
+import { reconcileUserPostCount } from './postCounts';
+import { reconcilePostLikes, reconcilePostComments } from './postEngagementCounts';
+export {
+  readPosts,
+  readPostMedia,
+  onPostMediaFinalized,
+  onPostMediaMetadataUpdated,
+} from './postReadEndpoints';
 import { COLLECTIONS, SERVER_COLLECTIONS, SUBCOLLECTIONS } from './firestoreContract';
 
 // Initialize Firebase Admin
@@ -25,9 +33,6 @@ const db = admin.firestore();
 // ==========================================================
 // 🏆 REPUTATION / KARMA SETTINGS
 // ==========================================================
-
-const KARMA_PER_LIKE = 2;
-const REPUTATION_MAX = 100;
 
 type ApplyToBatch<T> = (batch: admin.firestore.WriteBatch, item: T) => void;
 
@@ -455,135 +460,6 @@ async function deduplicatedDecrement(
 // 🧮 KARMA UPDATES (Posts Likes)
 // ==========================================================
 
-async function handlePostLikeChange(eventId: string, postId: string, delta: number): Promise<void> {
-  const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(eventId);
-  const postRef = db.doc(`${COLLECTIONS.posts}/${postId}`);
-
-  await db.runTransaction(async (tx) => {
-    const dedupDoc = await tx.get(dedupRef);
-    if (dedupDoc.exists) {
-      functions.logger.info('Event already processed, skipping', { eventId });
-      return;
-    }
-
-    const postSnap = await tx.get(postRef);
-    if (!postSnap.exists) {
-      functions.logger.warn('Post not found, skipping like update', { postId });
-      return;
-    }
-
-    const postData = postSnap.data() || {};
-    const authorId = typeof postData.authorId === 'string' ? postData.authorId : null;
-    if (!authorId) {
-      functions.logger.warn('Post has no authorId, skipping like update', { postId });
-      return;
-    }
-
-    const categoryId =
-      typeof postData.categoryId === 'string' && postData.categoryId.length > 0
-        ? postData.categoryId
-        : null;
-
-    const currentLikes =
-      typeof postData.likesCount === 'number'
-        ? postData.likesCount
-        : typeof postData.likeCount === 'number'
-          ? postData.likeCount
-          : 0;
-    const nextLikes = Math.max(0, currentLikes + delta);
-
-    const karmaDelta = delta * KARMA_PER_LIKE;
-
-    const userRef = db.doc(`${COLLECTIONS.users}/${authorId}`);
-    const userPublicRef = db.doc(`${COLLECTIONS.usersPublic}/${authorId}`);
-    const userSnap = await tx.get(userRef);
-    const userData = userSnap.data() || {};
-
-    const currentKarma =
-      typeof userData.karmaGlobal === 'number'
-        ? userData.karmaGlobal
-        : typeof userData.reputation === 'number'
-          ? userData.reputation
-          : 0;
-    const nextKarma = Math.max(0, currentKarma + karmaDelta);
-    const nextReputation = Math.min(REPUTATION_MAX, nextKarma);
-
-    const karmaUpdates: Record<string, unknown> = {
-      karmaGlobal: nextKarma,
-      reputation: nextReputation,
-      updatedAt: FieldValue.serverTimestamp(),
-    };
-
-    if (categoryId) {
-      const currentByInterest =
-        typeof userData.karmaByInterest === 'object' && userData.karmaByInterest !== null
-          ? (userData.karmaByInterest as Record<string, number>)
-          : {};
-      const currentInterest =
-        typeof currentByInterest[categoryId] === 'number' ? currentByInterest[categoryId] : 0;
-      const nextInterest = Math.max(0, currentInterest + karmaDelta);
-      karmaUpdates[`karmaByInterest.${categoryId}`] = nextInterest;
-    }
-
-    tx.create(dedupRef, {
-      createdAt: FieldValue.serverTimestamp(),
-      processedAt: new Date().toISOString(),
-    });
-
-    tx.update(postRef, {
-      likesCount: nextLikes,
-      likeCount: nextLikes,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-
-    tx.set(userRef, karmaUpdates, { merge: true });
-    tx.set(userPublicRef, karmaUpdates, { merge: true });
-  });
-}
-
-async function handlePostCommentChange(
-  eventId: string,
-  postId: string,
-  delta: number,
-): Promise<void> {
-  const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(`post_comment_${eventId}`);
-  const postRef = db.doc(`${COLLECTIONS.posts}/${postId}`);
-
-  await db.runTransaction(async (tx) => {
-    const dedupDoc = await tx.get(dedupRef);
-    if (dedupDoc.exists) {
-      functions.logger.info('Event already processed, skipping', { eventId, postId, delta });
-      return;
-    }
-
-    const postSnap = await tx.get(postRef);
-    if (!postSnap.exists) {
-      functions.logger.warn('Post not found, skipping comment counter update', { postId });
-      return;
-    }
-
-    const postData = postSnap.data() || {};
-    const currentComments =
-      typeof postData.commentCount === 'number'
-        ? postData.commentCount
-        : typeof postData.commentsCount === 'number'
-          ? postData.commentsCount
-          : 0;
-    const nextComments = Math.max(0, currentComments + delta);
-
-    tx.create(dedupRef, {
-      createdAt: FieldValue.serverTimestamp(),
-      processedAt: new Date().toISOString(),
-    });
-
-    tx.update(postRef, {
-      commentCount: nextComments,
-      commentsCount: nextComments,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-  });
-}
-
 async function handleArenaDebateLikeChange(
   eventId: string,
   debateId: string,
@@ -988,15 +864,16 @@ async function ensureGroupConversationForMember(groupId: string, uid: string): P
 }
 
 // ==========================================================
-// ❤️ POST LIKE COUNTERS (With Deduplication)
+// ❤️ POST LIKE COUNTERS (Current-state Reconciliation)
 // ==========================================================
 
 /**
- * Increment likesCount when a user likes a post
+ * Reconcile current likes and applied karma after a like is created
  * Trigger: onCreate posts/{postId}/likes/{userId}
  */
-export const onPostLikeCreated = functions.firestore
-  .document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.likes}/{userId}`)
+export const onPostLikeCreated = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.likes}/{userId}`)
   .onCreate(async (snap, context) => {
     const { postId, userId } = context.params;
     const eventId = context.eventId;
@@ -1004,7 +881,7 @@ export const onPostLikeCreated = functions.firestore
     try {
       functions.logger.info('Post liked', { postId, userId, eventId });
 
-      await handlePostLikeChange(eventId, postId, 1);
+      await reconcilePostLikes(db, postId);
 
       functions.logger.info('Like processed (post + karma)', { postId, eventId });
     } catch (error) {
@@ -1014,15 +891,17 @@ export const onPostLikeCreated = functions.firestore
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
     }
   });
 
 /**
- * Decrement likesCount when a user unlikes a post
+ * Reconcile current likes and applied karma after a like is deleted
  * Trigger: onDelete posts/{postId}/likes/{userId}
  */
-export const onPostLikeDeleted = functions.firestore
-  .document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.likes}/{userId}`)
+export const onPostLikeDeleted = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.likes}/{userId}`)
   .onDelete(async (snap, context) => {
     const { postId, userId } = context.params;
     const eventId = context.eventId;
@@ -1030,7 +909,7 @@ export const onPostLikeDeleted = functions.firestore
     try {
       functions.logger.info('Post unliked', { postId, userId, eventId });
 
-      await handlePostLikeChange(eventId, postId, -1);
+      await reconcilePostLikes(db, postId);
 
       functions.logger.info('Unlike processed (post + karma)', { postId, eventId });
     } catch (error) {
@@ -1040,54 +919,59 @@ export const onPostLikeDeleted = functions.firestore
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
     }
   });
 
 /**
- * Increment commentCount/commentsCount when a comment is created.
+ * Reconcile commentCount/commentsCount from current comments after creation.
  * Trigger: onCreate posts/{postId}/comments/{commentId}
  */
-export const onPostCommentCreated = functions.firestore
-  .document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.comments}/{commentId}`)
+export const onPostCommentCreated = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.comments}/{commentId}`)
   .onCreate(async (_snap, context) => {
     const { postId, commentId } = context.params;
     const eventId = context.eventId;
 
     try {
       functions.logger.info('Post comment created', { postId, commentId, eventId });
-      await handlePostCommentChange(eventId, postId, 1);
-      functions.logger.info('Post comment counter incremented', { postId, eventId });
+      await reconcilePostComments(db, postId);
+      functions.logger.info('Post comment counter reconciled', { postId, eventId });
     } catch (error) {
-      functions.logger.error('Failed to increment post comment counter', {
+      functions.logger.error('Failed to reconcile post comment counter', {
         postId,
         commentId,
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
     }
   });
 
 /**
- * Decrement commentCount/commentsCount when a comment is deleted.
+ * Reconcile commentCount/commentsCount from current comments after deletion.
  * Trigger: onDelete posts/{postId}/comments/{commentId}
  */
-export const onPostCommentDeleted = functions.firestore
-  .document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.comments}/{commentId}`)
+export const onPostCommentDeleted = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.comments}/{commentId}`)
   .onDelete(async (_snap, context) => {
     const { postId, commentId } = context.params;
     const eventId = context.eventId;
 
     try {
       functions.logger.info('Post comment deleted', { postId, commentId, eventId });
-      await handlePostCommentChange(eventId, postId, -1);
-      functions.logger.info('Post comment counter decremented', { postId, eventId });
+      await reconcilePostComments(db, postId);
+      functions.logger.info('Post comment counter reconciled', { postId, eventId });
     } catch (error) {
-      functions.logger.error('Failed to decrement post comment counter', {
+      functions.logger.error('Failed to reconcile post comment counter', {
         postId,
         commentId,
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
     }
   });
 
@@ -1223,11 +1107,12 @@ export const onEventDeleted = functions.firestore
   });
 
 /**
- * Increment postsCount when a post is created
+ * Reconcile postsCount when a post is created (unfinished uploads do not count).
  * Trigger: onCreate posts/{postId}
  */
-export const onPostCreated = functions.firestore
-  .document(`${COLLECTIONS.posts}/{postId}`)
+export const onPostCreated = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}`)
   .onCreate(async (snap, context) => {
     const { postId } = context.params;
     const eventId = context.eventId;
@@ -1241,14 +1126,15 @@ export const onPostCreated = functions.firestore
 
     try {
       functions.logger.info('Post created', { postId, authorId, eventId });
-      await deduplicatedUserCounterUpdate(eventId, authorId, 'postsCount', 1);
+      await reconcileUserPostCount(db, authorId);
     } catch (error) {
-      functions.logger.error('Failed to increment postsCount', {
+      functions.logger.error('Failed to reconcile postsCount on create', {
         postId,
         authorId,
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
     }
 
     try {
@@ -1260,6 +1146,20 @@ export const onPostCreated = functions.firestore
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+  });
+
+/** Reconcile publication status transitions, including successful upload retries. */
+export const onPostUpdatedCount = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}`)
+  .onUpdate(async (change) => {
+    const before = change.before.data();
+    const after = change.after.data();
+    if (before.status === after.status && before.authorId === after.authorId) return;
+    const authors = new Set([before.authorId, after.authorId]);
+    for (const authorId of authors) {
+      if (typeof authorId === 'string' && authorId) await reconcileUserPostCount(db, authorId);
     }
   });
 
@@ -1306,8 +1206,9 @@ export const onPostUpdatedModeration = functions.firestore
  * - Deletes comments subcollection (future-proofing)
  * Trigger: onDelete posts/{postId}
  */
-export const onPostDeleted = functions.firestore
-  .document(`${COLLECTIONS.posts}/{postId}`)
+export const onPostDeleted = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}`)
   .onDelete(async (snap, context) => {
     const { postId } = context.params;
     const eventId = context.eventId;
@@ -1316,14 +1217,15 @@ export const onPostDeleted = functions.firestore
 
     if (authorId) {
       try {
-        await deduplicatedUserCounterUpdate(eventId, authorId, 'postsCount', -1);
+        await reconcileUserPostCount(db, authorId);
       } catch (error) {
-        functions.logger.error('Failed to decrement postsCount', {
+        functions.logger.error('Failed to reconcile postsCount on delete', {
           postId,
           authorId,
           eventId,
           error: error instanceof Error ? error.message : String(error),
         });
+        throw error;
       }
     }
 
@@ -1555,7 +1457,13 @@ export const onMessageCreatedModeration = functions.firestore
 
 type ReportQueuePriority = 'low' | 'medium' | 'high';
 type ReportQueueTargetType =
-  'user' | 'group' | 'post' | 'comment' | 'message' | 'story' | 'unknown';
+  | 'user'
+  | 'group'
+  | 'post'
+  | 'comment'
+  | 'message'
+  | 'story'
+  | 'unknown';
 
 function inferQueuePriority(reason: unknown): ReportQueuePriority {
   if (reason === 'abuse' || reason === 'harassment') return 'high';

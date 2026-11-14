@@ -11,14 +11,30 @@ struct PostComment: Identifiable, Hashable {
   let createdAt: Date?
 }
 
+struct PostCommentsCursor {
+  let token: String
+}
+
 struct PostCommentsPage {
   let items: [PostComment]
   let isFromCache: Bool
+  var nextCursor: PostCommentsCursor? = nil
+  var hasMore = false
 }
 
 protocol PostCommentsRepo {
-  func fetchComments(postID: String, limit: Int) async throws -> PostCommentsPage
-  func addComment(postID: String, text: String) async throws
+  func fetchComments(postID: String, limit: Int, after cursor: PostCommentsCursor?) async throws -> PostCommentsPage
+  func addComment(postID: String, text: String, commentID: String) async throws
+}
+
+extension PostCommentsRepo {
+  func fetchComments(postID: String, limit: Int) async throws -> PostCommentsPage {
+    try await fetchComments(postID: postID, limit: limit, after: nil)
+  }
+
+  func addComment(postID: String, text: String) async throws {
+    try await addComment(postID: postID, text: text, commentID: UUID().uuidString)
+  }
 }
 
 enum PostCommentsRepoError: LocalizedError {
@@ -28,6 +44,8 @@ enum PostCommentsRepoError: LocalizedError {
   case emptyComment
   case commentTooLong(limit: Int)
   case missingSnapshot
+  case invalidCommentID
+  case draftMismatchForRetry
 
   var errorDescription: String? {
     switch self {
@@ -43,6 +61,10 @@ enum PostCommentsRepoError: LocalizedError {
       return "El comentario supera el límite de \(limit) caracteres."
     case .missingSnapshot:
       return "No se pudo cargar comentarios."
+    case .invalidCommentID:
+      return "No se pudo identificar el comentario."
+    case .draftMismatchForRetry:
+      return "El comentario pendiente no coincide con este borrador."
     }
   }
 }
@@ -57,48 +79,32 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     self.auth = auth
   }
 
-  func fetchComments(postID: String, limit: Int) async throws -> PostCommentsPage {
+  func fetchComments(postID: String, limit: Int, after cursor: PostCommentsCursor?) async throws -> PostCommentsPage {
     guard FirebaseApp.app() != nil else { throw PostCommentsRepoError.firebaseNotConfigured }
 
     let normalizedPostID = postID.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedPostID.isEmpty else { throw PostCommentsRepoError.invalidPostID }
 
-    let db = self.db ?? Firestore.firestore()
-    let pageSize = max(1, min(120, limit))
-
-    let query = db.collection(FirestoreCollections.posts)
-      .document(normalizedPostID)
-      .collection(FirestoreSubcollections.comments)
-      .order(by: "createdAt", descending: false)
-      .limit(to: pageSize)
-
-    let (snapshot, isFromCache) = try await getDocumentsWithFallback(query)
-    let items = snapshot.documents.map { doc in
-      let data = doc.data()
-      let authorSnapshot = data["authorSnapshot"] as? [String: Any]
-      let authorName = FirestoreValue.string(authorSnapshot?["displayName"])
-        ?? FirestoreValue.string(data["authorName"])
-        ?? FirestoreValue.string(data["authorId"])
-        ?? "Usuario"
-      let text = FirestoreValue.string(data["text"]) ?? ""
-
+    let result = try await PostReadClient.read(view: "comments", id: normalizedPostID, limit: max(1, min(50, limit)), cursor: cursor?.token)
+    let items = result.items.map { row -> PostComment in
+      let data = row.fields
+      let snapshot = data["authorSnapshot"] as? [String: Any]
       return PostComment(
-        id: doc.documentID,
-        authorID: FirestoreValue.string(data["authorId"]),
-        authorName: authorName,
-        text: text,
-        createdAt: FirestoreValue.date(data["createdAt"])
+        id: row.id, authorID: FirestoreValue.string(data["authorId"]),
+        authorName: FirestoreValue.string(snapshot?["displayName"]) ?? "Usuario",
+        text: data["text"] as? String ?? "", createdAt: FirestoreValue.date(data["createdAt"])
       )
     }
-
-    return PostCommentsPage(items: items, isFromCache: isFromCache || snapshot.metadata.isFromCache)
+    return PostCommentsPage(items: items, isFromCache: false,
+      nextCursor: result.cursor.map { PostCommentsCursor(token: $0) }, hasMore: result.hasMore)
   }
 
-  func addComment(postID: String, text: String) async throws {
+  func addComment(postID: String, text: String, commentID: String) async throws {
     guard FirebaseApp.app() != nil else { throw PostCommentsRepoError.firebaseNotConfigured }
 
     let normalizedPostID = postID.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedPostID.isEmpty else { throw PostCommentsRepoError.invalidPostID }
+    guard !commentID.isEmpty, !commentID.contains("/") else { throw PostCommentsRepoError.invalidCommentID }
 
     let normalizedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedText.isEmpty else { throw PostCommentsRepoError.emptyComment }
@@ -114,7 +120,7 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     let commentRef = db.collection(FirestoreCollections.posts)
       .document(normalizedPostID)
       .collection(FirestoreSubcollections.comments)
-      .document()
+      .document(commentID)
 
     let authorSnapshotPayload: [String: Any] = [
       "displayName": authorSnapshot.displayName,
@@ -129,7 +135,21 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
       "createdAt": FieldValue.serverTimestamp(),
     ]
 
-    try await commentRef.setData(payload)
+    let uid = currentUser.uid
+    _ = try await db.runTransaction { transaction, errorPointer in
+      do {
+        let existing = try transaction.getDocument(commentRef)
+        if let data = existing.data() {
+          guard data["authorId"] as? String == uid,
+            data["postId"] as? String == normalizedPostID,
+            data["text"] as? String == normalizedText
+          else { throw PostCommentsRepoError.draftMismatchForRetry }
+        } else {
+          transaction.setData(payload, forDocument: commentRef)
+        }
+      } catch { errorPointer?.pointee = error as NSError }
+      return nil
+    }
   }
 
   private func resolveAuthorSnapshot(
@@ -160,13 +180,4 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     return nil
   }
 
-  private func getDocumentsWithFallback(_ query: Query) async throws -> (QuerySnapshot, Bool) {
-    do {
-      let snapshot = try await query.getDocuments(source: .server)
-      return (snapshot, false)
-    } catch {
-      let cachedSnapshot = try await query.getDocuments(source: .cache)
-      return (cachedSnapshot, true)
-    }
-  }
 }

@@ -9,6 +9,11 @@ service cloud.firestore {
     function isAuthenticated() {
       return request.auth != null;
     }
+
+    function hasPostReadSession() {
+      return isAuthenticated()
+        && request.auth.token.get('firebase', {}).get('sign_in_provider', 'custom') != 'anonymous';
+    }
     
     // Check if user is the owner of the resource
     function isOwner(uid) {
@@ -45,7 +50,7 @@ service cloud.firestore {
       let publicDoc = get(/databases/$(database)/documents/users_public/$(uid));
       return publicDoc != null
         && publicDoc.data != null
-        && publicDoc.data.accountVisibility == 'private';
+        && publicDoc.data.get('accountVisibility', 'public') == 'private';
     }
 
     function isAccountPublic(uid) {
@@ -65,9 +70,10 @@ service cloud.firestore {
     }
     
     // Validate like structure against path
-    function isValidUserLikeCreate(postId) {
-      return request.resource.data.keys().hasAll(['postId', 'createdAt'])
-        && request.resource.data.postId == postId;  // Must match path
+    function isValidPostIndexCreate(postId) {
+      return request.resource.data.keys().hasOnly(['postId', 'createdAt'])
+        && request.resource.data.postId == postId
+        && request.resource.data.createdAt == request.time;
     }
 
     // Validate arena like structure against path
@@ -88,9 +94,10 @@ service cloud.firestore {
     
     // Validate post like structure against path and auth
     function isValidPostLikeCreate(postId, uid) {
-      return request.resource.data.keys().hasAll(['uid', 'postId', 'createdAt'])
+      return request.resource.data.keys().hasOnly(['uid', 'postId', 'createdAt'])
         && request.resource.data.uid == uid  // Must match path
-        && request.resource.data.postId == postId;  // Must match path
+        && request.resource.data.postId == postId
+        && request.resource.data.createdAt == request.time;
     }
 
     // Validate arena debate like structure against path and auth
@@ -326,8 +333,8 @@ service cloud.firestore {
         && data.toUid != request.auth.uid
         && data.postId is string
         && data.postId.size() > 0
-        && (data.postSnippet == null || (data.postSnippet is string && data.postSnippet.size() <= 220))
-        && (data.commentText == null || (data.commentText is string && data.commentText.size() <= 300))
+        && data.postSnippet == null
+        && data.commentText == null
         && data.read == false
         && data.createdAt == request.time;
     }
@@ -339,6 +346,8 @@ service cloud.firestore {
         && request.resource.data.toUid == resource.data.toUid
         && request.resource.data.type == resource.data.type
         && request.resource.data.postId == resource.data.postId
+        && request.resource.data.postSnippet == null
+        && request.resource.data.commentText == null
         && request.resource.data.read == resource.data.read
         && request.resource.data.createdAt == request.time;
     }
@@ -601,12 +610,13 @@ service cloud.firestore {
       allow read: if isOwner(uid);
       
       // Only the user can write to their own likes
-      allow create: if isOwner(uid) && isValidUserLikeCreate(postId);
+      allow create: if isOwner(uid) && isValidPostIndexCreate(postId)
+        && canInteractWithPost(postId);
       allow delete: if isOwner(uid);
       
       // Update only if data doesn't change (idempotent writes)
-      allow update: if isOwner(uid)
-        && request.resource.data.postId == postId;  // Prevent spoofing
+      allow update: if isOwner(uid) && canInteractWithPost(postId)
+        && request.resource.data == resource.data;
     }
 
     // users/{uid}/likedArenaDebates/{debateId}
@@ -640,12 +650,13 @@ service cloud.firestore {
       allow read: if isOwner(uid);
       
       // Only the user can write to their own saved posts
-      allow create: if isOwner(uid);
+      allow create: if isOwner(uid) && isValidPostIndexCreate(postId)
+        && canInteractWithPost(postId);
       allow delete: if isOwner(uid);
       
-      // Update only if postId doesn't change
-      allow update: if isOwner(uid)
-        && request.resource.data.postId == postId;
+      // Replays preserve all original fields, including createdAt.
+      allow update: if isOwner(uid) && canInteractWithPost(postId)
+        && request.resource.data == resource.data;
     }
     
     // users/{uid}/savedCategories/{categoryId}
@@ -1158,6 +1169,8 @@ service cloud.firestore {
         && item.url is string
         && item.url.size() > 0
         && item.url.size() <= 500
+        && (item.url == 'post-media:' + item.path
+          || (isVideo && item.url.matches('https://www[.]youtube[.]com/embed/[A-Za-z0-9_-]{11}')))
         && item.path is string
         && item.path.size() <= 300
         && item.type in ['image', 'video', 'file']
@@ -1271,20 +1284,72 @@ service cloud.firestore {
     function isPostAuthor() {
       return resource.data.authorId == request.auth.uid;
     }
+
+    // The group's member document authorizes access; the user-owned membership
+    // index cannot grant permission to publish or interact in a private group.
+    function canUsePostGroup(data, membersOnly) {
+      let groupId = data.get('groupId', null);
+      return groupId == null
+        || (groupId is string && groupId.size() > 0 && groupId.size() <= 100
+          && exists(/databases/$(database)/documents/groups/$(groupId))
+          && (isGroupOwner(groupId)
+            || exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid))
+            || (!membersOnly && isGroupPublic(groupId))));
+    }
+
+    function canInteractWithPost(postId) {
+      let post = get(/databases/$(database)/documents/posts/$(postId));
+      return isAuthenticated()
+        && post != null && post.data != null
+        && canViewPublishedPost(post.data);
+    }
+
+    function canViewPublishedPost(data) {
+      let authorId = data.get('authorId', null);
+      return hasPostReadSession() && authorId is string && authorId.size() > 0
+        && data.get('status', null) in [null, 'ready']
+        && exists(/databases/$(database)/documents/users_public/$(authorId))
+        && !isConversationBlocked(request.auth.uid, authorId)
+        && (data.get('groupId', null) == null
+          || (isGroupPublic(data.groupId)
+            || (exists(/databases/$(database)/documents/users_public/$(request.auth.uid)) && canUsePostGroup(data, false))))
+        && (isAccountPublic(authorId)
+          || (isAuthenticated() && (request.auth.uid == authorId
+            || (exists(/databases/$(database)/documents/users_public/$(request.auth.uid)) && isFollower(request.auth.uid, authorId)))));
+    }
+
+    function canViewPostById(postId) {
+      let post = get(/databases/$(database)/documents/posts/$(postId));
+      return post != null && post.data != null && canViewPublishedPost(post.data);
+    }
+
+    // Revoked members can clean up unfinished uploads, but cannot publish them
+    // or use the failure path to alter an already published post.
+    function isUnfinishedPostFailure() {
+      return resource.data.get('status', null) in ['uploading', 'failed']
+        && request.resource.data.status == 'failed';
+    }
     
     // posts/{postId}
-    // Post metadata (PUBLIC READ, author write)
+    // Post metadata (authenticated, authorized reads; author writes)
     match /posts/{postId} {
-      // Anyone can read posts (even anonymous for discovery)
-      allow read: if true;
+      // Lists use the server-authorized read API. Owners still read their own
+      // documents for idempotent publishing and cleanup after group revocation.
+      allow get: if hasPostReadSession() && (resource == null
+        || resource.data.authorId == request.auth.uid
+        || canViewPublishedPost(resource.data));
+      allow list: if false;
       
       // Only authenticated users can create posts with valid author info
       allow create: if isAuthenticated()
+        && canUsePostGroup(request.resource.data, true)
         && (isValidPostCreate(postId) || isValidPostCreateUploading(postId));
       
       // Only the author can update their posts
       allow update: if isAuthenticated() && isPostAuthor()
-        && (isValidPostUpdate(postId) || isValidPostUpdateUploading(postId));
+        && ((canUsePostGroup(resource.data, true)
+              && (isValidPostUpdate(postId) || isValidPostUpdateUploading(postId)))
+          || (isUnfinishedPostFailure() && isValidPostUpdateUploading(postId)));
       
       // Only the author can delete their posts
       allow delete: if isAuthenticated() && isPostAuthor();
@@ -1293,28 +1358,32 @@ service cloud.firestore {
     // posts/{postId}/likes/{uid}
     // Post likes (source of truth for counting)
     match /posts/{postId}/likes/{uid} {
-      // Likes are public for counts
-      allow read: if true;
+      // Counts come from the readable post. A user's reaction remains readable
+      // to that user for removal, even after losing access to the parent.
+      allow get: if isOwner(uid);
+      allow list: if false;
       
       // Only the user can like/unlike
       // Critical: Validate against BOTH path and auth
       allow create: if isOwner(uid) 
         && isValidPostLikeCreate(postId, uid)
-        && request.resource.data.uid == request.auth.uid;  // Triple check
+        && canInteractWithPost(postId);
       
       allow delete: if isOwner(uid);
       
       // Update ONLY if critical fields don't change
-      allow update: if isOwner(uid)
-        && request.resource.data.uid == uid  // Must match path
-        && request.resource.data.uid == request.auth.uid  // Must match auth
-        && request.resource.data.postId == postId;  // Must match path
+      allow update: if isOwner(uid) && canInteractWithPost(postId)
+        && request.resource.data == resource.data;
     }
 
     // posts/{postId}/comments/{commentId}
     match /posts/{postId}/comments/{commentId} {
-      allow read: if true;
-      allow create: if isAuthenticated() && isValidPostCommentCreate(postId);
+      allow get: if hasPostReadSession() && ((resource == null || resource.data.authorId == request.auth.uid)
+        || (canViewPostById(postId)
+          && !isConversationBlocked(request.auth.uid, resource.data.authorId)));
+      allow list: if false;
+      allow create: if isAuthenticated() && canInteractWithPost(postId)
+        && isValidPostCommentCreate(postId);
       allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
       allow update: if false;
     }

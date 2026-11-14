@@ -21,6 +21,7 @@ import {
 } from 'firebase/firestore';
 import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
+import { readPostRecords } from '@/shared/lib/post-reads-client';
 import { COLLECTIONS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 const DEFAULT_LIMIT = 30;
@@ -584,12 +585,5 @@ export async function getGroupMembersPage(
 }
 
 export async function getGroupPostsWeekCount(groupId: string): Promise<number> {
-  const weekAgo = Timestamp.fromDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
-  const q = query(
-    collection(db, COLLECTIONS.posts),
-    where('groupId', '==', groupId),
-    where('createdAt', '>=', weekAgo),
-  );
-  const snap = await getCountFromServer(q);
-  return snap.data().count;
+  return (await readPostRecords({ view: 'groupSummary', id: groupId })).weeklyPosts;
 }

@@ -92,7 +92,18 @@ enum AppRepos {
   static func profileBootstrap() -> UserProfileBootstrapRepo { FirebaseUserProfileBootstrapRepo() }
   static func createPost() -> any CreatePostRepo { FirebaseCreatePostRepo() }
   static func postComments() -> any PostCommentsRepo { FirebasePostCommentsRepo() }
-  static func engagement() -> EngagementRepo { FirebaseEngagementRepo() }
+  static func engagement() -> EngagementRepo {
+    #if SCREENSHOTS
+    if isDemo { return SampleEngagementRepo() }
+    #endif
+    return FirebaseEngagementRepo()
+  }
+  static func savedPosts() -> any SavedPostsRepo {
+    #if SCREENSHOTS
+    if isDemo { return SampleSavedPostsRepo() }
+    #endif
+    return FirebaseSavedPostsRepo()
+  }
   static func moderation() -> ModerationRepo { FirebaseModerationRepo() }
   static func ai() -> AIRepo { FirebaseAIRepo() }
   static func aiConsent() -> AIConsentRepo { FirebaseAIConsentRepo() }

@@ -1,8 +1,15 @@
 import Foundation
+import PhotosUI
+import SwiftUI
 
 @MainActor
 final class CreatePostViewModel: ObservableObject {
   @Published var draftText = ""
+  @Published var draftTitle = ""
+  @Published var youtubeURL = ""
+  @Published private(set) var attachments: [ChatPendingAttachment] = []
+  @Published private(set) var isPreparingMedia = false
+  @Published private(set) var uploadProgress = 0.0
   @Published private(set) var isSubmitting = false
   @Published var errorMessage: String?
   @Published var infoMessage: String?
@@ -10,10 +17,11 @@ final class CreatePostViewModel: ObservableObject {
 
   private let repo: CreatePostRepo
   private let groupID: String?
-  private var pendingDraftText: String?
-  private var lastPublishedDraftText: String?
+  private var pendingDraft: DraftIdentity?
+  private var lastPublishedDraft: DraftIdentity?
   private var lastPublishedAt: Date?
   private let duplicateWindow: TimeInterval = 25
+  private var submissionGeneration = 0
 
   init(repo: CreatePostRepo, groupID: String? = nil) {
     self.groupID = groupID
@@ -30,81 +38,148 @@ final class CreatePostViewModel: ObservableObject {
     characterLimit - characterCount
   }
 
+  private struct DraftIdentity: Equatable {
+    let title: String?
+    let text: String
+    let fileIDs: [String]
+    let youtubeID: String?
+  }
+
+  private var draft: NativePostDraft {
+    NativePostDraft(title: draftTitle, text: normalizedText(draftText), files: attachments,
+      youtubeVideoID: normalizedText(youtubeURL).isEmpty ? nil : YouTubeLink.videoID(from: youtubeURL))
+  }
+
+  private var identity: DraftIdentity {
+    DraftIdentity(title: draft.normalizedTitle, text: draft.text, fileIDs: attachments.map(\.id), youtubeID: draft.youtubeVideoID)
+  }
+
   var canSubmit: Bool {
-    !isSubmitting
-      && characterCount > 0
-      && remainingCharacters >= 0
+    !isSubmitting && !isPreparingMedia && remainingCharacters >= 0
+      && draftTitle.count <= Limits.Posts.titleMaxLength
+      && (!draft.text.isEmpty || draft.normalizedTitle != nil)
+      && (normalizedText(youtubeURL).isEmpty || draft.youtubeVideoID != nil)
+      && attachments.count + (draft.youtubeVideoID == nil ? 0 : 1) <= 10
   }
 
   var canRetryPendingSubmission: Bool {
-    !isSubmitting
-      && pendingPostID != nil
-      && pendingDraftText == normalizedText(draftText)
+    !isSubmitting && !isPreparingMedia && pendingPostID != nil && pendingDraft == identity
   }
 
-  func submit() {
+  func preparePhotos(_ items: [PhotosPickerItem]) async {
+    guard !isPreparingMedia, !isSubmitting else { return }
+    isPreparingMedia = true
+    defer { isPreparingMedia = false }
+    for item in items {
+      do {
+        try Task.checkCancellation()
+        guard let file = try await item.loadTransferable(type: PostPickedMedia.self)?.file else { throw PostMediaError.invalidFile }
+        try Task.checkCancellation()
+        try addAttachment(file)
+      } catch is CancellationError { return }
+      catch { errorMessage = error.localizedDescription }
+    }
+  }
+
+  func importDocuments(_ urls: [URL]) async {
+    guard !isPreparingMedia, !isSubmitting else { return }
+    isPreparingMedia = true
+    defer { isPreparingMedia = false }
+    for url in urls {
+      do {
+        try Task.checkCancellation()
+        let file = try await Task.detached { try PostFiles.copy(from: url, movie: false) }.value
+        try Task.checkCancellation()
+        try addAttachment(file)
+      } catch is CancellationError { return }
+      catch { errorMessage = error.localizedDescription }
+    }
+  }
+
+  func addAttachment(_ file: ChatPendingAttachment) throws {
+    guard attachments.count + (draft.youtubeVideoID == nil ? 0 : 1) < 10 else { throw PostMediaError.tooManyFiles }
+    try PostFiles.validate(contentType: file.contentType, size: file.size)
+    attachments.append(file)
+  }
+
+  func removeAttachment(_ id: String) {
+    guard !isSubmitting else { return }
+    attachments.removeAll { $0.id == id }
+  }
+
+  @discardableResult
+  func submit() -> Task<Void, Never>? {
     publish(allowDuplicateCooldownBypass: false)
   }
 
-  func retryPendingSubmission() {
+  @discardableResult
+  func retryPendingSubmission() -> Task<Void, Never>? {
     publish(allowDuplicateCooldownBypass: true)
   }
 
   func clearFeedbackIfNeeded() {
-    if pendingDraftText != normalizedText(draftText) {
+    if pendingDraft != identity {
       errorMessage = nil
       infoMessage = nil
     }
   }
 
-  private func publish(allowDuplicateCooldownBypass: Bool) {
-    guard !isSubmitting else { return }
+  private func publish(allowDuplicateCooldownBypass: Bool) -> Task<Void, Never>? {
+    guard !isSubmitting, !isPreparingMedia else { return nil }
 
     errorMessage = nil
     infoMessage = nil
 
-    let normalizedDraft = normalizedText(draftText)
-    guard !normalizedDraft.isEmpty else {
-      errorMessage = "Escribe algo antes de publicar."
-      return
+    let capturedDraft = draft
+    let draftIdentity = identity
+    do {
+      if !normalizedText(youtubeURL).isEmpty && capturedDraft.youtubeVideoID == nil { throw PostMediaError.invalidYouTube }
+      try capturedDraft.validate()
+    } catch {
+      errorMessage = error.localizedDescription
+      return nil
     }
-    guard normalizedDraft.count <= characterLimit else {
-      errorMessage = "El texto supera el límite de \(characterLimit) caracteres."
-      return
-    }
-
-    if !allowDuplicateCooldownBypass, isLikelyDuplicate(draft: normalizedDraft) {
-      infoMessage = "Este texto ya se publicó hace unos segundos."
-      return
+    if !allowDuplicateCooldownBypass, isLikelyDuplicate(draft: draftIdentity) {
+      infoMessage = "Esta publicación ya se envió hace unos segundos."
+      return nil
     }
 
     let postID: String
     do {
-      if let pendingPostID, pendingDraftText == normalizedDraft {
+      if let pendingPostID, pendingDraft == draftIdentity {
         postID = pendingPostID
       } else {
         postID = try repo.makePostID()
         pendingPostID = postID
-        pendingDraftText = normalizedDraft
+        pendingDraft = draftIdentity
       }
     } catch {
       errorMessage = error.localizedDescription
-      return
+      return nil
     }
 
     isSubmitting = true
+    submissionGeneration += 1
+    let generation = submissionGeneration
+    uploadProgress = 0
     AppLog.posts.info("createPost.submit.start")
 
-    Task {
+    return Task {
       do {
-        try await repo.publishTextPost(text: normalizedDraft, postID: postID, groupID: groupID)
+        try await repo.publishPost(capturedDraft, postID: postID, groupID: groupID) { fraction in
+          Task { @MainActor in
+            if self.isSubmitting, self.submissionGeneration == generation { self.uploadProgress = fraction }
+          }
+        }
         AppLog.posts.info("createPost.submit.success postID=\(postID, privacy: .private)")
 
         pendingPostID = nil
-        pendingDraftText = nil
-        lastPublishedDraftText = normalizedDraft
+        pendingDraft = nil
+        lastPublishedDraft = draftIdentity
         lastPublishedAt = Date()
-        draftText = ""
+        if identity == draftIdentity {
+          draftText = ""; draftTitle = ""; youtubeURL = ""; attachments = []
+        }
         infoMessage = "Publicación enviada."
         isSubmitting = false
       } catch {
@@ -117,15 +192,15 @@ final class CreatePostViewModel: ObservableObject {
     }
   }
 
-  private func isLikelyDuplicate(draft: String) -> Bool {
+  private func isLikelyDuplicate(draft: DraftIdentity) -> Bool {
     guard
-      let lastPublishedDraftText,
+      let lastPublishedDraft,
       let lastPublishedAt
     else {
       return false
     }
 
-    guard draft == lastPublishedDraftText else { return false }
+    guard draft == lastPublishedDraft else { return false }
     return Date().timeIntervalSince(lastPublishedAt) < duplicateWindow
   }
 

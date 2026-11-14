@@ -17,6 +17,8 @@ struct FeedItem: Identifiable, Hashable {
   var videoThumbnailURL: String? = nil
   /// Name of the first attached file, when the post only has files.
   var fileName: String? = nil
+  var title: String? = nil
+  var media: [PostMediaItem] = []
 
   /// What the posts grid shows: the photo, or else the video's thumbnail.
   var previewImageURL: String? { imageURL ?? videoThumbnailURL }
@@ -24,6 +26,7 @@ struct FeedItem: Identifiable, Hashable {
   /// Reads the `media` array of a post (`PostMedia` in `src/shared/lib/firestore/posts.ts`).
   mutating func applyMedia(_ value: Any?) {
     guard let items = value as? [[String: Any]] else { return }
+    media = items.compactMap(PostMediaItem.init(fields:))
     for item in items {
       guard let url = FirestoreValue.string(item["url"]) else { continue }
       switch item["type"] as? String {
@@ -42,7 +45,7 @@ struct FeedItem: Identifiable, Hashable {
 }
 
 struct FeedCursor {
-  fileprivate let lastDocument: QueryDocumentSnapshot
+  let token: String
 }
 
 struct FeedPage {
@@ -71,63 +74,27 @@ enum FeedRepoError: LocalizedError {
 }
 
 final class FirebaseFeedRepo: FeedRepo {
-  private let db: Firestore?
-
-  init(db: Firestore? = nil) {
-    self.db = db
-  }
-
   func fetchFeedPage(limit: Int, after cursor: FeedCursor?) async throws -> FeedPage {
-    guard FirebaseApp.app() != nil else { throw FeedRepoError.firebaseNotConfigured }
-
-    let db = self.db ?? Firestore.firestore()
-    let pageSize = max(1, min(30, limit))
-
-    var query = db.collection(FirestoreCollections.posts)
-      .order(by: "createdAt", descending: true)
-      .limit(to: pageSize + 1)
-
-    if let cursor {
-      query = query.start(afterDocument: cursor.lastDocument)
-    }
-
-    do {
-      let snapshot = try await query.getDocuments()
-      return buildPage(snapshot: snapshot, pageSize: pageSize)
-    } catch {
-      // Only first page tries cache fallback. Paginated requests should fail fast.
-      guard cursor == nil else { throw error }
-      let cacheSnapshot = try await query.getDocuments(source: .cache)
-      return buildPage(snapshot: cacheSnapshot, pageSize: pageSize)
-    }
-  }
-
-  private func buildPage(snapshot: QuerySnapshot, pageSize: Int) -> FeedPage {
-    let docs = snapshot.documents
-    let pageDocs = Array(docs.prefix(pageSize))
-    let hasMore = docs.count > pageSize
-
-    let items = pageDocs.map(Self.feedItem(from:))
-
-    let nextCursor: FeedCursor?
-    if hasMore, let lastVisible = pageDocs.last {
-      nextCursor = FeedCursor(lastDocument: lastVisible)
-    } else {
-      nextCursor = nil
-    }
-
+    let result = try await PostReadClient.read(view: "feed", limit: max(1, min(30, limit)), cursor: cursor?.token)
     return FeedPage(
-      items: items,
-      nextCursor: nextCursor,
-      hasMore: hasMore,
-      isFromCache: snapshot.metadata.isFromCache
+      items: result.items.map { Self.feedItem(id: $0.id, data: $0.fields) },
+      nextCursor: result.cursor.map { FeedCursor(token: $0) },
+      hasMore: result.hasMore,
+      isFromCache: false
     )
   }
 
   /// A post document as a feed item. Also used for a user's posts on their profile.
-  static func feedItem(from doc: QueryDocumentSnapshot) -> FeedItem {
-    let data = doc.data()
+  static func isPublished(_ doc: DocumentSnapshot) -> Bool {
+    let status = doc.data()?["status"] as? String
+    return doc.exists && (status == nil || status == "ready")
+  }
 
+  static func feedItem(from doc: DocumentSnapshot) -> FeedItem {
+    feedItem(id: doc.documentID, data: doc.data() ?? [:])
+  }
+
+  static func feedItem(id: String, data: [String: Any]) -> FeedItem {
     let authorSnapshot = data["authorSnapshot"] as? [String: Any]
     let authorName = FirestoreValue.string(authorSnapshot?["displayName"])
       ?? FirestoreValue.string(data["authorName"])
@@ -138,7 +105,7 @@ final class FirebaseFeedRepo: FeedRepo {
       ?? ""
 
     var item = FeedItem(
-      id: doc.documentID,
+      id: id,
       authorID: FirestoreValue.string(data["authorId"]) ?? FirestoreValue.string(data["authorID"]),
       authorName: authorName,
       text: text,
@@ -147,6 +114,7 @@ final class FirebaseFeedRepo: FeedRepo {
       commentCount: max(0, FirestoreValue.int(data["commentCount"]) ?? FirestoreValue.int(data["commentsCount"]) ?? 0)
     )
     item.applyMedia(data["media"])
+    item.title = FirestoreValue.string(data["title"])
     return item
   }
 }

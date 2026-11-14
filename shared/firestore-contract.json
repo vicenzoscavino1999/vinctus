@@ -32,7 +32,8 @@
   "serverCollections": {
     "deletionJobs": "deletionJobs",
     "dedupEvents": "_dedup_events",
-    "moderationActions": "moderation_actions"
+    "moderationActions": "moderation_actions",
+    "postReadCursors": "_post_read_cursors"
   },
   "subcollections": {
     "followers": { "name": "followers", "parents": ["users"] },

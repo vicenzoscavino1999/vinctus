@@ -79,10 +79,28 @@ jobs:
       - run: npm ci --include=optional
       - run: npm run test:rules
 
+  post-counts:
+    name: post-counts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --include=optional
+      - run: npm ci --prefix functions --include=optional
+      - run: npm run test:post-counts
+      - run: npm run test:post-reads
+
   build:
     name: build
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test, rules]
+    needs: [lint, typecheck, test, rules, post-counts]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -106,7 +124,10 @@ jobs:
 
   e2e:
     name: e2e
-    runs-on: ubuntu-latest
+    # Playwright 1.57 (package-lock) does not support ubuntu-latest's 26.04 image.
+    runs-on: ubuntu-24.04
+    env:
+      VINCTUS_TEST_FUNCTIONS: '1'
     needs: [lint, typecheck, test, rules, build]
     steps:
       - uses: actions/checkout@v4
@@ -124,11 +145,9 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
       - run: npm run functions:install
-        if: github.event_name != 'pull_request'
       - run: npm run functions:build
-        if: github.event_name != 'pull_request'
       - run: npx playwright install --with-deps chromium
-      - run: npx firebase emulators:exec --only auth,firestore,storage --project vinctus-dev "npm run seed && PLAYWRIGHT_SMOKE_FAST=1 npm run test:e2e:smoke"
+      - run: npx firebase emulators:exec --only auth,firestore,storage,functions --project vinctus-dev "npm run seed && PLAYWRIGHT_SMOKE_FAST=1 npm run test:e2e:smoke"
         if: github.event_name == 'pull_request'
       - run: npx firebase emulators:exec --only auth,firestore,storage,functions --project vinctus-dev "npm run seed && npm run test:e2e"
         if: github.event_name != 'pull_request'
@@ -142,7 +161,7 @@ jobs:
 
   lhci:
     name: lhci
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [lint, typecheck, test, rules, build]
     steps:
       - uses: actions/checkout@v4
@@ -156,6 +175,7 @@ jobs:
           cache: npm
       - run: npm ci --include=optional
       - run: npx playwright install --with-deps chromium
+      - run: npm ci --prefix functions --include=optional
       - run: npm run lhci:emulators
       - uses: actions/upload-artifact@v4
         if: always()

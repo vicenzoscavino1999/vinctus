@@ -2,10 +2,12 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   limit,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   writeBatch,
   type FieldValue,
@@ -71,16 +73,17 @@ export interface SavedArenaDebateWrite {
  * Save a post
  */
 export const savePostWithSync = async (postId: string, uid: string): Promise<void> => {
-  const batch = writeBatch(db);
-  batch.set(
-    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedPosts, postId),
-    {
-      postId,
-      createdAt: serverTimestamp(),
-    } as SavedPostWrite,
-    { merge: false },
-  );
-  await batch.commit();
+  const ref = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedPosts, postId);
+  await runTransaction(db, async (tx) => {
+    const [post, saved] = await Promise.all([
+      tx.get(doc(db, COLLECTIONS.posts, postId)),
+      tx.get(ref),
+    ]);
+    if (!post.exists() || (post.data().status && post.data().status !== 'ready')) {
+      throw new Error('La publicación ya no está disponible.');
+    }
+    if (!saved.exists()) tx.set(ref, { postId, createdAt: serverTimestamp() } as SavedPostWrite);
+  });
 };
 
 /**
@@ -97,7 +100,9 @@ export const unsavePostWithSync = async (postId: string, uid: string): Promise<v
  */
 export const isPostSaved = async (postId: string, uid: string): Promise<boolean> => {
   trackFirestoreRead('firestore.getDoc');
-  const docSnap = await getDoc(doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedPosts, postId));
+  const docSnap = await getDocFromServer(
+    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedPosts, postId),
+  );
   return docSnap.exists();
 };
 

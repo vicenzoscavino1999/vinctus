@@ -2,28 +2,29 @@ import XCTest
 @testable import VinctusNative
 
 @MainActor
-final class LikeViewModelTests: XCTestCase {
+final class PostReactionViewModelTests: XCTestCase {
   func testLoadsWhetherThePostIsLiked() async {
     let repo = FakeEngagementRepo()
     repo.likedPostIDs = ["p1"]
-    let vm = LikeViewModel(postID: "p1", repo: repo)
+    let vm = PostReactionViewModel(postID: "p1", repo: repo)
 
     await vm.load()
 
-    XCTAssertTrue(vm.isLiked)
+    XCTAssertTrue(vm.isSelected)
     XCTAssertEqual(vm.displayedCount(initialCount: 4), 4)
   }
 
   func testLikeAndUnlikeUpdateTheCount() async {
     let repo = FakeEngagementRepo()
-    let vm = LikeViewModel(postID: "p1", repo: repo)
+    let vm = PostReactionViewModel(postID: "p1", repo: repo)
+    await vm.load()
 
     await vm.toggle(initialCount: 4)
-    XCTAssertTrue(vm.isLiked)
+    XCTAssertTrue(vm.isSelected)
     XCTAssertEqual(vm.displayedCount(initialCount: 4), 5)
 
     await vm.toggle(initialCount: 4)
-    XCTAssertFalse(vm.isLiked)
+    XCTAssertFalse(vm.isSelected)
     XCTAssertEqual(vm.displayedCount(initialCount: 4), 4)
     XCTAssertEqual(repo.likeWrites, [true, false])
     XCTAssertFalse(vm.isSaving)
@@ -32,11 +33,12 @@ final class LikeViewModelTests: XCTestCase {
   func testAFailedLikeIsRolledBack() async {
     let repo = FakeEngagementRepo()
     repo.fails = true
-    let vm = LikeViewModel(postID: "p1", repo: repo)
+    let vm = PostReactionViewModel(postID: "p1", repo: repo)
+    await vm.load()
 
     await vm.toggle(initialCount: 4)
 
-    XCTAssertFalse(vm.isLiked)
+    XCTAssertFalse(vm.isSelected)
     XCTAssertEqual(vm.displayedCount(initialCount: 4), 4)
     XCTAssertFalse(vm.isSaving)
   }
@@ -44,13 +46,100 @@ final class LikeViewModelTests: XCTestCase {
   func testTheCountNeverGoesBelowZero() async {
     let repo = FakeEngagementRepo()
     repo.likedPostIDs = ["p1"]
-    let vm = LikeViewModel(postID: "p1", repo: repo)
+    let vm = PostReactionViewModel(postID: "p1", repo: repo)
     await vm.load()
 
     // The post still says 0 likes because the counter trigger has not run yet.
     await vm.toggle(initialCount: 0)
 
     XCTAssertEqual(vm.displayedCount(initialCount: 0), 0)
+  }
+
+  func testFailedLookupDoesNotGuessFalseOrWrite() async {
+    let repo = FakeEngagementRepo()
+    repo.readFails = true
+    repo.likedPostIDs = ["p1"]
+    let vm = PostReactionViewModel(postID: "p1", repo: repo)
+    await vm.load()
+    await vm.toggle(initialCount: 3)
+    XCTAssertFalse(vm.isLoaded)
+    XCTAssertTrue(repo.likeWrites.isEmpty)
+    XCTAssertNotNil(vm.errorMessage)
+    repo.readFails = false
+    await vm.load()
+    XCTAssertTrue(vm.isSelected)
+    XCTAssertTrue(vm.isLoaded)
+  }
+
+  func testLostConfirmationRetriesTheSameChoiceAndRestoresAnExactZeroCount() async {
+    let repo = FakeEngagementRepo()
+    repo.likedPostIDs = ["p1"]
+    let vm = PostReactionViewModel(postID: "p1", repo: repo)
+    await vm.load()
+    repo.writeHandler = { repo.likedPostIDs.remove("p1"); throw FakeError() }
+    await vm.toggle(initialCount: 0)
+    XCTAssertTrue(vm.isSelected)
+    XCTAssertEqual(vm.displayedCount(initialCount: 0), 0)
+    XCTAssertEqual(vm.pendingValue, false)
+    repo.writeHandler = nil
+    await vm.toggle(initialCount: 0)
+    XCTAssertEqual(repo.likeWrites, [false, false])
+    XCTAssertFalse(vm.isSelected)
+    XCTAssertNil(vm.pendingValue)
+    XCTAssertNil(vm.errorMessage)
+  }
+
+  func testPendingWritesBlockDoubleTapAndLateRefresh() async {
+    let repo = FakeEngagementRepo()
+    let vm = PostReactionViewModel(postID: "p1", repo: repo)
+    await vm.load()
+    let started = expectation(description: "Writing like")
+    var release: CheckedContinuation<Void, Never>?
+    repo.writeHandler = {
+      await withCheckedContinuation { release = $0; started.fulfill() }
+    }
+    let first = Task { await vm.toggle(initialCount: 2) }
+    await fulfillment(of: [started], timeout: 2)
+    await vm.toggle(initialCount: 2)
+    await vm.load()
+    XCTAssertEqual(repo.likeWrites, [true])
+    release?.resume()
+    await first.value
+    XCTAssertTrue(vm.isSelected)
+    XCTAssertEqual(vm.displayedCount(initialCount: 2), 3)
+  }
+
+  func testSaveRetryKeepsTheIntendedValue() async {
+    let repo = FakeEngagementRepo()
+    let vm = PostReactionViewModel(postID: "p1", repo: repo, kind: .save)
+    await vm.load()
+    repo.fails = true
+    await vm.toggle(initialCount: 0)
+    XCTAssertFalse(vm.isSelected)
+    XCTAssertEqual(vm.pendingValue, true)
+    repo.fails = false
+    await vm.toggle(initialCount: 0)
+    XCTAssertTrue(vm.isSelected)
+    XCTAssertEqual(repo.saveWrites, [true, true])
+  }
+
+  func testNewServerCountsReconcileLocalChangesWithoutReplacingAPendingChoice() async {
+    let repo = FakeEngagementRepo()
+    let vm = PostReactionViewModel(postID: "p1", repo: repo)
+    await vm.load()
+    await vm.toggle(initialCount: 2)
+    vm.syncCount(4)
+    XCTAssertEqual(vm.displayedCount(initialCount: 2), 4)
+    repo.fails = true
+    await vm.toggle(initialCount: 4)
+    vm.syncCount(3)
+    XCTAssertEqual(vm.displayedCount(initialCount: 3), 4)
+    XCTAssertEqual(vm.pendingValue, false)
+    repo.fails = false
+    await vm.toggle(initialCount: 3)
+    XCTAssertEqual(vm.displayedCount(initialCount: 3), 3)
+    vm.syncCount(5)
+    XCTAssertEqual(vm.displayedCount(initialCount: 3), 5)
   }
 }
 

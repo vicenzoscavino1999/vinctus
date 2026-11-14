@@ -6,7 +6,7 @@ Este archivo conserva el avance por módulos. A partir de conversaciones, revisa
 
 - [x] Conversaciones de la app nativa: revisión, correcciones y pruebas automatizadas.
 - [x] Conversaciones de la web: correcciones y validación local con Firebase y navegador.
-- [ ] Publicaciones / Comunidad — siguiente módulo, en ambas versiones.
+- [ ] Publicaciones / Comunidad — revisión en curso en ambas versiones.
 - [ ] Perfiles y seguidores — ambas versiones.
 - [ ] Grupos — ambas versiones.
 - [ ] Historias — ambas versiones.
@@ -66,7 +66,11 @@ Los cambios de la app y de la web se mantienen en el PR; comprobar su estado ant
 
 Estado de publicación al 13 de noviembre: [candidato web y resultados de release](release-conversaciones-2026-11-12.md). El candidato web compiló con configuración de producción sin cambiar el dominio público. Falta completar el staging aislado y sus 24 horas de observación exigidas por el runbook. **Vinctus 1.0.0 (2) ya fue firmada y subida a TestFlight desde una Mac de GitHub**; Apple la procesó y habilitó para pruebas internas en el grupo **Vinctus QA**. La [guía de TestFlight sin Mac propia](testflight-sin-mac.md) conserva la configuración. La instalación y prueba física siguen pendientes; no se envió la app a revisión pública.
 
-## Próximo módulo: Publicaciones / Comunidad
+## Publicaciones / Comunidad: revisión en curso
+
+El propietario autorizó avanzar con este módulo mientras siguen pendientes la
+instalación de TestFlight y las pruebas físicas de Conversaciones. Los cambios de
+esta etapa se separan en `fix/posts-community`, a partir de `fix/ios-conversations`.
 
 Revisar en ambas versiones:
 
@@ -74,6 +78,73 @@ Revisar en ambas versiones:
 2. Likes, comentarios y contadores.
 3. Paginación, conexión lenta, errores y reintentos.
 4. Permisos y visibilidad.
-5. Comparar las capacidades de adjuntos. El publicador nativo actual publica texto; concretar las ampliaciones tras revisar el flujo existente.
+5. Comparar las capacidades de adjuntos. La segunda etapa añade fotos, videos,
+   documentos y YouTube al publicador nativo y comprueba la recuperación de
+   subidas parciales. La validación automatizada pasó; falta la prueba física.
 
-La revisión de Publicaciones todavía no ha comenzado.
+Primera etapa: envío fiable de comentarios en ambas versiones, aislamiento del
+panel web por cuenta/publicación, conservación de borradores nativos y protección
+del feed nativo ante páginas antiguas que terminan después de actualizar. Consultar
+[la revisión de Publicaciones](revision-publicaciones-comunidad.md) para el alcance,
+los resultados de las pruebas y el trabajo que queda. El módulo sigue abierto.
+
+La segunda etapa cubre creación y adjuntos en ambas versiones, con IDs/rutas
+estables y protección de publicaciones ya confirmadas. La web tiene 438 pruebas
+aprobadas y un flujo de navegador que recupera una subida parcial sin duplicar
+el post ni sobrescribir la imagen. La compilación, las pruebas unitarias y 26
+pruebas de integración nativas de esta ampliación pasaron en CI; también pasó la
+CI web completa con tres flujos smoke. Todavía no se publicó una versión nueva.
+
+La tercera etapa añade comentarios nativos recientes con páginas de 20 y reintentos
+que conservan el historial. Corrige además el contador de publicaciones del servidor:
+los archivos pendientes o fallidos ya no cuentan y los eventos repetidos o tardíos
+reconcilian el estado actual. Pasaron las tres pruebas nuevas con Functions locales
+y en CI, la CI web completa, ReleaseProd, las pruebas unitarias y 27 pruebas de
+integración nativas. La prueba nueva recorre 105 comentarios de la misma fecha,
+con borrado del cursor e inserción entre páginas. Los cambios del servidor y su
+índice todavía no están desplegados; tampoco se subió otra versión a TestFlight.
+
+La cuarta etapa revisa likes y guardados en web e iOS: consulta confirmada de
+estado, bloqueo de doble toque, reintento del mismo valor y conservación de las
+fechas. Ambas versiones incorporan la lista paginada de publicaciones guardadas
+en el perfil propio. Pasaron 462 pruebas web con cobertura, 65 API/backend,
+la CI web completa con cuatro flujos smoke, ReleaseProd, las pruebas unitarias
+y 29 pruebas de integración nativas. El recorrido de navegador recupera commits
+aceptados cuya respuesta se pierde, conserva fechas y comprueba la lista del
+perfil, la recarga y otra cuenta. Los controles de Descubrir y la visibilidad
+siguen pendientes. Los cambios
+continúan en el PR; no se desplegaron ni se subió otro build de TestFlight.
+
+La quinta etapa corrige el backend compartido de likes, comentarios y karma:
+reconcilia los totales actuales, evita puntos duplicados por eventos tardíos y
+no recrea perfiles eliminados. Corrige el mapa de karma por categoría que leen
+ambas versiones y conserva el karma histórico al borrar una publicación.
+Incluye una auditoría acotada de solo lectura; no reconstruye puntos históricos
+sobrescritos ni aplica reparaciones generales. No modifica el código iOS: sigue
+vigente la validación nativa de la cuarta etapa. Consultar la revisión de
+Publicaciones para los resultados del backend y del navegador. El despliegue
+y la comprobación en dispositivo siguen pendientes.
+
+La sexta etapa exige permisos de escritura en el servidor compartido: membresía
+real para publicar en grupos, post publicado y ausencia de bloqueos para nuevas
+interacciones. Conserva la retirada de reacciones propias tras un bloqueo o un
+borrado y añade pruebas de integración nativas para estos permisos. La privacidad
+de lectura del feed y de los adjuntos sigue pendiente; esta etapa no convierte
+las publicaciones de grupos privados en contenido confidencial. Las reglas
+continúan sin desplegarse.
+
+La séptima etapa adapta las lecturas de publicaciones y comentarios a un servicio
+compartido que aplica privacidad de cuentas, membresía real y bloqueos. La web y
+la app nativa usan cursores opacos y descargan adjuntos con autorización por cada
+parte, sin entregar enlaces públicos. Incluye migración de enlaces antiguos y
+fragmentos de notificaciones. Las pruebas locales y la CI se documentan en el
+PR; la protección no está activa en producción hasta completar el despliegue
+coordinado y la migración. El módulo y la prueba en iPhone real siguen abiertos.
+
+La octava etapa corrige los likes y guardados de publicaciones en Descubrir web:
+lectura confirmada por post, total sin contar dos veces el like propio y reintentos
+del mismo valor después de perder una confirmación. Se valida un post fuera de
+los primeros 50 índices, su recarga y otra cuenta. En iOS se revisaron las acciones
+equivalentes del feed/detalle, que ya usan consultas individuales y conservan la
+validación nativa anterior; Descubrir nativo aún no incluye publicaciones. No se
+modifica Swift en esta etapa ni se publica otra versión.

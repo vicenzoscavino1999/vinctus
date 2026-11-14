@@ -17,7 +17,7 @@ struct PostDetailView: View {
     self.item = item
     self.profileRepo = profileRepo
     self.onCommentCountChange = onCommentCountChange
-    _vm = StateObject(wrappedValue: PostDetailViewModel(postID: item.id, repo: commentsRepo))
+    _vm = StateObject(wrappedValue: PostDetailViewModel(postID: item.id, repo: commentsRepo, initialCommentCount: item.commentCount))
   }
 
   var body: some View {
@@ -45,18 +45,24 @@ struct PostDetailView: View {
               )
             }
 
+            if let title = item.title {
+              Text(title).font(.title3.weight(.semibold))
+            }
             if !item.text.isEmpty {
               Text(item.text)
                 .font(.body)
                 .multilineTextAlignment(.leading)
-            } else {
+            } else if item.media.isEmpty && item.title == nil {
               Text("Sin texto")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             }
 
+            PostMediaView(items: item.media)
+
             HStack(spacing: 12) {
-              LikeButton(postID: item.id, initialCount: item.likeCount)
+              PostReactionButton(postID: item.id, initialCount: item.likeCount)
+              PostReactionButton(postID: item.id, kind: .save)
               Label("\(displayCommentCount)", systemImage: "text.bubble")
             }
             .font(.caption)
@@ -104,6 +110,24 @@ struct PostDetailView: View {
             CommentRow(postID: item.id, comment: comment)
               .listRowSeparator(.hidden)
           }
+        }
+
+        if let error = vm.loadMoreErrorMessage {
+          Text(error)
+            .font(.footnote)
+            .foregroundStyle(.red)
+        }
+
+        if vm.canLoadMoreComments {
+          Button {
+            Task { await vm.loadMoreComments() }
+          } label: {
+            HStack {
+              if vm.isLoadingMoreComments { ProgressView() }
+              Text(vm.loadMoreErrorMessage == nil ? "Cargar comentarios anteriores" : "Reintentar carga")
+            }
+          }
+          .disabled(vm.isLoadingComments || vm.isLoadingMoreComments)
         }
       }
 
@@ -177,8 +201,11 @@ struct PostDetailView: View {
       await vm.refreshComments()
       syncCommentCountToFeed()
     }
-    .onChange(of: vm.comments.count) { _, newCount in
-      syncCommentCountToFeed(newCount)
+    .onChange(of: vm.comments.count) { _, _ in
+      syncCommentCountToFeed()
+    }
+    .onChange(of: vm.submittedCommentCount) { _, _ in
+      syncCommentCountToFeed()
     }
     .onDisappear {
       syncCommentCountToFeed()
@@ -191,12 +218,11 @@ struct PostDetailView: View {
   }
 
   private var displayCommentCount: Int {
-    max(item.commentCount, vm.comments.count)
+    max(item.commentCount, vm.commentCount)
   }
 
-  private func syncCommentCountToFeed(_ count: Int? = nil) {
-    let resolvedCount = max(item.commentCount, count ?? vm.comments.count)
-    onCommentCountChange?(resolvedCount)
+  private func syncCommentCountToFeed() {
+    onCommentCountChange?(displayCommentCount)
   }
 
   @ViewBuilder

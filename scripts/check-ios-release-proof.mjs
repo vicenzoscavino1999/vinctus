@@ -52,6 +52,7 @@ command('git', [
   '--',
   'ios-native',
   'shared',
+  'functions',
   'firebase.json',
   'firestore.rules',
   'firestore.indexes.json',

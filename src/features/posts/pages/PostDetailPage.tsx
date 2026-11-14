@@ -1,3 +1,4 @@
+import { PostDownload, PostImage, PostVideo } from '@/features/posts/components/ProtectedPostMedia';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -16,18 +17,11 @@ import { useToast } from '@/shared/ui/Toast';
 import { triggerSelectionHaptic } from '@/shared/lib/haptics';
 import PostCommentsModal from '@/features/posts/components/PostCommentsModal';
 import { toPostSummary } from '@/features/posts/model/postSummary';
-import {
-  getPost,
-  isPostLiked,
-  isPostSaved,
-  likePostWithSync,
-  savePostWithSync,
-  type PostRead,
-  unlikePostWithSync,
-  unsavePostWithSync,
-} from '@/features/posts/api';
+import { getPost, type PostRead } from '@/features/posts/api';
 import { formatRelativeTime } from '@/shared/lib/formatUtils';
 import { parseYouTubeUrl } from '@/shared/lib/youtube';
+import { usePostEngagement } from '@/features/posts/hooks/usePostEngagement';
+import { reactionLabel } from '@/features/posts/model/PostEngagementSession';
 
 type PostMediaItem = {
   type: 'image' | 'video' | 'file';
@@ -46,7 +40,7 @@ const getFileExtension = (name: string | undefined): string | null => {
   return ext.toUpperCase();
 };
 
-const PostDetailPage = () => {
+const PostDetailSession = () => {
   const { postId } = useParams<{ postId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
@@ -54,13 +48,20 @@ const PostDetailPage = () => {
   const { showToast } = useToast();
 
   const [post, setPost] = useState<PostRead | null>(null);
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
+  const readScope = JSON.stringify([user?.uid ?? null, postId]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [likeCount, setLikeCount] = useState(0);
   const [commentCount, setCommentCount] = useState(0);
-  const [liked, setLiked] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const { like, save, act } = usePostEngagement(
+    post ? postId : undefined,
+    user?.uid,
+    post?.likeCount ?? 0,
+  );
+  const likeCount = like.loaded ? like.count : Math.max(0, post?.likeCount ?? 0);
+  const liked = like.value;
+  const saved = save.value;
 
   const shouldOpenCommentsFromNavigation = useMemo(() => {
     const navigationState = (location.state as { openComments?: boolean } | null) ?? null;
@@ -81,6 +82,7 @@ const PostDetailPage = () => {
 
     const loadPost = async () => {
       setLoading(true);
+      setPost(null);
       setError(null);
       try {
         const data = await getPost(postId);
@@ -91,7 +93,7 @@ const PostDetailPage = () => {
           return;
         }
         setPost(data);
-        setLikeCount(typeof data.likeCount === 'number' ? Math.max(0, data.likeCount) : 0);
+        setLoadedScope(readScope);
         setCommentCount(typeof data.commentCount === 'number' ? Math.max(0, data.commentCount) : 0);
       } catch (loadError) {
         if (!active) return;
@@ -107,38 +109,7 @@ const PostDetailPage = () => {
     return () => {
       active = false;
     };
-  }, [postId]);
-
-  useEffect(() => {
-    let active = true;
-    if (!postId || !user) {
-      setLiked(false);
-      setSaved(false);
-      return () => {
-        active = false;
-      };
-    }
-
-    const loadUserState = async () => {
-      try {
-        const [likedState, savedState] = await Promise.all([
-          isPostLiked(postId, user.uid),
-          isPostSaved(postId, user.uid),
-        ]);
-        if (!active) return;
-        setLiked(likedState);
-        setSaved(savedState);
-      } catch (stateError) {
-        console.error('Error loading post state:', stateError);
-      }
-    };
-
-    void loadUserState();
-
-    return () => {
-      active = false;
-    };
-  }, [postId, user]);
+  }, [postId, readScope]);
 
   useEffect(() => {
     if (!postId) return;
@@ -165,51 +136,13 @@ const PostDetailPage = () => {
     return toPostSummary(post, { likeCount, commentCount });
   }, [commentCount, likeCount, post, postId]);
 
-  const handleLike = async () => {
-    if (!postId) return;
+  const handleReaction = (kind: 'like' | 'save') => {
     if (!user) {
-      showToast('Inicia sesion para dar me gusta', 'info');
+      showToast('Inicia sesion para continuar', 'info');
       return;
     }
-
-    void triggerSelectionHaptic();
-
-    const nextLiked = !liked;
-    setLiked(nextLiked);
-    setLikeCount((prev) => Math.max(0, prev + (nextLiked ? 1 : -1)));
-
-    try {
-      if (nextLiked) {
-        await likePostWithSync(postId, user.uid);
-      } else {
-        await unlikePostWithSync(postId, user.uid);
-      }
-    } catch {
-      setLiked(!nextLiked);
-      setLikeCount((prev) => Math.max(0, prev + (nextLiked ? -1 : 1)));
-      showToast('No se pudo actualizar el like', 'error');
-    }
-  };
-
-  const handleSave = async () => {
-    if (!postId) return;
-    if (!user) {
-      showToast('Inicia sesion para guardar', 'info');
-      return;
-    }
-
-    const nextSaved = !saved;
-    setSaved(nextSaved);
-    try {
-      if (nextSaved) {
-        await savePostWithSync(postId, user.uid);
-      } else {
-        await unsavePostWithSync(postId, user.uid);
-      }
-    } catch {
-      setSaved(!nextSaved);
-      showToast('No se pudo actualizar el guardado', 'error');
-    }
+    if (kind === 'like') void triggerSelectionHaptic();
+    void act(kind);
   };
 
   const handleShare = async () => {
@@ -229,7 +162,7 @@ const PostDetailPage = () => {
     }
   };
 
-  if (loading) {
+  if (loading || (post !== null && loadedScope !== readScope)) {
     return (
       <div className="page-category pb-32 text-center pt-20">
         <Loader2 size={32} className="animate-spin text-amber-500 mx-auto" />
@@ -290,10 +223,14 @@ const PostDetailPage = () => {
                 className="w-full h-full"
               />
             ) : (
-              <video src={primaryVideo.url} controls className="w-full h-full object-cover" />
+              <PostVideo src={primaryVideo.url} controls className="w-full h-full object-cover" />
             )
           ) : (
-            <img src={primaryImage?.url} alt={titleText} className="w-full h-full object-cover" />
+            <PostImage
+              src={primaryImage?.url}
+              alt={titleText}
+              className="w-full h-full object-cover"
+            />
           )}
           {media.length > 1 && (
             <div className="absolute top-3 right-3 rounded-full bg-black/60 text-white text-xs px-2 py-1">
@@ -309,9 +246,10 @@ const PostDetailPage = () => {
             const label = file.fileName ?? file.url;
             const ext = getFileExtension(label) ?? 'ARCHIVO';
             return (
-              <a
+              <PostDownload
                 key={file.url}
                 href={file.url}
+                download={file.fileName || 'archivo'}
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-3 rounded-lg border border-neutral-800 bg-neutral-900/50 px-4 py-3 text-neutral-200 hover:border-neutral-600 transition-colors"
@@ -321,7 +259,7 @@ const PostDetailPage = () => {
                   <p className="text-sm font-medium truncate">{label}</p>
                   <p className="text-xs text-neutral-500">{ext}</p>
                 </div>
-              </a>
+              </PostDownload>
             );
           })}
         </div>
@@ -340,7 +278,11 @@ const PostDetailPage = () => {
       <div className="flex items-center justify-between py-4 border-t border-b border-neutral-800/50">
         <div className="flex items-center gap-6">
           <button
-            onClick={handleLike}
+            onClick={() => handleReaction('like')}
+            disabled={like.loading}
+            aria-busy={like.loading}
+            aria-label={reactionLabel('like', like)}
+            aria-pressed={liked ?? undefined}
             className={`flex items-center gap-2 transition-colors press-scale ${liked ? 'text-red-400' : 'text-neutral-500 hover:text-white'}`}
           >
             <Heart size={20} fill={liked ? 'currentColor' : 'none'} />
@@ -366,8 +308,11 @@ const PostDetailPage = () => {
         <div className="flex items-center gap-4">
           <button
             type="button"
-            onClick={handleSave}
-            aria-label={saved ? 'Quitar de guardados' : 'Guardar publicacion'}
+            onClick={() => handleReaction('save')}
+            disabled={save.loading}
+            aria-busy={save.loading}
+            aria-pressed={saved ?? undefined}
+            aria-label={reactionLabel('save', save)}
             className={`transition-colors press-scale ${saved ? 'text-brand-gold' : 'text-neutral-500 hover:text-white'}`}
           >
             <Bookmark size={20} fill={saved ? 'currentColor' : 'none'} />
@@ -383,6 +328,12 @@ const PostDetailPage = () => {
           </button>
         </div>
       </div>
+
+      {(like.error || save.error) && (
+        <p role="alert" className="text-sm text-red-400 py-3">
+          {like.error || save.error}
+        </p>
+      )}
 
       <PostCommentsModal
         isOpen={commentsOpen}
@@ -404,4 +355,8 @@ const PostDetailPage = () => {
   );
 };
 
-export default PostDetailPage;
+export default function PostDetailPage() {
+  const { postId } = useParams<{ postId: string }>();
+  const { user } = useAuth();
+  return <PostDetailSession key={`${user?.uid ?? 'anonymous'}|${postId ?? 'missing'}`} />;
+}

@@ -64,6 +64,12 @@ struct FeedView: View {
             Text("Cuando haya publicaciones recientes, aparecerán aquí.")
               .font(.footnote)
               .foregroundStyle(VinctusTokens.Color.textMuted)
+            if vm.canLoadMore {
+              VButton(vm.isLoadingMore ? "Cargando…" : "Cargar más publicaciones", variant: .secondary) {
+                vm.triggerLoadMoreFromFooter()
+              }
+              .disabled(vm.isLoadingMore)
+            }
           }
         }
         .listRowSeparator(.hidden)
@@ -209,6 +215,9 @@ private struct FeedCard: View {
           )
         }
 
+        if let title = item.title {
+          Text(title).font(.headline)
+        }
         if !item.text.isEmpty {
           Text(item.text)
             .font(.body)
@@ -217,17 +226,16 @@ private struct FeedCard: View {
             .foregroundStyle(VinctusTokens.Color.textPrimary)
         }
 
-        if let preview = item.previewImageURL, let url = URL(string: preview) {
+        if item.previewImageURL == nil {
+          if item.hasVideo { Label("Video adjunto", systemImage: "play.rectangle").font(.caption) }
+          if let name = item.fileName { Label(name, systemImage: "doc").font(.caption).lineLimit(1) }
+        }
+
+        if let preview = item.previewImageURL {
           SwiftUI.Color.clear
             .aspectRatio(4 / 3, contentMode: .fit)
             .overlay {
-              AsyncImage(url: url) { phase in
-                if case .success(let image) = phase {
-                  image.resizable().scaledToFill()
-                } else {
-                  VinctusTokens.Color.surface2
-                }
-              }
+              PostImageView(source: preview)
             }
             .overlay {
               if item.hasVideo {
@@ -243,7 +251,9 @@ private struct FeedCard: View {
         }
 
         HStack(spacing: 12) {
-          LikeButton(postID: item.id, initialCount: item.likeCount)
+          PostReactionButton(postID: item.id, initialCount: item.likeCount)
+            .font(.caption)
+          PostReactionButton(postID: item.id, kind: .save)
             .font(.caption)
 
           Label("\(item.commentCount)", systemImage: "text.bubble")
