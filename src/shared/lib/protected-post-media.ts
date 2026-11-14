@@ -43,6 +43,8 @@ export async function downloadPostMedia(
   expectedUid?: string | null,
 ): Promise<Blob> {
   const uid = auth.currentUser?.uid ?? null;
+  if (!uid || auth.currentUser?.isAnonymous)
+    throw new Error('Inicia sesión para descargar el adjunto.');
   if (expectedUid !== undefined && uid !== expectedUid) throw new Error('La sesión cambió.');
   const endpoint = postMediaEndpoint(source);
   const headers = async (): Promise<Record<string, string>> => {

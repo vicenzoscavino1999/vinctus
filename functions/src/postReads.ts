@@ -43,6 +43,7 @@ function invalid(): never {
 
 /** Bounded scans and server-held cursors never disclose the IDs/dates of hidden rows. */
 export async function readPostsForViewer(db: Firestore, uid: string | null, input: unknown) {
+  if (!uid) throw new HttpsError('unauthenticated', 'Inicia sesión para leer publicaciones.');
   if (!input || typeof input !== 'object' || Array.isArray(input)) invalid();
   if (uid !== null && !isPostReadId(uid)) invalid();
   const data = input as Record<string, unknown>;

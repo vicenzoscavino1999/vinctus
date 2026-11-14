@@ -81,13 +81,46 @@ async function group(visibility = 'private') {
 const mediaURL = (ref, path) =>
   `${base}/readPostMedia?${new URLSearchParams({ postId: ref.id, path })}`;
 
+test('all post views and media require a non-guest login, including public content', async () => {
+  const author = await actor();
+  const ref = await post(author);
+  for (const view of [
+    'feed',
+    'author',
+    'group',
+    'category',
+    'comments',
+    'ids',
+    'saved',
+    'groupSummary',
+  ]) {
+    await call(null, { view, id: ref.id }, 401);
+  }
+  const response = await fetch(
+    'http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=test',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ returnSecureToken: true }),
+    },
+  );
+  assert.equal(response.status, 200);
+  const guest = await response.json();
+  const user = { uid: guest.localId, token: guest.idToken };
+  await call(user, { view: 'ids', ids: [ref.id] }, 401);
+  const url = mediaURL(ref, `posts/${author.uid}/${ref.id}/files/public.pdf`);
+  assert.equal((await fetch(url, { method: 'HEAD' })).status, 401);
+  assert.equal((await fetch(url, { method: 'HEAD', headers: headers(user) })).status, 401);
+});
+
 test('public, private accounts, reciprocal blocks, draft and deleted profiles use current authorization', async () => {
   const author = await actor();
   const viewer = await actor();
   const ref = await post(author);
-  assert.equal((await rows(null, ref)).length, 1);
+  await call(null, { view: 'ids', ids: [ref.id] }, 401);
+  assert.equal((await rows(viewer, ref)).length, 1);
   await db.doc(`users_public/${author.uid}`).update({ accountVisibility: 'private' });
-  assert.equal((await rows(null, ref)).length, 0);
+  await call(null, { view: 'ids', ids: [ref.id] }, 401);
   assert.equal((await rows(viewer, ref)).length, 0);
   assert.equal((await rows(author, ref)).length, 1);
   const follow = db.doc(`users/${author.uid}/followers/${viewer.uid}`);
@@ -165,7 +198,7 @@ test('opaque cursors can advance across an empty hidden page and are bound to re
   assert.deepEqual(Object.keys(first).sort(), ['cursor', 'hasMore', 'items']);
   const second = await call(viewer, { ...request, cursor: first.cursor });
   assert.equal(second.items[0].id, old.id);
-  await call(null, { ...request, cursor: first.cursor }, 400);
+  await call(null, { ...request, cursor: first.cursor }, 401);
   await call(viewer, { ...request, limit: 2, cursor: first.cursor }, 400);
   await call(viewer, { view: 'author', id: category, limit: 1, cursor: first.cursor }, 400);
   await db.doc(`_post_read_cursors/${first.cursor}`).update({ expiresAt: Timestamp.fromMillis(1) });
@@ -249,11 +282,9 @@ test('raw list reads and private point reads are denied; direct Storage reads ca
   assert.equal((await read(`posts/${ref.id}`)).status, 403);
   assert.equal((await read(`posts/${ref.id}/comments`)).status, 403);
   const path = `posts/${author.uid}/${ref.id}/files/test.pdf`;
-  await bucket
-    .file(path)
-    .save(Buffer.from('%PDF'), {
-      metadata: { contentType: 'application/pdf', cacheControl: 'private,no-store,max-age=0' },
-    });
+  await bucket.file(path).save(Buffer.from('%PDF'), {
+    metadata: { contentType: 'application/pdf', cacheControl: 'private,no-store,max-age=0' },
+  });
   const storage = `http://127.0.0.1:9199/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media`;
   assert.equal((await fetch(storage, { headers: headers(viewer) })).status, 403);
   assert.equal((await fetch(storage)).status, 403);
@@ -268,14 +299,12 @@ test('media reauthorizes each 8MiB chunk, validates ETag/path/range and never re
   const ref = await post(author, { groupId: g.id });
   const path = `posts/${author.uid}/${ref.id}/files/large.pdf`;
   const content = Buffer.alloc(9 * 1024 * 1024, 37);
-  await bucket
-    .file(path)
-    .save(content, {
-      metadata: {
-        contentType: 'application/pdf',
-        metadata: { firebaseStorageDownloadTokens: 'old-token' },
-      },
-    });
+  await bucket.file(path).save(content, {
+    metadata: {
+      contentType: 'application/pdf',
+      metadata: { firebaseStorageDownloadTokens: 'old-token' },
+    },
+  });
   await ref.update({
     media: [{ type: 'file', path, url: 'https://example.test/legacy?token=secret' }],
   });
@@ -283,7 +312,7 @@ test('media reauthorizes each 8MiB chunk, validates ETag/path/range and never re
   assert.equal(serialized.media[0].url, `post-media:${path}`);
   assert.ok(!JSON.stringify(serialized).includes('secret'));
   const endpoint = mediaURL(ref, path);
-  assert.equal((await fetch(endpoint, { method: 'HEAD' })).status, 404);
+  assert.equal((await fetch(endpoint, { method: 'HEAD' })).status, 401);
   const head = await fetch(endpoint, { method: 'HEAD', headers: headers(viewer) });
   assert.equal(head.status, 200);
   assert.equal(head.headers.get('Content-Length'), String(content.length));
@@ -322,7 +351,8 @@ test('media reauthorizes each 8MiB chunk, validates ETag/path/range and never re
     404,
   );
   await g.update({ visibility: 'public' });
-  assert.equal((await fetch(endpoint, { method: 'HEAD' })).status, 200);
+  assert.equal((await fetch(endpoint, { method: 'HEAD' })).status, 401);
+  assert.equal((await fetch(endpoint, { method: 'HEAD', headers: headers(viewer) })).status, 200);
   let clean = false;
   for (let i = 0; i < 50; i++) {
     const [metadata] = await bucket.file(path).getMetadata();

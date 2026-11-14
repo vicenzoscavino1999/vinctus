@@ -9,6 +9,11 @@ service cloud.firestore {
     function isAuthenticated() {
       return request.auth != null;
     }
+
+    function hasPostReadSession() {
+      return isAuthenticated()
+        && request.auth.token.get('firebase', {}).get('sign_in_provider', 'custom') != 'anonymous';
+    }
     
     // Check if user is the owner of the resource
     function isOwner(uid) {
@@ -1301,14 +1306,13 @@ service cloud.firestore {
 
     function canViewPublishedPost(data) {
       let authorId = data.get('authorId', null);
-      return authorId is string && authorId.size() > 0
+      return hasPostReadSession() && authorId is string && authorId.size() > 0
         && data.get('status', null) in [null, 'ready']
         && exists(/databases/$(database)/documents/users_public/$(authorId))
-        && (!isAuthenticated() || !isConversationBlocked(request.auth.uid, authorId))
+        && !isConversationBlocked(request.auth.uid, authorId)
         && (data.get('groupId', null) == null
-          || (isAuthenticated() && (isGroupPublic(data.groupId)
+          || (isGroupPublic(data.groupId)
             || (exists(/databases/$(database)/documents/users_public/$(request.auth.uid)) && canUsePostGroup(data, false))))
-          || (!isAuthenticated() && data.groupId is string && isGroupPublic(data.groupId)))
         && (isAccountPublic(authorId)
           || (isAuthenticated() && (request.auth.uid == authorId
             || (exists(/databases/$(database)/documents/users_public/$(request.auth.uid)) && isFollower(request.auth.uid, authorId)))));
@@ -1327,13 +1331,13 @@ service cloud.firestore {
     }
     
     // posts/{postId}
-    // Post metadata (PUBLIC READ, author write)
+    // Post metadata (authenticated, authorized reads; author writes)
     match /posts/{postId} {
       // Lists use the server-authorized read API. Owners still read their own
       // documents for idempotent publishing and cleanup after group revocation.
-      allow get: if resource == null
-        || (isAuthenticated() && resource.data.authorId == request.auth.uid)
-        || canViewPublishedPost(resource.data);
+      allow get: if hasPostReadSession() && (resource == null
+        || resource.data.authorId == request.auth.uid
+        || canViewPublishedPost(resource.data));
       allow list: if false;
       
       // Only authenticated users can create posts with valid author info
@@ -1374,9 +1378,9 @@ service cloud.firestore {
 
     // posts/{postId}/comments/{commentId}
     match /posts/{postId}/comments/{commentId} {
-      allow get: if (isAuthenticated() && (resource == null || resource.data.authorId == request.auth.uid))
-        || (resource != null && canViewPostById(postId)
-          && (!isAuthenticated() || !isConversationBlocked(request.auth.uid, resource.data.authorId)));
+      allow get: if hasPostReadSession() && ((resource == null || resource.data.authorId == request.auth.uid)
+        || (canViewPostById(postId)
+          && !isConversationBlocked(request.auth.uid, resource.data.authorId)));
       allow list: if false;
       allow create: if isAuthenticated() && canInteractWithPost(postId)
         && isValidPostCommentCreate(postId);

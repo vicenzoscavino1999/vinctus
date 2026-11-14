@@ -31,7 +31,8 @@ struct PostReadPage {
 enum PostReadClient {
   static func read(view: String, id: String? = nil, ids: [String]? = nil, limit: Int = 12, cursor: String? = nil) async throws -> PostReadPage {
     guard FirebaseApp.app() != nil else { throw FeedRepoError.firebaseNotConfigured }
-    let uid = Auth.auth().currentUser?.uid
+    guard let user = Auth.auth().currentUser, !user.isAnonymous else { throw EngagementRepoError.userNotAuthenticated }
+    let uid = user.uid
     var request: [String: Any] = ["view": view, "limit": max(1, min(50, limit))]
     if let id { request["id"] = id }
     if let ids { request["ids"] = ids }

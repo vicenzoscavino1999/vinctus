@@ -26,6 +26,8 @@ const wireTime = (value: unknown): Timestamp | null => {
 
 export async function readPostRecords(request: PostReadRequest) {
   const uid = auth.currentUser?.uid ?? null;
+  if (!uid || auth.currentUser?.isAnonymous)
+    throw new Error('Inicia sesión para leer publicaciones.');
   const callable = httpsCallable<PostReadRequest, unknown>(functions, 'readPosts', {
     timeout: 20000,
   });

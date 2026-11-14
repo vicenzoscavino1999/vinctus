@@ -104,6 +104,14 @@ it('rejects invalid paths, oversized bodies and a mismatched UI session before s
   expect(fetcher).toHaveBeenCalledTimes(1);
 });
 
+it('does not request even a public attachment without login', async () => {
+  session.currentUser = null;
+  const fetcher = vi.fn();
+  vi.stubGlobal('fetch', fetcher);
+  await expect(downloadPostMedia(source, new AbortController().signal)).rejects.toThrow();
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
 it('discards a response after cancellation', async () => {
   const controller = new AbortController();
   vi.stubGlobal(

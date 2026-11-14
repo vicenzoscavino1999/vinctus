@@ -437,8 +437,9 @@ publicada, tener un perfil de autor existente y cumplir **ambas** restricciones:
 una cuenta privada requiere autor o seguidor aprobado; un grupo privado exige
 propietario o documento real de miembro. Los perfiles eliminados no conservan
 permisos privados. Los bloqueos se comprueban en ambas direcciones para la cuenta
-autenticada. El contenido de cuentas y grupos públicos conserva lectura anónima;
-un bloqueo no puede ocultar contenido público a alguien que cierre sesión.
+autenticada. **Toda lectura exige iniciar sesión**, también en cuentas y grupos
+públicos. Se rechazan las sesiones técnicas de Firebase Anonymous Auth: no permiten
+eludir el acceso con una cuenta. Cerrar sesión impide consultar posts y adjuntos.
 
 Las reglas deniegan listas directas de posts, comentarios y likes. Las lecturas
 individuales aplican la política; se conservan las lecturas propias necesarias
@@ -479,7 +480,7 @@ para grupos con mayor actividad. Cada fragmento multimedia vuelve a leer permiso
 y metadatos y consume transferencia de Functions/Storage. Descargar videos completos
 antes de reproducirlos aumenta latencia y memoria temporal; el máximo es 100 MiB.
 
-Validación local: 474 pruebas web, 70 API/backend, 77 reglas y ocho pruebas nuevas
+Validación local: 477 pruebas web, 70 API/backend, 78 reglas y nueve pruebas nuevas
 con Auth/Firestore/Storage/Functions reales en emuladores. Cubren privacidad
 combinada, revocación, bloqueos, cuentas suspendidas, cursores caducados/cruzados,
 105 comentarios con fechas iguales y borrado del cursor, guardados huérfanos,
@@ -487,6 +488,10 @@ denegación de consultas directas, descargas de 9 MiB, ETag/rangos y revocación
 fragmentos. Se incorporan pruebas del decodificador Swift, lectura nativa tras
 expulsión y un recorrido Chromium de privacidad; consultar el PR para el resultado
 final de CI y de esas plataformas.
+
+Por decisión del propietario se exige sesión para todas las publicaciones,
+incluidas las públicas. Las pruebas ampliadas comprueban su
+denegación en todas las vistas, Firestore y el proxy, también con Auth anónimo.
 
 ### Despliegue coordinado pendiente
 

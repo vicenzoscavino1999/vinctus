@@ -23,10 +23,17 @@ export const readPosts = functions
   .runWith({ maxInstances: 10, timeoutSeconds: 60 })
   .https.onCall(async (data, context) => {
     context.rawRequest.res?.set('Cache-Control', 'private, no-store, max-age=0');
+    if (!context.auth)
+      throw new functions.https.HttpsError(
+        'unauthenticated',
+        'Inicia sesión para leer publicaciones.',
+      );
     if (context.auth) {
       const token = context.rawRequest.get('Authorization')?.match(/^Bearer (\S+)$/)?.[1];
       try {
-        if (!token || (await getAuth().verifyIdToken(token, true)).uid !== context.auth.uid)
+        if (!token) throw new Error('invalid-session');
+        const session = await getAuth().verifyIdToken(token, true);
+        if (session.uid !== context.auth.uid || session.firebase.sign_in_provider === 'anonymous')
           throw new Error('invalid-session');
       } catch {
         throw new functions.https.HttpsError('unauthenticated', 'Vuelve a iniciar sesión.');
@@ -59,6 +66,10 @@ export const readPostMedia = functions
     }
     let uid: string | null = null;
     const authorization = req.get('Authorization');
+    if (!authorization) {
+      res.status(401).end();
+      return;
+    }
     if (authorization) {
       const match = authorization.match(/^Bearer (\S+)$/);
       if (!match) {
@@ -66,7 +77,12 @@ export const readPostMedia = functions
         return;
       }
       try {
-        uid = (await getAuth().verifyIdToken(match[1], true)).uid;
+        const session = await getAuth().verifyIdToken(match[1], true);
+        if (session.firebase.sign_in_provider === 'anonymous') {
+          res.status(401).end();
+          return;
+        }
+        uid = session.uid;
       } catch {
         res.status(401).end();
         return;

@@ -43,6 +43,7 @@ export class PostReadAccess {
   }
 
   async group(groupId: unknown): Promise<boolean> {
+    if (!this.uid) return false;
     if (groupId == null) return true;
     if (!isPostReadId(groupId)) return false;
     const group = await this.get(`${COLLECTIONS.groups}/${groupId}`);
@@ -58,6 +59,7 @@ export class PostReadAccess {
   }
 
   async post(data: DocumentData): Promise<boolean> {
+    if (!this.uid) return false;
     if (!isPublishedPost(data) || !isPostReadId(data.authorId)) return false;
     if (!(await this.group(data.groupId)) || (await this.blocked(data.authorId))) return false;
     const profile = await this.get(`${COLLECTIONS.usersPublic}/${data.authorId}`);

@@ -2,6 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { loginWithSeedUser, prepareOnboardingState } from './helpers/session';
 
+test('@smoke public post direct links require login', async ({ page }) => {
+  await prepareOnboardingState(page);
+  await page.goto('/post/post_1');
+  await expect(page.locator('input[type="email"]')).toBeVisible();
+  await expect(page.getByLabel(/Compartir publicaci/i)).toHaveCount(0);
+});
+
 test('@smoke private group posts and comments disappear on reload after membership revocation', async ({
   page,
 }, info) => {

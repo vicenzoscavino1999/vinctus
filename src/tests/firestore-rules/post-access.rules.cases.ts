@@ -67,6 +67,20 @@ describe('Post write authorization at the server boundary', () => {
   beforeEach(clearRulesTestData);
   afterAll(cleanupRulesTestEnv);
 
+  it('requires a non-guest session even for public posts and comments', async () => {
+    const db = await seed();
+    await adminWrite('posts/post/comments/public', { authorId: author, text: 'Public comment' });
+    await assertSucceeds(db.doc('posts/post').get());
+    const env = await getRulesTestEnv();
+    for (const context of [
+      env.unauthenticatedContext(),
+      env.authenticatedContext('guest', { firebase: { sign_in_provider: 'anonymous' } }),
+    ]) {
+      await assertFails(context.firestore().doc('posts/post').get());
+      await assertFails(context.firestore().doc('posts/post/comments/public').get());
+    }
+  });
+
   it('protects direct reads as private-group membership and private-account followers change', async () => {
     const db = await seed({ groupId: 'group' }, 'private');
     await adminWrite(`users_public/${author}`, { accountVisibility: 'private' });

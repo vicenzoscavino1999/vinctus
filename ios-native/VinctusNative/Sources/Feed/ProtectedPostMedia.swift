@@ -16,7 +16,7 @@ enum PostMediaDownload {
   private static let maxBytes = 100 * 1024 * 1024
 
   private static func request(_ endpoint: URL, method: String, uid: String?) async throws -> URLRequest {
-    guard Auth.auth().currentUser?.uid == uid else { throw PostReadError.sessionChanged }
+    guard Auth.auth().currentUser?.isAnonymous == false, Auth.auth().currentUser?.uid == uid else { throw PostReadError.sessionChanged }
     var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
     request.httpMethod = method
     request.httpShouldHandleCookies = false

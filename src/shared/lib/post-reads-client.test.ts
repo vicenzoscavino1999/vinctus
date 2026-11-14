@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { readPostRecords } from './post-reads-client';
 const mocks = vi.hoisted(() => ({
-  auth: { currentUser: { uid: 'a' } as { uid: string } | null },
+  auth: { currentUser: { uid: 'a' } as { uid: string; isAnonymous?: boolean } | null },
   call: vi.fn(),
 }));
 vi.mock('@/shared/lib/firebase', () => ({ auth: mocks.auth, functions: {} }));
@@ -11,6 +11,14 @@ beforeEach(() => {
   mocks.auth.currentUser = { uid: 'a' };
   mocks.call.mockReset();
 });
+it.each([null, { uid: 'guest', isAnonymous: true }])(
+  'requires account login before requesting any public post page',
+  async (user) => {
+    mocks.auth.currentUser = user;
+    await expect(readPostRecords({ view: 'feed' })).rejects.toThrow();
+    expect(mocks.call).not.toHaveBeenCalled();
+  },
+);
 it('hydrates timestamp precision and opaque cursors', async () => {
   mocks.call.mockResolvedValue({
     data: {
