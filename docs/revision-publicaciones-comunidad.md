@@ -75,10 +75,10 @@ un iPhone físico. La prueba local usa exclusivamente el proyecto emulado
   la auditoría de datos históricos y cualquier reparación siguen pendientes.
   Descubrir conserva sus controles anteriores del contexto y queda por revisar
   con ese módulo (incluidos el límite de 50 IDs y las preferencias anónimas).
-- Reglas y visibilidad: actualmente posts/comentarios tienen lectura pública;
-  revisar el alcance esperado para grupos privados y bloqueos antes de cambiarlas.
-  La sexta etapa refuerza la autorización de escrituras, pero no cierra la
-  privacidad de lectura del feed, perfiles, comentarios ni enlaces de adjuntos.
+- Despliegue de privacidad: la séptima etapa adapta feed, perfiles, grupos,
+  comentarios y adjuntos en ambas versiones. Falta validar staging, migrar
+  enlaces/notificaciones antiguos y desplegar juntos clientes, Functions, reglas
+  e índices. La protección todavía no está activa en producción.
 - Pruebas en dispositivo, despliegue y versión posterior de TestFlight.
 - Recuperación tras cerrar el editor o recargar la app y política de limpieza de
   borradores incompletos y sus objetos de Storage. Esta etapa recupera el envío

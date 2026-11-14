@@ -107,6 +107,17 @@ try {
         /^https:\/\/www\.youtube\.com\/embed\/[A-Za-z0-9_-]{11}$/.test(item.url)
       )
         return item;
+      // Never turn an unrecognized external embed into a nonexistent Storage file.
+      // Keep it for explicit review and make the audit fail closed.
+      if (
+        item?.contentType === 'video/youtube' ||
+        /^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com)(\/|$)/.test(
+          item?.url ?? '',
+        )
+      ) {
+        stats.unsupportedMedia++;
+        return item;
+      }
       const prefix = `posts/${data.authorId}/${doc.id}/`;
       if (
         typeof item?.path !== 'string' ||
