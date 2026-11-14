@@ -73,8 +73,9 @@ un iPhone físico. La prueba local usa exclusivamente el proyecto emulado
   detalle web. La quinta etapa corrige los agregados de likes/karma y comentarios,
   los eventos fuera de orden y la recreación de perfiles borrados. Su despliegue,
   la auditoría de datos históricos y cualquier reparación siguen pendientes.
-  Descubrir conserva sus controles anteriores del contexto y queda por revisar
-  con ese módulo (incluidos el límite de 50 IDs y las preferencias anónimas).
+  La octava etapa adapta los likes y guardados de publicaciones en Descubrir al
+  flujo confirmado. El resto de Descubrir y sus preferencias de categorías/grupos
+  continúa pendiente de revisión con su módulo.
 - Despliegue de privacidad: la séptima etapa adapta feed, perfiles, grupos,
   comentarios y adjuntos en ambas versiones. Falta validar staging, migrar
   enlaces/notificaciones antiguos y desplegar juntos clientes, Functions, reglas
@@ -530,3 +531,50 @@ Las copias ya descargadas, capturas y cachés de contenido que antes era públic
 no pueden revocarse retroactivamente. La retirada se aplica a nuevas peticiones;
 no se promete borrar de una pantalla contenido ya autorizado. Falta staging y su
 periodo de observación, despliegue coordinado, nuevo TestFlight y prueba física.
+
+## Octava etapa: reacciones de publicaciones en Descubrir
+
+Los botones de la web deducían el estado a partir del contexto general, cuya
+carga inicial solo incluye 50 likes y guardados. Un post posterior a ese límite
+podía aparecer sin seleccionar aunque ya estuviera marcado. Además, la tarjeta
+sumaba uno al total del servidor por cada like propio: contaba dos veces una
+reacción ya incluida. Las escrituras optimistas del contexto no conservaban la
+elección pendiente cuando se perdía la respuesta del servidor.
+
+Las tarjetas de comunidad ahora usan `usePostEngagement`, igual que el feed y el
+detalle. Cada tarjeta consulta su like y guardado con lecturas individuales del
+servidor; una consulta fallida permanece desconocida y se reintenta antes de
+permitir una escritura. Las mutaciones mantienen el valor deseado, bloquean
+doble toque, restauran el total al fallar y ofrecen un reintento de la misma
+elección. El total inicial ya incluye los likes propios y no recibe una suma
+adicional. Las tarjetas conservan los totales de su sesión al actualizarse el
+resto del flujo; el cambio de cuenta reinicia el estado y descarta respuestas
+anteriores. YouTube y los elementos editoriales conservan sus acciones
+deshabilitadas; las reacciones se aplican a publicaciones reales de comunidad.
+
+Validación local: 483 pruebas web y 70 API/backend aprobadas, TypeScript y ESLint.
+Las seis pruebas nuevas cubren estado inicial seleccionado sin duplicar el total,
+consulta fallida, doble clic, confirmación perdida de like/guardado, cambio de
+cuenta/post y acceso sin sesión. El recorrido Chromium con Firebase/Functions
+reales crea 52 índices huérfanos anteriores al post, comprueba que el bootstrap
+limitado no lo incluye y aun así muestra ambos estados correctos. Pierde a
+propósito una respuesta después de aceptar cada commit; el reintento conserva
+las fechas y el total, y se verifica la recarga y otra cuenta. Pasó sin reintentos
+del test. YouTube se sustituye por una respuesta vacía para aislar este recorrido
+de su API externa; las lecturas y escrituras de publicaciones son reales.
+
+En iOS, estas acciones están en el feed y el detalle: Descubrir nativo todavía
+no muestra publicaciones. Sus repositorios ya consultan documentos individuales
+y sus pruebas verifican selección inicial, total sin doble suma, consulta fallida,
+doble toque y reintento del mismo valor. Esta etapa no cambia `ios-native`, el
+backend, las reglas ni el contrato: siguen idénticos a `eb8888d`, validado con
+ReleaseProd, pruebas unitarias y 32 integraciones en
+[43601861319](https://github.com/vicenzoscavino1999/vinctus/actions/runs/43601861319).
+Consultar el PR para la CI del último commit.
+
+Cada tarjeta de comunidad añade dos lecturas individuales por montaje; no añade
+listeners. El contexto general y sus índices parciales siguen disponibles para
+otros usos, pero ya no deciden estas acciones. Continúan pendientes la recuperación
+tras cerrar/recargar el editor, la limpieza de subidas incompletas y los requisitos
+de despliegue/prueba física de la etapa anterior. No hubo despliegue de producción
+ni otro build de TestFlight.

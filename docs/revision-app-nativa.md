@@ -140,3 +140,11 @@ parte, sin entregar enlaces públicos. Incluye migración de enlaces antiguos y
 fragmentos de notificaciones. Las pruebas locales y la CI se documentan en el
 PR; la protección no está activa en producción hasta completar el despliegue
 coordinado y la migración. El módulo y la prueba en iPhone real siguen abiertos.
+
+La octava etapa corrige los likes y guardados de publicaciones en Descubrir web:
+lectura confirmada por post, total sin contar dos veces el like propio y reintentos
+del mismo valor después de perder una confirmación. Se valida un post fuera de
+los primeros 50 índices, su recarga y otra cuenta. En iOS se revisaron las acciones
+equivalentes del feed/detalle, que ya usan consultas individuales y conservan la
+validación nativa anterior; Descubrir nativo aún no incluye publicaciones. No se
+modifica Swift en esta etapa ni se publica otra versión.
