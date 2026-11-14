@@ -81,9 +81,9 @@ un iPhone físico. La prueba local usa exclusivamente el proyecto emulado
   enlaces/notificaciones antiguos y desplegar juntos clientes, Functions, reglas
   e índices. La protección todavía no está activa en producción.
 - Pruebas en dispositivo, despliegue y versión posterior de TestFlight.
-- Recuperación tras cerrar el editor o recargar la app y política de limpieza de
-  borradores incompletos y sus objetos de Storage. Esta etapa recupera el envío
-  mientras el editor conserva en memoria su selección.
+- Política de limpieza de subidas incompletas y sus objetos remotos de Storage.
+  La novena etapa añade recuperación local tras cerrar/recargar el editor, con
+  copias de adjuntos e IDs de envío; no elimina objetos remotos abandonados.
 
 El PR puede generar una vista previa de Vercel automáticamente. Esta etapa no
 se ha promovido al dominio de producción ni subido a TestFlight, y el módulo
