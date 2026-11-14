@@ -92,6 +92,8 @@ private final class PostMediaLoader: ObservableObject {
   @Published var progress = 0.0
   private var pending: Task<DownloadedPostMedia, Error>?
   private var authListener: AuthStateDidChangeListenerHandle?
+  // Stored Sendable value: deinit cannot read the actor-isolated @Published getter.
+  private var downloadedFileURL: URL?
   private var scope: String?
   private var generation = 0
 
@@ -108,14 +110,15 @@ private final class PostMediaLoader: ObservableObject {
   deinit {
     pending?.cancel()
     if let authListener { Auth.auth().removeStateDidChangeListener(authListener) }
-    if let url { try? FileManager.default.removeItem(at: url) }
+    if let downloadedFileURL { try? FileManager.default.removeItem(at: downloadedFileURL) }
   }
 
   func cancel() {
     generation += 1
     pending?.cancel()
     pending = nil
-    if let url { try? FileManager.default.removeItem(at: url) }
+    if let downloadedFileURL { try? FileManager.default.removeItem(at: downloadedFileURL) }
+    downloadedFileURL = nil
     url = nil
     image = nil
     isLoading = false
@@ -144,6 +147,7 @@ private final class PostMediaLoader: ObservableObject {
         return
       }
       url = result.url
+      downloadedFileURL = result.url
       image = result.isImage ? UIImage(contentsOfFile: result.url.path) : nil
       isLoading = false
     } catch {
