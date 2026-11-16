@@ -2,6 +2,7 @@ import { act, cleanup, renderHook as rawRenderHook, waitFor } from '@testing-lib
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChangeEvent } from 'react';
 import { createPostUploading, getNewPostId, updatePost } from '@/features/posts/api';
+import { POST_UPLOAD_ABANDONED_CODE } from '@/shared/lib/firestore-post-upload';
 import { uploadPostMedia, deletePostAllMedia } from '@/shared/lib/storage';
 import { compressToWebp } from '@/shared/lib/compression';
 import { useCreatePost } from './useCreatePost';
@@ -377,5 +378,45 @@ describe('create post recovery', () => {
     });
     expect(props.onClose).toHaveBeenCalledOnce();
     expect(browserPostDraftStore.save).not.toHaveBeenCalled();
+  });
+
+  it('rotates and flushes a fresh post ID when a restored pending upload was retired as abandoned', async () => {
+    vi.mocked(getNewPostId).mockReturnValueOnce('p-old').mockReturnValueOnce('p-fresh');
+    vi.mocked(uploadPostMedia).mockRejectedValueOnce(new Error('Sin conexión'));
+    const first = await renderHook(() => useCreatePost(options()));
+    act(() => {
+      first.result.current.setText('Recuperar tras limpieza');
+      first.result.current.handleFileSelect(selection([file]));
+    });
+    await act(async () => {
+      await first.result.current.handleSubmit();
+    });
+    expect([...records.values()][0].draft?.pending?.input.postId).toBe('p-old');
+    first.unmount();
+
+    const abandonedError = Object.assign(new Error('Caducó'), {
+      cause: { code: POST_UPLOAD_ABANDONED_CODE },
+    });
+    let persistedReplacementId: string | undefined;
+    vi.mocked(createPostUploading)
+      .mockRejectedValueOnce(abandonedError)
+      .mockImplementationOnce(async (input) => {
+        persistedReplacementId = [...records.values()][0].draft?.pending?.input.postId;
+        expect(persistedReplacementId).toBe(input.postId);
+        return false;
+      });
+    const second = await renderHook(() => useCreatePost(options()));
+    await act(async () => {
+      await second.result.current.handleSubmit();
+    });
+    expect(persistedReplacementId).toBe('p-fresh');
+    expect(uploadPostMedia).toHaveBeenLastCalledWith(
+      expect.any(Array),
+      'ana',
+      'p-fresh',
+      expect.any(Function),
+    );
+    expect(updatePost).toHaveBeenCalledExactlyOnceWith('p-fresh', { status: 'ready', media: [] });
+    expect([...records.values()][0].draft).toBeNull();
   });
 });

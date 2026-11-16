@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runTransaction } from 'firebase/firestore';
-import { createPostUploading, updatePost } from './firestore-post-upload';
+import {
+  createPostUploading,
+  isAbandonedPostUploadError,
+  updatePost,
+} from './firestore-post-upload';
 
 describe('post upload transaction invariants', () => {
   let data: Record<string, unknown> | null;
@@ -62,4 +66,22 @@ describe('post upload transaction invariants', () => {
       expect(set).toHaveBeenCalledTimes(1);
     },
   );
+
+  it('rejects retired abandoned tombstones with a recoverable code instead of finalizing them', async () => {
+    data = {
+      postId: 'p1',
+      authorId: 'ana',
+      status: 'abandoned',
+      title: null,
+      text: '',
+      media: [],
+      groupId: 'g1',
+    };
+    await expect(createPostUploading(input)).rejects.toSatisfy(isAbandonedPostUploadError);
+    await expect(updatePost('p1', { status: 'ready', media: [] })).rejects.toSatisfy(
+      isAbandonedPostUploadError,
+    );
+    expect(set).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
 });

@@ -78,8 +78,25 @@ final class PostIntegrationTests: EmulatorTestCase {
       try data.write(to: url)
       files.append(ChatPendingAttachment(fileURL: url, fileName: "test.\(suffix)", contentType: type, size: data.count, kind: kind))
     }
-    // Simulate a previous attempt that uploaded the image but never finalized
-    // the post. Storage rules reject overwrites, so the repo must recover it.
+    // Simulate a previous attempt that created the uploading post and uploaded
+    // the image, but never finalized. Storage rules reject overwrites, so the repo must recover it.
+    let ref = Firestore.firestore().collection("posts").document(postID)
+    try await ref.setData([
+      "postId": postID,
+      "authorId": user.uid,
+      "authorSnapshot": ["displayName": "Lucía", "photoURL": NSNull()],
+      "title": "Adjuntos entre plataformas",
+      "text": "",
+      "content": "",
+      "status": "uploading",
+      "media": [],
+      "groupId": NSNull(),
+      "categoryId": NSNull(),
+      "likeCount": 0,
+      "commentCount": 0,
+      "createdAt": FieldValue.serverTimestamp(),
+      "updatedAt": NSNull(),
+    ])
     let firstPath = PostFiles.path(files[0], userID: user.uid, postID: postID)
     let firstObject = Storage.storage().reference(withPath: firstPath)
     let metadata = StorageMetadata()
@@ -90,7 +107,6 @@ final class PostIntegrationTests: EmulatorTestCase {
     try await repo.publishPost(draft, postID: postID, groupID: nil, onProgress: { _ in })
     let recovered = try await firstObject.getMetadata()
     XCTAssertEqual(recovered.generation, beforeRetry.generation)
-    let ref = Firestore.firestore().collection("posts").document(postID)
     let first = try await ref.getDocument(source: .server)
     try await repo.publishPost(draft, postID: postID, groupID: nil, onProgress: { _ in })
     let second = try await ref.getDocument(source: .server)

@@ -8,7 +8,26 @@ import {
 import { db } from './firebase';
 import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
-export type PostStatus = 'uploading' | 'ready' | 'failed';
+export type PostStatus = 'uploading' | 'ready' | 'failed' | 'abandoned';
+
+export const POST_UPLOAD_ABANDONED_CODE = 'POST_UPLOAD_ABANDONED';
+
+const makeAbandonedUploadError = () => {
+  const error = new Error(
+    'La subida pendiente anterior caducó. Se iniciará una publicación nueva.',
+  ) as Error & { code?: string };
+  error.code = POST_UPLOAD_ABANDONED_CODE;
+  return error;
+};
+
+export const isAbandonedPostUploadError = (error: unknown): boolean => {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as { code?: unknown; cause?: { code?: unknown } };
+  return (
+    candidate.code === POST_UPLOAD_ABANDONED_CODE ||
+    candidate.cause?.code === POST_UPLOAD_ABANDONED_CODE
+  );
+};
 
 export type AuthorSnapshot = {
   displayName: string;
@@ -35,8 +54,13 @@ export async function createPostUploading(input: CreatePostUploadingInput): Prom
     const existing = await transaction.get(ref);
     if (existing.exists()) {
       const data = existing.data();
+      if (data.authorId !== input.authorId) {
+        throw new Error('La publicación pendiente no coincide con este borrador.');
+      }
+      if (data.status === 'abandoned') {
+        throw makeAbandonedUploadError();
+      }
       if (
-        data.authorId !== input.authorId ||
         data.text !== input.text ||
         (data.title ?? null) !== (input.title ?? null) ||
         (data.groupId ?? null) !== (input.groupId ?? null) ||
@@ -79,6 +103,9 @@ export async function updatePost(
     await runTransaction(db, async (transaction) => {
       const existing = await transaction.get(ref);
       if (!existing.exists()) throw new Error('No se encontró la publicación pendiente.');
+      if (existing.data().status === 'abandoned') {
+        throw makeAbandonedUploadError();
+      }
       if (existing.data().status === 'ready') {
         // Ready is terminal for the upload workflow. A late failure or a lost
         // acknowledgement must not remove media or change an accepted post.

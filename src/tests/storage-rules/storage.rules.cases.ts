@@ -78,6 +78,24 @@ async function seedStorageFile(path: string, contentType: string) {
   });
 }
 
+async function seedPost(
+  postId = 'post_alpha',
+  authorId = 'user_a',
+  status: 'uploading' | 'failed' | 'ready' | 'abandoned' | null = 'uploading',
+) {
+  const env = await getRulesTestEnv();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await db.doc(`posts/${postId}`).set({
+      postId,
+      authorId,
+      text: 'Texto',
+      media: [],
+      ...(status === null ? {} : { status }),
+    });
+  });
+}
+
 describe('Storage Rules - upload security', () => {
   beforeAll(async () => {
     await getRulesTestEnv();
@@ -91,7 +109,8 @@ describe('Storage Rules - upload security', () => {
     await cleanupRulesTestEnv();
   });
 
-  it('allows owner to upload a valid post image', async () => {
+  it('allows owner to upload a valid post image while the post is uploading', async () => {
+    await seedPost('post_alpha', 'user_a', 'uploading');
     const env = await getRulesTestEnv();
     const storage = env.authenticatedContext('user_a').storage();
     const fileRef = storage.ref('posts/user_a/post_alpha/images/cover.jpg');
@@ -103,7 +122,55 @@ describe('Storage Rules - upload security', () => {
     );
   });
 
+  it('denies post media uploads when post is missing, ready, abandoned or anonymous, and denies client deletes', async () => {
+    const env = await getRulesTestEnv();
+    const ownerStorage = env.authenticatedContext('user_a').storage();
+
+    // Missing post document
+    await assertFails(
+      ownerStorage
+        .ref('posts/user_a/post_missing/images/cover.jpg')
+        .putString('image-bytes', 'raw', { contentType: 'image/jpeg' })
+        .then((snapshot) => snapshot),
+    );
+
+    // Already published (ready) post
+    await seedPost('post_ready', 'user_a', 'ready');
+    await assertFails(
+      ownerStorage
+        .ref('posts/user_a/post_ready/images/cover.jpg')
+        .putString('image-bytes', 'raw', { contentType: 'image/jpeg' })
+        .then((snapshot) => snapshot),
+    );
+
+    // Server-retired abandoned tombstone
+    await seedPost('post_abandoned', 'user_a', 'abandoned');
+    await assertFails(
+      ownerStorage
+        .ref('posts/user_a/post_abandoned/images/cover.jpg')
+        .putString('image-bytes', 'raw', { contentType: 'image/jpeg' })
+        .then((snapshot) => snapshot),
+    );
+
+    // Anonymous auth session
+    await seedPost('post_alpha', 'user_a', 'uploading');
+    const anonymousOwner = env
+      .authenticatedContext('user_a', { firebase: { sign_in_provider: 'anonymous' } })
+      .storage();
+    await assertFails(
+      anonymousOwner
+        .ref('posts/user_a/post_alpha/images/anon.jpg')
+        .putString('image-bytes', 'raw', { contentType: 'image/jpeg' })
+        .then((snapshot) => snapshot),
+    );
+
+    // Client-side deletion of post media is always denied (handled by server Admin SDK)
+    await seedStorageFile('posts/user_a/post_alpha/images/existing.jpg', 'image/jpeg');
+    await assertFails(ownerStorage.ref('posts/user_a/post_alpha/images/existing.jpg').delete());
+  });
+
   it('denies upload when auth user does not match path owner', async () => {
+    await seedPost('post_alpha', 'user_a', 'uploading');
     const env = await getRulesTestEnv();
     const storage = env.authenticatedContext('user_b').storage();
     const fileRef = storage.ref('posts/user_a/post_alpha/images/cover.jpg');
@@ -116,6 +183,7 @@ describe('Storage Rules - upload security', () => {
   });
 
   it('denies invalid content type for post image path', async () => {
+    await seedPost('post_alpha', 'user_a', 'uploading');
     const env = await getRulesTestEnv();
     const storage = env.authenticatedContext('user_a').storage();
     const fileRef = storage.ref('posts/user_a/post_alpha/images/readme.txt');

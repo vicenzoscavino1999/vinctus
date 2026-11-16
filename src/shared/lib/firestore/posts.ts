@@ -15,7 +15,7 @@ import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 const DEFAULT_LIMIT = 30;
 const DEFAULT_AUTHOR_NAME = 'Usuario';
-const POST_STATUS_VALUES = ['ready', 'uploading', 'failed'] as const;
+const POST_STATUS_VALUES = ['ready', 'uploading', 'failed', 'abandoned'] as const;
 
 /**
  * Media attachment for posts

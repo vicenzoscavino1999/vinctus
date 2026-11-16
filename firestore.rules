@@ -1248,7 +1248,8 @@ service cloud.firestore {
     // Validate post update (only content and media can change)
     function isValidPostUpdate(postId) {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['content', 'media', 'updatedAt', 'title'])
+      return resource.data.get('status', null) in [null, 'ready']
+        && changed.hasOnly(['content', 'media', 'updatedAt', 'title'])
         && request.resource.data.content is string
         && request.resource.data.content.size() <= 5000
         && (!request.resource.data.keys().hasAny(['title']) || request.resource.data.title == null || (request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 120))
@@ -1261,7 +1262,8 @@ service cloud.firestore {
     // Validate post update (uploading workflow)
     function isValidPostUpdateUploading(postId) {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['status', 'media', 'updatedAt'])
+      return resource.data.get('status', null) in ['uploading', 'failed']
+        && changed.hasOnly(['status', 'media', 'updatedAt'])
         && request.resource.data.status in ['ready', 'failed']
         && request.resource.data.media is list
         && isValidMediaArray(request.resource.data.media, postId)
@@ -1351,8 +1353,10 @@ service cloud.firestore {
               && (isValidPostUpdate(postId) || isValidPostUpdateUploading(postId)))
           || (isUnfinishedPostFailure() && isValidPostUpdateUploading(postId)));
       
-      // Only the author can delete their posts
-      allow delete: if isAuthenticated() && isPostAuthor();
+      // Only the author can delete their posts; server-retired tombstones stay until Storage is purged.
+      allow delete: if isAuthenticated()
+        && isPostAuthor()
+        && resource.data.get('status', null) != 'abandoned';
     }
     
     // posts/{postId}/likes/{uid}

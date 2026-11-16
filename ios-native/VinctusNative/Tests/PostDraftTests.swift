@@ -166,4 +166,38 @@ final class PostDraftTests: XCTestCase {
     let manifest = root.appendingPathComponent(scope.directoryName).appendingPathComponent("draft.json")
     XCTAssertTrue(try String(contentsOf: manifest, encoding: .utf8).contains("Original"))
   }
+
+  func testAbandonedPendingUploadRotatesAndFlushesNewIDBeforeRetrying() async throws {
+    let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+    let store = PostDraftStore(root: root)
+    let repo = DraftPublishingRepo()
+    let scope = PostDraftScope(uid: "ana", groupID: nil)
+    let file = try file()
+    let identity = NativePostDraftIdentity(title: "Título", text: "Texto", fileIDs: [file.id], youtubeID: nil)
+    _ = try await store.save(
+      PostDraftSnapshot(title: "Título", text: "Texto", files: [file], pendingPostID: "retired-id", pendingIdentity: identity),
+      scope: scope,
+      expectedRevision: nil
+    )
+    var sawReplacementPersisted = false
+    repo.handler = { _, id in
+      if id == "retired-id" {
+        throw CreatePostRepoError.postUploadAbandoned
+      }
+      let saved = try await store.load(scope).snapshot
+      XCTAssertEqual(saved?.pendingPostID, id, "Replacement ID must be flushed before publishing")
+      sawReplacementPersisted = true
+    }
+    let vm = CreatePostViewModel(repo: repo, draftSession: PostDraftSession(uid: "ana", groupID: nil, store: store), currentUserID: { "ana" })
+    await vm.restoreDraft()
+    XCTAssertEqual(vm.pendingPostID, "retired-id")
+    await vm.retryPendingSubmission()?.value
+    XCTAssertTrue(sawReplacementPersisted)
+    XCTAssertEqual(repo.ids.count, 2)
+    XCTAssertEqual(repo.ids.first, "retired-id")
+    XCTAssertNotEqual(repo.ids.last, "retired-id")
+    XCTAssertNil(vm.errorMessage)
+    let cleared = try await store.load(scope)
+    XCTAssertNil(cleared.snapshot)
+  }
 }

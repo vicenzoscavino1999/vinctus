@@ -218,7 +218,7 @@ describe('Post write authorization at the server boundary', () => {
     },
   );
 
-  it.each(['missing', 'uploading', 'failed', 'invalid'])(
+  it.each(['missing', 'uploading', 'failed', 'abandoned', 'invalid'])(
     'denies all interactions on %s posts',
     async (status) => {
       const db = await seed({ status });
@@ -226,6 +226,41 @@ describe('Post write authorization at the server boundary', () => {
       for (const write of operations(db)) await assertFails(write());
     },
   );
+
+  it('does not let an author downgrade a published post or mutate/delete a retired abandoned tombstone', async () => {
+    const db = await seed(
+      { authorId: viewer, groupId: null, status: 'ready', media: [] },
+      'public',
+    );
+    await assertFails(
+      db.doc('posts/post').update({ status: 'failed', media: [], updatedAt: timestamp() }),
+    );
+    await adminWrite('posts/abandoned', {
+      postId: 'abandoned',
+      authorId: viewer,
+      status: 'abandoned',
+      title: null,
+      text: '',
+      media: [],
+      likeCount: 0,
+      commentCount: 0,
+      groupId: null,
+      categoryId: null,
+    });
+    await assertSucceeds(db.doc('posts/abandoned').get());
+    await assertFails(
+      db.doc('posts/abandoned').update({ status: 'ready', media: [], updatedAt: timestamp() }),
+    );
+    await assertFails(
+      db.doc('posts/abandoned').update({ status: 'failed', media: [], updatedAt: timestamp() }),
+    );
+    await assertFails(
+      db
+        .doc('posts/abandoned')
+        .update({ content: 'Nuevo', media: [], title: null, updatedAt: timestamp() }),
+    );
+    await assertFails(db.doc('posts/abandoned').delete());
+  });
 
   it('does not let a revoked author use the failure path on an already published post', async () => {
     const db = await seed(

@@ -135,48 +135,65 @@ service firebase.storage {
     function isNewFile() {
       return resource == null;
     }
+
+    function hasPostSession() {
+      return isAuthenticated()
+        && request.auth.token.get('firebase', {}).get('sign_in_provider', 'custom') != 'anonymous';
+    }
+
+    function canUploadPostMediaOfPost(userId, post) {
+      return post.authorId == userId
+        && ('status' in post && post.status in ['uploading', 'failed']);
+    }
+
+    function canUploadPostMedia(userId, postId) {
+      return hasPostSession()
+        && isOwner(userId)
+        && firestore.exists(/databases/(default)/documents/posts/$(postId))
+        && canUploadPostMediaOfPost(
+          userId,
+          firestore.get(/databases/(default)/documents/posts/$(postId)).data
+        );
+    }
     
     // Post images: posts/{userId}/{postId}/images/{filename}
     match /posts/{userId}/{postId}/images/{filename} {
       // Readers use the authorized media endpoint. The uploader retains access
       // for resumable uploads/metadata checks; download tokens are revoked server-side.
-      allow read: if isAuthenticated() && isOwner(userId);
+      allow read: if hasPostSession() && isOwner(userId);
       
-      allow create: if isAuthenticated()
-        && isOwner(userId)
+      allow create: if canUploadPostMedia(userId, postId)
         && isNewFile()
         && isValidImageType()
         && isUnderImageSizeLimit();
       
-      allow delete: if isAuthenticated() && isOwner(userId);
+      allow delete: if false;
       allow update: if false;
     }
     
     // Post videos: posts/{userId}/{postId}/videos/{filename}
     match /posts/{userId}/{postId}/videos/{filename} {
-      allow read: if isAuthenticated() && isOwner(userId);
+      allow read: if hasPostSession() && isOwner(userId);
       
-      allow create: if isAuthenticated()
-        && isOwner(userId)
+      allow create: if canUploadPostMedia(userId, postId)
         && isNewFile()
         && isValidVideoType()
         && isUnderVideoSizeLimit();
       
-      allow delete: if isAuthenticated() && isOwner(userId);
+      allow delete: if false;
       allow update: if false;
     }
 
     // Post files: posts/{userId}/{postId}/files/{filename}
     match /posts/{userId}/{postId}/files/{filename} {
-      allow read: if isAuthenticated() && isOwner(userId);
+      allow read: if hasPostSession() && isOwner(userId);
 
-      allow create: if isAuthenticated()
-        && isOwner(userId)
+      allow create: if canUploadPostMedia(userId, postId)
         && isNewFile()
         && isValidChatFileType()
         && isUnderCollectionFileSizeLimit();
 
-      allow delete: if isAuthenticated() && isOwner(userId);
+      allow delete: if false;
       allow update: if false;
     }
 

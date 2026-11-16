@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/auth';
 import { getNewPostId } from '@/features/posts/api';
+import { isAbandonedPostUploadError } from '@/shared/lib/firestore-post-upload';
 import { usePostDraft } from './usePostDraft';
 import { postDraftAttemptKey, hasPostDraft } from '@/features/posts/model/postDraftStore';
 import { PostSubmission } from '@/features/posts/model/PostSubmission';
@@ -372,9 +373,9 @@ export const useCreatePost = ({
     setProgress({ percent: 0, transferred: 0, total: 0 });
 
     const key = postDraftAttemptKey(scope, draftStore.peek());
-    try {
-      if (pending.current?.key !== key) {
-        const cached = draftStore.peek().pending;
+    const publishAttempt = async (forceNewId: boolean): Promise<string | null> => {
+      if (pending.current?.key !== key || forceNewId) {
+        const cached = !forceNewId ? draftStore.peek().pending : undefined;
         const postId = cached?.key === key ? cached.input.postId : getNewPostId();
         const input =
           cached?.key === key
@@ -416,12 +417,12 @@ export const useCreatePost = ({
           ),
         };
       }
-      if (draftStore.peek().pending?.key !== key) {
+      if (draftStore.peek().pending?.key !== key || forceNewId) {
         draftStore.edit({ pending: { key, input: pending.current.submission.input } });
       }
       await draftStore.flush();
-      if (!current()) return;
-      const publishedId = await pending.current.submission.publish((total, transferred) => {
+      if (!current()) return null;
+      return pending.current.submission.publish((total, transferred) => {
         if (current())
           setProgress({
             percent: total > 0 ? Math.round((transferred / total) * 100) : 0,
@@ -429,6 +430,18 @@ export const useCreatePost = ({
             transferred,
           });
       });
+    };
+    try {
+      let publishedId: string | null;
+      try {
+        publishedId = await publishAttempt(false);
+      } catch (firstError) {
+        if (!isAbandonedPostUploadError(firstError)) throw firstError;
+        if (!current()) return;
+        setProgress({ percent: 0, transferred: 0, total: 0 });
+        publishedId = await publishAttempt(true);
+      }
+      if (!publishedId) return;
       confirmedId.current = publishedId;
       try {
         await draftStore.complete(key);

@@ -21,7 +21,7 @@ extension CreatePostRepo {
   }
 }
 
-enum CreatePostRepoError: LocalizedError {
+enum CreatePostRepoError: LocalizedError, Equatable {
   case firebaseNotConfigured
   case userNotAuthenticated
   case invalidPostID
@@ -29,6 +29,7 @@ enum CreatePostRepoError: LocalizedError {
   case textTooLong(limit: Int)
   case postOwnedByAnotherUser
   case draftMismatchForRetry
+  case postUploadAbandoned
   case missingSnapshot
   case titleTooLong
 
@@ -48,6 +49,8 @@ enum CreatePostRepoError: LocalizedError {
       return "No puedes reutilizar un post que pertenece a otro usuario."
     case .draftMismatchForRetry:
       return "El borrador cambió. Intenta publicar de nuevo."
+    case .postUploadAbandoned:
+      return "La subida pendiente anterior caducó. Intenta publicar de nuevo."
     case .titleTooLong:
       return "El título supera el límite de 120 caracteres."
     case .missingSnapshot:
@@ -90,11 +93,14 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
     let expectedPaths = draft.files.map { PostFiles.path($0, userID: uid, postID: postID) }
       + (draft.youtubeVideoID.map { [StoragePaths.postVideo(userID: uid, postID: postID, filename: "youtube-\($0)")] } ?? [])
     guard expectedPaths.allSatisfy({ $0.count <= 300 }) else { throw PostMediaError.invalidFile }
-    let alreadyReady = try await db.runTransaction { transaction, errorPointer in
+    let initialState = try await db.runTransaction { transaction, errorPointer in
       do {
         let existing = try transaction.getDocument(post)
         if let data = existing.data() {
           guard data["authorId"] as? String == uid else { throw CreatePostRepoError.postOwnedByAnotherUser }
+          if data["status"] as? String == "abandoned" {
+            return "abandoned"
+          }
           guard data["text"] as? String == text,
             FirestoreValue.string(data["title"]) == title,
             FirestoreValue.string(data["groupId"]) == groupID
@@ -102,7 +108,7 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
           if data["status"] as? String == "ready" {
             let paths = (data["media"] as? [[String: Any]] ?? []).compactMap { $0["path"] as? String }
             guard paths == expectedPaths else { throw CreatePostRepoError.draftMismatchForRetry }
-            return true
+            return "ready"
           }
         } else {
           transaction.setData([
@@ -115,9 +121,10 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
           ], forDocument: post)
         }
       } catch { errorPointer?.pointee = error as NSError }
-      return false
-    } as? Bool ?? false
-    if alreadyReady { onProgress(1); return }
+      return "uploading"
+    } as? String ?? "uploading"
+    if initialState == "abandoned" { throw CreatePostRepoError.postUploadAbandoned }
+    if initialState == "ready" { onProgress(1); return }
 
     let total = max(1, draft.files.reduce(0) { $0 + $1.size })
     var completed = 0
@@ -148,16 +155,20 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
         path: StoragePaths.postVideo(userID: uid, postID: postID, filename: "youtube-\(id)"), contentType: "video/youtube"))
     }
     let fields = media.map(\.fields)
-    _ = try await db.runTransaction { transaction, errorPointer in
+    let finalState = try await db.runTransaction { transaction, errorPointer in
       do {
         let existing = try transaction.getDocument(post)
         guard existing.data()?["authorId"] as? String == uid else { throw CreatePostRepoError.postOwnedByAnotherUser }
+        if existing.data()?["status"] as? String == "abandoned" {
+          return "abandoned"
+        }
         if existing.data()?["status"] as? String != "ready" {
           transaction.updateData(["status": "ready", "media": fields, "updatedAt": FieldValue.serverTimestamp()], forDocument: post)
         }
       } catch { errorPointer?.pointee = error as NSError }
-      return nil
-    }
+      return "ready"
+    } as? String ?? "ready"
+    if finalState == "abandoned" { throw CreatePostRepoError.postUploadAbandoned }
     onProgress(1)
   }
 

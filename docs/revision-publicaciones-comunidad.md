@@ -81,9 +81,12 @@ un iPhone físico. La prueba local usa exclusivamente el proyecto emulado
   enlaces/notificaciones antiguos y desplegar juntos clientes, Functions, reglas
   e índices. La protección todavía no está activa en producción.
 - Pruebas en dispositivo, despliegue y versión posterior de TestFlight.
-- Política de limpieza de subidas incompletas y sus objetos remotos de Storage.
-  La novena etapa añade recuperación local tras cerrar/recargar el editor, con
-  copias de adjuntos e IDs de envío; no elimina objetos remotos abandonados.
+- Política de limpieza de subidas incompletas y sus objetos remotos de Storage:
+  resuelta en la décima etapa con retiro transaccional tras siete días sin actividad,
+  purga en dos pasadas y rotación automática de ID al reanudar borradores locales
+  antiguos. Falta desplegar el índice `posts(status ASC, createdAt ASC)`, las reglas
+  de Firestore/Storage y la función programada `cleanupAbandonedPosts` dentro del
+  despliegue coordinado.
 
 El PR puede generar una vista previa de Vercel automáticamente. Esta etapa no
 se ha promovido al dominio de producción ni subido a TestFlight, y el módulo
@@ -611,7 +614,65 @@ para los resultados de la compilación y pruebas en la Mac de CI.
 
 No hay garantía de recuperar cambios anteriores a completar la preparación o el
 guardado local, ni después de borrar los datos del navegador/desinstalar la app.
-La web avisa al salir con cambios pendientes o imágenes en preparación. La
-limpieza de subidas remotas abandonadas sigue pendiente, junto al despliegue
-coordinado, migración, nuevo TestFlight y prueba en iPhone real. Esta etapa no
-despliega reglas ni cambia el requisito de sesión para leer publicaciones.
+La web avisa al salir con cambios pendientes o imágenes en preparación. Esta
+etapa no despliega reglas ni cambia el requisito de sesión para leer publicaciones.
+
+## Décima etapa: política y limpieza segura de subidas remotas abandonadas
+
+Un envío interrumpido deja un documento `posts/{postId}` en estado `uploading`
+(o `failed`) y objetos parciales bajo `posts/{authorId}/{postId}/`. Borrarlos de
+inmediato rompería la recuperación de borradores locales o eliminaría archivos
+de un post cuya confirmación final se perdió.
+
+Cambios de esta etapa:
+
+- Ventana de recuperación de siete días (`ABANDONED_UPLOAD_AFTER_MS`): los posts
+  `uploading` o `failed` con menos de siete días —o con cualquier objeto en
+  Storage creado o actualizado dentro de los últimos siete días— se conservan
+  sin cambios para que el borrador local reutilice los archivos ya subidos.
+- Las publicaciones confirmadas (`ready` o heredadas sin `status`) jamás son
+  retiradas ni limpiadas, incluso si el cliente perdió la respuesta del commit.
+- Retiro transaccional a tombstone (`status: 'abandoned'`) en
+  `cleanupAbandonedPostUploads` y en el job programado `cleanupAbandonedPosts`
+  (cada seis horas): verifica dentro de una transacción que el documento siga en
+  `uploading`/`failed` y vencido, limpia `title`/`text`/`content` y agenda la
+  purga de Storage.
+- Purga de Storage en dos pasadas con concesión (`CLEANUP_LEASE_MS` de 15 minutos)
+  para evitar ejecuciones solapadas: la primera pasada borra todas las versiones
+  bajo `posts/{authorId}/{postId}/` y programa una segunda pasada tras ocho días
+  (`LATE_UPLOAD_GRACE_MS`, superior a la validez de siete días de una sesión
+  reanudable de GCS iniciada antes del retiro). La segunda pasada barre cualquier
+  objeto tardío y elimina el tombstone.
+- Si el autor borra manualmente un post `uploading` o `failed`, `onPostDeleted`
+  reserva el tombstone `abandoned` y ejecuta la primera pasada de limpieza sobre
+  su prefijo de Storage, salvo cuando la cuenta está en proceso de borrado
+  (`deletionJobs`), caso en el que no crea documentos nuevos.
+- Reglas de Firestore y Storage:
+  - `storage.rules` exige sesión no anónima, propiedad y que `posts/{postId}`
+    exista en estado `uploading` o `failed` para crear objetos de publicación;
+    deniega subidas sobre posts inexistentes, `ready` o `abandoned`, y prohíbe
+    el borrado directo de objetos desde clientes (`allow delete: if false`).
+  - `firestore.rules` impide degradar un post `ready` a `failed` y bloquea
+    cualquier edición o borrado de cliente sobre un tombstone `abandoned`.
+  - Se añade el índice compuesto `posts(status ASC, createdAt ASC)`.
+- Recuperación transparente en web e iOS tras el retiro: si el usuario reabre un
+  borrador local después de más de siete días y su `postId` remoto ya pasó a
+  `abandoned`, `useCreatePost` (web) y `CreatePostViewModel` (iOS) detectan el
+  estado en la primera fase, generan y guardan en el almacenamiento local un
+  nuevo `postId` antes de subir, y publican las copias locales bajo el nuevo ID.
+
+Validación:
+
+- [x] Compilación de Functions, TypeScript, ESLint, contrato e índices.
+- [x] 493 pruebas unitarias web con cobertura aprobada y 76 pruebas de API/Functions,
+      incluidas las pruebas de retiro en dos pasadas, preservación de posts `ready`
+      y activos, reserva al borrar incompletos, exclusión de cuentas en borrado y
+      rotación de ID en `useCreatePost` y `firestore-post-upload`.
+- [x] Nuevos casos de reglas de Firestore y Storage, integración con emuladores en
+      `scripts/post-upload-cleanup.integration.test.mjs` y pruebas unitarias e
+      integración nativa en `PostDraftTests.swift` y `PostDraftIntegrationTests.swift`.
+      Consultar el PR para las ejecuciones de CI web y Mac.
+
+El índice `posts(status ASC, createdAt ASC)`, las reglas y `cleanupAbandonedPosts`
+deben desplegarse junto con el despliegue coordinado pendiente. No se desplegó a
+producción ni se subió una nueva versión a TestFlight en esta etapa.

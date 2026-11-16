@@ -18,6 +18,12 @@ import { messageReportKey, moderateUserText, newlyMatchedTerms } from './moderat
 import { clearLastMessagePreview } from './moderationActions';
 import { reconcileUserPostCount } from './postCounts';
 import { reconcilePostLikes, reconcilePostComments } from './postEngagementCounts';
+import {
+  ABANDONED_POST_STATUS,
+  cleanupAbandonedPostUploads,
+  isUnfinishedPostStatus,
+  reserveDeletedUnfinishedPost,
+} from './postUploadCleanup';
 export {
   readPosts,
   readPostMedia,
@@ -1137,6 +1143,10 @@ export const onPostCreated = functions
       throw error;
     }
 
+    if (data?.status === ABANDONED_POST_STATUS) {
+      return;
+    }
+
     try {
       await moderatePostContent(postId, data as Record<string, unknown>, eventId);
     } catch (error) {
@@ -1174,6 +1184,10 @@ export const onPostUpdatedModeration = functions.firestore
     const eventId = context.eventId;
     const before = change.before.data() || {};
     const after = change.after.data() || {};
+
+    if (after.status === ABANDONED_POST_STATUS) {
+      return;
+    }
 
     const textChanged =
       before.text !== after.text ||
@@ -1227,6 +1241,18 @@ export const onPostDeleted = functions
         });
         throw error;
       }
+    }
+
+    if (data?.status === ABANDONED_POST_STATUS) {
+      return;
+    }
+
+    if (data && isUnfinishedPostStatus(data.status)) {
+      const reserved = await reserveDeletedUnfinishedPost(db, postId, data);
+      if (reserved) {
+        await cleanupAbandonedPostUploads(db, admin.storage().bucket(), { limit: 10 });
+      }
+      return;
     }
 
     try {
@@ -1303,6 +1329,19 @@ export const onPostDeleted = functions
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  });
+
+/**
+ * Retire stale unfinished post uploads (>7 days without Storage activity) and
+ * purge their Storage objects in two passes without touching accepted posts.
+ */
+export const cleanupAbandonedPosts = functions
+  .runWith({ timeoutSeconds: 300, memory: '256MB' })
+  .pubsub.schedule('every 6 hours')
+  .onRun(async () => {
+    const report = await cleanupAbandonedPostUploads(db, admin.storage().bucket());
+    functions.logger.info('Completed abandoned post upload cleanup', report);
+    return null;
   });
 
 /**

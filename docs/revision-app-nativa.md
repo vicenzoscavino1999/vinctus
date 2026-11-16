@@ -157,4 +157,16 @@ protección frente a editores antiguos. Una integración nativa recupera un post
 aceptado cuya respuesta se perdió y comprueba que el reintento conserva el objeto
 y las fechas. Consultar el PR para la compilación y las pruebas nativas de esta
 etapa. Son borradores de cada dispositivo; no se sincronizan entre web e iPhone.
-La limpieza remota, el despliegue y la prueba física siguen pendientes.
+
+La décima etapa incorpora la política y limpieza segura de subidas remotas
+abandonadas en dos fases, compatible con los borradores locales recuperables:
+conserva intactos durante siete días los envíos incompletos (`uploading`/`failed`)
+y extiende la ventana cuando hay objetos recientes en Storage; nunca toca
+publicaciones confirmadas (`ready` o heredadas sin estado). Tras siete días sin
+actividad, retira el documento a un tombstone `abandoned`, bloquea en reglas
+nuevas subidas/actualizaciones/borrados de cliente sobre ese ID, purga los
+objetos del prefijo en dos pasadas con concesión transaccional (incluida una
+segunda pasada tras ocho días para sesiones reanudables preautorizadas) y elimina
+el tombstone al concluir. Si el usuario reabre después un borrador local cuyo ID
+fue retirado, web e iOS rotan y persisten un nuevo `postId` antes de subir las
+copias locales. El despliegue coordinado y la prueba física siguen pendientes.

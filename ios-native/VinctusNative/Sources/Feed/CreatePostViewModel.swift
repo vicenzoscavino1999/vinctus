@@ -176,15 +176,32 @@ final class CreatePostViewModel: ObservableObject {
     AppLog.posts.info("createPost.submit.start")
 
     return Task {
+      var activePostID = postID
       do {
         try await draftSession?.flush()
         if let draftSession, currentUserID?() != draftSession.scope.uid { throw PostDraftStoreError.wrongAccount }
-        try await repo.publishPost(capturedDraft, postID: postID, groupID: groupID) { fraction in
-          Task { @MainActor in
-            if self.isSubmitting, self.submissionGeneration == generation { self.uploadProgress = fraction }
+        do {
+          try await repo.publishPost(capturedDraft, postID: activePostID, groupID: groupID) { fraction in
+            Task { @MainActor in
+              if self.isSubmitting, self.submissionGeneration == generation { self.uploadProgress = fraction }
+            }
+          }
+        } catch CreatePostRepoError.postUploadAbandoned {
+          let replacementID = try repo.makePostID()
+          activePostID = replacementID
+          pendingPostID = replacementID
+          pendingDraft = draftIdentity
+          uploadProgress = 0
+          persistDraft()
+          try await draftSession?.flush()
+          if let draftSession, currentUserID?() != draftSession.scope.uid { throw PostDraftStoreError.wrongAccount }
+          try await repo.publishPost(capturedDraft, postID: replacementID, groupID: groupID) { fraction in
+            Task { @MainActor in
+              if self.isSubmitting, self.submissionGeneration == generation { self.uploadProgress = fraction }
+            }
           }
         }
-        AppLog.posts.info("createPost.submit.success postID=\(postID, privacy: .private)")
+        AppLog.posts.info("createPost.submit.success postID=\(activePostID, privacy: .private)")
 
         applyingSnapshot = true
         pendingPostID = nil
@@ -203,7 +220,7 @@ final class CreatePostViewModel: ObservableObject {
         isSubmitting = false
       } catch {
         AppLog.posts.error(
-          "createPost.submit.failed postID=\(postID, privacy: .private) errorType=\(AppLog.errorType(error), privacy: .public)"
+          "createPost.submit.failed postID=\(activePostID, privacy: .private) errorType=\(AppLog.errorType(error), privacy: .public)"
         )
         errorMessage = error.localizedDescription
         isSubmitting = false
