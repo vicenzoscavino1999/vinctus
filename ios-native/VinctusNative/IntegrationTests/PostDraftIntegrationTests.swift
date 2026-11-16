@@ -72,39 +72,43 @@ final class PostDraftIntegrationTests: EmulatorTestCase {
 
     let data = Data("%PDF-1.4\n%%EOF".utf8)
     let source = ChatPendingAttachment.temporaryURL(extension: "pdf")
+    try FileManager.default.createDirectory(at: source.deletingLastPathComponent(), withIntermediateDirectories: true)
     try data.write(to: source)
     let file = ChatPendingAttachment(fileURL: source, fileName: "Informe.pdf", contentType: "application/pdf", size: data.count, kind: .document)
     let identity = NativePostDraftIdentity(title: "Borrador tras limpieza", text: "Texto conservado en el dispositivo", fileIDs: [file.id], youtubeID: nil)
-    _ = try await store.save(
-      PostDraftSnapshot(
-        title: "Borrador tras limpieza",
-        text: "Texto conservado en el dispositivo",
-        youtubeURL: "",
-        files: [file],
-        pendingPostID: abandonedPostID,
-        pendingIdentity: identity
-      ),
-      scope: scope,
-      expectedRevision: nil
+    let snapshot = PostDraftSnapshot(
+      title: "Borrador tras limpieza",
+      text: "Texto conservado en el dispositivo",
+      youtubeURL: "",
+      files: [file],
+      pendingPostID: abandonedPostID,
+      pendingIdentity: identity
     )
-    try FileManager.default.removeItem(at: source)
+    _ = try await store.save(snapshot, scope: scope, expectedRevision: nil)
+    try? FileManager.default.removeItem(at: source)
 
-    // Simulate server cleanup retiring the old incomplete post to `abandoned`.
-    let db = Firestore.firestore()
-    try await db.collection("posts").document(abandonedPostID).setData([
-      "postId": abandonedPostID,
-      "authorId": user.uid,
-      "status": "abandoned",
-      "title": NSNull(),
-      "text": "",
-      "media": [],
-      "likeCount": 0,
-      "commentCount": 0,
-      "groupId": NSNull(),
-      "categoryId": NSNull(),
-      "createdAt": FieldValue.serverTimestamp(),
-      "updatedAt": FieldValue.serverTimestamp(),
-    ])
+    // Simulate server cleanup retiring the old incomplete post to `abandoned` (admin write).
+    let endpoint = URL(string: "http://127.0.0.1:8080/v1/projects/\(Emulator.projectID)/databases/(default)/documents/posts/\(abandonedPostID)")!
+    var request = URLRequest(url: endpoint)
+    request.httpMethod = "PATCH"
+    request.setValue("Bearer owner", forHTTPHeaderField: "Authorization")
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try JSONSerialization.data(withJSONObject: ["fields": [
+      "postId": ["stringValue": abandonedPostID],
+      "authorId": ["stringValue": user.uid],
+      "status": ["stringValue": "abandoned"],
+      "title": ["nullValue": NSNull()],
+      "text": ["stringValue": ""],
+      "media": ["arrayValue": [:]],
+      "likeCount": ["integerValue": "0"],
+      "commentCount": ["integerValue": "0"],
+      "groupId": ["nullValue": NSNull()],
+      "categoryId": ["nullValue": NSNull()],
+      "createdAt": ["timestampValue": "2026-01-01T00:00:00Z"],
+      "updatedAt": ["timestampValue": "2026-01-01T00:00:00Z"],
+    ]])
+    let (_, response) = try await URLSession.shared.data(for: request)
+    XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
 
     let viewModel = CreatePostViewModel(
       repo: repo,
@@ -119,6 +123,7 @@ final class PostDraftIntegrationTests: EmulatorTestCase {
     XCTAssertNil(viewModel.errorMessage)
     XCTAssertEqual(viewModel.infoMessage, "Publicación enviada.")
 
+    let db = Firestore.firestore()
     let tombstone = try await db.collection("posts").document(abandonedPostID).getDocument(source: .server)
     XCTAssertEqual(tombstone.data()?["status"] as? String, "abandoned")
 
