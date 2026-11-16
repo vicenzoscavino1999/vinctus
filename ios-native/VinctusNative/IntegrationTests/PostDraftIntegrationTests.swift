@@ -7,8 +7,20 @@ import XCTest
 private final class LostPostAcknowledgementRepo: CreatePostRepo {
   private let underlying = FirebaseCreatePostRepo()
   func makePostID() throws -> String { try underlying.makePostID() }
-  func publishPost(_ draft: NativePostDraft, postID: String, groupID: String?, onProgress: @escaping (Double) -> Void) async throws {
-    try await underlying.publishPost(draft, postID: postID, groupID: groupID, onProgress: onProgress)
+  func publishPost(
+    _ draft: NativePostDraft,
+    postID: String,
+    groupID: String?,
+    categoryID: String?,
+    onProgress: @escaping (Double) -> Void
+  ) async throws {
+    try await underlying.publishPost(
+      draft,
+      postID: postID,
+      groupID: groupID,
+      categoryID: categoryID,
+      onProgress: onProgress
+    )
     throw NSError(domain: "InjectedLostPostAcknowledgement", code: 1)
   }
 }
