@@ -84,7 +84,8 @@ final class PostDraftIntegrationTests: EmulatorTestCase {
         pendingPostID: abandonedPostID,
         pendingIdentity: identity
       ),
-      for: scope
+      scope: scope,
+      expectedRevision: nil
     )
     try FileManager.default.removeItem(at: source)
 
