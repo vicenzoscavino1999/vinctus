@@ -50,7 +50,9 @@ final class PostDraftIntegrationTests: EmulatorTestCase {
     let path = PostFiles.path(file, userID: user.uid, postID: postID)
     let stored = Storage.storage().reference(withPath: path)
     let original = try await stored.getMetadata()
-    try FileManager.default.removeItem(at: source)
+    // The temporary original may already be gone (attachment cleanup); the draft keeps its own copy.
+    try? FileManager.default.removeItem(at: source)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
 
     let relaunchedStore = PostDraftStore(root: root)
     let second = CreatePostViewModel(repo: FirebaseCreatePostRepo(), draftSession: PostDraftSession(uid: user.uid, groupID: nil, store: relaunchedStore), currentUserID: { Auth.auth().currentUser?.uid })
