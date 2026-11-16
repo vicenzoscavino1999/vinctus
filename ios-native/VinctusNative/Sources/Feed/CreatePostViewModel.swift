@@ -2,6 +2,10 @@ import Foundation
 import PhotosUI
 import SwiftUI
 
+extension Notification.Name {
+  static let vinctusPostPublished = Notification.Name("vinctus.postPublished")
+}
+
 @MainActor
 final class CreatePostViewModel: ObservableObject {
   @Published var draftText = "" { didSet { persistDraft() } }
@@ -22,6 +26,7 @@ final class CreatePostViewModel: ObservableObject {
 
   private let repo: CreatePostRepo
   private let groupID: String?
+  private let categoryID: String?
   private var pendingDraft: NativePostDraftIdentity?
   private var lastPublishedDraft: NativePostDraftIdentity?
   private var lastPublishedAt: Date?
@@ -31,8 +36,15 @@ final class CreatePostViewModel: ObservableObject {
   private let currentUserID: (() -> String?)?
   private var applyingSnapshot = false
 
-  init(repo: CreatePostRepo, groupID: String? = nil, draftSession: PostDraftSession? = nil, currentUserID: (() -> String?)? = nil) {
+  init(
+    repo: CreatePostRepo,
+    groupID: String? = nil,
+    categoryID: String? = nil,
+    draftSession: PostDraftSession? = nil,
+    currentUserID: (() -> String?)? = nil
+  ) {
     self.groupID = groupID
+    self.categoryID = categoryID
     self.repo = repo
     self.draftSession = draftSession
     self.currentUserID = currentUserID
@@ -181,7 +193,7 @@ final class CreatePostViewModel: ObservableObject {
         try await draftSession?.flush()
         if let draftSession, currentUserID?() != draftSession.scope.uid { throw PostDraftStoreError.wrongAccount }
         do {
-          try await repo.publishPost(capturedDraft, postID: activePostID, groupID: groupID) { fraction in
+          try await repo.publishPost(capturedDraft, postID: activePostID, groupID: groupID, categoryID: categoryID) { fraction in
             Task { @MainActor in
               if self.isSubmitting, self.submissionGeneration == generation { self.uploadProgress = fraction }
             }
@@ -195,7 +207,7 @@ final class CreatePostViewModel: ObservableObject {
           persistDraft()
           try await draftSession?.flush()
           if let draftSession, currentUserID?() != draftSession.scope.uid { throw PostDraftStoreError.wrongAccount }
-          try await repo.publishPost(capturedDraft, postID: replacementID, groupID: groupID) { fraction in
+          try await repo.publishPost(capturedDraft, postID: replacementID, groupID: groupID, categoryID: categoryID) { fraction in
             Task { @MainActor in
               if self.isSubmitting, self.submissionGeneration == generation { self.uploadProgress = fraction }
             }
@@ -218,6 +230,11 @@ final class CreatePostViewModel: ObservableObject {
         catch { draftSaveError = "La publicación se envió, pero no se pudo actualizar el borrador local. Reintenta el guardado." }
         infoMessage = "Publicación enviada."
         isSubmitting = false
+        NotificationCenter.default.post(
+          name: .vinctusPostPublished,
+          object: nil,
+          userInfo: ["postID": activePostID, "groupID": groupID as Any]
+        )
       } catch {
         AppLog.posts.error(
           "createPost.submit.failed postID=\(activePostID, privacy: .private) errorType=\(AppLog.errorType(error), privacy: .public)"

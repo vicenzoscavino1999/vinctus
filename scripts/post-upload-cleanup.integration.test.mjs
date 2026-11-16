@@ -240,3 +240,74 @@ test('deleting an unfinished post reserves a tombstone and purges its partial ob
   assert.equal(reserved, false);
   assert.equal((await db.doc(`posts/${deletingPostId}`).get()).exists, false);
 });
+
+test('cleanup paginates past skipped active or recently updated uploads to retire later abandoned uploads', async () => {
+  const authorId = await makeAuthor();
+  const baseMs = Date.UTC(2020, 0, 10, 0, 0, 0);
+  const now = new Date(baseMs);
+  const t1 = Timestamp.fromMillis(baseMs - ABANDONED_UPLOAD_AFTER_MS - 300_000);
+  const t2 = Timestamp.fromMillis(baseMs - ABANDONED_UPLOAD_AFTER_MS - 200_000);
+  const t3 = Timestamp.fromMillis(baseMs - ABANDONED_UPLOAD_AFTER_MS - 100_000);
+  const recentUpdate = Timestamp.fromMillis(baseMs - 60_000);
+
+  const activeStorageId = `page_active_${id()}`;
+  const recentUpdatedId = `page_updated_${id()}`;
+  const abandonedId = `page_abandoned_${id()}`;
+
+  const activePath = `posts/${authorId}/${activeStorageId}/images/recent.webp`;
+  await putObject(activePath, 'image/webp');
+
+  await db.doc(`posts/${activeStorageId}`).set({
+    postId: activeStorageId,
+    authorId,
+    authorSnapshot: { displayName: 'Autor', photoURL: null },
+    title: 'Activo por Storage',
+    text: 'Sigue subiendo',
+    status: 'uploading',
+    media: [],
+    createdAt: t1,
+    updatedAt: null,
+  });
+
+  await db.doc(`posts/${recentUpdatedId}`).set({
+    postId: recentUpdatedId,
+    authorId,
+    authorSnapshot: { displayName: 'Autor', photoURL: null },
+    title: 'Actualizado hace poco',
+    text: 'Sigue reciente',
+    status: 'failed',
+    media: [],
+    createdAt: t2,
+    updatedAt: recentUpdate,
+  });
+
+  await db.doc(`posts/${abandonedId}`).set({
+    postId: abandonedId,
+    authorId,
+    authorSnapshot: { displayName: 'Autor', photoURL: null },
+    title: 'Detrás de la primera página',
+    text: 'Debe retirarse aunque limit sea 1',
+    status: 'failed',
+    media: [],
+    createdAt: t3,
+    updatedAt: t3,
+  });
+
+  // With limit = 1, cleanup must paginate past `activeStorageId` and `recentUpdatedId` to retire `abandonedId`.
+  const report = await cleanupAbandonedPostUploads(db, bucket, { now, limit: 1 });
+  assert.ok(report.scanned >= 3);
+  assert.ok(report.skippedActive >= 1);
+  assert.ok(report.skippedChanged >= 1);
+  assert.equal(report.retired, 1);
+  assert.equal(report.purged, 1);
+
+  const [activeSnap, updatedSnap, abandonedSnap] = await db.getAll(
+    db.doc(`posts/${activeStorageId}`),
+    db.doc(`posts/${recentUpdatedId}`),
+    db.doc(`posts/${abandonedId}`),
+  );
+  assert.equal(activeSnap.data()?.status, 'uploading');
+  assert.equal(updatedSnap.data()?.status, 'failed');
+  assert.equal(abandonedSnap.data()?.status, ABANDONED_POST_STATUS);
+  assert.equal(await objectExists(activePath), true);
+});

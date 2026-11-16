@@ -153,6 +153,9 @@ struct FeedView: View {
     .task {
       await vm.refresh()
     }
+    .onReceive(NotificationCenter.default.publisher(for: .vinctusPostPublished)) { _ in
+      Task { await vm.refresh() }
+    }
     .refreshable {
       await vm.refresh()
     }

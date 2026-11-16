@@ -12,12 +12,33 @@ private struct CreatePostAuthorSnapshot {
 protocol CreatePostRepo {
   func makePostID() throws -> String
   /// `groupID` publishes the post inside that group (the web's `groupId`).
-  func publishPost(_ draft: NativePostDraft, postID: String, groupID: String?, onProgress: @escaping (Double) -> Void) async throws
+  func publishPost(
+    _ draft: NativePostDraft,
+    postID: String,
+    groupID: String?,
+    categoryID: String?,
+    onProgress: @escaping (Double) -> Void
+  ) async throws
 }
 
 extension CreatePostRepo {
-  func publishTextPost(text: String, postID: String, groupID: String?) async throws {
-    try await publishPost(NativePostDraft(text: text), postID: postID, groupID: groupID, onProgress: { _ in })
+  func publishPost(
+    _ draft: NativePostDraft,
+    postID: String,
+    groupID: String?,
+    onProgress: @escaping (Double) -> Void
+  ) async throws {
+    try await publishPost(draft, postID: postID, groupID: groupID, categoryID: nil, onProgress: onProgress)
+  }
+
+  func publishTextPost(text: String, postID: String, groupID: String?, categoryID: String? = nil) async throws {
+    try await publishPost(
+      NativePostDraft(text: text),
+      postID: postID,
+      groupID: groupID,
+      categoryID: categoryID,
+      onProgress: { _ in }
+    )
   }
 }
 
@@ -77,7 +98,13 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
     return postID
   }
 
-  func publishPost(_ draft: NativePostDraft, postID: String, groupID: String?, onProgress: @escaping (Double) -> Void) async throws {
+  func publishPost(
+    _ draft: NativePostDraft,
+    postID: String,
+    groupID: String?,
+    categoryID: String? = nil,
+    onProgress: @escaping (Double) -> Void
+  ) async throws {
     guard FirebaseApp.app() != nil else { throw CreatePostRepoError.firebaseNotConfigured }
     guard !postID.isEmpty, !postID.contains("/") else { throw CreatePostRepoError.invalidPostID }
     try draft.validate()
@@ -88,6 +115,10 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
     let post = db.collection(FirestoreCollections.posts).document(postID)
     let text = draft.text.trimmingCharacters(in: .whitespacesAndNewlines)
     let title = draft.normalizedTitle
+    let normalizedGroupID = groupID?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let groupValue = (normalizedGroupID?.isEmpty == false) ? normalizedGroupID : nil
+    let normalizedCategoryID = categoryID?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let categoryValue = (normalizedCategoryID?.isEmpty == false) ? normalizedCategoryID : nil
     let author = try await resolveAuthorSnapshot(uid: uid, fallbackUser: currentUser, db: db)
     let authorFields: [String: Any] = ["displayName": author.displayName, "photoURL": author.photoURL ?? NSNull()]
     let expectedPaths = draft.files.map { PostFiles.path($0, userID: uid, postID: postID) }
@@ -103,7 +134,8 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
           }
           guard data["text"] as? String == text,
             FirestoreValue.string(data["title"]) == title,
-            FirestoreValue.string(data["groupId"]) == groupID
+            FirestoreValue.string(data["groupId"]) == groupValue,
+            FirestoreValue.string(data["categoryId"]) == categoryValue
           else { throw CreatePostRepoError.draftMismatchForRetry }
           if data["status"] as? String == "ready" {
             let paths = (data["media"] as? [[String: Any]] ?? []).compactMap { $0["path"] as? String }
@@ -115,7 +147,7 @@ final class FirebaseCreatePostRepo: CreatePostRepo {
             "postId": postID, "authorId": uid,
             "authorSnapshot": authorFields,
             "title": title ?? NSNull(), "text": text, "content": text,
-            "status": "uploading", "media": [], "groupId": groupID ?? NSNull(), "categoryId": NSNull(),
+            "status": "uploading", "media": [], "groupId": groupValue ?? NSNull(), "categoryId": categoryValue ?? NSNull(),
             "likeCount": 0, "commentCount": 0,
             "createdAt": FieldValue.serverTimestamp(), "updatedAt": NSNull(),
           ], forDocument: post)

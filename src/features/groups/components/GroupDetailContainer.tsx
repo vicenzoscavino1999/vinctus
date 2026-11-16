@@ -12,6 +12,7 @@ import {
   type TopMember,
 } from './GroupDetailView';
 import CreatePostModal from '@/features/posts/components/CreatePostModal';
+import { FEED_CACHE_INVALIDATED_EVENT } from '@/features/posts/model/feedCache';
 import GroupMembersPanel, { type GroupMemberItem } from './GroupMembersPanel';
 import { useToast } from '@/shared/ui/Toast';
 import {
@@ -88,6 +89,7 @@ const GroupDetailSession = () => {
   const [membersPanelLoadingMore, setMembersPanelLoadingMore] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const refreshSeqRef = useRef(0);
 
   const groupIdStr = groupId || '';
 
@@ -191,7 +193,8 @@ const GroupDetailSession = () => {
     return () => {
       isActive = false;
     };
-  }, [groupIdStr, user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupIdStr, user?.uid]);
 
   const categoryData = group?.categoryId
     ? CATEGORIES.find((category) => category.id === group.categoryId)
@@ -247,6 +250,7 @@ const GroupDetailSession = () => {
         await joinPublicGroup(group.id, user.uid);
         setJoinStatus('member');
         setMembersCount((prev) => prev + 1);
+        void refreshRecentPosts();
         showToast('Te uniste al grupo', 'success');
       } else {
         if (!group.ownerId) {
@@ -276,13 +280,15 @@ const GroupDetailSession = () => {
     navigate(-1);
   };
 
-  const refreshRecentPosts = async () => {
+  const refreshRecentPosts = useCallback(async () => {
     if (!groupIdStr) return;
+    const seq = ++refreshSeqRef.current;
     try {
       const [postsResult, weekCount] = await Promise.all([
         getPostsByGroup(groupIdStr, 3).catch(() => ({ items: [], lastDoc: null, hasMore: false })),
-        getGroupPostsWeekCount(groupIdStr).catch(() => postsPerWeek),
+        getGroupPostsWeekCount(groupIdStr).catch(() => null),
       ]);
+      if (seq !== refreshSeqRef.current) return;
 
       const recent = postsResult.items.map((post) => ({
         id: post.id,
@@ -292,13 +298,23 @@ const GroupDetailSession = () => {
       })) as RecentPost[];
 
       setRecentPosts(recent);
-      if (Number.isFinite(weekCount)) {
+      if (typeof weekCount === 'number' && Number.isFinite(weekCount)) {
         setPostsPerWeek(weekCount);
       }
     } catch (refreshError) {
       console.error('Error refreshing posts:', refreshError);
     }
-  };
+  }, [groupIdStr]);
+
+  useEffect(() => {
+    const handlePostsInvalidated = () => {
+      void refreshRecentPosts();
+    };
+    window.addEventListener(FEED_CACHE_INVALIDATED_EVENT, handlePostsInvalidated);
+    return () => {
+      window.removeEventListener(FEED_CACHE_INVALIDATED_EVENT, handlePostsInvalidated);
+    };
+  }, [refreshRecentPosts]);
 
   const handleNavigateToCategory = () => {
     if (category) {
@@ -306,8 +322,9 @@ const GroupDetailSession = () => {
     }
   };
 
-  const handleOpenPost = (_postId: string) => {
-    showToast('Detalle de publicacion estara disponible pronto', 'info');
+  const handleOpenPost = (postId: string) => {
+    if (!postId) return;
+    navigate(`/post/${postId}`);
   };
 
   const handleOpenMembers = () => {
@@ -466,7 +483,12 @@ const GroupDetailSession = () => {
     try {
       await leaveGroupWithSync(groupIdStr, user.uid);
       setJoinStatus('none');
+      setIsCreatePostOpen(false);
       setMembersCount((prev) => Math.max(0, prev - 1));
+      if (visibility === 'private') {
+        refreshSeqRef.current += 1;
+        setRecentPosts([]);
+      }
       showToast('Saliste del grupo', 'success');
     } catch (leaveError) {
       console.error('Error leaving group:', leaveError);

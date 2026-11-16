@@ -1,8 +1,10 @@
 import { useAuth } from '@/context/auth';
+import CreatePostModal from '@/features/posts/components/CreatePostModal';
 import { PostImage } from '@/features/posts/components/ProtectedPostMedia';
+import { FEED_CACHE_INVALIDATED_EVENT } from '@/features/posts/model/feedCache';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Film, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { FileText, Film, Image as ImageIcon, Loader2, Plus } from 'lucide-react';
 import { getPostsByUser, type PaginatedResult, type PostRead } from '@/features/posts/api';
 import { getYouTubeThumbnailUrl } from '@/shared/lib/youtube';
 
@@ -58,6 +60,19 @@ const ProfilePostsSession = ({ userId, canView = true }: ProfilePostsGridProps) 
   const [error, setError] = useState<string | null>(null);
   const [cursor, setCursor] = useState<PaginatedResult<PostRead>['lastDoc']>(null);
   const [hasMore, setHasMore] = useState(false);
+  const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
+  const [reloadVersion, setReloadVersion] = useState(0);
+  const canCreate = Boolean(user?.uid && userId && user.uid === userId && canView);
+
+  useEffect(() => {
+    const handlePostsInvalidated = () => {
+      setReloadVersion((prev) => prev + 1);
+    };
+    window.addEventListener(FEED_CACHE_INVALIDATED_EVENT, handlePostsInvalidated);
+    return () => {
+      window.removeEventListener(FEED_CACHE_INVALIDATED_EVENT, handlePostsInvalidated);
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -75,8 +90,6 @@ const ProfilePostsSession = ({ userId, canView = true }: ProfilePostsGridProps) 
 
     const loadInitial = async () => {
       setLoading(true);
-      setPosts([]);
-      setLoadedReader(undefined);
       setError(null);
       try {
         const result = await getPostsByUser(userId, PAGE_SIZE);
@@ -101,7 +114,7 @@ const ProfilePostsSession = ({ userId, canView = true }: ProfilePostsGridProps) 
     return () => {
       active = false;
     };
-  }, [userId, canView, user?.uid]);
+  }, [userId, canView, user?.uid, reloadVersion]);
 
   const loadMore = async () => {
     if (!userId || !hasMore || loadingMore) return;
@@ -109,7 +122,14 @@ const ProfilePostsSession = ({ userId, canView = true }: ProfilePostsGridProps) 
     try {
       const result = await getPostsByUser(userId, PAGE_SIZE, cursor ?? undefined);
       const visible = result.items.filter((item) => isReadyPost(item as ProfilePost));
-      setPosts((prev) => [...prev, ...(visible as ProfilePost[])]);
+      setPosts((prev) => {
+        const seen = new Set(prev.map((item) => item.id || item.postId));
+        const next = (visible as ProfilePost[]).filter((item) => {
+          const id = item.id || item.postId;
+          return id ? !seen.has(id) : false;
+        });
+        return [...prev, ...next];
+      });
       setCursor(result.lastDoc);
       setHasMore(result.hasMore);
     } catch (err) {
@@ -137,7 +157,19 @@ const ProfilePostsSession = ({ userId, canView = true }: ProfilePostsGridProps) 
 
   return (
     <section>
-      <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-6">Publicaciones</h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase">Publicaciones</h2>
+        {canCreate && (
+          <button
+            type="button"
+            onClick={() => setIsCreatePostOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-button bg-brand-gold text-black text-xs uppercase tracking-wider font-medium hover:opacity-90 transition-opacity"
+          >
+            <Plus size={14} />
+            Publicar
+          </button>
+        )}
+      </div>
 
       {loading || loadedReader !== (user?.uid ?? null) ? (
         <div className="flex items-center gap-2 text-sm text-neutral-500">
@@ -152,6 +184,18 @@ const ProfilePostsSession = ({ userId, canView = true }: ProfilePostsGridProps) 
             <ImageIcon size={22} />
           </div>
           <p className="text-neutral-500 text-sm">Aun no hay publicaciones.</p>
+          {hasMore && (
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="px-5 py-2 rounded-full border border-neutral-700 text-neutral-200 hover:text-white hover:border-neutral-500 transition-colors text-sm disabled:opacity-50"
+              >
+                {loadingMore ? 'Cargando...' : 'Ver mas'}
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <>
@@ -246,6 +290,14 @@ const ProfilePostsSession = ({ userId, canView = true }: ProfilePostsGridProps) 
             </div>
           )}
         </>
+      )}
+
+      {canCreate && (
+        <CreatePostModal
+          isOpen={isCreatePostOpen}
+          onClose={() => setIsCreatePostOpen(false)}
+          redirectTo={null}
+        />
       )}
     </section>
   );

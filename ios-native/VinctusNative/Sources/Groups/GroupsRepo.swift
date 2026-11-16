@@ -21,6 +21,20 @@ struct GroupPostPreview: Identifiable, Hashable {
   let authorID: String?
   let authorName: String
   let createdAt: Date?
+  var feedItem: FeedItem? = nil
+
+  var resolvedFeedItem: FeedItem {
+    feedItem ?? FeedItem(
+      id: id,
+      authorID: authorID,
+      authorName: authorName,
+      text: title,
+      createdAt: createdAt,
+      likeCount: 0,
+      commentCount: 0,
+      title: title
+    )
+  }
 }
 
 struct GroupMemberPreview: Identifiable, Hashable {
@@ -209,6 +223,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
 
     let recentPosts = recent.items.map { row in
       let data = row.fields
+      let item = FirebaseFeedRepo.feedItem(id: row.id, data: data)
       let title = FirestoreValue.string(data["title"]) ?? FirestoreValue.string(data["text"]) ?? FirestoreValue.string(data["content"]) ?? "Publicacion"
 
       let authorName: String = {
@@ -224,9 +239,10 @@ final class FirebaseGroupsRepo: GroupsRepo {
       return GroupPostPreview(
         id: row.id,
         title: normalizedPostTitle(title),
-        authorID: FirestoreValue.string(data["authorId"]) ?? FirestoreValue.string(data["authorID"]),
+        authorID: item.authorID,
         authorName: authorName,
-        createdAt: FirestoreValue.date(data["createdAt"])
+        createdAt: FirestoreValue.date(data["createdAt"]),
+        feedItem: item
       )
     }
 

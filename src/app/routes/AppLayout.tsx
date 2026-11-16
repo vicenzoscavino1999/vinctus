@@ -388,7 +388,11 @@ const AppLayout = () => {
       </div>
 
       {/* Create Post Modal */}
-      <CreatePostModal isOpen={isCreatePostOpen} onClose={() => setIsCreatePostOpen(false)} />
+      <CreatePostModal
+        isOpen={isCreatePostOpen}
+        onClose={() => setIsCreatePostOpen(false)}
+        redirectTo={pathname === '/profile' ? null : '/feed'}
+      />
     </div>
   );
 };

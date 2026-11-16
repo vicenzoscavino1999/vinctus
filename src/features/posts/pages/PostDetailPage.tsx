@@ -121,6 +121,14 @@ const PostDetailSession = () => {
   const primaryVideo = media.find((item) => item.type === 'video') ?? null;
   const primaryVideoYouTube = primaryVideo ? parseYouTubeUrl(primaryVideo.url) : null;
   const primaryImage = media.find((item) => item.type === 'image') ?? null;
+  const primaryVisual = primaryVideo ?? primaryImage;
+  const additionalVisualMedia = useMemo(
+    () =>
+      media.filter(
+        (item) => (item.type === 'image' || item.type === 'video') && item !== primaryVisual,
+      ),
+    [media, primaryVisual],
+  );
   const fileAttachments = media.filter((item) => item.type === 'file');
   const displayText = post?.text ?? post?.content ?? '';
   const authorName = post?.authorSnapshot?.displayName ?? post?.authorName ?? 'Usuario';
@@ -129,7 +137,9 @@ const PostDetailSession = () => {
   const fallbackTitle = trimmedBody ? (trimmedBody.split('\n')[0] ?? trimmedBody) : '';
   const titleText = post?.title?.trim() || fallbackTitle || 'Publicacion';
   const isLongContent = trimmedBody.length > 140;
-  const showBody = post?.title ? trimmedBody.length > 0 : isLongContent;
+  const showBody = post?.title
+    ? trimmedBody.length > 0
+    : isLongContent || trimmedBody !== titleText;
 
   const commentsSummary = useMemo(() => {
     if (!post || !postId) return null;
@@ -237,6 +247,40 @@ const PostDetailSession = () => {
               +{media.length - 1}
             </div>
           )}
+        </div>
+      )}
+
+      {additionalVisualMedia.length > 0 && (
+        <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {additionalVisualMedia.map((item) => {
+            const youtube = item.type === 'video' ? parseYouTubeUrl(item.url) : null;
+            return (
+              <div
+                key={item.path || item.url}
+                className="relative rounded-xl overflow-hidden aspect-video bg-surface-overlay"
+              >
+                {item.type === 'video' ? (
+                  youtube ? (
+                    <iframe
+                      src={youtube.embedUrl}
+                      title={titleText}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                      className="w-full h-full"
+                    />
+                  ) : (
+                    <PostVideo src={item.url} controls className="w-full h-full object-cover" />
+                  )
+                ) : (
+                  <PostImage
+                    src={item.url}
+                    alt={titleText}
+                    className="w-full h-full object-cover"
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

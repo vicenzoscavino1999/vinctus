@@ -167,6 +167,22 @@ actividad, retira el documento a un tombstone `abandoned`, bloquea en reglas
 nuevas subidas/actualizaciones/borrados de cliente sobre ese ID, purga los
 objetos del prefijo en dos pasadas con concesión transaccional (incluida una
 segunda pasada tras ocho días para sesiones reanudables preautorizadas) y elimina
-el tombstone al concluir. Si el usuario reabre después un borrador local cuyo ID
-fue retirado, web e iOS rotan y persisten un nuevo `postId` antes de subir las
-copias locales. El despliegue coordinado y la prueba física siguen pendientes.
+el tombstone al concluir. El barrido pagina con cursor (`startAfter` por fecha e
+ID) para que las subidas activas o actualizadas recientemente no bloqueen el
+retiro de envíos abandonados posteriores. Si el usuario reabre después un
+borrador local cuyo ID fue retirado, web e iOS rotan y persisten un nuevo
+`postId` antes de subir las copias locales.
+
+La undécima etapa completa los flujos pendientes de creación desde perfil y
+grupos, actualización inmediata de listas y apertura de detalle en web e iOS:
+en web añade el botón `Publicar` en la cuadrícula del perfil propio, conserva la
+ruta `/profile` al publicar desde la cabecera, refresca automáticamente las
+publicaciones de perfil y grupo tras publicar, abre `/post/:postId` al tocar
+una publicación reciente del grupo y muestra en `PostDetailPage` tanto el cuerpo
+multilínea sin título como los adjuntos visuales adicionales. En iOS añade el
+botón `Publicar` en `PUBLICACIONES` del perfil propio, propaga `categoryID` al
+publicar en grupos, refresca `FeedView`, `ProfileView` y `GroupView` al publicar
+y convierte las tarjetas de `Publicaciones recientes` del grupo en enlaces a
+`PostDetailView` con su `FeedItem` completo. Con esto queda terminada toda la
+implementación y validación automatizada del módulo; la casilla permanece abierta
+únicamente a la espera del despliegue coordinado y de las pruebas en iPhone real.

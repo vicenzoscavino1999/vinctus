@@ -5,7 +5,13 @@ private final class DraftPublishingRepo: CreatePostRepo {
   var ids: [String] = []
   var handler: ((NativePostDraft, String) async throws -> Void)?
   func makePostID() -> String { UUID().uuidString }
-  func publishPost(_ draft: NativePostDraft, postID: String, groupID: String?, onProgress: @escaping (Double) -> Void) async throws {
+  func publishPost(
+    _ draft: NativePostDraft,
+    postID: String,
+    groupID: String?,
+    categoryID: String?,
+    onProgress: @escaping (Double) -> Void
+  ) async throws {
     ids.append(postID)
     try await handler?(draft, postID)
   }

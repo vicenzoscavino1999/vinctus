@@ -636,7 +636,11 @@ Cambios de esta etapa:
   `cleanupAbandonedPostUploads` y en el job programado `cleanupAbandonedPosts`
   (cada seis horas): verifica dentro de una transacción que el documento siga en
   `uploading`/`failed` y vencido, limpia `title`/`text`/`content` y agenda la
-  purga de Storage.
+  purga de Storage. Tanto el barrido de retiro como la purga de tombstones
+  paginan con cursor (`orderBy(..., 'asc').orderBy(FieldPath.documentId()).startAfter(...)`)
+  hasta completar el cupo de elementos procesados, evitando que borradores activos
+  o actualizados recientemente al principio de la consulta impidan limpiar envíos
+  abandonados posteriores.
 - Purga de Storage en dos pasadas con concesión (`CLEANUP_LEASE_MS` de 15 minutos)
   para evitar ejecuciones solapadas: la primera pasada borra todas las versiones
   bajo `posts/{authorId}/{postId}/` y programa una segunda pasada tras ocho días
@@ -676,3 +680,85 @@ Validación:
 El índice `posts(status ASC, createdAt ASC)`, las reglas y `cleanupAbandonedPosts`
 deben desplegarse junto con el despliegue coordinado pendiente. No se desplegó a
 producción ni se subió una nueva versión a TestFlight en esta etapa.
+
+## Undécima etapa: creación desde perfil y grupos, reflejo inmediato y apertura de detalle
+
+Se completaron los flujos restantes de creación, visualización y navegación al
+detalle de publicaciones desde perfil y grupos en ambas plataformas, manteniendo
+el alcance en los flujos de publicaciones sin iniciar todavía la revisión general
+de los módulos de Perfiles ni Grupos:
+
+- **Web (`src`)**:
+  - `ProfilePostsGrid`: incorpora el botón `Publicar` en el encabezado de
+    `Publicaciones` cuando el usuario consulta su propio perfil (`CreatePostModal`
+    con `redirectTo={null}`), escucha `FEED_CACHE_INVALIDATED_EVENT` para recargar
+    la cuadrícula tras publicar desde el perfil o desde la barra superior,
+    deduplica elementos al paginar y mantiene visible `Ver mas` cuando una primera
+    página autorizada queda vacía pero conserva cursor.
+  - `AppLayout`: al abrir el compositor global desde la barra superior estando en
+    `/profile`, mantiene la vista en `/profile` (`redirectTo={null}`) en lugar de
+    redirigir a `/feed`.
+  - `GroupDetailContainer`: corrige `handleOpenPost` para navegar a `/post/:postId`
+    al pulsar cualquier tarjeta de `Publicaciones recientes` (reemplazando el
+    aviso provisional), escucha `FEED_CACHE_INVALIDATED_EVENT` para actualizar
+    `recentPosts` y `postsPerWeek`, protege el refresco frente a respuestas fuera
+    de orden, recarga las publicaciones al unirse a un grupo público y limpia la
+    lista si el usuario sale de un grupo privado.
+  - `PostDetailPage`: muestra siempre el cuerpo completo cuando una publicación
+    sin `title` explícito tiene múltiples líneas (`trimmedBody !== titleText`) y
+    renderiza en una galería secundaria las imágenes o videos adicionales cuando
+    el post incluye más de un adjunto visual.
+- **App nativa (`ios-native/VinctusNative`)**:
+  - `CreatePostRepo`, `CreatePostViewModel` y `CreatePostView`: soportan
+    `categoryID` opcional al publicar en un grupo (guardando `categoryId` en
+    Firestore y validando que no cambie en reintentos, igual que la web) y emiten
+    la notificación `.vinctusPostPublished` al finalizar el envío.
+  - `GroupsRepo`, `GroupViewModel` y `GroupView`: `GroupPostPreview` conserva el
+    `FeedItem` completo reconstruido desde `PostReadClient` (`resolvedFeedItem`),
+    cada fila de `Publicaciones recientes` abre `PostDetailView` al tocarla sin
+    interferir con `ModerationMenu`, `CreatePostView` recibe `categoryID:
+vm.detail?.categoryID` y `GroupView` refresca el detalle al volver del
+    compositor, al publicarse un post o al cambiar la membresía.
+  - `ProfileWorkSections`, `ProfileView` y `FeedView`: `ProfilePostsSection`
+    muestra el botón `Publicar` en el perfil propio y tanto `ProfileView` como
+    `FeedView` recargan automáticamente sus datos al recibir `.vinctusPostPublished`.
+
+Validación de cierre de implementación:
+
+- [x] Pruebas unitarias web en `ProfileAndGroupPostFlows.test.tsx` (creación y
+      recarga en perfil propio, navegación a `/post/:postId` desde perfil y grupo,
+      y renderizado de cuerpo multilínea sin título en `PostDetailPage`) y flujo
+      E2E `@smoke` en `e2e/smoke.spec.ts` para crear desde perfil y grupo, ver las
+      nuevas publicaciones y abrir su detalle.
+- [x] Pruebas unitarias e integración en `functions/src/postUploadCleanup.test.ts`
+      y `scripts/post-upload-cleanup.integration.test.mjs` para la paginación con
+      cursor sobre subidas activas o actualizadas recientemente.
+- [x] Pruebas unitarias e integración nativas en `PostSubmissionTests.swift` y
+      `GroupsAndCollectionsIntegrationTests.swift` para la propagación de
+      `categoryID` en grupos, notificación `.vinctusPostPublished` y navegación al
+      detalle con `resolvedFeedItem`.
+
+## Estado para cerrar el módulo Publicaciones / Comunidad
+
+1. **Implementación y pruebas automatizadas (Completado)**:
+   - Las once etapas del módulo están implementadas y cubiertas por pruebas
+     unitarias, de reglas, de Functions, de navegador (Playwright) y de
+     integración nativa (XCTest con emuladores en Mac de CI).
+2. **Despliegue coordinado (Pendiente)**:
+   - Desplegar conjuntamente en `staging` aislado y observar durante 24 horas:
+     `firestore.indexes.json` (incluidos `posts(status ASC, createdAt ASC)` y TTL
+     de `_post_read_cursors`), `firestore.rules`, `storage.rules`, Cloud Functions
+     (`readPosts`, `readPostMedia`, `cleanupAbandonedPosts`, triggers de conteo,
+     reacciones/karma y metadatos de Storage) y clientes web/iOS actualizados.
+   - Ejecutar la auditoría y migración `node scripts/migrate-post-read-privacy.mjs`
+     en el proyecto/bucket antes de dar por activa la confidencialidad en
+     producción.
+   - Generar y subir un nuevo build de **TestFlight** posterior a `1.0.0 (2)` que
+     incluya los cambios de `fix/posts-community`.
+3. **Pruebas en iPhone real (Pendiente)**:
+   - Instalar el nuevo build de TestFlight y verificar en dispositivo físico:
+     creación de publicaciones desde feed, perfil y grupos con fotos, videos
+     reales de la fototeca (MOV/HEVC), documentos y YouTube; recuperación de
+     borradores locales al cerrar la app; reproducción y descarga autenticada de
+     adjuntos; likes, guardados, comentarios paginados y permisos de cuentas y
+     grupos privados.

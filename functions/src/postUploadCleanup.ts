@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  FieldPath,
   FieldValue,
   Timestamp,
   type DocumentData,
@@ -156,31 +157,47 @@ async function retireStaleUploads(
   report: PostUploadCleanupReport,
 ) {
   const cutoff = now - ABANDONED_UPLOAD_AFTER_MS;
-  const stale = await db
-    .collection(COLLECTIONS.posts)
-    .where('status', 'in', [...UNFINISHED_POST_STATUSES])
-    .where('createdAt', '<=', Timestamp.fromMillis(cutoff))
-    .orderBy('createdAt')
-    .limit(limit)
-    .get();
-  for (const doc of stale.docs) {
-    report.scanned += 1;
-    try {
-      const prefix = postUploadPrefix(doc.get('authorId'), doc.id);
-      if (!prefix) {
-        report.skippedChanged += 1;
-        continue;
-      }
-      // Objects created recently mean a client is still retrying this draft.
-      if (await hasRecentObject(bucket, prefix, cutoff)) {
-        report.skippedActive += 1;
-        continue;
-      }
-      if (await retire(db, doc.ref, cutoff, Timestamp.fromMillis(now))) report.retired += 1;
-      else report.skippedChanged += 1;
-    } catch {
-      report.failures += 1;
+  let cursor: { time: Timestamp; id: string } | null = null;
+  while (report.retired < limit) {
+    let query = db
+      .collection(COLLECTIONS.posts)
+      .where('status', 'in', [...UNFINISHED_POST_STATUSES])
+      .where('createdAt', '<=', Timestamp.fromMillis(cutoff))
+      .orderBy('createdAt')
+      .orderBy(FieldPath.documentId());
+    if (cursor) {
+      query = query.startAfter(cursor.time, cursor.id);
     }
+    const stale = await query.limit(limit).get();
+    if (stale.empty) break;
+    for (const doc of stale.docs) {
+      const createdAt = doc.get('createdAt');
+      if (createdAt instanceof Timestamp) {
+        cursor = { time: createdAt, id: doc.id };
+      }
+      report.scanned += 1;
+      try {
+        const prefix = postUploadPrefix(doc.get('authorId'), doc.id);
+        if (!prefix) {
+          report.skippedChanged += 1;
+          continue;
+        }
+        // Objects created recently mean a client is still retrying this draft.
+        if (await hasRecentObject(bucket, prefix, cutoff)) {
+          report.skippedActive += 1;
+          continue;
+        }
+        if (await retire(db, doc.ref, cutoff, Timestamp.fromMillis(now))) {
+          report.retired += 1;
+          if (report.retired >= limit) break;
+        } else {
+          report.skippedChanged += 1;
+        }
+      } catch {
+        report.failures += 1;
+      }
+    }
+    if (stale.docs.length < limit) break;
   }
 }
 
@@ -196,73 +213,86 @@ async function purgeAbandonedMedia(
   limit: number,
   report: PostUploadCleanupReport,
 ) {
-  const due = await db
-    .collection(COLLECTIONS.posts)
-    .where('mediaCleanupDueAt', '<=', Timestamp.fromMillis(now))
-    .orderBy('mediaCleanupDueAt')
-    .limit(limit)
-    .get();
-  for (const doc of due.docs) {
-    try {
-      const claimId = randomUUID();
-      const claimed = await db.runTransaction(async (tx) => {
-        const current = await tx.get(doc.ref);
-        const latest = current.data();
-        const dueAt = millis(latest?.mediaCleanupDueAt);
-        const prefix = postUploadPrefix(latest?.authorId, doc.id);
-        if (
-          !latest ||
-          latest.status !== ABANDONED_POST_STATUS ||
-          !prefix ||
-          dueAt == null ||
-          dueAt > now
-        )
-          return null;
-        const pass = typeof latest.mediaCleanupPass === 'number' ? latest.mediaCleanupPass : 0;
-        tx.update(doc.ref, {
-          mediaCleanupClaimId: claimId,
-          mediaCleanupDueAt: Timestamp.fromMillis(now + CLEANUP_LEASE_MS),
-        });
-        return { prefix, pass, authorId: String(latest.authorId) };
-      });
-      if (!claimed) {
-        report.skippedChanged += 1;
-        continue;
-      }
-      report.objectsDeleted += await deletePrefix(bucket, claimed.prefix);
-      const outcome = await db.runTransaction(async (tx) => {
-        const current = await tx.get(doc.ref);
-        const latest = current.data();
-        if (
-          !latest ||
-          latest.status !== ABANDONED_POST_STATUS ||
-          latest.mediaCleanupClaimId !== claimId
-        )
-          return 'changed';
-        const [author, deletionJob] = await Promise.all([
-          tx.get(db.collection(COLLECTIONS.users).doc(claimed.authorId)),
-          tx.get(db.collection(SERVER_COLLECTIONS.deletionJobs).doc(claimed.authorId)),
-        ]);
-        const accountGone = !author.exists || isDeletionJobActive(deletionJob.data()?.status);
-        // Deleted accounts cannot start new uploads; their prefix is already removed.
-        if (claimed.pass >= 1 || accountGone) {
-          tx.delete(doc.ref);
-          return 'removed';
-        }
-        tx.update(doc.ref, {
-          mediaCleanupPass: 1,
-          mediaCleanupClaimId: FieldValue.delete(),
-          mediaCleanupDueAt: Timestamp.fromMillis(now + LATE_UPLOAD_GRACE_MS),
-          mediaCleanedAt: FieldValue.serverTimestamp(),
-        });
-        return 'purged';
-      });
-      if (outcome === 'changed') report.skippedChanged += 1;
-      else if (outcome === 'removed') report.tombstonesRemoved += 1;
-      else report.purged += 1;
-    } catch {
-      report.failures += 1;
+  let cursor: { time: Timestamp; id: string } | null = null;
+  while (report.purged + report.tombstonesRemoved < limit) {
+    let query = db
+      .collection(COLLECTIONS.posts)
+      .where('mediaCleanupDueAt', '<=', Timestamp.fromMillis(now))
+      .orderBy('mediaCleanupDueAt')
+      .orderBy(FieldPath.documentId());
+    if (cursor) {
+      query = query.startAfter(cursor.time, cursor.id);
     }
+    const due = await query.limit(limit).get();
+    if (due.empty) break;
+    for (const doc of due.docs) {
+      const dueAtField = doc.get('mediaCleanupDueAt');
+      if (dueAtField instanceof Timestamp) {
+        cursor = { time: dueAtField, id: doc.id };
+      }
+      try {
+        const claimId = randomUUID();
+        const claimed = await db.runTransaction(async (tx) => {
+          const current = await tx.get(doc.ref);
+          const latest = current.data();
+          const dueAt = millis(latest?.mediaCleanupDueAt);
+          const prefix = postUploadPrefix(latest?.authorId, doc.id);
+          if (
+            !latest ||
+            latest.status !== ABANDONED_POST_STATUS ||
+            !prefix ||
+            dueAt == null ||
+            dueAt > now
+          )
+            return null;
+          const pass = typeof latest.mediaCleanupPass === 'number' ? latest.mediaCleanupPass : 0;
+          tx.update(doc.ref, {
+            mediaCleanupClaimId: claimId,
+            mediaCleanupDueAt: Timestamp.fromMillis(now + CLEANUP_LEASE_MS),
+          });
+          return { prefix, pass, authorId: String(latest.authorId) };
+        });
+        if (!claimed) {
+          report.skippedChanged += 1;
+          continue;
+        }
+        report.objectsDeleted += await deletePrefix(bucket, claimed.prefix);
+        const outcome = await db.runTransaction(async (tx) => {
+          const current = await tx.get(doc.ref);
+          const latest = current.data();
+          if (
+            !latest ||
+            latest.status !== ABANDONED_POST_STATUS ||
+            latest.mediaCleanupClaimId !== claimId
+          )
+            return 'changed';
+          const [author, deletionJob] = await Promise.all([
+            tx.get(db.collection(COLLECTIONS.users).doc(claimed.authorId)),
+            tx.get(db.collection(SERVER_COLLECTIONS.deletionJobs).doc(claimed.authorId)),
+          ]);
+          const accountGone = !author.exists || isDeletionJobActive(deletionJob.data()?.status);
+          // Deleted accounts cannot start new uploads; their prefix is already removed.
+          if (claimed.pass >= 1 || accountGone) {
+            tx.delete(doc.ref);
+            return 'removed';
+          }
+          tx.update(doc.ref, {
+            mediaCleanupPass: 1,
+            mediaCleanupClaimId: FieldValue.delete(),
+            mediaCleanupDueAt: Timestamp.fromMillis(now + LATE_UPLOAD_GRACE_MS),
+            mediaCleanedAt: FieldValue.serverTimestamp(),
+          });
+          return 'purged';
+        });
+        if (outcome === 'changed') report.skippedChanged += 1;
+        else if (outcome === 'removed') report.tombstonesRemoved += 1;
+        else report.purged += 1;
+        if (report.purged + report.tombstonesRemoved >= limit) break;
+      } catch {
+        report.failures += 1;
+      }
+    }
+    if (due.docs.length < limit) break;
   }
 }
 

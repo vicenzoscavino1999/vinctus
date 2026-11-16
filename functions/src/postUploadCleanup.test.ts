@@ -40,6 +40,8 @@ function createFakeStore(initialDocs: Record<string, StoredDoc> = {}) {
   const db = {
     collection: (collectionName: string) => {
       const filters: Array<(doc: StoredDoc) => boolean> = [];
+      let sortField = 'createdAt';
+      let cursorAfter: { timeMillis: number; id: string } | null = null;
       const query = {
         doc: (docId: string) => makeRef(`${collectionName}/${docId}`),
         where: (field: string, op: string, target: unknown) => {
@@ -53,13 +55,35 @@ function createFakeStore(initialDocs: Record<string, StoredDoc> = {}) {
           });
           return query;
         },
-        orderBy: () => query,
+        orderBy: (field: unknown) => {
+          if (typeof field === 'string') sortField = field;
+          return query;
+        },
+        startAfter: (time: Timestamp, id: string) => {
+          cursorAfter = { timeMillis: time.toMillis(), id };
+          return query;
+        },
         limit: (max: number) => ({
           get: async () => {
             const matched = [...docs.entries()]
               .filter(([path, data]) => {
                 if (!path.startsWith(`${collectionName}/`)) return false;
                 return filters.every((fn) => fn(data));
+              })
+              .sort(([pathA, a], [pathB, b]) => {
+                const idA = pathA.split('/').pop() ?? '';
+                const idB = pathB.split('/').pop() ?? '';
+                const tA = a[sortField] instanceof Timestamp ? a[sortField].toMillis() : 0;
+                const tB = b[sortField] instanceof Timestamp ? b[sortField].toMillis() : 0;
+                if (tA !== tB) return tA - tB;
+                return idA.localeCompare(idB);
+              })
+              .filter(([path, data]) => {
+                if (!cursorAfter) return true;
+                const id = path.split('/').pop() ?? '';
+                const t = data[sortField] instanceof Timestamp ? data[sortField].toMillis() : 0;
+                if (t !== cursorAfter.timeMillis) return t > cursorAfter.timeMillis;
+                return id.localeCompare(cursorAfter.id) > 0;
               })
               .slice(0, max)
               .map(([path, data]) => {
@@ -353,5 +377,81 @@ describe('post upload cleanup helpers', () => {
     expect(await deletePostUploadPrefix(bucket, 'ana', 'deleted_draft')).toBe(1);
     expect(files.size).toBe(0);
     expect(await deletePostUploadPrefix(bucket, 'invalid/id', 'deleted_draft')).toBe(0);
+  });
+
+  it('paginates past skipped active or recently updated uploads instead of starving later abandoned uploads', async () => {
+    const now = new Date('2026-11-16T00:00:00.000Z');
+    const t1 = Timestamp.fromMillis(now.getTime() - ABANDONED_UPLOAD_AFTER_MS - 300_000);
+    const t2 = Timestamp.fromMillis(now.getTime() - ABANDONED_UPLOAD_AFTER_MS - 200_000);
+    const t3 = Timestamp.fromMillis(now.getTime() - ABANDONED_UPLOAD_AFTER_MS - 100_000);
+    const recentUpdate = Timestamp.fromMillis(now.getTime() - 60_000);
+
+    const { db, docs } = createFakeStore({
+      'users/ana': { uid: 'ana' },
+      // Page 1 (limit = 2): both entries are skipped (one has a recent Storage object, one has recent updatedAt)
+      'posts/01_active_storage': {
+        postId: '01_active_storage',
+        authorId: 'ana',
+        status: 'uploading',
+        createdAt: t1,
+        updatedAt: null,
+      },
+      'posts/02_recent_updated': {
+        postId: '02_recent_updated',
+        authorId: 'ana',
+        status: 'failed',
+        createdAt: t2,
+        updatedAt: recentUpdate,
+      },
+      // Page 2: two truly abandoned uploads that must be reached and retired in the same run
+      'posts/03_abandoned_a': {
+        postId: '03_abandoned_a',
+        authorId: 'ana',
+        status: 'uploading',
+        title: 'Antiguo A',
+        text: 'Texto A',
+        createdAt: t3,
+        updatedAt: null,
+      },
+      'posts/04_abandoned_b': {
+        postId: '04_abandoned_b',
+        authorId: 'ana',
+        status: 'failed',
+        title: 'Antiguo B',
+        text: 'Texto B',
+        createdAt: t3,
+        updatedAt: t3,
+      },
+    });
+
+    const { bucket, files } = createFakeBucket({
+      'posts/ana/01_active_storage/images/recent.webp': {
+        timeCreated: new Date(now.getTime() - 5_000).toISOString(),
+      },
+      'posts/ana/03_abandoned_a/images/old_a.webp': {
+        timeCreated: new Date(t3.toMillis()).toISOString(),
+      },
+      'posts/ana/04_abandoned_b/files/old_b.pdf': {
+        timeCreated: new Date(t3.toMillis()).toISOString(),
+      },
+    });
+
+    const report = await cleanupAbandonedPostUploads(db, bucket, { now, limit: 2 });
+    expect(report).toMatchObject({
+      scanned: 4,
+      skippedActive: 1,
+      skippedChanged: 1,
+      retired: 2,
+      purged: 2,
+      objectsDeleted: 2,
+      failures: 0,
+    });
+    expect(docs.get('posts/01_active_storage')?.status).toBe('uploading');
+    expect(docs.get('posts/02_recent_updated')?.status).toBe('failed');
+    expect(docs.get('posts/03_abandoned_a')?.status).toBe(ABANDONED_POST_STATUS);
+    expect(docs.get('posts/04_abandoned_b')?.status).toBe(ABANDONED_POST_STATUS);
+    expect(files.has('posts/ana/01_active_storage/images/recent.webp')).toBe(true);
+    expect(files.has('posts/ana/03_abandoned_a/images/old_a.webp')).toBe(false);
+    expect(files.has('posts/ana/04_abandoned_b/files/old_b.pdf')).toBe(false);
   });
 });

@@ -24,12 +24,22 @@ private final class PendingCommentsRepo: PostCommentsRepo {
 
 private final class PendingPostsRepo: CreatePostRepo {
   var sentIDs: [String] = []
+  var sentGroupIDs: [String?] = []
+  var sentCategoryIDs: [String?] = []
   var drafts: [NativePostDraft] = []
   var fails = false
   var sendHandler: (() async throws -> Void)?
   func makePostID() -> String { UUID().uuidString }
-  func publishPost(_ draft: NativePostDraft, postID: String, groupID: String?, onProgress: @escaping (Double) -> Void) async throws {
+  func publishPost(
+    _ draft: NativePostDraft,
+    postID: String,
+    groupID: String?,
+    categoryID: String?,
+    onProgress: @escaping (Double) -> Void
+  ) async throws {
     sentIDs.append(postID)
+    sentGroupIDs.append(groupID)
+    sentCategoryIDs.append(categoryID)
     drafts.append(draft)
     if let sendHandler { try await sendHandler() }
     if fails { throw FakeError() }
@@ -274,5 +284,62 @@ final class PostSubmissionTests: XCTestCase {
     XCTAssertEqual(vm.submittedCommentCount, 1)
     XCTAssertFalse(vm.canLoadMoreComments)
     XCTAssertFalse(vm.isLoadingMoreComments)
+  }
+
+  func testGroupPostSubmissionPropagatesGroupAndCategoryAndPostsNotification() async {
+    let repo = PendingPostsRepo()
+    let vm = CreatePostViewModel(repo: repo, groupID: "grp_quantum", categoryID: "science")
+    var notifications: [[AnyHashable: Any]?] = []
+    let token = NotificationCenter.default.addObserver(
+      forName: .vinctusPostPublished,
+      object: nil,
+      queue: nil
+    ) { note in
+      notifications.append(note.userInfo)
+    }
+    defer { NotificationCenter.default.removeObserver(token) }
+
+    vm.draftTitle = "Debate cuántico"
+    vm.draftText = "Publicación desde el grupo"
+    await vm.submit()?.value
+
+    XCTAssertEqual(repo.sentGroupIDs, ["grp_quantum"])
+    XCTAssertEqual(repo.sentCategoryIDs, ["science"])
+    XCTAssertEqual(notifications.count, 1)
+    XCTAssertEqual(notifications.first??["postID"] as? String, repo.sentIDs.first)
+    XCTAssertEqual(notifications.first??["groupID"] as? String, "grp_quantum")
+  }
+
+  func testGroupPostPreviewResolvesFullFeedItemForDetailNavigation() {
+    let fullItem = FeedItem(
+      id: "p_group_1",
+      authorID: "u1",
+      authorName: "Lucía",
+      text: "Cuerpo completo de la publicación del grupo",
+      createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+      likeCount: 4,
+      commentCount: 2,
+      title: "Título del grupo"
+    )
+    let previewWithItem = GroupPostPreview(
+      id: "p_group_1",
+      title: "Título del grupo",
+      authorID: "u1",
+      authorName: "Lucía",
+      createdAt: fullItem.createdAt,
+      feedItem: fullItem
+    )
+    XCTAssertEqual(previewWithItem.resolvedFeedItem, fullItem)
+
+    let fallbackPreview = GroupPostPreview(
+      id: "p_fallback",
+      title: "Resumen rápido",
+      authorID: "u2",
+      authorName: "Mateo",
+      createdAt: nil
+    )
+    XCTAssertEqual(fallbackPreview.resolvedFeedItem.id, "p_fallback")
+    XCTAssertEqual(fallbackPreview.resolvedFeedItem.title, "Resumen rápido")
+    XCTAssertEqual(fallbackPreview.resolvedFeedItem.authorName, "Mateo")
   }
 }

@@ -155,10 +155,45 @@ final class GroupsIntegrationTests: EmulatorTestCase {
       iconURL: nil
     )
     try await groups.updateGroup(groupID: groupID, update)
+
+    let posts = FirebaseCreatePostRepo()
+    let postID = try posts.makePostID()
+    let draft = NativePostDraft(
+      title: "Salida al observatorio",
+      text: "Nos vemos este sábado a las 8pm con telescopios.",
+      files: [],
+      youtubeVideoID: nil
+    )
+    try await posts.publishPost(
+      draft,
+      postID: postID,
+      groupID: groupID,
+      categoryID: "science",
+      onProgress: { _ in }
+    )
+    do {
+      try await posts.publishPost(
+        draft,
+        postID: postID,
+        groupID: groupID,
+        categoryID: "music",
+        onProgress: { _ in }
+      )
+      XCTFail("A retry must not change the group post's category")
+    } catch CreatePostRepoError.draftMismatchForRetry {
+      // Expected.
+    }
+
     let detail = try await groups.fetchGroupDetail(groupID: groupID, recentPostLimit: 5, topMemberLimit: 5)
 
     XCTAssertEqual(detail?.name, "Astronomía Lima")
     XCTAssertEqual(detail?.description, "Salidas para observar el cielo")
+    XCTAssertEqual(detail?.categoryID, "science")
+    let recentPost = try XCTUnwrap(detail?.recentPosts.first { $0.id == postID })
+    XCTAssertEqual(recentPost.title, "Salida al observatorio")
+    XCTAssertEqual(recentPost.resolvedFeedItem.id, postID)
+    XCTAssertEqual(recentPost.resolvedFeedItem.title, "Salida al observatorio")
+    XCTAssertEqual(recentPost.resolvedFeedItem.text, "Nos vemos este sábado a las 8pm con telescopios.")
   }
 }
 

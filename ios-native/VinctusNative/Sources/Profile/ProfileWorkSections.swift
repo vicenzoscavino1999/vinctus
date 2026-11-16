@@ -4,14 +4,22 @@ import SwiftUI
 
 struct ProfilePostsSection: View {
   let profileRepo: ProfileRepo
+  let canCreate: Bool
   let reloadToken: Int
 
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
   @StateObject private var vm: ProfilePostsViewModel
   private let commentsRepo: any PostCommentsRepo = AppRepos.postComments()
 
-  init(repo: ProfileContentRepo, profileRepo: ProfileRepo, userID: String, reloadToken: Int) {
+  init(
+    repo: ProfileContentRepo,
+    profileRepo: ProfileRepo,
+    userID: String,
+    canCreate: Bool = false,
+    reloadToken: Int
+  ) {
     self.profileRepo = profileRepo
+    self.canCreate = canCreate
     self.reloadToken = reloadToken
     _vm = StateObject(wrappedValue: ProfilePostsViewModel(repo: repo, userID: userID))
   }
@@ -22,10 +30,27 @@ struct ProfilePostsSection: View {
   /// the bottom, and a VIDEO badge.
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
-      Text("PUBLICACIONES")
-        .font(VinctusTokens.Typography.serif(14))
-        .tracking(4)
-        .foregroundStyle(VinctusTokens.Color.textMuted)
+      HStack {
+        Text("PUBLICACIONES")
+          .font(VinctusTokens.Typography.serif(14))
+          .tracking(4)
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+        Spacer()
+        if canCreate {
+          NavigationLink {
+            CreatePostView(repo: AppRepos.createPost())
+          } label: {
+            Label("Publicar", systemImage: "plus")
+              .font(.caption.weight(.semibold))
+              .foregroundStyle(.black)
+              .padding(.horizontal, 12)
+              .padding(.vertical, 6)
+              .background(VinctusTokens.Color.accent)
+              .clipShape(Capsule())
+          }
+          .buttonStyle(.plain)
+        }
+      }
 
       if vm.isLoading {
         ProgressView()

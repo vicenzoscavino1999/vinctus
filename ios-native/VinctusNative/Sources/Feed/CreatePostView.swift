@@ -11,10 +11,10 @@ struct CreatePostView: View {
   @State private var confirmingDiscard = false
   @Environment(\.scenePhase) private var scenePhase
 
-  init(repo: CreatePostRepo, groupID: String? = nil) {
+  init(repo: CreatePostRepo, groupID: String? = nil, categoryID: String? = nil) {
     let uid = !AppRepos.isDemo && FirebaseApp.app() != nil && Auth.auth().currentUser?.isAnonymous == false ? Auth.auth().currentUser?.uid : nil
     let session = uid.map { PostDraftSession(uid: $0, groupID: groupID) }
-    _vm = StateObject(wrappedValue: CreatePostViewModel(repo: repo, groupID: groupID, draftSession: session,
+    _vm = StateObject(wrappedValue: CreatePostViewModel(repo: repo, groupID: groupID, categoryID: categoryID, draftSession: session,
       currentUserID: { FirebaseApp.app() != nil ? Auth.auth().currentUser?.uid : nil }))
   }
 
