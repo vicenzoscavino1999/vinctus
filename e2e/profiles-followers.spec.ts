@@ -28,11 +28,14 @@ test.describe('Profiles and followers', () => {
     await expect(bioField).toBeVisible({ timeout: 10000 });
     await bioField.fill(bioText);
     await page.getByRole('button', { name: /Guardar Cambios/i }).click();
+    await expect(bioField).toBeHidden({ timeout: 15000 });
     await expect(page.getByText(bioText)).toBeVisible({ timeout: 15000 });
 
     await page.getByRole('button', { name: /Editar perfil/i }).click();
-    await page.getByPlaceholder(/Cuéntale al mundo/i).fill('');
+    await expect(bioField).toBeVisible({ timeout: 10000 });
+    await bioField.fill('');
     await page.getByRole('button', { name: /Guardar Cambios/i }).click();
+    await expect(bioField).toBeHidden({ timeout: 15000 });
     await expect(page.getByText(bioText)).toBeHidden({ timeout: 15000 });
 
     // 2. Follow and unfollow another seeded user, and inspect connections list
