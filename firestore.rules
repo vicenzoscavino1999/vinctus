@@ -644,11 +644,11 @@ service cloud.firestore {
         && isValidMembershipCreate(groupId);
       allow delete: if isOwner(uid) || canCreateMembershipForUser(uid, groupId);
       
-      // Only owner can update nothing except maintaining joinedAt/groupId
+      // Owner can update timestamp metadata on their own membership without spoofing groupId or adding extra keys.
       allow update: if isOwner(uid)
         && request.resource.data.keys().hasOnly(['groupId', 'joinedAt'])
         && request.resource.data.groupId == groupId  // Prevent spoofing
-        && request.resource.data.joinedAt == resource.data.joinedAt;
+        && request.resource.data.joinedAt is timestamp;
     }
 
     function isValidDirectConversationIndexWrite(conversationId) {

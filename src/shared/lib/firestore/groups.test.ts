@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const docs = new Map<string, Record<string, unknown>>();
+const getDocPaths: string[] = [];
 const batchSets: Array<{ path: string; data: Record<string, unknown> }> = [];
 const batchUpdates: Array<{ path: string; data: Record<string, unknown> }> = [];
 const batchCommitMock = vi.fn();
@@ -28,6 +29,7 @@ vi.mock('firebase/firestore', () => ({
     return docRef(segments.join('/'));
   }),
   getDoc: vi.fn(async (ref: { id: string; path: string }) => {
+    getDocPaths.push(ref.path);
     const data = docs.get(ref.path);
     return {
       id: ref.id,
@@ -130,6 +132,7 @@ import {
 describe('groups firestore client helpers', () => {
   beforeEach(() => {
     docs.clear();
+    getDocPaths.length = 0;
     batchSets.length = 0;
     batchUpdates.length = 0;
     batchCommitMock.mockClear();
@@ -236,7 +239,7 @@ describe('groups firestore client helpers', () => {
     ).rejects.toThrow('Ya eres miembro de este grupo.');
   });
 
-  it('acceptGroupJoinRequest requires group existence and avoids overwriting existing membership docs', async () => {
+  it('acceptGroupJoinRequest checks only readable member doc and creates member + membership together', async () => {
     docs.set('group_requests/r1', {
       groupId: 'g_missing',
       fromUid: 'u2',
@@ -247,7 +250,6 @@ describe('groups firestore client helpers', () => {
     await expect(acceptGroupJoinRequest('r1')).rejects.toThrow('Grupo no encontrado');
 
     docs.set('groups/g1', { ownerId: 'owner', visibility: 'private' });
-    docs.set('groups/g1/members/u2', { uid: 'u2', groupId: 'g1', role: 'member', joinedAt: 'OLD' });
     docs.set('group_requests/r2', {
       groupId: 'g1',
       fromUid: 'u2',
@@ -256,7 +258,24 @@ describe('groups firestore client helpers', () => {
     });
 
     await acceptGroupJoinRequest('r2');
+    expect(getDocPaths).not.toContain('users/u2/memberships/g1');
     expect(batchUpdates).toHaveLength(1);
-    expect(batchSets.map((entry) => entry.path)).toEqual(['users/u2/memberships/g1']);
+    expect(batchSets.map((entry) => entry.path)).toEqual([
+      'groups/g1/members/u2',
+      'users/u2/memberships/g1',
+    ]);
+
+    // When already a member, accepting only updates the request status without rewriting member docs.
+    batchSets.length = 0;
+    batchUpdates.length = 0;
+    docs.set('group_requests/r3', {
+      groupId: 'g1',
+      fromUid: 'u2',
+      toUid: 'owner',
+      status: 'pending',
+    });
+    await acceptGroupJoinRequest('r3');
+    expect(batchUpdates).toHaveLength(1);
+    expect(batchSets).toEqual([]);
   });
 });

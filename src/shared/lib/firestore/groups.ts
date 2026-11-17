@@ -311,40 +311,31 @@ export async function addGroupMember(
 ): Promise<void> {
   const memberRef = doc(db, COLLECTIONS.groups, groupId, SUBCOLLECTIONS.members, uid);
   const membershipRef = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.memberships, groupId);
-  const [memberSnap, membershipSnap] = await Promise.all([
-    getDoc(memberRef),
-    getDoc(membershipRef),
-  ]);
+  const memberSnap = await getDoc(memberRef);
 
-  if (memberSnap.exists() && membershipSnap.exists()) {
+  if (memberSnap.exists()) {
     return;
   }
 
   const batch = writeBatch(db);
-
-  if (!memberSnap.exists()) {
-    batch.set(
-      memberRef,
-      {
-        uid,
-        groupId,
-        role,
-        joinedAt: serverTimestamp(),
-      } as GroupMemberWrite,
-      { merge: false },
-    );
-  }
-
-  if (!membershipSnap.exists()) {
-    batch.set(
-      membershipRef,
-      {
-        groupId,
-        joinedAt: serverTimestamp(),
-      } as UserMembershipWrite,
-      { merge: false },
-    );
-  }
+  batch.set(
+    memberRef,
+    {
+      uid,
+      groupId,
+      role,
+      joinedAt: serverTimestamp(),
+    } as GroupMemberWrite,
+    { merge: false },
+  );
+  batch.set(
+    membershipRef,
+    {
+      groupId,
+      joinedAt: serverTimestamp(),
+    } as UserMembershipWrite,
+    { merge: false },
+  );
 
   // memberCount is maintained server-side by onGroupMemberCreated reconciliation.
   await batch.commit();
@@ -494,10 +485,9 @@ export async function acceptGroupJoinRequest(requestId: string): Promise<void> {
 
   const memberRef = doc(db, COLLECTIONS.groups, groupId, SUBCOLLECTIONS.members, memberUid);
   const membershipRef = doc(db, COLLECTIONS.users, memberUid, SUBCOLLECTIONS.memberships, groupId);
-  const [memberSnap, membershipSnap] = await Promise.all([
-    getDoc(memberRef),
-    getDoc(membershipRef),
-  ]);
+  // Group owners cannot read users/{memberUid}/memberships/* per rules (isOwner(uid)),
+  // so check groups/{groupId}/members/{memberUid} before writing both docs together.
+  const memberSnap = await getDoc(memberRef);
 
   const batch = writeBatch(db);
   batch.update(requestRef, {
@@ -515,8 +505,6 @@ export async function acceptGroupJoinRequest(requestId: string): Promise<void> {
       } as GroupMemberWrite,
       { merge: false },
     );
-  }
-  if (!membershipSnap.exists()) {
     batch.set(
       membershipRef,
       {

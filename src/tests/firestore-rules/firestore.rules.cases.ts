@@ -1121,10 +1121,20 @@ describe('Firestore Rules - critical access controls', () => {
         joinedAt: serverTimestamp(),
       }),
     );
-    // JoinedAt on membership cannot be mutated or spoofed with extra keys.
-    await assertFails(
+    // Owner can update timestamp metadata on own membership, but cannot spoof groupId or add extra keys.
+    await assertSucceeds(
       outsiderDb.doc('users/user_c/memberships/group_pub').update({
         joinedAt: new Date('2025-01-01T00:00:00Z'),
+      }),
+    );
+    await assertFails(
+      outsiderDb.doc('users/user_c/memberships/group_pub').update({
+        groupId: 'other_group',
+      }),
+    );
+    await assertFails(
+      outsiderDb.doc('users/user_c/memberships/group_pub').update({
+        role: 'admin',
       }),
     );
 
@@ -1204,5 +1214,37 @@ describe('Firestore Rules - critical access controls', () => {
       }),
     );
     await assertSucceeds(outsiderDb.doc('group_requests/req_outsider').delete());
+
+    // Owner accepting a pending request can execute the full batch (request + member + membership).
+    await assertSucceeds(
+      outsiderDb.doc('group_requests/req_outsider_accept').set({
+        groupId: 'group_priv',
+        groupName: 'Grupo Privado',
+        fromUid: 'user_c',
+        toUid: 'user_a',
+        status: 'pending',
+        message: null,
+        fromUserName: 'Carol',
+        fromUserPhoto: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    const acceptBatch = ownerDb.batch();
+    acceptBatch.update(ownerDb.doc('group_requests/req_outsider_accept'), {
+      status: 'accepted',
+      updatedAt: serverTimestamp(),
+    });
+    acceptBatch.set(ownerDb.doc('groups/group_priv/members/user_c'), {
+      uid: 'user_c',
+      groupId: 'group_priv',
+      role: 'member',
+      joinedAt: serverTimestamp(),
+    });
+    acceptBatch.set(ownerDb.doc('users/user_c/memberships/group_priv'), {
+      groupId: 'group_priv',
+      joinedAt: serverTimestamp(),
+    });
+    await assertSucceeds(acceptBatch.commit());
   });
 });
