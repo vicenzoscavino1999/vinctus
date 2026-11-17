@@ -24,11 +24,11 @@ Módulo revisado y corregido de extremo a extremo siguiendo el plan por módulos
   - Permite limpiar explícitamente `bio`, `role` y `location` enviando `null` (en lugar de `undefined`), exige nombre no vacío y respeta límites de `LIMITS.profile` en el formulario y el esquema Zod.
   - `EditProfileModal` reinicia su estado de carga al cerrarse/reabrirse e ignora respuestas tardías al desmontar o cambiar de usuario, y `ProfilePage` lo monta solo mientras está abierto, evitando que al reabrir rápido se muestre o guarde texto obsoleto de la sesión anterior.
   - `uploadProfilePhoto` respeta el `contentType` real de la imagen comprimida (`image/webp`, `image/jpeg`, `image/png`, `image/gif`) en lugar de forzar `image/jpeg`.
-- **Estado de seguimiento, perfil ajeno y listas (`shared/lib/firestore/follows.ts`, `UserProfilePage.tsx`, `FollowListPage.tsx`, `profile/api/queries.ts`)**:
+- **Estado de seguimiento, perfil ajeno, búsqueda y listas (`shared/lib/firestore/follows.ts`, `UserProfilePage.tsx`, `FollowListPage.tsx`, `UserSearchPage.tsx`, `profile/api/queries.ts`)**:
   - `getFollowStatus` preserva solicitudes entrantes (`hasIncomingRequest` / `incomingRequestId`) aun cuando el usuario ya sigue al solicitante o cuando el perfil visitado es público.
   - `unfollowUser` limpia el documento `follow_requests/{fromUid}_{toUid}` aceptado anteriormente si existe, evitando residuos al volver a seguir.
-  - `UserProfilePage` verifica `isUserBlocked` al cargar y permite desbloquear desde la vista, muestra los botones de aceptar/rechazar solicitud independientemente del seguimiento saliente, corrige el detección de `AppError` (`PERMISSION_DENIED`) al cambiar privacidad en paralelo, refresca contadores tras acciones y evita mostrar falsos textos por defecto (`Nuevo miembro`, `Sin ubicación`, `Sin biografía aún.`) en perfiles ajenos cuyos campos privados no están en `users_public`.
-  - `FollowListPage` filtra usuarios bloqueados de listas y solicitudes entrantes, muestra un mensaje específico ante listas privadas (`PERMISSION_DENIED`), expone error si falla la carga de solicitudes, deduplica filas paginadas y refleja de forma optimista al seguidor recién aceptado mientras termina la Cloud Function.
+  - `UserProfilePage` y `UserSearchPage` verifican `isUserBlocked`, preservan solicitudes entrantes, detectan `AppError` (`PERMISSION_DENIED`) ante cambios concurrentes de privacidad y evitan exponer falsos textos por defecto (`Nuevo miembro`, `Sin ubicación`, `Sin biografía aún.`) en perfiles ajenos sin campo público; `UserProfilePage` además permite desbloquear desde la vista y refresca contadores tras acciones.
+  - `FollowListPage` filtra usuarios bloqueados de listas y solicitudes entrantes, muestra un mensaje específico ante listas privadas (`PERMISSION_DENIED`), expone error si falla la carga de solicitudes, ignora respuestas obsoletas al cambiar rápido de pestaña, deduplica filas paginadas y refleja de forma optimista al seguidor recién aceptado mientras termina la Cloud Function.
 - **Portafolio / Contribuciones (`ContributionsSection.tsx`, `shared/lib/firestore/contributions.ts`, `profile/api/mutations.ts`)**:
   - Añade eliminación de contribuciones propias con borrado previo del archivo en Storage (paridad con iOS), límites de longitud de `LIMITS.contributions` y saneamiento de enlaces externos `http`/`https`.
 
@@ -39,26 +39,27 @@ Módulo revisado y corregido de extremo a extremo siguiendo el plan por módulos
   - `follow` consulta `users_public.accountVisibility` en servidor antes de escribir, usa transacción en altas públicas para preservar `createdAt`, evita reescribir solicitudes ya pendientes y reintenta una vez si la privacidad cambió en paralelo.
   - `unfollow` contempla el caso concurrente en que una solicitud pendiente ya fue aceptada al momento de cancelar y limpia el documento `follow_requests` asociado al dejar de seguir.
   - `FollowViewModel` y `FollowButton` pasan a estado de error explícito con botón `Reintentar` cuando falla la carga inicial del estado.
-- **Vistas de perfil y conexiones (`ProfileView.swift`, `ProfileViewModel.swift`, `ProfileHeaderViews.swift`, `ProfileConnectionViewModel.swift`, `FollowListViewModel.swift`, `FollowListView.swift`, `EditProfileSheet.swift`)**:
-  - `ProfileView` separa la vista con `@StateObject` bajo `.id("\(authVM.currentUserID ?? "anon"):\(userID)")` para reiniciar estado al cambiar de cuenta o perfil, refresca contadores silenciosamente tras seguir/dejar de seguir o aceptar solicitud y oculta los textos por defecto `Nuevo miembro` / `Sin biografía aún.` en perfiles ajenos sin campo público.
+- **Vistas de perfil, contribuciones y conexiones (`ProfileView.swift`, `ProfileViewModel.swift`, `ProfileHeaderViews.swift`, `ProfileConnectionViewModel.swift`, `ProfileWorkSections.swift`, `ProfileContentRepo.swift`, `FollowListViewModel.swift`, `FollowListView.swift`, `EditProfileSheet.swift`)**:
+  - `ProfileView` separa la vista con `@StateObject` bajo `.id("\(authVM.currentUserID ?? "anon"):\(userID)")` para reiniciar estado al cambiar de cuenta o perfil, impide abrir listas de seguimiento si el perfil visitado está bloqueado, refresca contadores silenciosamente tras seguir/dejar de seguir o aceptar solicitud y oculta los textos por defecto `Nuevo miembro` / `Sin biografía aún.` en perfiles ajenos sin campo público.
+  - `ProfileContributionsSection` solo abre enlaces `http`/`https` y `FirebaseProfileContentRepo.deleteContribution` limpia el adjunto asociado en Storage antes de borrar el documento en Firestore (paridad con web).
   - `FollowListViewModel` y `FollowListView` muestran error explícito cuando falla `loadRequests` o el listado es privado, revierten la fila si falla `answer`, filtran usuarios bloqueados en solicitudes y deduplican la lista al aceptar.
   - `EditProfileSheet` muestra aviso de longitud cuando `displayName`, `role` o `location` superan su límite.
 
 ## Validación ejecutada
 
-- **Local (Windows)** tras la corrección final de código (`83448f4`):
-  - `npx tsc --noEmit` y `npm run build`: compilación limpia (`dist` + PWA).
-  - `npm run test:run`: `72` archivos / `517` pruebas aprobadas (incluidas `follows.test.ts` y `ProfileAndFollowFlows.test.tsx`).
-  - `eslint` sobre archivos modificados, `npm run contract:check` (`77/77` en `firestoreContract.test.ts`), `npm run functions:build`, `npm run test:api` (`81/81`), `check:cycles`, `check:stubs`, `check:raw-onsnapshot` y `metrics:phase6:gate` aprobados en el desarrollo de la rama.
-- **GitHub Actions `CI` (`44028606410`, commit `83448f4`) — `success`**:
+- **Local (Windows)** tras la última corrección de código (`299b764`):
+  - `npx tsc --noEmit`, `eslint src functions e2e scripts api`, `npm run contract:check`, `check:cycles`, `check:stubs`, `check:raw-onsnapshot` y `npm run build`: todo aprobado (`dist` + PWA).
+  - `npm run test:run`: `72` archivos / `518` pruebas aprobadas (incluidas `follows.test.ts` y `ProfileAndFollowFlows.test.tsx`).
+  - `npm run functions:build` y `npm run test:api`: `11` archivos / `81` pruebas aprobadas.
+- **GitHub Actions `CI` (`44111671324`, commit `299b764`) — `success`**:
   - `cost-gates`, `lint`, `typecheck`, `build`, `lhci`: todos en verde.
-  - `test`: `72` archivos / `517` pruebas web (`npm run test:run`) y `11` archivos / `81` pruebas API/Functions (`npm run test:api`, incluidas 4 en `functions/src/followCounts.test.ts`).
+  - `test`: `72` archivos / `518` pruebas web (`npm run test:run`) y `11` archivos / `81` pruebas API/Functions (`npm run test:api`, incluidas 4 en `functions/src/followCounts.test.ts`).
   - `rules`: `3` archivos / `83` pruebas de reglas Firestore/Storage aprobadas (`firestore.rules.cases.ts`).
   - `post-counts`: `13/13` aprobadas en `test:post-counts` (incluidos triggers reales de seguidores/bloqueos en `scripts/follow-counts.integration.test.mjs`) y `13/13` en `test:post-reads`.
-  - `e2e`: `12 passed (3.4m)` en Chromium contra emuladores Firebase sin reintentos ni `flaky` (incluido `@smoke editar perfil con limpieza de bio y flujo seguir/dejar de seguir` en `e2e/profiles-followers.spec.ts`).
-- **GitHub Actions `iOS native` (`44028606337`, commit `83448f4`) — `success`**:
-  - `ios-native`: compilación `ReleaseProd` + suite unitaria (`xcodebuild test`) en macOS aprobadas.
-  - `ios-native-integration`: `passed: 35 failed: 0` contra emuladores Firebase (`SocialIntegrationTests`, `ProfileAndPostsIntegrationTests`, `GroupsAndCollectionsIntegrationTests`, etc.).
+  - `e2e`: `12 passed (3.3m)` en Chromium contra emuladores Firebase sin reintentos ni `flaky` (incluido `@smoke editar perfil con limpieza de bio y flujo seguir/dejar de seguir` en `e2e/profiles-followers.spec.ts`).
+- **GitHub Actions `iOS native` (`44111654860`, intento 2 sobre commit `299b764`) — `success`**:
+  - `ios-native`: compilación `ReleaseProd` + suite unitaria (`xcodebuild test`, incluida `testSafeWebURLOnlyAllowsHTTPAndHTTPS`) en macOS aprobadas.
+  - `ios-native-integration`: `passed: 35 failed: 0` contra emuladores Firebase (`SocialIntegrationTests`, `ProfileAndPostsIntegrationTests`, `GroupsAndCollectionsIntegrationTests`, `PostDraftIntegrationTests`, etc.; el primer intento falló de forma transitoria en `PostDraftIntegrationTests` con `client is offline` y aprobó limpio en el relanzamiento sin cambios de código).
 - **GitHub Actions `iOS screenshots` (`44020660770`, commit `cfc12cc`) — `success`**:
   - Capturas visuales iOS generadas sin errores.
 
