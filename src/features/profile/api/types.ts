@@ -42,15 +42,16 @@ export const profilePageLimitSchema = limitSchema;
 export const recentUsersLimitSchema = limitSchema;
 export const contributionTypeSchema = z.enum(['project', 'paper', 'cv', 'certificate', 'other']);
 
-const optionalTrimmedString = (max: number) => z.string().trim().max(max).optional();
+const optionalNullableTrimmedString = (max: number) =>
+  z.string().trim().max(max).nullable().optional();
 
 export const userProfileUpdateSchema: z.ZodType<UserProfileUpdate> = z.object({
-  displayName: optionalTrimmedString(LIMITS.profile.displayNameMaxLength),
+  displayName: z.string().trim().min(1).max(LIMITS.profile.displayNameMaxLength).optional(),
   photoURL: urlSchema.nullable().optional(),
-  bio: optionalTrimmedString(LIMITS.profile.bioMaxLength),
-  role: optionalTrimmedString(LIMITS.profile.roleMaxLength),
-  location: optionalTrimmedString(LIMITS.profile.locationMaxLength),
-  username: optionalTrimmedString(40),
+  bio: optionalNullableTrimmedString(LIMITS.profile.bioMaxLength),
+  role: optionalNullableTrimmedString(LIMITS.profile.roleMaxLength),
+  location: optionalNullableTrimmedString(LIMITS.profile.locationMaxLength),
+  username: optionalNullableTrimmedString(40),
 });
 
 export const createContributionInputSchema = z.object({

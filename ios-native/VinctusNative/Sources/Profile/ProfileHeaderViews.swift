@@ -3,6 +3,7 @@ import SwiftUI
 /// Photo, name, role, username and account visibility at the top of a profile.
 struct ProfileHeader: View {
   let profile: UserProfile
+  var isOwnProfile: Bool = true
 
   var body: some View {
     VStack(spacing: 10) {
@@ -26,9 +27,11 @@ struct ProfileHeader: View {
         .foregroundStyle(VinctusTokens.Color.textPrimary)
         .multilineTextAlignment(.center)
 
-      Text(profile.role ?? "Nuevo miembro")
-        .font(.subheadline)
-        .foregroundStyle(VinctusTokens.Color.textMuted)
+      if isOwnProfile || profile.role != nil {
+        Text(profile.role ?? "Nuevo miembro")
+          .font(.subheadline)
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+      }
 
       HStack(spacing: 8) {
         if let username = profile.username {

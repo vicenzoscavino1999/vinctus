@@ -32,9 +32,19 @@ struct FollowListView: View {
         .listRowBackground(SwiftUI.Color.clear)
       }
 
-      if vm.showsRequests && !vm.requests.isEmpty {
+      if vm.showsRequests && (!visibleRequests.isEmpty || vm.requestsError != nil || vm.actionError != nil) {
         Section("Solicitudes de seguimiento") {
-          ForEach(vm.requests) { request in
+          if let requestsError = vm.requestsError {
+            Text(requestsError)
+              .font(.caption)
+              .foregroundStyle(.red)
+          }
+          if let actionError = vm.actionError {
+            Text(actionError)
+              .font(.caption)
+              .foregroundStyle(.red)
+          }
+          ForEach(visibleRequests) { request in
             HStack {
               userRow(request.from)
               Spacer()
@@ -90,7 +100,14 @@ struct FollowListView: View {
     .navigationBarTitleDisplayMode(.inline)
     .task(id: vm.kind) { await vm.load() }
     .task { await vm.loadRequests() }
-    .refreshable { await vm.load() }
+    .refreshable {
+      await vm.load()
+      if vm.showsRequests { await vm.loadRequests() }
+    }
+  }
+
+  private var visibleRequests: [IncomingFollowRequest] {
+    vm.requests.filter { !blockedUsers.isBlocked($0.from.id) }
   }
 
   private var visibleUsers: [ProfileUserSummary] {

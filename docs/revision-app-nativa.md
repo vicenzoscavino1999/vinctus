@@ -7,7 +7,7 @@ Este archivo conserva el avance por módulos. A partir de conversaciones, revisa
 - [x] Conversaciones de la app nativa: revisión, correcciones y pruebas automatizadas.
 - [x] Conversaciones de la web: correcciones y validación local con Firebase y navegador.
 - [ ] Publicaciones / Comunidad — implementación y CI completadas en ambas versiones ([PR #120](https://github.com/vicenzoscavino1999/vinctus/pull/120)); pendiente despliegue coordinado y prueba en iPhone real.
-- [ ] Perfiles y seguidores — ambas versiones.
+- [ ] Perfiles y seguidores — revisión y correcciones aplicadas en backend compartido, web e iOS ([detalle](revision-perfiles-seguidores.md)); validando CI completa antes de pasar al despliegue coordinado y prueba en iPhone real.
 - [ ] Grupos — ambas versiones.
 - [ ] Historias — ambas versiones.
 - [ ] Descubrir y búsqueda — ambas versiones.

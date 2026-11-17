@@ -90,7 +90,13 @@ struct FollowButton: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       Button {
-        Task { await vm.toggle(isPrivate: isPrivate) }
+        Task {
+          if vm.loadFailed {
+            await vm.load()
+          } else {
+            await vm.toggle(isPrivate: isPrivate)
+          }
+        }
       } label: {
         HStack(spacing: 6) {
           if vm.isSaving {
@@ -107,7 +113,7 @@ struct FollowButton: View {
         .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.sm, style: .continuous))
       }
       .buttonStyle(.plain)
-      .disabled(vm.status == nil || vm.isSaving)
+      .disabled(vm.isSaving || (vm.status == nil && !vm.loadFailed))
 
       if let errorMessage = vm.errorMessage {
         Text(errorMessage)

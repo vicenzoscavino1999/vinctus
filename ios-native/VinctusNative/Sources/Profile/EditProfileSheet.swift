@@ -38,12 +38,26 @@ struct EditProfileSheet: View {
         } header: {
           Text("Foto de perfil")
         }
-        Section("Nombre") {
+        Section {
           TextField("Tu nombre", text: $vm.displayName)
             .textContentType(.name)
+        } header: {
+          Text("Nombre")
+        } footer: {
+          if vm.trimmedName.count > EditProfileViewModel.nameLimit {
+            Text("Máximo \(EditProfileViewModel.nameLimit) caracteres.")
+              .foregroundStyle(.red)
+          }
         }
-        Section("Rol") {
+        Section {
           TextField("Ej. Estudiante de física, músico…", text: $vm.role)
+        } header: {
+          Text("Rol")
+        } footer: {
+          if vm.role.count > EditProfileViewModel.roleLimit {
+            Text("Máximo \(EditProfileViewModel.roleLimit) caracteres.")
+              .foregroundStyle(.red)
+          }
         }
         Section {
           TextField("Cuéntale a la comunidad sobre ti", text: $vm.bio, axis: .vertical)
@@ -54,8 +68,15 @@ struct EditProfileSheet: View {
           Text("\(vm.bioCharactersLeft) caracteres restantes")
             .foregroundStyle(vm.bioCharactersLeft < 0 ? .red : .secondary)
         }
-        Section("Ubicación") {
+        Section {
           TextField("Ciudad, país", text: $vm.location)
+        } header: {
+          Text("Ubicación")
+        } footer: {
+          if vm.location.count > EditProfileViewModel.locationLimit {
+            Text("Máximo \(EditProfileViewModel.locationLimit) caracteres.")
+              .foregroundStyle(.red)
+          }
         }
         if let errorMessage = vm.errorMessage {
           Section {

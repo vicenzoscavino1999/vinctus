@@ -264,4 +264,39 @@ final class FollowListViewModelTests: XCTestCase {
     XCTAssertEqual(vm.errorMessage, "No se pudo cargar la lista.")
     XCTAssertFalse(vm.isLoading)
   }
+
+  func testLoadRequestsErrorAndAnswerRollback() async {
+    let repo = FakeProfileContentRepo()
+    repo.incomingRequests = [request(from: "x"), request(from: "y")]
+    repo.failsToLoadRequests = true
+    let vm = FollowListViewModel(repo: repo, userID: "u1", initialKind: .followers, showsRequests: true)
+
+    await vm.loadRequests()
+    XCTAssertEqual(vm.requestsError, "No se pudieron cargar las solicitudes.")
+    XCTAssertTrue(vm.requests.isEmpty)
+
+    repo.failsToLoadRequests = false
+    await vm.loadRequests()
+    XCTAssertNil(vm.requestsError)
+    XCTAssertEqual(vm.requests.map(\.id), ["req_x", "req_y"])
+
+    repo.failsToWrite = true
+    await vm.answer(vm.requests[0], accept: true)
+    XCTAssertEqual(vm.requests.map(\.id), ["req_x", "req_y"])
+    XCTAssertEqual(vm.actionError, "No se pudo responder la solicitud.")
+  }
+
+  func testDeduplicatesDuplicateFollowersOnLoad() async {
+    let repo = FakeProfileContentRepo()
+    repo.followLists[.followers] = [
+      FakeProfileContentRepo.user("a"),
+      FakeProfileContentRepo.user("a"),
+      FakeProfileContentRepo.user("b"),
+    ]
+    let vm = FollowListViewModel(repo: repo, userID: "u1", initialKind: .followers, showsRequests: false)
+
+    await vm.load()
+
+    XCTAssertEqual(vm.users.map(\.id), ["a", "b"])
+  }
 }

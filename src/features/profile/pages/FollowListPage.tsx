@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Loader2, UserCheck, UserPlus } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
+import { AppError } from '@/shared/lib/errors';
 import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
 import {
   acceptFollowRequest,
   declineFollowRequest,
+  getBlockedUsers,
   getFollowList,
   getIncomingFollowRequests,
   getUserProfile,
@@ -14,6 +16,27 @@ import {
   type PaginatedResult,
   type UserProfileRead,
 } from '@/features/profile/api';
+
+const isPermissionDeniedError = (err: unknown): boolean => {
+  if (err instanceof AppError) return err.code === 'PERMISSION_DENIED';
+  const code = (err as { code?: unknown })?.code;
+  return code === 'permission-denied' || code === 'PERMISSION_DENIED';
+};
+
+const mergeUniqueFollowUsers = (
+  existing: FollowUserRead[],
+  incoming: FollowUserRead[],
+): FollowUserRead[] => {
+  const seen = new Set(existing.map((item) => item.uid));
+  const merged = [...existing];
+  for (const item of incoming) {
+    if (!seen.has(item.uid)) {
+      seen.add(item.uid);
+      merged.push(item);
+    }
+  }
+  return merged;
+};
 
 type FollowTab = 'followers' | 'following';
 
@@ -43,6 +66,17 @@ const FollowListPage = () => {
 
   const [requests, setRequests] = useState<Array<FollowUserRead & { requestId: string }>>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
+  const [requestsError, setRequestsError] = useState<string | null>(null);
+  const refreshTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current !== null) {
+        window.clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    };
+  }, [activeTab, userId]);
 
   const isOwner = !!user && user.uid === userId;
 
@@ -95,25 +129,38 @@ const FollowListPage = () => {
       }
       setError(null);
       try {
-        const data = await getFollowList(
-          userId,
-          activeTab,
-          FOLLOW_PAGE_SIZE,
-          reset ? undefined : (cursorRef.current ?? undefined),
+        const [data, blockedIds] = await Promise.all([
+          getFollowList(
+            userId,
+            activeTab,
+            FOLLOW_PAGE_SIZE,
+            reset ? undefined : (cursorRef.current ?? undefined),
+          ),
+          user?.uid ? getBlockedUsers(user.uid).catch(() => []) : Promise.resolve([]),
+        ]);
+        const blockedSet = new Set(blockedIds);
+        const visibleItems = data.items.filter((entry) => !blockedSet.has(entry.uid));
+        setItems((prev) =>
+          reset
+            ? mergeUniqueFollowUsers([], visibleItems)
+            : mergeUniqueFollowUsers(prev, visibleItems),
         );
-        setItems((prev) => (reset ? data.items : [...prev, ...data.items]));
         setCursor(data.lastDoc);
         cursorRef.current = data.lastDoc;
         setHasMore(data.hasMore);
       } catch (loadError) {
         console.error('Error loading follow list:', loadError);
-        setError('No se pudieron cargar los usuarios.');
+        setError(
+          isPermissionDeniedError(loadError)
+            ? 'Esta lista de conexiones es privada.'
+            : 'No se pudieron cargar los usuarios.',
+        );
       } finally {
         setLoading(false);
         setLoadingMore(false);
       }
     },
-    [activeTab, userId],
+    [activeTab, user?.uid, userId],
   );
 
   useEffect(() => {
@@ -123,22 +170,30 @@ const FollowListPage = () => {
   const loadRequests = useCallback(async () => {
     if (!userId || !isOwner || activeTab !== 'followers') return;
     setLoadingRequests(true);
+    setRequestsError(null);
     try {
-      const data = await getIncomingFollowRequests(userId, 20);
-      const mapped = data.items.map((item) => ({
-        requestId: item.id,
-        uid: item.fromUid,
-        displayName: item.fromUser?.displayName ?? null,
-        photoURL: item.fromUser?.photoURL ?? null,
-        username: item.fromUser?.username ?? null,
-      }));
+      const [data, blockedIds] = await Promise.all([
+        getIncomingFollowRequests(userId, 20),
+        user?.uid ? getBlockedUsers(user.uid).catch(() => []) : Promise.resolve([]),
+      ]);
+      const blockedSet = new Set(blockedIds);
+      const mapped = data.items
+        .filter((item) => !blockedSet.has(item.fromUid))
+        .map((item) => ({
+          requestId: item.id,
+          uid: item.fromUid,
+          displayName: item.fromUser?.displayName ?? null,
+          photoURL: item.fromUser?.photoURL ?? null,
+          username: item.fromUser?.username ?? null,
+        }));
       setRequests(mapped);
     } catch (reqError) {
       console.error('Error loading follow requests:', reqError);
+      setRequestsError('No se pudieron cargar las solicitudes.');
     } finally {
       setLoadingRequests(false);
     }
-  }, [activeTab, isOwner, userId]);
+  }, [activeTab, isOwner, user?.uid, userId]);
 
   useEffect(() => {
     void loadRequests();
@@ -147,9 +202,25 @@ const FollowListPage = () => {
   const handleAccept = async (requestId: string, fromUid: string) => {
     if (!userId) return;
     try {
+      const acceptedReq = requests.find((item) => item.requestId === requestId);
       await acceptFollowRequest(fromUid, userId);
       setRequests((prev) => prev.filter((item) => item.requestId !== requestId));
-      void loadList(true);
+      if (acceptedReq && activeTab === 'followers') {
+        const acceptedUser: FollowUserRead = {
+          uid: acceptedReq.uid,
+          displayName: acceptedReq.displayName,
+          photoURL: acceptedReq.photoURL,
+          username: acceptedReq.username,
+        };
+        setItems((prev) => mergeUniqueFollowUsers([acceptedUser], prev));
+      }
+      if (refreshTimerRef.current !== null) {
+        window.clearTimeout(refreshTimerRef.current);
+      }
+      refreshTimerRef.current = window.setTimeout(() => {
+        refreshTimerRef.current = null;
+        void loadList(true);
+      }, 1200);
     } catch (error) {
       console.error('Error accepting follow request:', error);
       showToast('No se pudo aceptar la solicitud.', 'error');
@@ -260,6 +331,8 @@ const FollowListPage = () => {
                 <Loader2 size={18} className="animate-spin mr-2" />
                 Cargando solicitudes...
               </div>
+            ) : requestsError ? (
+              <div className="text-sm text-red-400 text-center py-6">{requestsError}</div>
             ) : requests.length === 0 ? (
               <div className="text-sm text-neutral-500 text-center py-6">
                 No tienes solicitudes pendientes.

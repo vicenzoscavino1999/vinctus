@@ -143,9 +143,14 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
     e.preventDefault();
     if (!user) return;
 
+    const normalizedDisplayName = displayName.trim();
+    if (!normalizedDisplayName) {
+      showToast('El nombre no puede estar vacío.', 'error');
+      return;
+    }
+
     setSaving(true);
     try {
-      const normalizedDisplayName = displayName.trim();
       let uploadedPhotoURL: string | null | undefined = undefined;
 
       if (photoRemoved) {
@@ -165,11 +170,11 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
       }
 
       await updateUserProfile(user.uid, {
-        displayName: normalizedDisplayName || undefined,
+        displayName: normalizedDisplayName,
         photoURL: uploadedPhotoURL,
-        bio: bio.trim() || undefined,
-        role: role.trim() || undefined,
-        location: location.trim() || undefined,
+        bio: bio.trim() || null,
+        role: role.trim() || null,
+        location: location.trim() || null,
       });
 
       const currentUser = auth.currentUser;
@@ -177,7 +182,7 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
         const authUpdates: { displayName?: string | null; photoURL?: string | null } = {};
         const currentDisplayName = currentUser.displayName?.trim() ?? '';
         if (currentDisplayName !== normalizedDisplayName) {
-          authUpdates.displayName = normalizedDisplayName || null;
+          authUpdates.displayName = normalizedDisplayName;
         }
         if (uploadedPhotoURL !== undefined) {
           authUpdates.photoURL = uploadedPhotoURL;
@@ -287,6 +292,8 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
+                maxLength={LIMITS.profile.displayNameMaxLength}
+                required
                 placeholder="Tu nombre"
                 className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
               />
@@ -302,6 +309,7 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
                 type="text"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
+                maxLength={LIMITS.profile.roleMaxLength}
                 placeholder="Ej: Desarrollador, Músico, Estudiante..."
                 className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
               />
@@ -317,6 +325,7 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
                 type="text"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
+                maxLength={LIMITS.profile.locationMaxLength}
                 placeholder="Ej: Lima, Perú"
                 className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
               />

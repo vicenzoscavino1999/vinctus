@@ -3,14 +3,7 @@ import SwiftUI
 struct ProfileView: View {
   let userID: String
 
-  @StateObject private var vm: ProfileViewModel
   @EnvironmentObject private var authVM: AuthViewModel
-  @EnvironmentObject private var blockedUsers: BlockedUsersStore
-  @StateObject private var connection: ProfileConnectionViewModel
-  @State private var isEditing = false
-  @State private var followStatus: FollowStatus?
-  @State private var followList: FollowListKind?
-  @State private var reloadToken = 0
 
   private let repo: ProfileRepo
   private let chatRepo: ChatRepo
@@ -21,6 +14,41 @@ struct ProfileView: View {
     userID: String,
     chatRepo: ChatRepo = AppRepos.chat(),
     contentRepo: ProfileContentRepo = AppRepos.profileContent()
+  ) {
+    self.userID = userID
+    self.repo = repo
+    self.chatRepo = chatRepo
+    self.contentRepo = contentRepo
+  }
+
+  var body: some View {
+    ProfileBodyView(repo: repo, userID: userID, chatRepo: chatRepo, contentRepo: contentRepo)
+      .id("\(authVM.currentUserID ?? "anon"):\(userID)")
+  }
+}
+
+private struct ProfileBodyView: View {
+  let userID: String
+
+  @StateObject private var vm: ProfileViewModel
+  @EnvironmentObject private var authVM: AuthViewModel
+  @EnvironmentObject private var blockedUsers: BlockedUsersStore
+  @StateObject private var connection: ProfileConnectionViewModel
+  @State private var isEditing = false
+  @State private var followStatus: FollowStatus?
+  @State private var followList: FollowListKind?
+  @State private var reloadToken = 0
+  @State private var followRefreshTask: Task<Void, Never>?
+
+  private let repo: ProfileRepo
+  private let chatRepo: ChatRepo
+  private let contentRepo: ProfileContentRepo
+
+  init(
+    repo: ProfileRepo,
+    userID: String,
+    chatRepo: ChatRepo,
+    contentRepo: ProfileContentRepo
   ) {
     self.userID = userID
     self.repo = repo
@@ -46,7 +74,7 @@ struct ProfileView: View {
     ScrollView {
       VStack(spacing: VinctusTokens.Spacing.lg) {
         if let profile = vm.profile {
-          ProfileHeader(profile: profile)
+          ProfileHeader(profile: profile, isOwnProfile: isOwnProfile)
           ProfileStatsBar(profile: profile, canOpenLists: canViewContent(profile)) { followList = $0 }
           actions(profile)
           content(profile)
@@ -124,12 +152,24 @@ struct ProfileView: View {
     .refreshable {
       await reload()
     }
+    .onDisappear {
+      followRefreshTask?.cancel()
+    }
   }
 
   private func reload() async {
     await vm.load(userID: userID)
     reloadToken += 1
     await connection.loadRequests(isOwnProfile: isOwnProfile)
+  }
+
+  private func scheduleSilentCounterRefresh() {
+    followRefreshTask?.cancel()
+    followRefreshTask = Task {
+      try? await Task.sleep(nanoseconds: 1_200_000_000)
+      guard !Task.isCancelled else { return }
+      await vm.refreshSilently(userID: userID)
+    }
   }
 
   // MARK: Actions
@@ -169,7 +209,13 @@ struct ProfileView: View {
           FollowButton(
             targetUID: userID,
             isPrivate: profile.accountVisibility == .private,
-            onStatusChange: { followStatus = $0 }
+            onStatusChange: { newValue in
+              let previous = followStatus
+              followStatus = newValue
+              if let previous, previous != newValue, previous == .following || newValue == .following {
+                scheduleSilentCounterRefresh()
+              }
+            }
           )
 
           Button {
@@ -215,7 +261,11 @@ struct ProfileView: View {
         .font(.subheadline.weight(.semibold))
       HStack(spacing: VinctusTokens.Spacing.sm) {
         VButton("Aceptar") {
-          Task { await connection.answerRequest(accept: true) }
+          Task {
+            if await connection.answerRequest(accept: true) {
+              scheduleSilentCounterRefresh()
+            }
+          }
         }
         VButton("Rechazar", variant: .secondary) {
           Task { await connection.answerRequest(accept: false) }
@@ -235,7 +285,9 @@ struct ProfileView: View {
     if !isOwnProfile && blockedUsers.isBlocked(userID) {
       EmptyView()
     } else if canViewContent(profile) {
-      ProfileAboutSection(profile: profile, isOwnProfile: isOwnProfile) { isEditing = true }
+      if isOwnProfile || !(profile.bio ?? "").isEmpty {
+        ProfileAboutSection(profile: profile, isOwnProfile: isOwnProfile) { isEditing = true }
+      }
       ProfileReputationSection(reputation: profile.reputation, karma: profile.karmaByInterest)
       if isOwnProfile {
         StoriesBar()
