@@ -502,6 +502,9 @@ final class FirebaseGroupsRepo: GroupsRepo {
       let snapshot = try await query.getDocuments(source: .server)
       return (snapshot, false)
     } catch {
+      if FirestoreValue.isPermissionDenied(error) {
+        throw error
+      }
       let cachedSnapshot = try await query.getDocuments(source: .cache)
       return (cachedSnapshot, true)
     }
@@ -512,6 +515,9 @@ final class FirebaseGroupsRepo: GroupsRepo {
       let snapshot = try await ref.getDocument(source: .server)
       return (snapshot, false)
     } catch {
+      if FirestoreValue.isPermissionDenied(error) {
+        throw error
+      }
       let cachedSnapshot = try await ref.getDocument(source: .cache)
       return (cachedSnapshot, true)
     }
