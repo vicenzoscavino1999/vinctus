@@ -185,6 +185,14 @@ final class NewContributionViewModelTests: XCTestCase {
     XCTAssertFalse(saved)
     XCTAssertEqual(vm.errorMessage, ProfileContentRepoError.invalidContribution.errorDescription)
   }
+
+  func testSafeWebURLOnlyAllowsHTTPAndHTTPS() {
+    XCTAssertEqual(ProfileContributionsSection.safeWebURL("https://example.com/a.pdf")?.absoluteString, "https://example.com/a.pdf")
+    XCTAssertEqual(ProfileContributionsSection.safeWebURL("HTTP://example.com")?.scheme?.lowercased(), "http")
+    XCTAssertNil(ProfileContributionsSection.safeWebURL("javascript:alert(1)"))
+    XCTAssertNil(ProfileContributionsSection.safeWebURL("file:///etc/passwd"))
+    XCTAssertNil(ProfileContributionsSection.safeWebURL("   "))
+  }
 }
 
 @MainActor

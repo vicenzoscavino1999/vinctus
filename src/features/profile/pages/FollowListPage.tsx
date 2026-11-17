@@ -68,6 +68,7 @@ const FollowListPage = () => {
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [requestsError, setRequestsError] = useState<string | null>(null);
   const refreshTimerRef = useRef<number | null>(null);
+  const listRequestSeqRef = useRef(0);
 
   useEffect(() => {
     return () => {
@@ -118,6 +119,7 @@ const FollowListPage = () => {
   const loadList = useCallback(
     async (reset = false) => {
       if (!userId) return;
+      const requestSeq = ++listRequestSeqRef.current;
       if (reset) {
         setLoading(true);
         setItems([]);
@@ -138,6 +140,7 @@ const FollowListPage = () => {
           ),
           user?.uid ? getBlockedUsers(user.uid).catch(() => []) : Promise.resolve([]),
         ]);
+        if (requestSeq !== listRequestSeqRef.current) return;
         const blockedSet = new Set(blockedIds);
         const visibleItems = data.items.filter((entry) => !blockedSet.has(entry.uid));
         setItems((prev) =>
@@ -149,6 +152,7 @@ const FollowListPage = () => {
         cursorRef.current = data.lastDoc;
         setHasMore(data.hasMore);
       } catch (loadError) {
+        if (requestSeq !== listRequestSeqRef.current) return;
         console.error('Error loading follow list:', loadError);
         setError(
           isPermissionDeniedError(loadError)
@@ -156,8 +160,10 @@ const FollowListPage = () => {
             : 'No se pudieron cargar los usuarios.',
         );
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
+        if (requestSeq === listRequestSeqRef.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
     [activeTab, user?.uid, userId],

@@ -445,4 +445,57 @@ describe('Perfiles y seguidores flows', () => {
 
     expect(await screen.findByText('Esta lista de conexiones es privada.')).toBeInTheDocument();
   });
+
+  it('FollowListPage ignores stale responses when switching tabs quickly', async () => {
+    let resolveFollowers!: (value: {
+      items: Array<Record<string, unknown>>;
+      lastDoc: null;
+      hasMore: false;
+    }) => void;
+    const followersPromise = new Promise<{
+      items: Array<Record<string, unknown>>;
+      lastDoc: null;
+      hasMore: false;
+    }>((resolve) => {
+      resolveFollowers = resolve;
+    });
+
+    mockGetUserProfile.mockResolvedValue({ uid: 'user_2', displayName: 'Carla' });
+    mockGetBlockedUsers.mockResolvedValue([]);
+    mockGetFollowList
+      .mockImplementationOnce(() => followersPromise)
+      .mockResolvedValueOnce({
+        items: [
+          { uid: 'user_following', displayName: 'Seguido Vigente', photoURL: null, username: null },
+        ],
+        lastDoc: null,
+        hasMore: false,
+      });
+
+    render(
+      <ToastProvider>
+        <MemoryRouter initialEntries={['/user/user_2/connections?tab=followers']}>
+          <Routes>
+            <Route path="/user/:userId/connections" element={<FollowListPage />} />
+          </Routes>
+        </MemoryRouter>
+      </ToastProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Seguidos' }));
+    expect(await screen.findByText('Seguido Vigente')).toBeInTheDocument();
+
+    resolveFollowers({
+      items: [
+        { uid: 'user_stale', displayName: 'Seguidor Tardío', photoURL: null, username: null },
+      ],
+      lastDoc: null,
+      hasMore: false,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Seguido Vigente')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Seguidor Tardío')).not.toBeInTheDocument();
+  });
 });

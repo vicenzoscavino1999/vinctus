@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Search, UserPlus, UserCheck, Check, Clock, X, MessageCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { AppError } from '@/shared/lib/errors';
 import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
 import {
@@ -21,6 +22,12 @@ import {
 } from '@/features/profile/api';
 
 const MIN_QUERY_LENGTH = 2;
+
+const isPermissionDeniedError = (err: unknown): boolean => {
+  if (err instanceof AppError) return err.code === 'PERMISSION_DENIED';
+  const code = (err as { code?: unknown })?.code;
+  return code === 'permission-denied' || code === 'PERMISSION_DENIED';
+};
 
 type FollowStatusState = FollowStatus | 'loading';
 
@@ -55,10 +62,7 @@ export default function UserSearchPage() {
             try {
               const status = await getFollowStatus(user.uid, item.uid, item.accountVisibility);
               let nextStatus = status.status;
-              if (
-                item.accountVisibility !== 'private' &&
-                (nextStatus === 'pending_sent' || nextStatus === 'pending_received')
-              ) {
+              if (item.accountVisibility !== 'private' && nextStatus === 'pending_sent') {
                 nextStatus = 'none';
               }
               return { ...item, followStatus: nextStatus, isMutual: status.isMutual };
@@ -104,10 +108,7 @@ export default function UserSearchPage() {
             try {
               const status = await getFollowStatus(user.uid, item.uid, item.accountVisibility);
               let nextStatus = status.status;
-              if (
-                item.accountVisibility !== 'private' &&
-                (nextStatus === 'pending_sent' || nextStatus === 'pending_received')
-              ) {
+              if (item.accountVisibility !== 'private' && nextStatus === 'pending_sent') {
                 nextStatus = 'none';
               }
               return { ...item, followStatus: nextStatus, isMutual: status.isMutual };
@@ -179,16 +180,21 @@ export default function UserSearchPage() {
           }));
           showToast('Solicitud enviada', 'success');
         } catch (err) {
-          const code = (err as { code?: string })?.code;
-          if (code === 'permission-denied') {
-            await followPublicUser(user.uid, target.uid);
-            const status = await getFollowStatus(user.uid, target.uid, 'public');
-            updateUserStatus(target.uid, (item) => ({
-              ...item,
-              followStatus: status.status,
-              isMutual: status.isMutual,
-            }));
-            showToast('Siguiendo', 'success');
+          if (isPermissionDeniedError(err)) {
+            const fallbackVisibility = await getAccountVisibilityServer(target.uid);
+            if (fallbackVisibility !== 'private') {
+              await followPublicUser(user.uid, target.uid);
+              const status = await getFollowStatus(user.uid, target.uid, fallbackVisibility);
+              updateUserStatus(target.uid, (item) => ({
+                ...item,
+                accountVisibility: fallbackVisibility,
+                followStatus: status.status,
+                isMutual: status.isMutual,
+              }));
+              showToast('Siguiendo', 'success');
+            } else {
+              throw err;
+            }
           } else {
             throw err;
           }
@@ -205,13 +211,13 @@ export default function UserSearchPage() {
           }));
           showToast('Siguiendo', 'success');
         } catch (err) {
-          const code = (err as { code?: string })?.code;
-          if (code === 'permission-denied') {
+          if (isPermissionDeniedError(err)) {
             const fallbackVisibility = await getAccountVisibilityServer(target.uid);
             if (fallbackVisibility === 'private') {
               await sendFollowRequest(user.uid, target.uid);
               updateUserStatus(target.uid, (item) => ({
                 ...item,
+                accountVisibility: 'private',
                 followStatus: 'pending_sent' as FollowStatusState,
                 isMutual: false,
               }));
@@ -225,7 +231,11 @@ export default function UserSearchPage() {
         }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al seguir usuario';
+      const message = isPermissionDeniedError(err)
+        ? 'No se pudo seguir a este usuario en este momento.'
+        : err instanceof Error
+          ? err.message
+          : 'Error al seguir usuario';
       showToast(message, 'error');
     } finally {
       setActionLoading(null);

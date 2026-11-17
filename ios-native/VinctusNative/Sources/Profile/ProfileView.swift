@@ -66,7 +66,8 @@ private struct ProfileBodyView: View {
 
   /// Same rule as `canViewPrivateContent` in the web's UserProfilePage.
   private func canViewContent(_ profile: UserProfile) -> Bool {
-    isOwnProfile || profile.accountVisibility == .public || followStatus == .following
+    guard isOwnProfile || !blockedUsers.isBlocked(userID) else { return false }
+    return isOwnProfile || profile.accountVisibility == .public || followStatus == .following
   }
 
   var body: some View {
