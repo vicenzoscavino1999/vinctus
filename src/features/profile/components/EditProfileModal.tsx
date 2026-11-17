@@ -33,15 +33,25 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const userRef = useRef(user);
+  userRef.current = user;
+  const userId = user?.uid ?? null;
 
   // Load current profile data
   useEffect(() => {
-    if (!isOpen || !user) return;
+    if (!isOpen || !userId) {
+      setLoading(true);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
 
     const loadProfile = async () => {
-      setLoading(true);
       try {
-        const profile = await getUserProfile(user.uid);
+        const profile = await getUserProfile(userId);
+        if (cancelled) return;
+        const currentUser = userRef.current;
         if (profile) {
           setDisplayName(profile.displayName || '');
           setBio(profile.bio || '');
@@ -50,23 +60,32 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
           setPhotoPreview(profile.photoURL || null);
         } else {
           // Use data from auth if no profile exists
-          setDisplayName(user.displayName || '');
-          setPhotoPreview(user.photoURL || null);
+          setDisplayName(currentUser?.displayName || '');
+          setBio('');
+          setRole('');
+          setLocation('');
+          setPhotoPreview(currentUser?.photoURL || null);
         }
         setPhotoFile(null);
         setPhotoRemoved(false);
         setPhotoError(null);
         setUploadProgress(null);
       } catch (error) {
+        if (cancelled) return;
         console.error('Error loading profile:', error);
         showToast('Error al cargar el perfil', 'error');
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     void loadProfile();
-  }, [isOpen, user, showToast]);
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, userId, showToast]);
 
   useEffect(() => {
     return () => {

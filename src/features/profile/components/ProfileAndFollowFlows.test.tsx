@@ -148,6 +148,81 @@ describe('Perfiles y seguidores flows', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('EditProfileModal resets to loading state when reopened and clears stale bio cleanly', async () => {
+    let resolveSecondLoad!: (value: Record<string, unknown>) => void;
+    const secondLoadPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSecondLoad = resolve;
+    });
+
+    mockGetUserProfile
+      .mockResolvedValueOnce({
+        uid: 'user_1',
+        displayName: 'Alice V.',
+        photoURL: null,
+        bio: 'Bio inicial',
+        role: null,
+        location: null,
+        accountVisibility: 'public',
+        followersCount: 0,
+        followingCount: 0,
+        postsCount: 0,
+      })
+      .mockImplementationOnce(() => secondLoadPromise);
+    mockUpdateUserProfile.mockResolvedValue(undefined);
+
+    const onClose = vi.fn();
+    const view = render(
+      <ToastProvider>
+        <EditProfileModal isOpen onClose={onClose} />
+      </ToastProvider>,
+    );
+
+    const firstBioInput = await screen.findByPlaceholderText(/Cuéntale al mundo/i);
+    expect((firstBioInput as HTMLTextAreaElement).value).toBe('Bio inicial');
+
+    view.rerender(
+      <ToastProvider>
+        <EditProfileModal isOpen={false} onClose={onClose} />
+      </ToastProvider>,
+    );
+    view.rerender(
+      <ToastProvider>
+        <EditProfileModal isOpen onClose={onClose} />
+      </ToastProvider>,
+    );
+
+    // Must not expose stale form fields while the fresh profile fetch is still pending.
+    expect(screen.queryByPlaceholderText(/Cuéntale al mundo/i)).toBeNull();
+
+    resolveSecondLoad({
+      uid: 'user_1',
+      displayName: 'Alice V.',
+      photoURL: null,
+      bio: 'Bio temporal 2',
+      role: null,
+      location: null,
+      accountVisibility: 'public',
+      followersCount: 0,
+      followingCount: 0,
+      postsCount: 0,
+    });
+
+    const reopenedBioInput = await screen.findByPlaceholderText(/Cuéntale al mundo/i);
+    expect((reopenedBioInput as HTMLTextAreaElement).value).toBe('Bio temporal 2');
+    fireEvent.change(reopenedBioInput, { target: { value: '' } });
+    fireEvent.submit(reopenedBioInput.closest('form')!);
+
+    await waitFor(() => {
+      expect(mockUpdateUserProfile).toHaveBeenCalledWith('user_1', {
+        displayName: 'Alice V.',
+        photoURL: undefined,
+        bio: null,
+        role: null,
+        location: null,
+      });
+    });
+  });
+
   it('ContributionsSection allows deleting own contribution and filters unsafe URLs', async () => {
     mockGetUserContributions.mockResolvedValueOnce([
       {
