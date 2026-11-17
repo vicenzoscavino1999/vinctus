@@ -6,7 +6,7 @@ Este archivo conserva el avance por módulos. A partir de conversaciones, revisa
 
 - [x] Conversaciones de la app nativa: revisión, correcciones y pruebas automatizadas.
 - [x] Conversaciones de la web: correcciones y validación local con Firebase y navegador.
-- [ ] Publicaciones / Comunidad — revisión en curso en ambas versiones.
+- [ ] Publicaciones / Comunidad — implementación y CI completadas en ambas versiones ([PR #120](https://github.com/vicenzoscavino1999/vinctus/pull/120)); pendiente despliegue coordinado y prueba en iPhone real.
 - [ ] Perfiles y seguidores — ambas versiones.
 - [ ] Grupos — ambas versiones.
 - [ ] Historias — ambas versiones.
@@ -14,6 +14,18 @@ Este archivo conserva el avance por módulos. A partir de conversaciones, revisa
 - [ ] Colecciones — ambas versiones.
 - [ ] Inteligencia artificial: chat y Arena — ambas versiones.
 - [ ] Cuenta y seguridad: acceso, recuperación, bloqueos, denuncias y eliminación de cuenta — ambas versiones.
+
+## Forma de trabajo acordada por módulo
+
+Por indicación del propietario (16 de noviembre de 2026), mientras el despliegue en nube y la verificación en iPhone físico quedan pospuestos para la etapa final a cargo del propietario, el desarrollo avanza **módulo por módulo** siguiendo el orden de la lista anterior:
+
+- **Alcance por módulo**: cada funcionalidad se revisa, corrige y prueba de extremo a extremo tanto en la **web (`src`)** como en la **app nativa (`ios-native/VinctusNative`)**, incluyendo `functions`, reglas (`firestore.rules`, `storage.rules`) y `shared/firestore-contract.json` cuando corresponda.
+- **Separación de estado**: al terminar cada módulo se deja documentado y verificado por separado qué corresponde a:
+  1. **Implementación y pruebas automatizadas** (suite local + CI completa de web e iOS en GitHub Actions).
+  2. **Despliegue coordinado** (`staging` aislado con observación de 24–48 h, reglas, índices/TTL, Cloud Functions, migraciones de datos existentes, producción web y nuevo build de TestFlight).
+  3. **Pruebas en iPhone real**.
+- **Criterio de casillas y ramas**: las casillas cuyos despliegues o pruebas físicas en iPhone sigan pendientes no se marcan como cierre total del módulo. Cada módulo nuevo se trabaja en una rama y PR borrador apilados sobre el módulo anterior para mantener diffs limpios sin fusionar a `main` antes del despliegue coordinado.
+- **Fase final**: una vez completada la revisión por módulos en código y CI, el propietario se encargará del aprovisionamiento de credenciales/staging, despliegues coordinados, migraciones, subida a TestFlight y pruebas físicas en iPhone.
 
 ## Conversaciones nativas
 
