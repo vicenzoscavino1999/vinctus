@@ -94,7 +94,15 @@ struct GroupView: View {
       ProfileView(repo: profileRepo, userID: userID)
     }
     .navigationDestination(isPresented: $isComposing) {
-      CreatePostView(repo: AppRepos.createPost(), groupID: groupID)
+      CreatePostView(repo: AppRepos.createPost(), groupID: groupID, categoryID: vm.detail?.categoryID)
+    }
+    .onChange(of: isComposing) { _, composing in
+      if !composing {
+        Task { await vm.refresh() }
+      }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .vinctusPostPublished)) { _ in
+      Task { await vm.refresh() }
     }
     .confirmationDialog("¿Salir del grupo?", isPresented: $isConfirmingLeave, titleVisibility: .visible) {
       Button("Salir", role: .destructive) {
@@ -233,22 +241,39 @@ struct GroupView: View {
       } else {
         ForEach(posts) { post in
           HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-              Text(post.title)
-                .font(.body.weight(.medium))
-                .foregroundStyle(VinctusTokens.Color.textPrimary)
-                .lineLimit(2)
-              HStack(spacing: 6) {
-                Text(post.authorName)
-                if let createdAt = post.createdAt {
-                  Text("·")
-                  Text(createdAt, style: .relative)
+            NavigationLink {
+              PostDetailView(
+                item: post.resolvedFeedItem,
+                profileRepo: profileRepo,
+                commentsRepo: AppRepos.postComments()
+              )
+            } label: {
+              HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                  Text(post.title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(VinctusTokens.Color.textPrimary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                  HStack(spacing: 6) {
+                    Text(post.authorName)
+                    if let createdAt = post.createdAt {
+                      Text("·")
+                      Text(createdAt, style: .relative)
+                    }
+                  }
+                  .font(.subheadline)
+                  .foregroundStyle(VinctusTokens.Color.textMuted)
                 }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                  .font(.caption.weight(.semibold))
+                  .foregroundStyle(VinctusTokens.Color.textMuted)
               }
-              .font(.subheadline)
-              .foregroundStyle(VinctusTokens.Color.textMuted)
+              .contentShape(Rectangle())
             }
-            Spacer()
+            .buttonStyle(.plain)
+
             ModerationMenu(
               target: .post(postID: post.id, authorID: post.authorID),
               authorID: post.authorID,

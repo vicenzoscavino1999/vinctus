@@ -1,3 +1,4 @@
+import type { PostPage } from '@/shared/lib/post-reads-client';
 import type { DocumentSnapshot } from 'firebase/firestore';
 import {
   getFollowing as getFollowingRaw,
@@ -133,8 +134,8 @@ export const getPendingGroupJoinRequests = async (
 export const getPostsByGroup = async (
   groupId: string,
   pageSize: number = 30,
-  lastDoc?: DocumentSnapshot,
-): Promise<PaginatedResult<PostRead>> => {
+  lastDoc?: string,
+): Promise<PostPage<PostRead>> => {
   const safeGroupId = validate(groupIdSchema, groupId, { field: 'groupId' });
   const safePageSize = validate(groupPageLimitSchema, safeLimit(pageSize, 30), {
     field: 'pageSize',

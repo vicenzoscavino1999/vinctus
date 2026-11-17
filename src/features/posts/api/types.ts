@@ -1,24 +1,23 @@
 import { z } from 'zod';
-import type { DocumentSnapshot } from 'firebase/firestore';
 import type { CreatePostUploadingInput } from '@/shared/lib/firestore-post-upload';
 import type { CreateStoryInput, StoryMediaType, StoryRead } from '@/shared/lib/firestore/stories';
 import type { PostCommentRead } from '@/shared/lib/firestore/postEngagement';
 import type { PostRead } from '@/shared/lib/firestore/posts';
-import type { PaginatedResult } from '@/shared/lib/firestore/sharedTypes';
+import type { PostPage, PostReadCursor } from '@/shared/lib/post-reads-client';
 import { idSchema, limitSchema, urlSchema } from '@/shared/lib/validators';
 import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 export type {
   CreatePostUploadingInput,
   CreateStoryInput,
-  PaginatedResult,
   PostCommentRead,
   PostRead,
   StoryMediaType,
   StoryRead,
 };
 
-export type PostCursor = DocumentSnapshot | undefined | null;
+export type PaginatedResult<T> = PostPage<T>;
+export type PostCursor = PostReadCursor | undefined | null;
 
 export const postIdSchema = idSchema;
 export const storyIdSchema = idSchema;
@@ -56,15 +55,31 @@ export const createStoryInputSchema = z.object({
   visibility: z.literal('friends').optional(),
 });
 
-export const createPostUploadingInputSchema = z.object({
-  postId: idSchema,
-  authorId: idSchema,
-  authorSnapshot: authorSnapshotSchema,
-  title: z.string().trim().max(LIMITS.posts.titleMaxLength).nullable().optional(),
-  text: z.string().trim().min(1).max(LIMITS.posts.textMaxLength),
-  groupId: idSchema.nullable().optional(),
-  categoryId: z.string().trim().min(1).max(LIMITS.posts.categoryIdMaxLength).nullable().optional(),
-});
+export const createPostUploadingInputSchema = z
+  .object({
+    postId: idSchema,
+    authorId: idSchema,
+    authorSnapshot: authorSnapshotSchema,
+    title: z
+      .string()
+      .trim()
+      .max(LIMITS.posts.titleMaxLength)
+      .transform((title) => title || null)
+      .nullable()
+      .optional(),
+    text: z.string().trim().max(LIMITS.posts.textMaxLength),
+    groupId: idSchema.nullable().optional(),
+    categoryId: z
+      .string()
+      .trim()
+      .min(1)
+      .max(LIMITS.posts.categoryIdMaxLength)
+      .nullable()
+      .optional(),
+  })
+  .refine((input) => Boolean(input.text || input.title?.trim()), {
+    message: 'Escribe un título o una descripción.',
+  });
 
 export const updatePostPatchSchema = z
   .record(z.string(), z.unknown())

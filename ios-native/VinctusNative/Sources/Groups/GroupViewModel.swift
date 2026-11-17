@@ -247,6 +247,7 @@ final class GroupDetailViewModel: ObservableObject {
       case .member:
         try await repo.leaveGroup(groupID: groupID, uid: uid)
         self.membership = GroupMembershipStatus.none
+        if detail != nil { await refresh() }
       case .none:
         self.membership = try await repo.joinOrRequest(
           groupID: groupID,
@@ -255,6 +256,7 @@ final class GroupDetailViewModel: ObservableObject {
           isPrivate: detail?.visibility == .private,
           uid: uid
         )
+        if detail != nil, self.membership == .member { await refresh() }
       case .owner, .pending:
         break
       }

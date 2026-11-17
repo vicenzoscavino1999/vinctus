@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { PostDownload, PostImage, PostVideo } from '@/features/posts/components/ProtectedPostMedia';
+import { useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronLeft, Heart, Loader2, MessageCircle, User, FileText } from 'lucide-react';
 
 import { useAuth } from '@/context/auth';
 import {
-  addPostComment,
   createPostCommentReport,
   createPostReport,
-  getPostComments,
-  type PaginatedResult,
   type PostCommentRead,
   type UserReportReason,
 } from '@/features/posts/api';
 import ContentReportModal from '@/features/posts/components/ContentReportModal';
+import { usePostComments } from '@/features/posts/hooks/usePostComments';
 import type { PostSummary } from '@/features/posts/model/postSummary';
 import { useToast } from '@/shared/ui/Toast';
 import { formatRelativeTime, formatBytes } from '@/shared/lib/formatUtils';
@@ -40,133 +40,56 @@ type ReportTarget =
 
 // toDate, formatRelativeTime, formatBytes imported from @/shared/lib/formatUtils
 
-const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommentsModalProps) => {
+const PostCommentsModal = (props: PostCommentsModalProps) => {
+  const { user } = useAuth();
+  if (!props.isOpen || !props.post) return null;
+  return createPortal(
+    <PostCommentsSession
+      key={`${props.post.postId}:${user?.uid ?? 'anonymous'}`}
+      {...props}
+      post={props.post}
+    />,
+    document.body,
+  );
+};
+
+const PostCommentsSession = ({
+  post,
+  onClose,
+  onCommentAdded,
+}: Omit<PostCommentsModalProps, 'post'> & { post: PostSummary }) => {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const [comments, setComments] = useState<PostCommentRead[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState('');
-  const [commentsCursor, setCommentsCursor] =
-    useState<PaginatedResult<PostCommentRead>['lastDoc']>(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [commentTotal, setCommentTotal] = useState<number | null>(null);
-  const [likeTotal, setLikeTotal] = useState<number | null>(null);
-  const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const {
+    comments,
+    message,
+    setMessage,
+    loading,
+    loadingMore,
+    submitting,
+    error,
+    hasMore,
+    commentTotal,
+    isComposerOpen,
+    setIsComposerOpen,
+    loadComments,
+    submitComment,
+  } = usePostComments({
+    postId: post.postId,
+    user,
+    initialCount: post.commentCount,
+    onCommentAdded,
+  });
+  const likeTotal = post.likeCount;
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const [reportReason, setReportReason] = useState<UserReportReason>('spam');
   const [reportDetails, setReportDetails] = useState('');
   const [reportError, setReportError] = useState<string | null>(null);
   const [submittingReport, setSubmittingReport] = useState(false);
 
-  const COMMENTS_PAGE_SIZE = 12;
-
-  const loadComments = useCallback(
-    async (loadMore = false, cursor?: PaginatedResult<PostCommentRead>['lastDoc']) => {
-      if (!post) return;
-      try {
-        setError(null);
-        if (loadMore) {
-          setLoadingMore(true);
-        } else {
-          setLoading(true);
-        }
-        const data = await getPostComments(
-          post.postId,
-          COMMENTS_PAGE_SIZE,
-          loadMore ? (cursor ?? undefined) : undefined,
-        );
-        setComments((prev) => (loadMore ? [...prev, ...data.items] : data.items));
-        setCommentsCursor(data.lastDoc);
-        setHasMore(data.hasMore);
-        if (!loadMore) {
-          const embeddedCommentCount =
-            typeof post.commentCount === 'number' && Number.isFinite(post.commentCount)
-              ? Math.max(0, post.commentCount)
-              : null;
-          const embeddedLikeCount =
-            typeof post.likeCount === 'number' && Number.isFinite(post.likeCount)
-              ? Math.max(0, post.likeCount)
-              : null;
-          setCommentTotal(embeddedCommentCount);
-          setLikeTotal(embeddedLikeCount);
-        }
-      } catch (loadError) {
-        console.error('Error loading comments:', loadError);
-        setError('No se pudieron cargar los comentarios.');
-      } finally {
-        setLoading(false);
-        setLoadingMore(false);
-      }
-    },
-    [post],
-  );
-
-  useEffect(() => {
-    if (!isOpen || !post) return;
-    setComments([]);
-    setCommentsCursor(null);
-    setHasMore(false);
-    setCommentTotal(
-      typeof post.commentCount === 'number' && Number.isFinite(post.commentCount)
-        ? Math.max(0, post.commentCount)
-        : null,
-    );
-    setLikeTotal(
-      typeof post.likeCount === 'number' && Number.isFinite(post.likeCount)
-        ? Math.max(0, post.likeCount)
-        : null,
-    );
-    setIsComposerOpen(false);
-    loadComments();
-    setMessage('');
-    setReportTarget(null);
-    setReportReason('spam');
-    setReportDetails('');
-    setReportError(null);
-  }, [isOpen, post, loadComments]);
-
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    setError(null);
-
-    if (!post) return;
-    if (!user) {
-      setError('Inicia sesion para comentar.');
-      return;
-    }
-
-    const trimmed = message.trim();
-    if (!trimmed) {
-      setError('Escribe un comentario.');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      await addPostComment(
-        post.postId,
-        user.uid,
-        {
-          displayName: user.displayName || 'Usuario',
-          photoURL: user.photoURL || null,
-        },
-        trimmed,
-      );
-      setMessage('');
-      showToast('Comentario enviado', 'success');
-      setCommentTotal((prev) => (prev === null ? comments.length + 1 : prev + 1));
-      onCommentAdded(post.postId);
-      await loadComments(false);
-      setIsComposerOpen(false);
-    } catch (submitError) {
-      console.error('Error adding comment:', submitError);
-      setError('No se pudo enviar el comentario.');
-    } finally {
-      setSubmitting(false);
-    }
+    if (await submitComment()) showToast('Comentario enviado', 'success');
   };
 
   const openPostReport = () => {
@@ -239,8 +162,6 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
     }
   };
 
-  if (!isOpen || !post) return null;
-
   const postTimestamp = post.createdAt ? formatRelativeTime(post.createdAt) : null;
   const totalComments = commentTotal ?? comments.length;
   const totalLikes = likeTotal ?? 0;
@@ -258,8 +179,13 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-5xl mx-4 bg-bg border border-neutral-900 rounded-2xl overflow-hidden max-h-[90vh] flex flex-col">
-        <div className="flex-1 overflow-y-auto">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Comentarios de la publicación"
+        className="relative w-full max-w-5xl mx-4 bg-bg border border-neutral-900 rounded-2xl overflow-hidden max-h-[90dvh] flex flex-col"
+      >
+        <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="px-6 md:px-12 py-6 pb-10">
             <div className="flex items-center justify-between mb-6">
               <button
@@ -284,7 +210,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
                     {post.media
                       .filter((item) => item.type === 'image')
                       .map((item, index) => (
-                        <img
+                        <PostImage
                           key={`${item.path}-${index}`}
                           src={item.url}
                           alt="Adjunto"
@@ -318,7 +244,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
                         }
 
                         return (
-                          <video
+                          <PostVideo
                             key={`${item.path}-${index}`}
                             src={item.url}
                             controls
@@ -335,9 +261,10 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
                     {post.media
                       .filter((item) => item.type === 'file')
                       .map((item, index) => (
-                        <a
+                        <PostDownload
                           key={`${item.path}-${index}`}
                           href={item.url}
+                          download={item.fileName || 'archivo'}
                           target="_blank"
                           rel="noreferrer"
                           className="flex items-center justify-between gap-3 bg-neutral-900/60 border border-neutral-800 rounded-lg px-3 py-2 hover:border-neutral-700 transition-colors"
@@ -349,7 +276,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
                           <div className="flex items-center gap-2 text-xs text-neutral-500">
                             {item.size ? formatBytes(item.size) : ''}
                           </div>
-                        </a>
+                        </PostDownload>
                       ))}
                   </div>
                 )}
@@ -378,7 +305,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
 
             {!hasMedia && post.imageUrl && (
               <div className="relative rounded-xl overflow-hidden mb-8 aspect-video bg-surface-overlay">
-                <img src={post.imageUrl} alt="Post" className="w-full h-full object-cover" />
+                <PostImage src={post.imageUrl} alt="Post" className="w-full h-full object-cover" />
               </div>
             )}
 
@@ -412,6 +339,19 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
               </button>
             </div>
 
+            {error && (
+              <div role="alert" className="mt-4 text-sm text-red-400">
+                {error}
+                <button
+                  type="button"
+                  onClick={() => void loadComments()}
+                  disabled={loading || submitting}
+                  className="ml-3 underline"
+                >
+                  Reintentar carga
+                </button>
+              </div>
+            )}
             <section className="mt-8">
               <h2 className="text-heading-lg font-display text-white mb-4">
                 Comentarios ({totalComments})
@@ -421,7 +361,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
                   <div className="text-sm text-neutral-500 text-center py-6">
                     Cargando comentarios...
                   </div>
-                ) : error ? (
+                ) : error && comments.length === 0 ? (
                   <div className="text-sm text-red-400 text-center py-6">{error}</div>
                 ) : comments.length === 0 ? (
                   <div className="text-sm text-neutral-500 text-center py-6">
@@ -474,7 +414,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
               {hasMore && (
                 <div className="flex justify-center mt-6">
                   <button
-                    onClick={() => void loadComments(true, commentsCursor ?? undefined)}
+                    onClick={() => void loadComments(true)}
                     disabled={loadingMore}
                     className="px-5 py-2 rounded-full text-xs uppercase tracking-widest border border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   >
@@ -486,7 +426,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
           </div>
         </div>
 
-        <div className="border-t border-neutral-800/60 bg-bg/95">
+        <div className="shrink-0 border-t border-neutral-800/60 bg-bg/95">
           {isComposerOpen ? (
             <form onSubmit={handleSubmit} className="p-6 space-y-3">
               <div className="flex items-center justify-between">
@@ -506,7 +446,7 @@ const PostCommentsModal = ({ isOpen, post, onClose, onCommentAdded }: PostCommen
                 onChange={(event) => setMessage(event.target.value)}
                 rows={3}
                 maxLength={LIMITS.comments.textMaxLength}
-                disabled={!user || submitting}
+                disabled={!user}
                 className="w-full bg-neutral-900/60 border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors resize-none disabled:opacity-60"
                 placeholder={user ? 'Escribe tu comentario...' : 'Inicia sesion para comentar'}
               />

@@ -1,6 +1,7 @@
 import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
+import FirebaseFunctions
 import FirebaseStorage
 import UIKit
 import XCTest
@@ -27,6 +28,7 @@ enum Emulator {
     }
 
     Auth.auth().useEmulator(withHost: "127.0.0.1", port: 9099)
+    Functions.functions().useEmulator(withHost: "127.0.0.1", port: 5001)
 
     let settings = FirestoreSettings()
     settings.host = "127.0.0.1:8080"

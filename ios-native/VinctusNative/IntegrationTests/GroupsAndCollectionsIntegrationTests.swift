@@ -3,6 +3,67 @@ import XCTest
 @testable import VinctusNative
 
 final class GroupsIntegrationTests: EmulatorTestCase {
+  func testPrivatePostAndCommentsAreReauthorizedAfterMembershipRevocation() async throws {
+    let owner = try await makeUser("Owner")
+    let groupID = try await makeGroup(name: "Private reading", visibility: .private)
+    let posts = FirebaseCreatePostRepo()
+    let postID = try posts.makePostID()
+    try await posts.publishTextPost(text: "Members only", postID: postID, groupID: groupID)
+    try await FirebasePostCommentsRepo().addComment(postID: postID, text: "Private comment")
+    let member = try await makeUser("Reader")
+    let before = try await PostReadClient.read(view: "ids", ids: [postID])
+    XCTAssertTrue(before.items.isEmpty)
+    try await signIn(owner)
+    let membership = Firestore.firestore().collection("groups").document(groupID).collection("members").document(member.uid)
+    try await membership.setData(["uid": member.uid, "groupId": groupID, "role": "member", "joinedAt": FieldValue.serverTimestamp()])
+    try await signIn(member)
+    let allowed = try await PostReadClient.read(view: "ids", ids: [postID])
+    XCTAssertEqual(allowed.items.map(\.id), [postID])
+    let comments = try await FirebasePostCommentsRepo().fetchComments(postID: postID, limit: 50)
+    XCTAssertEqual(comments.items.map(\.text), ["Private comment"])
+    try await signIn(owner)
+    try await membership.delete()
+    try await signIn(member)
+    let revoked = try await PostReadClient.read(view: "ids", ids: [postID])
+    XCTAssertTrue(revoked.items.isEmpty)
+    let hiddenComments = try await FirebasePostCommentsRepo().fetchComments(postID: postID, limit: 50)
+    XCTAssertTrue(hiddenComments.items.isEmpty)
+  }
+
+  func testPublishingRequiresRealGroupMembershipAndStopsAfterLeaving() async throws {
+    let owner = try await makeUser("Bruno")
+    let groupID = try await makeGroup(name: "Publicaciones privadas", visibility: .private)
+    let posts = FirebaseCreatePostRepo()
+    let ownerPost = try posts.makePostID()
+    try await posts.publishTextPost(text: "Del propietario", postID: ownerPost, groupID: groupID)
+    let member = try await makeUser("Ana")
+    let deniedPost = try posts.makePostID()
+    do {
+      try await posts.publishTextPost(text: "Sin permiso", postID: deniedPost, groupID: groupID)
+      XCTFail("A non-member must not publish in a private group")
+    } catch {
+      XCTAssertEqual((error as NSError).code, FirestoreErrorCode.permissionDenied.rawValue)
+    }
+
+    try await signIn(owner)
+    try await Firestore.firestore().collection("groups").document(groupID)
+      .collection("members").document(member.uid).setData([
+        "uid": member.uid, "groupId": groupID, "role": "member",
+        "joinedAt": FieldValue.serverTimestamp(),
+      ])
+    try await signIn(member)
+    let acceptedPost = try posts.makePostID()
+    try await posts.publishTextPost(text: "Soy miembro", postID: acceptedPost, groupID: groupID)
+    try await FirebaseGroupsRepo().leaveGroup(groupID: groupID, uid: member.uid)
+    let afterLeaving = try posts.makePostID()
+    do {
+      try await posts.publishTextPost(text: "Ya salí", postID: afterLeaving, groupID: groupID)
+      XCTFail("A former member must not publish")
+    } catch {
+      XCTAssertEqual((error as NSError).code, FirestoreErrorCode.permissionDenied.rawValue)
+    }
+  }
+
   func testJoinAPublicGroupOpenItsChatAndLeave() async throws {
     let bruno = try await makeUser("Bruno")
     let groupID = try await makeGroup(name: "Astronomía", visibility: .public)
@@ -94,10 +155,45 @@ final class GroupsIntegrationTests: EmulatorTestCase {
       iconURL: nil
     )
     try await groups.updateGroup(groupID: groupID, update)
+
+    let posts = FirebaseCreatePostRepo()
+    let postID = try posts.makePostID()
+    let draft = NativePostDraft(
+      title: "Salida al observatorio",
+      text: "Nos vemos este sábado a las 8pm con telescopios.",
+      files: [],
+      youtubeVideoID: nil
+    )
+    try await posts.publishPost(
+      draft,
+      postID: postID,
+      groupID: groupID,
+      categoryID: "science",
+      onProgress: { _ in }
+    )
+    do {
+      try await posts.publishPost(
+        draft,
+        postID: postID,
+        groupID: groupID,
+        categoryID: "music",
+        onProgress: { _ in }
+      )
+      XCTFail("A retry must not change the group post's category")
+    } catch CreatePostRepoError.draftMismatchForRetry {
+      // Expected.
+    }
+
     let detail = try await groups.fetchGroupDetail(groupID: groupID, recentPostLimit: 5, topMemberLimit: 5)
 
     XCTAssertEqual(detail?.name, "Astronomía Lima")
     XCTAssertEqual(detail?.description, "Salidas para observar el cielo")
+    XCTAssertEqual(detail?.categoryID, "science")
+    let recentPost = try XCTUnwrap(detail?.recentPosts.first { $0.id == postID })
+    XCTAssertEqual(recentPost.title, "Salida al observatorio")
+    XCTAssertEqual(recentPost.resolvedFeedItem.id, postID)
+    XCTAssertEqual(recentPost.resolvedFeedItem.title, "Salida al observatorio")
+    XCTAssertEqual(recentPost.resolvedFeedItem.text, "Nos vemos este sábado a las 8pm con telescopios.")
   }
 }
 

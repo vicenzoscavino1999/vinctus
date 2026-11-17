@@ -12,6 +12,7 @@ import EditProfileModal from '@/features/profile/components/EditProfileModal';
 import CollectionsPanel from '@/features/collections/components/CollectionsPanel';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
 import ProfilePostsGrid from '@/features/posts/components/ProfilePostsGrid';
+import SavedPostsPanel from '@/features/posts/components/SavedPostsPanel';
 import ContributionsSection from '@/features/profile/components/ContributionsSection';
 import { CATEGORIES } from '@/shared/constants';
 
@@ -369,6 +370,7 @@ const ProfilePage = () => {
 
           {/* Right column - Posts + Portfolio */}
           <div className="md:col-span-2 space-y-10">
+            {userId && <SavedPostsPanel key={userId} uid={userId} />}
             <section className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-5">
               <div className="mb-4 flex items-center gap-2">
                 <Bookmark size={16} className="text-brand-gold" />

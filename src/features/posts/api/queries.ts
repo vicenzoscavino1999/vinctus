@@ -1,4 +1,4 @@
-import type { DocumentSnapshot } from 'firebase/firestore';
+import { getSavedPostsRaw } from './savedPosts';
 import {
   getBlockedUsers as getBlockedUsersRaw,
   getFriendIds as getFriendIdsRaw,
@@ -28,7 +28,7 @@ import {
   type StoryRead,
 } from '@/features/posts/api/types';
 
-const READ_TIMEOUT_MS = 5000;
+const READ_TIMEOUT_MS = 15000;
 const READ_RETRYABLE_CODES = [
   'TIMEOUT',
   'NETWORK',
@@ -69,10 +69,20 @@ export const getPost = async (postId: string): Promise<PostRead | null> => {
   return runRead('posts.getPost', () => getPostRaw(safePostId));
 };
 
+export const getSavedPosts = async (
+  uid: string,
+  pageSize: number = 12,
+  lastDoc?: string,
+): Promise<PaginatedResult<PostRead>> => {
+  const safeUid = validate(userIdSchema, uid, { field: 'uid' });
+  const safePageSize = safeLimit(pageSize, 30);
+  return runRead('posts.getSavedPosts', () => getSavedPostsRaw(safeUid, safePageSize, lastDoc));
+};
+
 export const getPostComments = async (
   postId: string,
   limitCount: number = 30,
-  lastDoc?: DocumentSnapshot,
+  lastDoc?: string,
 ): Promise<PaginatedResult<PostCommentRead>> => {
   const safePostId = validate(postIdSchema, postId, { field: 'postId' });
   const safePageSize = safeLimit(limitCount, 30);
@@ -94,7 +104,7 @@ export const getPostLikeCount = async (postId: string): Promise<number> => {
 export const getPostsByUser = async (
   userId: string,
   pageSize: number = 30,
-  lastDoc?: DocumentSnapshot,
+  lastDoc?: string,
 ): Promise<PaginatedResult<PostRead>> => {
   const safeUserId = validate(userIdSchema, userId, { field: 'userId' });
   const safePageSize = validate(paginationLimitSchema, safeLimit(pageSize, 30), {
@@ -107,7 +117,7 @@ export const getPostsByUser = async (
 
 export const getGlobalFeed = async (
   pageSize: number = 30,
-  lastDoc?: DocumentSnapshot,
+  lastDoc?: string,
 ): Promise<PaginatedResult<PostRead>> => {
   const safePageSize = validate(paginationLimitSchema, safeLimit(pageSize, 30), {
     field: 'pageSize',

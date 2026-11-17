@@ -333,6 +333,7 @@ export const SERVER_COLLECTIONS = {
   deletionJobs: 'deletionJobs',
   dedupEvents: '_dedup_events',
   moderationActions: 'moderation_actions',
+  postReadCursors: '_post_read_cursors',
 } as const;
 
 const STORAGE_PATH_TEMPLATES = {

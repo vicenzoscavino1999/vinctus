@@ -29,6 +29,12 @@ async function seedPost(postId = 'post_alpha') {
   const env = await getRulesTestEnv();
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
+    await db.doc('users_public/user_a').set({
+      displayName: 'Alice',
+      username: 'alice',
+      photoURL: null,
+      accountVisibility: 'public',
+    });
     await db.doc(`posts/${postId}`).set({
       authorId: 'user_a',
       authorName: 'Alice',
@@ -327,11 +333,11 @@ describe('Firestore Rules - critical access controls', () => {
     await assertSucceeds(db.doc('posts/post_missing').get());
   });
 
-  it('allows empty comments query for any post', async () => {
+  it('denies direct comment lists even for missing posts', async () => {
     const env = await getRulesTestEnv();
     const db = env.authenticatedContext('user_a').firestore();
 
-    await assertSucceeds(db.collection('posts/post_empty/comments').limit(10).get());
+    await assertFails(db.collection('posts/post_empty/comments').limit(10).get());
   });
 
   it('denies creating likes when path uid does not match auth user', async () => {
@@ -377,6 +383,7 @@ describe('Firestore Rules - critical access controls', () => {
   });
 
   it('allows writing saved posts for own user', async () => {
+    await seedPost('post_x');
     const env = await getRulesTestEnv();
     const db = env.authenticatedContext('user_a').firestore();
 

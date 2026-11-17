@@ -1,3 +1,5 @@
+import { PostImage } from '@/features/posts/components/ProtectedPostMedia';
+import DiscoverPostActions from '@/features/discover/components/DiscoverPostActions';
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
@@ -9,7 +11,6 @@ import {
   Users,
   UserPlus,
   Heart,
-  MessageCircle,
   Bookmark,
   X,
 } from 'lucide-react';
@@ -404,7 +405,7 @@ const getTrendPreviewForCategory = async (
   }
 };
 
-const DiscoverPage = () => {
+const DiscoverSession = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchQuery = searchParams.get('q') || '';
@@ -428,10 +429,6 @@ const DiscoverPage = () => {
     followedCategories,
     toggleFollowCategory,
     isCategoryFollowed,
-    toggleLikePost,
-    isPostLiked,
-    toggleSavePost,
-    isPostSaved,
   } = useAppState();
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -458,10 +455,17 @@ const DiscoverPage = () => {
   const publicationObserverLockedRef = useRef(false);
   const [visiblePublicationCount, setVisiblePublicationCount] = useState(PUBLICATION_BATCH_SIZE);
   const [communityPublications, setCommunityPublications] = useState<PublicationStreamItem[]>([]);
+  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
+  const handleLikeCount = useCallback((postId: string, count: number) => {
+    setLikeCounts((previous) =>
+      previous[postId] === count ? previous : { ...previous, [postId]: count },
+    );
+  }, []);
   const [communityCursor, setCommunityCursor] = useState<PostCursor>(null);
   const [communityHasMore, setCommunityHasMore] = useState(true);
   const [communityLoading, setCommunityLoading] = useState(false);
   const [communityReady, setCommunityReady] = useState(false);
+  const [communityReader, setCommunityReader] = useState<string | null | undefined>(undefined);
   const [youtubeQueryInput, setYoutubeQueryInput] = useState(YOUTUBE_FALLBACK_QUERY);
   const [youtubeQuery, setYoutubeQuery] = useState(YOUTUBE_FALLBACK_QUERY);
   const [youtubePublications, setYoutubePublications] = useState<PublicationStreamItem[]>([]);
@@ -604,12 +608,17 @@ const DiscoverPage = () => {
 
   // Grow the rendered feed only once pending loads settle, and only by appending: items the user
   // already scrolled past never move, so scrolling back up shows the same feed.
+  const publicationScope = JSON.stringify([user?.uid ?? null, youtubeQuery]);
   const publicationSourcesSettled =
-    communityReady && !communityLoading && youtubeResultsQuery === youtubeQuery && !youtubeLoading;
+    communityReader === (user?.uid ?? null) &&
+    communityReady &&
+    !communityLoading &&
+    youtubeResultsQuery === youtubeQuery &&
+    !youtubeLoading;
   if (publicationSourcesSettled) {
     const nextShownPublications = appendToStream(
       shownPublications,
-      youtubeQuery,
+      publicationScope,
       candidatePublicationStream,
       publicationTargetCount,
       getPublicationDedupeKey,
@@ -618,7 +627,8 @@ const DiscoverPage = () => {
       setShownPublications(nextShownPublications);
     }
   }
-  const publicationStream = shownPublications.scope === youtubeQuery ? shownPublications.items : [];
+  const publicationStream =
+    shownPublications.scope === publicationScope ? shownPublications.items : [];
 
   const hasMoreEditorial = visiblePublicationCount < PUBLICATION_MAX_ITEMS;
   const hasMorePublications = communityHasMore || youtubeHasMore || hasMoreEditorial;
@@ -627,18 +637,24 @@ const DiscoverPage = () => {
     let active = true;
 
     const loadInitialCommunityPublications = async () => {
+      setCommunityReader(undefined);
       setCommunityLoading(true);
+      setCommunityPublications([]);
+      setCommunityCursor(null);
+      setCommunityHasMore(false);
       try {
         const result = await getGlobalFeed(PUBLICATION_BATCH_SIZE);
         if (!active) return;
         const mapped = result.items.map((post, index) => buildCommunityPublication(post, index));
         setCommunityPublications(mapped);
+        setCommunityReader(user?.uid ?? null);
         setCommunityCursor(result.lastDoc ?? null);
         setCommunityHasMore(result.hasMore);
       } catch (error) {
         console.error('Error loading community publications for Discover:', error);
         if (!active) return;
         setCommunityPublications([]);
+        setCommunityReader(user?.uid ?? null);
         setCommunityCursor(null);
         setCommunityHasMore(false);
       } finally {
@@ -653,7 +669,7 @@ const DiscoverPage = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [user?.uid]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -1322,9 +1338,6 @@ const DiscoverPage = () => {
     const category = CATEGORIES.find((item) => item.id === publication.categoryId);
     const supportsCommunityActions =
       publication.source === 'community' && Boolean(publication.postId);
-    const liked = supportsCommunityActions ? isPostLiked(publication.id) : false;
-    const saved = supportsCommunityActions ? isPostSaved(publication.id) : false;
-    const displayLikes = publication.likes + (liked ? 1 : 0);
     const bodyText = (publication.body || category?.description || '').replace(/\s+/g, ' ').trim();
     const youtubeDateLabel = publication.youtubePublishedAt
       ? toDate(publication.youtubePublishedAt)?.toLocaleDateString('es-ES', {
@@ -1337,6 +1350,7 @@ const DiscoverPage = () => {
     return (
       <article
         key={publication.streamKey}
+        aria-label={`Publicación: ${publication.title}`}
         style={{ animationDelay: `${Math.min(index, 8) * 70}ms` }}
         className="overflow-hidden rounded-card border border-neutral-800/70 bg-surface-overlay/85 card-premium animate-in fade-in slide-in-from-bottom-2 duration-500"
       >
@@ -1376,7 +1390,7 @@ const DiscoverPage = () => {
           onClick={() => openPublicationFromDiscover(publication)}
           className="group relative block w-full text-left"
         >
-          <img
+          <PostImage
             src={publication.image}
             alt={publication.title}
             className="h-[280px] w-full object-cover md:h-[360px] transition-transform duration-700 group-hover:scale-[1.02]"
@@ -1398,30 +1412,13 @@ const DiscoverPage = () => {
 
         <div className="px-4 pb-4 pt-3 md:px-5">
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                if (!supportsCommunityActions) return;
-                toggleLikePost(publication.id);
-              }}
-              disabled={!supportsCommunityActions}
-              aria-label={`Me gusta: ${displayLikes}`}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                !supportsCommunityActions
-                  ? 'cursor-not-allowed border-neutral-800 bg-neutral-900/40 text-neutral-500'
-                  : liked
-                    ? 'border-red-400/60 bg-red-500/15 text-red-300'
-                    : 'border-neutral-700 bg-neutral-900/70 text-neutral-200 hover:border-neutral-500'
-              }`}
-            >
-              <Heart size={13} fill={liked ? 'currentColor' : 'none'} />
-              {displayLikes}
-            </button>
-
-            {publication.postId && (
-              <button
-                type="button"
-                onClick={() => {
+            {supportsCommunityActions && publication.postId ? (
+              <DiscoverPostActions
+                postId={publication.postId}
+                initialCount={likeCounts[publication.postId] ?? publication.likes}
+                commentCount={publication.comments}
+                onLikeCount={handleLikeCount}
+                onComments={() =>
                   navigate(`/post/${publication.postId}`, {
                     state: {
                       fromDiscover: true,
@@ -1429,35 +1426,31 @@ const DiscoverPage = () => {
                       enteredAt: Date.now(),
                       openComments: true,
                     },
-                  });
-                }}
-                aria-label={`Comentarios: ${publication.comments}`}
-                className="inline-flex items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-900/70 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500"
-              >
-                <MessageCircle size={13} />
-                {publication.comments}
-              </button>
+                  })
+                }
+              />
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled
+                  aria-label={`Me gusta: ${publication.likes}`}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-neutral-800 bg-neutral-900/40 px-3 py-1.5 text-xs text-neutral-500 cursor-not-allowed"
+                >
+                  <Heart size={13} />
+                  {publication.likes}
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  aria-label="Guardar publicacion"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-neutral-800 bg-neutral-900/40 px-3 py-1.5 text-xs text-neutral-500 cursor-not-allowed"
+                >
+                  <Bookmark size={13} />
+                  Guardar
+                </button>
+              </>
             )}
-
-            <button
-              type="button"
-              onClick={() => {
-                if (!supportsCommunityActions) return;
-                toggleSavePost(publication.id);
-              }}
-              disabled={!supportsCommunityActions}
-              aria-label="Guardar publicacion"
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                !supportsCommunityActions
-                  ? 'cursor-not-allowed border-neutral-800 bg-neutral-900/40 text-neutral-500'
-                  : saved
-                    ? 'border-brand-gold/50 bg-brand-gold/15 text-brand-gold'
-                    : 'border-neutral-700 bg-neutral-900/70 text-neutral-200 hover:border-neutral-500'
-              }`}
-            >
-              <Bookmark size={13} fill={saved ? 'currentColor' : 'none'} />
-              {saved ? 'Guardado' : 'Guardar'}
-            </button>
 
             <span className="ml-auto text-[10px] uppercase tracking-[0.2em] text-neutral-500">
               {publication.source === 'community'
@@ -2137,4 +2130,8 @@ const DiscoverPage = () => {
   );
 };
 
+const DiscoverPage = () => {
+  const { user } = useAuth();
+  return <DiscoverSession key={user?.uid ?? 'anonymous'} />;
+};
 export default DiscoverPage;

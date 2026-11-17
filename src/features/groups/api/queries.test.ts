@@ -6,6 +6,7 @@ import type {
   PostRead,
 } from '@/features/groups/api/types';
 import { AppError } from '@/shared/lib/errors';
+import type { PostPage } from '@/shared/lib/post-reads-client';
 import {
   getFollowing,
   getGroup,
@@ -44,7 +45,7 @@ const emptyMembersPage: PaginatedResult<GroupMemberRead> = {
   hasMore: false,
 };
 
-const emptyPostsPage: PaginatedResult<PostRead> = {
+const emptyPostsPage: PostPage<PostRead> = {
   items: [],
   lastDoc: null,
   hasMore: false,

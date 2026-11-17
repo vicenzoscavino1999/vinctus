@@ -2,7 +2,10 @@ import { Heart, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import ExpertBadge from '@/shared/ui/ExpertBadge';
-import { useAppState } from '@/context/app-state';
+import { useAuth } from '@/context/auth';
+import { useToast } from '@/shared/ui/Toast';
+import { usePostEngagement } from '@/features/posts/hooks/usePostEngagement';
+import { reactionLabel } from '@/features/posts/model/PostEngagementSession';
 import type { PostCardProps } from '@/shared/types';
 
 // Helper to convert author name to URL slug
@@ -13,10 +16,11 @@ const authorToSlug = (name: string) => {
 // PostCard component with clickable author and working likes
 const PostCard = ({ post }: PostCardProps) => {
   const navigate = useNavigate();
-  const { isPostLiked, toggleLikePost } = useAppState();
-
-  const liked = isPostLiked(post.id);
-  const likeCount = liked ? post.likes + 1 : post.likes;
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  const { like, act } = usePostEngagement(post.id, user?.uid, post.likes);
+  const liked = like.value;
+  const likeCount = like.loaded ? like.count : post.likes;
 
   const handleAuthorClick = (e: MouseEvent<HTMLDivElement> | KeyboardEvent<HTMLDivElement>) => {
     e.stopPropagation();
@@ -26,7 +30,11 @@ const PostCard = ({ post }: PostCardProps) => {
 
   const handleLike = (e: MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
-    toggleLikePost(post.id);
+    if (!user) {
+      showToast('Inicia sesión para dar me gusta', 'info');
+      return;
+    }
+    void act('like');
   };
 
   const handleComment = (e: MouseEvent<HTMLButtonElement>) => {
@@ -69,7 +77,10 @@ const PostCard = ({ post }: PostCardProps) => {
         <div className="flex items-center space-x-6 text-neutral-600">
           <button
             onClick={handleLike}
-            aria-label="Me gusta"
+            aria-label={reactionLabel('like', like)}
+            aria-pressed={liked ?? undefined}
+            aria-busy={like.loading}
+            disabled={like.loading}
             className={`flex items-center space-x-2 transition-colors ${liked ? 'text-red-500' : 'hover:text-white'}`}
           >
             <Heart size={14} fill={liked ? 'currentColor' : 'none'} />
@@ -85,6 +96,11 @@ const PostCard = ({ post }: PostCardProps) => {
           </button>
         </div>
       </div>
+      {like.error && (
+        <p role="alert" className="text-xs text-red-400 mt-3">
+          {like.error}
+        </p>
+      )}
     </div>
   );
 };

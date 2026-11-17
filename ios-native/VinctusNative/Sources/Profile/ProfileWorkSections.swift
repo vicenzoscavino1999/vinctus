@@ -4,14 +4,22 @@ import SwiftUI
 
 struct ProfilePostsSection: View {
   let profileRepo: ProfileRepo
+  let canCreate: Bool
   let reloadToken: Int
 
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
   @StateObject private var vm: ProfilePostsViewModel
   private let commentsRepo: any PostCommentsRepo = AppRepos.postComments()
 
-  init(repo: ProfileContentRepo, profileRepo: ProfileRepo, userID: String, reloadToken: Int) {
+  init(
+    repo: ProfileContentRepo,
+    profileRepo: ProfileRepo,
+    userID: String,
+    canCreate: Bool = false,
+    reloadToken: Int
+  ) {
     self.profileRepo = profileRepo
+    self.canCreate = canCreate
     self.reloadToken = reloadToken
     _vm = StateObject(wrappedValue: ProfilePostsViewModel(repo: repo, userID: userID))
   }
@@ -22,10 +30,27 @@ struct ProfilePostsSection: View {
   /// the bottom, and a VIDEO badge.
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
-      Text("PUBLICACIONES")
-        .font(VinctusTokens.Typography.serif(14))
-        .tracking(4)
-        .foregroundStyle(VinctusTokens.Color.textMuted)
+      HStack {
+        Text("PUBLICACIONES")
+          .font(VinctusTokens.Typography.serif(14))
+          .tracking(4)
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+        Spacer()
+        if canCreate {
+          NavigationLink {
+            CreatePostView(repo: AppRepos.createPost())
+          } label: {
+            Label("Publicar", systemImage: "plus")
+              .font(.caption.weight(.semibold))
+              .foregroundStyle(.black)
+              .padding(.horizontal, 12)
+              .padding(.vertical, 6)
+              .background(VinctusTokens.Color.accent)
+              .clipShape(Capsule())
+          }
+          .buttonStyle(.plain)
+        }
+      }
 
       if vm.isLoading {
         ProgressView()
@@ -43,6 +68,9 @@ struct ProfilePostsSection: View {
           Text("Aún no hay publicaciones.")
             .font(.subheadline)
             .foregroundStyle(VinctusTokens.Color.textMuted)
+          if vm.hasMore {
+            LoadMoreButton(isLoading: vm.isLoadingMore) { Task { await vm.loadMore() } }
+          }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 36)
@@ -80,14 +108,8 @@ private struct PostGridTile: View {
     SwiftUI.Color.clear
       .aspectRatio(1, contentMode: .fit)
       .overlay {
-        if let preview = post.previewImageURL, let url = URL(string: preview) {
-          AsyncImage(url: url) { phase in
-            if case .success(let image) = phase {
-              image.resizable().scaledToFill()
-            } else {
-              emptyBackground
-            }
-          }
+        if let preview = post.previewImageURL {
+          PostImageView(source: preview)
         } else {
           emptyBackground
         }
@@ -133,7 +155,7 @@ private struct PostGridTile: View {
         .foregroundStyle(SwiftUI.Color(white: 0.9))
         .lineLimit(1)
     } else {
-      Text(post.text.isEmpty ? "Publicación" : post.text)
+      Text(post.title ?? (post.text.isEmpty ? "Publicación" : post.text))
         .font(.subheadline)
         .foregroundStyle(post.text.isEmpty ? VinctusTokens.Color.textSecondary : SwiftUI.Color(white: 0.96))
         .lineLimit(3)

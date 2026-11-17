@@ -117,6 +117,10 @@ struct ProfileView: View {
     .task(id: userID) {
       await reload()
     }
+    .onReceive(NotificationCenter.default.publisher(for: .vinctusPostPublished)) { _ in
+      guard isOwnProfile else { return }
+      Task { await reload() }
+    }
     .refreshable {
       await reload()
     }
@@ -237,11 +241,16 @@ struct ProfileView: View {
         StoriesBar()
         ProfileCollectionsLink()
           .id("collections")
+        NavigationLink {
+          SavedPostsView(profileRepo: repo)
+        } label: {
+          Label("Publicaciones guardadas", systemImage: "bookmark")
+        }
         ProfileCategoriesSection(repo: contentRepo)
           .id("categories")
         ProfileSavedDebatesSection(repo: contentRepo)
       }
-      ProfilePostsSection(repo: contentRepo, profileRepo: repo, userID: userID, reloadToken: reloadToken)
+      ProfilePostsSection(repo: contentRepo, profileRepo: repo, userID: userID, canCreate: isOwnProfile, reloadToken: reloadToken)
         .id("posts")
       ProfileContributionsSection(repo: contentRepo, userID: userID, canEdit: isOwnProfile, reloadToken: reloadToken)
       ProfileDetailsSection(profile: profile, isOwnProfile: isOwnProfile)

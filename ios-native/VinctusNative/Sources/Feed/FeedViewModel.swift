@@ -16,6 +16,7 @@ final class FeedViewModel: ObservableObject {
   private let pageSize = 15
   private var nextCursor: FeedCursor?
   private var hasLoadedOnce = false
+  private var requestGeneration = 0
 
   init(repo: FeedRepo) {
     self.repo = repo
@@ -23,6 +24,10 @@ final class FeedViewModel: ObservableObject {
 
   func refresh() async {
     guard !isInitialLoading, !isRefreshing else { return }
+    requestGeneration += 1
+    // A refresh starts a new pagination window. Older page requests may still
+    // finish, but must not append to it or replace its cursor.
+    isLoadingMore = false
 
     if hasLoadedOnce {
       isRefreshing = true
@@ -90,13 +95,15 @@ final class FeedViewModel: ObservableObject {
     guard !isInitialLoading, !isRefreshing, !isLoadingMore else { return }
 
     isLoadingMore = true
+    let generation = requestGeneration
     loadMoreErrorMessage = nil
 
     Task {
-      defer { isLoadingMore = false }
+      defer { if generation == requestGeneration { isLoadingMore = false } }
       do {
         AppLog.ui.info("feed.loadMore.start")
         let page = try await repo.fetchFeedPage(limit: pageSize, after: nextCursor)
+        guard generation == requestGeneration else { return }
         appendDeduped(page.items)
         nextCursor = page.nextCursor
         canLoadMore = page.hasMore
@@ -104,6 +111,7 @@ final class FeedViewModel: ObservableObject {
           "feed.loadMore.success added=\(page.items.count, privacy: .public) hasMore=\(page.hasMore, privacy: .public)"
         )
       } catch {
+        guard generation == requestGeneration else { return }
         AppLog.ui.error(
           "feed.loadMore.failed errorType=\(AppLog.errorType(error), privacy: .public)"
         )

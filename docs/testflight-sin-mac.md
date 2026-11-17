@@ -89,8 +89,17 @@ el workflow no sube archivos de configuración ni credenciales como artefactos.
 
 El build 2 ya está procesado y asignado al grupo **Vinctus QA**, y la cuenta
 autorizada por el propietario ya está agregada como probador interno. Apple
-confirmó la invitación como `INVITED`. Abre el correo en el iPhone y usa la app
-TestFlight para aceptar e instalar Vinctus.
+confirmó la invitación como `INVITED`. Para instalar hay que aceptar el enlace
+del correo usando TestFlight en el iPhone.
+
+Incidencia pendiente del 13 de noviembre: el propietario no recibe ese correo,
+incluida la búsqueda en Outlook web y correo no deseado. Se comprobó que la cuenta
+de TestFlight coincide con la invitada y que el iPhone actual aparece en
+TestFlight. Apple aceptó un reenvío y se retiró/volvió a añadir el tester al grupo,
+pero el estado continúa `INVITED`, sin instalación registrada. Se preparó un
+reporte para soporte; no se ha enviado desde el agente. Una Mac compatible con
+Xcode permitiría instalar una build de desarrollo directamente en el iPhone.
+
 Valida los cuatro puntos de
 `docs/revision-app-nativa.md`: voz audible y grabación, videos de la fototeca,
 interrupciones/salida de audio y permisos de Safari. La reproducción en un

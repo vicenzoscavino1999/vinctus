@@ -15,6 +15,8 @@ enum FollowStatus: Equatable {
 protocol EngagementRepo {
   func isPostLiked(postID: String) async throws -> Bool
   func setPostLiked(_ liked: Bool, postID: String) async throws
+  func isPostSaved(postID: String) async throws -> Bool
+  func setPostSaved(_ saved: Bool, postID: String) async throws
   func followStatus(targetUID: String) async throws -> FollowStatus
   func follow(targetUID: String, isPrivate: Bool) async throws -> FollowStatus
   func unfollow(targetUID: String, status: FollowStatus) async throws
@@ -24,6 +26,7 @@ enum EngagementRepoError: LocalizedError {
   case firebaseNotConfigured
   case userNotAuthenticated
   case cannotFollowSelf
+  case postUnavailable
 
   var errorDescription: String? {
     switch self {
@@ -33,6 +36,8 @@ enum EngagementRepoError: LocalizedError {
       return "Debes iniciar sesión."
     case .cannotFollowSelf:
       return "No puedes seguirte a ti mismo."
+    case .postUnavailable:
+      return "La publicación ya no está disponible."
     }
   }
 }
@@ -50,7 +55,7 @@ final class FirebaseEngagementRepo: EngagementRepo {
     let (db, uid) = try context()
     return try await db.collection(FirestoreCollections.posts).document(postID)
       .collection(FirestoreSubcollections.likes).document(uid)
-      .getDocument().exists
+      .getDocument(source: .server).exists
   }
 
   func setPostLiked(_ liked: Bool, postID: String) async throws {
@@ -60,21 +65,54 @@ final class FirebaseEngagementRepo: EngagementRepo {
       .collection(FirestoreSubcollections.likes).document(uid)
     let userLikeRef = db.collection(FirestoreCollections.users).document(uid)
       .collection(FirestoreSubcollections.likes).document(postID)
-    let batch = db.batch()
-    if liked {
-      batch.setData(
-        ["uid": uid, "postId": postID, "createdAt": FieldValue.serverTimestamp()],
-        forDocument: likeRef
-      )
-      batch.setData(
-        ["postId": postID, "createdAt": FieldValue.serverTimestamp()],
-        forDocument: userLikeRef
-      )
-    } else {
-      batch.deleteDocument(likeRef)
-      batch.deleteDocument(userLikeRef)
+    let postRef = db.collection(FirestoreCollections.posts).document(postID)
+    _ = try await db.runTransaction { tx, errorPointer in
+      do {
+        let like = try tx.getDocument(likeRef)
+        let index = try tx.getDocument(userLikeRef)
+        if liked {
+          let post = try tx.getDocument(postRef)
+          guard FirebaseFeedRepo.isPublished(post) else { throw EngagementRepoError.postUnavailable }
+          if !like.exists {
+            tx.setData(["uid": uid, "postId": postID, "createdAt": FieldValue.serverTimestamp()], forDocument: likeRef)
+          }
+          if !index.exists {
+            tx.setData(["postId": postID, "createdAt": FieldValue.serverTimestamp()], forDocument: userLikeRef)
+          }
+        } else {
+          if like.exists { tx.deleteDocument(likeRef) }
+          if index.exists { tx.deleteDocument(userLikeRef) }
+        }
+      } catch { errorPointer?.pointee = error as NSError }
+      return nil
     }
-    try await batch.commit()
+  }
+
+  func isPostSaved(postID: String) async throws -> Bool {
+    let (db, uid) = try context()
+    return try await db.collection(FirestoreCollections.users).document(uid)
+      .collection(FirestoreSubcollections.savedPosts).document(postID)
+      .getDocument(source: .server).exists
+  }
+
+  func setPostSaved(_ saved: Bool, postID: String) async throws {
+    let (db, uid) = try context()
+    let ref = db.collection(FirestoreCollections.users).document(uid)
+      .collection(FirestoreSubcollections.savedPosts).document(postID)
+    let postRef = db.collection(FirestoreCollections.posts).document(postID)
+    _ = try await db.runTransaction { tx, errorPointer in
+      do {
+        let existing = try tx.getDocument(ref)
+        if saved {
+          let post = try tx.getDocument(postRef)
+          guard FirebaseFeedRepo.isPublished(post) else { throw EngagementRepoError.postUnavailable }
+          if !existing.exists {
+            tx.setData(["postId": postID, "createdAt": FieldValue.serverTimestamp()], forDocument: ref)
+          }
+        } else if existing.exists { tx.deleteDocument(ref) }
+      } catch { errorPointer?.pointee = error as NSError }
+      return nil
+    }
   }
 
   // MARK: Follows

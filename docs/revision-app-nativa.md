@@ -6,7 +6,7 @@ Este archivo conserva el avance por módulos. A partir de conversaciones, revisa
 
 - [x] Conversaciones de la app nativa: revisión, correcciones y pruebas automatizadas.
 - [x] Conversaciones de la web: correcciones y validación local con Firebase y navegador.
-- [ ] Publicaciones / Comunidad — siguiente módulo, en ambas versiones.
+- [ ] Publicaciones / Comunidad — implementación y CI completadas en ambas versiones ([PR #120](https://github.com/vicenzoscavino1999/vinctus/pull/120)); pendiente despliegue coordinado y prueba en iPhone real.
 - [ ] Perfiles y seguidores — ambas versiones.
 - [ ] Grupos — ambas versiones.
 - [ ] Historias — ambas versiones.
@@ -14,6 +14,18 @@ Este archivo conserva el avance por módulos. A partir de conversaciones, revisa
 - [ ] Colecciones — ambas versiones.
 - [ ] Inteligencia artificial: chat y Arena — ambas versiones.
 - [ ] Cuenta y seguridad: acceso, recuperación, bloqueos, denuncias y eliminación de cuenta — ambas versiones.
+
+## Forma de trabajo acordada por módulo
+
+Por indicación del propietario (16 de noviembre de 2026), mientras el despliegue en nube y la verificación en iPhone físico quedan pospuestos para la etapa final a cargo del propietario, el desarrollo avanza **módulo por módulo** siguiendo el orden de la lista anterior:
+
+- **Alcance por módulo**: cada funcionalidad se revisa, corrige y prueba de extremo a extremo tanto en la **web (`src`)** como en la **app nativa (`ios-native/VinctusNative`)**, incluyendo `functions`, reglas (`firestore.rules`, `storage.rules`) y `shared/firestore-contract.json` cuando corresponda.
+- **Separación de estado**: al terminar cada módulo se deja documentado y verificado por separado qué corresponde a:
+  1. **Implementación y pruebas automatizadas** (suite local + CI completa de web e iOS en GitHub Actions).
+  2. **Despliegue coordinado** (`staging` aislado con observación de 24–48 h, reglas, índices/TTL, Cloud Functions, migraciones de datos existentes, producción web y nuevo build de TestFlight).
+  3. **Pruebas en iPhone real**.
+- **Criterio de casillas y ramas**: las casillas cuyos despliegues o pruebas físicas en iPhone sigan pendientes no se marcan como cierre total del módulo. Cada módulo nuevo se trabaja en una rama y PR borrador apilados sobre el módulo anterior para mantener diffs limpios sin fusionar a `main` antes del despliegue coordinado.
+- **Fase final**: una vez completada la revisión por módulos en código y CI, el propietario se encargará del aprovisionamiento de credenciales/staging, despliegues coordinados, migraciones, subida a TestFlight y pruebas físicas en iPhone.
 
 ## Conversaciones nativas
 
@@ -66,7 +78,11 @@ Los cambios de la app y de la web se mantienen en el PR; comprobar su estado ant
 
 Estado de publicación al 13 de noviembre: [candidato web y resultados de release](release-conversaciones-2026-11-12.md). El candidato web compiló con configuración de producción sin cambiar el dominio público. Falta completar el staging aislado y sus 24 horas de observación exigidas por el runbook. **Vinctus 1.0.0 (2) ya fue firmada y subida a TestFlight desde una Mac de GitHub**; Apple la procesó y habilitó para pruebas internas en el grupo **Vinctus QA**. La [guía de TestFlight sin Mac propia](testflight-sin-mac.md) conserva la configuración. La instalación y prueba física siguen pendientes; no se envió la app a revisión pública.
 
-## Próximo módulo: Publicaciones / Comunidad
+## Publicaciones / Comunidad: revisión en curso
+
+El propietario autorizó avanzar con este módulo mientras siguen pendientes la
+instalación de TestFlight y las pruebas físicas de Conversaciones. Los cambios de
+esta etapa se separan en `fix/posts-community`, a partir de `fix/ios-conversations`.
 
 Revisar en ambas versiones:
 
@@ -74,6 +90,111 @@ Revisar en ambas versiones:
 2. Likes, comentarios y contadores.
 3. Paginación, conexión lenta, errores y reintentos.
 4. Permisos y visibilidad.
-5. Comparar las capacidades de adjuntos. El publicador nativo actual publica texto; concretar las ampliaciones tras revisar el flujo existente.
+5. Comparar las capacidades de adjuntos. La segunda etapa añade fotos, videos,
+   documentos y YouTube al publicador nativo y comprueba la recuperación de
+   subidas parciales. La validación automatizada pasó; falta la prueba física.
 
-La revisión de Publicaciones todavía no ha comenzado.
+Primera etapa: envío fiable de comentarios en ambas versiones, aislamiento del
+panel web por cuenta/publicación, conservación de borradores nativos y protección
+del feed nativo ante páginas antiguas que terminan después de actualizar. Consultar
+[la revisión de Publicaciones](revision-publicaciones-comunidad.md) para el alcance,
+los resultados de las pruebas y el trabajo que queda. El módulo sigue abierto.
+
+La segunda etapa cubre creación y adjuntos en ambas versiones, con IDs/rutas
+estables y protección de publicaciones ya confirmadas. La web tiene 438 pruebas
+aprobadas y un flujo de navegador que recupera una subida parcial sin duplicar
+el post ni sobrescribir la imagen. La compilación, las pruebas unitarias y 26
+pruebas de integración nativas de esta ampliación pasaron en CI; también pasó la
+CI web completa con tres flujos smoke. Todavía no se publicó una versión nueva.
+
+La tercera etapa añade comentarios nativos recientes con páginas de 20 y reintentos
+que conservan el historial. Corrige además el contador de publicaciones del servidor:
+los archivos pendientes o fallidos ya no cuentan y los eventos repetidos o tardíos
+reconcilian el estado actual. Pasaron las tres pruebas nuevas con Functions locales
+y en CI, la CI web completa, ReleaseProd, las pruebas unitarias y 27 pruebas de
+integración nativas. La prueba nueva recorre 105 comentarios de la misma fecha,
+con borrado del cursor e inserción entre páginas. Los cambios del servidor y su
+índice todavía no están desplegados; tampoco se subió otra versión a TestFlight.
+
+La cuarta etapa revisa likes y guardados en web e iOS: consulta confirmada de
+estado, bloqueo de doble toque, reintento del mismo valor y conservación de las
+fechas. Ambas versiones incorporan la lista paginada de publicaciones guardadas
+en el perfil propio. Pasaron 462 pruebas web con cobertura, 65 API/backend,
+la CI web completa con cuatro flujos smoke, ReleaseProd, las pruebas unitarias
+y 29 pruebas de integración nativas. El recorrido de navegador recupera commits
+aceptados cuya respuesta se pierde, conserva fechas y comprueba la lista del
+perfil, la recarga y otra cuenta. Los controles de Descubrir y la visibilidad
+siguen pendientes. Los cambios
+continúan en el PR; no se desplegaron ni se subió otro build de TestFlight.
+
+La quinta etapa corrige el backend compartido de likes, comentarios y karma:
+reconcilia los totales actuales, evita puntos duplicados por eventos tardíos y
+no recrea perfiles eliminados. Corrige el mapa de karma por categoría que leen
+ambas versiones y conserva el karma histórico al borrar una publicación.
+Incluye una auditoría acotada de solo lectura; no reconstruye puntos históricos
+sobrescritos ni aplica reparaciones generales. No modifica el código iOS: sigue
+vigente la validación nativa de la cuarta etapa. Consultar la revisión de
+Publicaciones para los resultados del backend y del navegador. El despliegue
+y la comprobación en dispositivo siguen pendientes.
+
+La sexta etapa exige permisos de escritura en el servidor compartido: membresía
+real para publicar en grupos, post publicado y ausencia de bloqueos para nuevas
+interacciones. Conserva la retirada de reacciones propias tras un bloqueo o un
+borrado y añade pruebas de integración nativas para estos permisos. La privacidad
+de lectura del feed y de los adjuntos sigue pendiente; esta etapa no convierte
+las publicaciones de grupos privados en contenido confidencial. Las reglas
+continúan sin desplegarse.
+
+La séptima etapa adapta las lecturas de publicaciones y comentarios a un servicio
+compartido que aplica privacidad de cuentas, membresía real y bloqueos. La web y
+la app nativa usan cursores opacos y descargan adjuntos con autorización por cada
+parte, sin entregar enlaces públicos. Incluye migración de enlaces antiguos y
+fragmentos de notificaciones. Las pruebas locales y la CI se documentan en el
+PR; la protección no está activa en producción hasta completar el despliegue
+coordinado y la migración. El módulo y la prueba en iPhone real siguen abiertos.
+
+La octava etapa corrige los likes y guardados de publicaciones en Descubrir web:
+lectura confirmada por post, total sin contar dos veces el like propio y reintentos
+del mismo valor después de perder una confirmación. Se valida un post fuera de
+los primeros 50 índices, su recarga y otra cuenta. En iOS se revisaron las acciones
+equivalentes del feed/detalle, que ya usan consultas individuales y conservan la
+validación nativa anterior; Descubrir nativo aún no incluye publicaciones. No se
+modifica Swift en esta etapa ni se publica otra versión.
+
+La novena etapa añade recuperación local de borradores en web e iOS, con copias
+duraderas de adjuntos e identificador de envío guardado antes de publicar. Los
+borradores se separan por cuenta/grupo y conservan los cambios nuevos mientras
+otro envío termina. Incluye descarte explícito, errores de guardado visibles y
+protección frente a editores antiguos. Una integración nativa recupera un post
+aceptado cuya respuesta se perdió y comprueba que el reintento conserva el objeto
+y las fechas. Consultar el PR para la compilación y las pruebas nativas de esta
+etapa. Son borradores de cada dispositivo; no se sincronizan entre web e iPhone.
+
+La décima etapa incorpora la política y limpieza segura de subidas remotas
+abandonadas en dos fases, compatible con los borradores locales recuperables:
+conserva intactos durante siete días los envíos incompletos (`uploading`/`failed`)
+y extiende la ventana cuando hay objetos recientes en Storage; nunca toca
+publicaciones confirmadas (`ready` o heredadas sin estado). Tras siete días sin
+actividad, retira el documento a un tombstone `abandoned`, bloquea en reglas
+nuevas subidas/actualizaciones/borrados de cliente sobre ese ID, purga los
+objetos del prefijo en dos pasadas con concesión transaccional (incluida una
+segunda pasada tras ocho días para sesiones reanudables preautorizadas) y elimina
+el tombstone al concluir. El barrido pagina con cursor (`startAfter` por fecha e
+ID) para que las subidas activas o actualizadas recientemente no bloqueen el
+retiro de envíos abandonados posteriores. Si el usuario reabre después un
+borrador local cuyo ID fue retirado, web e iOS rotan y persisten un nuevo
+`postId` antes de subir las copias locales.
+
+La undécima etapa completa los flujos pendientes de creación desde perfil y
+grupos, actualización inmediata de listas y apertura de detalle en web e iOS:
+en web añade el botón `Publicar` en la cuadrícula del perfil propio, conserva la
+ruta `/profile` al publicar desde la cabecera, refresca automáticamente las
+publicaciones de perfil y grupo tras publicar, abre `/post/:postId` al tocar
+una publicación reciente del grupo y muestra en `PostDetailPage` tanto el cuerpo
+multilínea sin título como los adjuntos visuales adicionales. En iOS añade el
+botón `Publicar` en `PUBLICACIONES` del perfil propio, propaga `categoryID` al
+publicar en grupos, refresca `FeedView`, `ProfileView` y `GroupView` al publicar
+y convierte las tarjetas de `Publicaciones recientes` del grupo en enlaces a
+`PostDetailView` con su `FeedItem` completo. Con esto queda terminada toda la
+implementación y validación automatizada del módulo; la casilla permanece abierta
+únicamente a la espera del despliegue coordinado y de las pruebas en iPhone real.

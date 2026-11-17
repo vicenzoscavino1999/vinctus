@@ -19,7 +19,7 @@ test.describe('Critical flows', () => {
     await waitForAuthenticatedShell(page);
 
     await page.goto('/feed');
-    const likeButton = page.getByLabel(/Dar like/i).first();
+    const likeButton = page.getByRole('button', { name: /^(Me gusta|Quitar me gusta)$/i }).first();
     await expect(likeButton).toBeVisible({ timeout: 15000 });
     await page.mouse.wheel(0, 2400);
     const loadMoreButton = page.getByRole('button', { name: /Cargar m/i });
