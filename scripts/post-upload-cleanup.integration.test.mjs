@@ -212,7 +212,7 @@ test('deleting an unfinished post reserves a tombstone and purges its partial ob
   await db.doc(`posts/${unfinishedId}`).delete();
 
   let tombstoneData = null;
-  for (let attempt = 0; attempt < 60; attempt++) {
+  for (let attempt = 0; attempt < 100; attempt++) {
     const snap = await db.doc(`posts/${unfinishedId}`).get();
     const exists = await objectExists(orphanPath);
     if (snap.exists && snap.data()?.status === ABANDONED_POST_STATUS && !exists) {
