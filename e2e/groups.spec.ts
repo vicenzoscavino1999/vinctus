@@ -103,7 +103,7 @@ test.describe('Flujo de Grupos', () => {
       await waitForGroupDetailReady(page, new RegExp(initialName, 'i'), 30000);
       await page.getByRole('button', { name: /Editar grupo/i }).click();
       await page.waitForURL(new RegExp(`/group/${groupId}/edit`));
-      const nameInput = page.locator('form input').first();
+      const nameInput = page.locator('form input:not([type="file"])').first();
       await expect(nameInput).toHaveValue(initialName);
       await nameInput.fill(editedName);
       await page.getByRole('button', { name: /Guardar cambios/i }).click();
@@ -132,7 +132,7 @@ test.describe('Flujo de Grupos', () => {
       await page.getByRole('button', { name: /^Grupos$/i }).click();
       await expect(page.getByText(editedName)).toBeVisible({ timeout: 15000 });
       const requestRow = page
-        .locator('div')
+        .locator('div.rounded-xl')
         .filter({ hasText: editedName })
         .filter({
           has: page.getByRole('button', { name: /^Aceptar$/i }),

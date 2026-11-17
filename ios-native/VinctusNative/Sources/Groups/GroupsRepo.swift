@@ -361,8 +361,12 @@ final class FirebaseGroupsRepo: GroupsRepo {
       .whereField("groupId", isEqualTo: groupID)
       .whereField("status", isEqualTo: "pending")
       .limit(to: 1)
-    let requests = (try? await requestsQuery.getDocuments(source: .server))
-      ?? (try? await requestsQuery.getDocuments())
+    let requests: QuerySnapshot?
+    if let serverRequests = try? await requestsQuery.getDocuments(source: .server) {
+      requests = serverRequests
+    } else {
+      requests = try? await requestsQuery.getDocuments()
+    }
     return requests?.documents.isEmpty == false ? .pending : .none
   }
 
