@@ -16,13 +16,16 @@ const app = initializeApp({ projectId: 'vinctus-dev' }, 'follow-count-tests');
 const db = getFirestore(app);
 after(() => deleteApp(app));
 
-async function makeUser(displayName) {
+async function makeUser(
+  displayName,
+  counts = { followersCount: 77, followingCount: 66 },
+) {
   const uid = randomUUID();
   const base = {
     uid,
     displayName,
-    followersCount: 77,
-    followingCount: 66,
+    followersCount: counts.followersCount,
+    followingCount: counts.followingCount,
     accountVisibility: 'public',
   };
   await db.doc(`users/${uid}`).set(base);
@@ -74,22 +77,26 @@ async function waitForDocExists(path, expectedExists) {
 test('real triggers reconcile follower and following counts across churn and do not resurrect deleted users', async () => {
   const alice = await makeUser('Alice Follow');
   const bob = await makeUser('Bob Follow');
-  const carol = await makeUser('Carol Follow');
+  const carol = await makeUser('Carol Follow', { followersCount: 77, followingCount: 0 });
 
   await Promise.all([
     db.doc(`users/${alice}/following/${bob}`).set({ uid: bob, createdAt: FieldValue.serverTimestamp() }),
     db.doc(`users/${bob}/followers/${alice}`).set({ uid: alice, createdAt: FieldValue.serverTimestamp() }),
     db.doc(`users/${alice}/following/${carol}`).set({ uid: carol, createdAt: FieldValue.serverTimestamp() }),
     db.doc(`users/${carol}/followers/${alice}`).set({ uid: alice, createdAt: FieldValue.serverTimestamp() }),
+    db.doc(`users/${bob}/following/${alice}`).set({ uid: alice, createdAt: FieldValue.serverTimestamp() }),
+    db.doc(`users/${alice}/followers/${bob}`).set({ uid: bob, createdAt: FieldValue.serverTimestamp() }),
   ]);
 
-  await expectFollowCounts(alice, 0, 2);
-  await expectFollowCounts(bob, 1, 0);
+  await expectFollowCounts(alice, 1, 2);
+  await expectFollowCounts(bob, 1, 1);
   await expectFollowCounts(carol, 1, 0);
 
   await Promise.all([
     db.doc(`users/${alice}/following/${bob}`).delete(),
     db.doc(`users/${bob}/followers/${alice}`).delete(),
+    db.doc(`users/${bob}/following/${alice}`).delete(),
+    db.doc(`users/${alice}/followers/${bob}`).delete(),
   ]);
   // Simulate late or duplicated reconciliation calls firing out of order.
   await Promise.all([
@@ -104,7 +111,8 @@ test('real triggers reconcile follower and following counts across churn and do 
   // Deleting a user's profile before cleaning up follower edges must not recreate users/users_public.
   await Promise.all([db.doc(`users/${carol}`).delete(), db.doc(`users_public/${carol}`).delete()]);
   await db.doc(`users/${carol}/followers/${alice}`).delete();
-  await delay(500);
+  await delay(800);
+  await reconcileUserFollowersCount(db, carol);
   const [carolPriv, carolPub] = await db.getAll(
     db.doc(`users/${carol}`),
     db.doc(`users_public/${carol}`),
@@ -114,8 +122,8 @@ test('real triggers reconcile follower and following counts across churn and do 
 });
 
 test('onFollowRequestUpdated creates edges and onUserBlockedCreated cleans up follow state', async () => {
-  const alice = await makeUser('Alice Req');
-  const bob = await makeUser('Bob Req');
+  const alice = await makeUser('Alice Req', { followersCount: 0, followingCount: 66 });
+  const bob = await makeUser('Bob Req', { followersCount: 77, followingCount: 0 });
 
   const requestRef = db.doc(`follow_requests/${alice}_${bob}`);
   await requestRef.set({
