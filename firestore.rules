@@ -75,8 +75,10 @@ service cloud.firestore {
     
     // Validate membership structure against path and auth
     function isValidMembershipCreate(groupId) {
-      return request.resource.data.keys().hasAll(['groupId', 'joinedAt'])
-        && request.resource.data.groupId == groupId;  // Must match path
+      return request.resource.data.keys().hasOnly(['groupId', 'joinedAt'])
+        && request.resource.data.keys().hasAll(['groupId', 'joinedAt'])
+        && request.resource.data.groupId == groupId  // Must match path
+        && request.resource.data.joinedAt == request.time;
     }
     
     // Validate like structure against path
@@ -120,10 +122,12 @@ service cloud.firestore {
     
     // Validate group member structure against path and auth
     function isValidGroupMemberCreate(groupId, uid) {
-      return request.resource.data.keys().hasAll(['uid', 'groupId', 'role', 'joinedAt'])
+      return request.resource.data.keys().hasOnly(['uid', 'groupId', 'role', 'joinedAt'])
+        && request.resource.data.keys().hasAll(['uid', 'groupId', 'role', 'joinedAt'])
         && request.resource.data.uid == uid  // Must match path AND auth
         && request.resource.data.groupId == groupId  // Must match path
-        && request.resource.data.role in ['member', 'moderator', 'admin'];
+        && request.resource.data.role in ['member', 'moderator', 'admin']
+        && request.resource.data.joinedAt == request.time;
     }
     
     function getGroupDoc(groupId) {
@@ -640,9 +644,11 @@ service cloud.firestore {
         && isValidMembershipCreate(groupId);
       allow delete: if isOwner(uid) || canCreateMembershipForUser(uid, groupId);
       
-      // Update only if data doesn't change (idempotent writes)
-      allow update: if isOwner(uid) 
-        && request.resource.data.groupId == groupId;  // Prevent spoofing
+      // Only owner can update nothing except maintaining joinedAt/groupId
+      allow update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['groupId', 'joinedAt'])
+        && request.resource.data.groupId == groupId  // Prevent spoofing
+        && request.resource.data.joinedAt == resource.data.joinedAt;
     }
 
     function isValidDirectConversationIndexWrite(conversationId) {
@@ -952,6 +958,11 @@ service cloud.firestore {
       return group != null && group.data != null && group.data.visibility == 'public';
     }
 
+    function isGroupMember(groupId) {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+    }
+
     function isValidGroupCreate() {
       let data = request.resource.data;
       let hasIcon = data.keys().hasAny(['iconUrl']);
@@ -972,7 +983,7 @@ service cloud.firestore {
         && data.ownerId == request.auth.uid
         && (!hasCategory || data.categoryId == null || (data.categoryId is string && data.categoryId.size() > 0 && data.categoryId.size() <= 80))
         && (!hasIcon || data.iconUrl == null || (data.iconUrl is string && data.iconUrl.size() > 0 && data.iconUrl.size() <= 500))
-        && (!hasMemberCount || (data.memberCount is int && data.memberCount >= 1))
+        && (!hasMemberCount || (data.memberCount is int && data.memberCount == 1))
         && data.createdAt == request.time
         && data.updatedAt == request.time;
     }
@@ -982,10 +993,9 @@ service cloud.firestore {
       let changed = data.diff(resource.data).affectedKeys();
       let hasIcon = data.keys().hasAny(['iconUrl']);
       let hasCategory = data.keys().hasAny(['categoryId']);
-      let hasMemberCount = data.keys().hasAny(['memberCount']);
 
       return changed.hasOnly([
-          'name', 'description', 'categoryId', 'visibility', 'iconUrl', 'memberCount', 'updatedAt'
+          'name', 'description', 'categoryId', 'visibility', 'iconUrl', 'updatedAt'
         ])
         && data.ownerId == resource.data.ownerId
         && data.createdAt == resource.data.createdAt
@@ -998,21 +1008,24 @@ service cloud.firestore {
         && data.visibility in ['public', 'private']
         && (!hasCategory || data.categoryId == null || (data.categoryId is string && data.categoryId.size() > 0 && data.categoryId.size() <= 80))
         && (!hasIcon || data.iconUrl == null || (data.iconUrl is string && data.iconUrl.size() > 0 && data.iconUrl.size() <= 500))
-        && (!hasMemberCount || (data.memberCount is int && data.memberCount >= 1))
         && data.updatedAt == request.time;
     }
 
     function isValidGroupMemberSelfCreate(groupId, uid) {
+      let group = getGroupDoc(groupId);
+      let ownerId = (group != null && group.data != null) ? group.data.get('ownerId', null) : null;
       return isValidGroupMemberCreate(groupId, uid)
         && request.auth.uid == uid
         && request.resource.data.role == 'member'
-        && isGroupPublic(groupId);
+        && isGroupPublic(groupId)
+        && (ownerId == uid || !(ownerId is string) || !isConversationBlocked(uid, ownerId));
     }
 
     function isValidGroupMemberOwnerCreate(groupId, uid) {
       return isValidGroupMemberCreate(groupId, uid)
         && isGroupOwner(groupId)
-        && request.resource.data.role in ['member', 'moderator', 'admin'];
+        && request.resource.data.role in ['member', 'moderator', 'admin']
+        && (uid == request.auth.uid || !isConversationBlocked(request.auth.uid, uid));
     }
 
     function isValidGroupMemberRoleUpdate(groupId, uid) {
@@ -1039,27 +1052,39 @@ service cloud.firestore {
         && data.toUid is string
         && data.toUid.size() > 0
         && data.toUid != request.auth.uid
+        && !isConversationBlocked(request.auth.uid, data.toUid)
         && data.status == 'pending'
         && (data.message == null || (data.message is string && data.message.size() > 0 && data.message.size() <= 1000))
         && (data.fromUserName == null || (data.fromUserName is string && data.fromUserName.size() > 0 && data.fromUserName.size() <= 80))
-        && (data.fromUserPhoto == null || data.fromUserPhoto is string)
+        && (data.fromUserPhoto == null || (data.fromUserPhoto is string && data.fromUserPhoto.size() <= 600))
         && data.createdAt == request.time
         && data.updatedAt == request.time
         && group != null
         && group.data != null
         && group.data.ownerId == data.toUid
-        && group.data.visibility == 'private';
+        && group.data.visibility == 'private'
+        && !exists(/databases/$(database)/documents/groups/$(data.groupId)/members/$(request.auth.uid));
     }
 
     function isValidGroupJoinRequestUpdate() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['status', 'updatedAt'])
+      let group = getGroupDoc(resource.data.groupId);
+      return resource.data.status == 'pending'
+        && changed.hasOnly(['status', 'updatedAt'])
         && request.resource.data.status in ['accepted', 'rejected']
         && request.resource.data.updatedAt == request.time
         && request.resource.data.fromUid == resource.data.fromUid
         && request.resource.data.toUid == resource.data.toUid
         && request.resource.data.groupId == resource.data.groupId
-        && request.resource.data.groupName == resource.data.groupName;
+        && request.resource.data.groupName == resource.data.groupName
+        && (
+          request.resource.data.status != 'accepted'
+          || (
+            !isConversationBlocked(resource.data.fromUid, resource.data.toUid)
+            && group != null
+            && group.data != null
+          )
+        );
     }
     
     // groups/{groupId}
@@ -1077,17 +1102,23 @@ service cloud.firestore {
     // groups/{groupId}/members/{uid}
     // Group members (source of truth for counting)
     match /groups/{groupId}/members/{uid} {
-      // Allow authenticated reads for member display
-      allow read: if isAuthenticated();
+      // Allow self status check or member list on public groups; private group member lists are for members/owner only.
+      allow get: if isAuthenticated()
+        && (isOwner(uid) || isGroupPublic(groupId) || isGroupOwner(groupId) || isGroupMember(groupId));
+      allow list: if isAuthenticated()
+        && (isGroupPublic(groupId) || isGroupOwner(groupId) || isGroupMember(groupId));
       
       // Self-join for public groups OR owner adds member (private/public)
       allow create: if isAuthenticated()
         && (isValidGroupMemberSelfCreate(groupId, uid) || isValidGroupMemberOwnerCreate(groupId, uid));
       
-      allow delete: if isOwner(uid) || isGroupOwner(groupId);
+      // Members can leave, owners can remove others (owner cannot leave/remove self cleanly while owning).
+      allow delete: if (isOwner(uid) && !isGroupOwner(groupId))
+        || (isGroupOwner(groupId) && !isOwner(uid));
       
-      // Owner can adjust roles
+      // Owner can adjust roles of other members
       allow update: if isGroupOwner(groupId)
+        && !isOwner(uid)
         && isValidGroupMemberRoleUpdate(groupId, uid);
     }
 

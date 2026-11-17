@@ -34,6 +34,7 @@ import {
   type GroupJoinStatus,
 } from '@/features/groups/api';
 import { formatRelativeTime } from '@/shared/lib/formatUtils';
+import { AppError } from '@/shared/lib/errors';
 
 // formatRelativeTime imported from @/shared/lib/formatUtils
 
@@ -90,6 +91,7 @@ const GroupDetailSession = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const refreshSeqRef = useRef(0);
+  const membersSeqRef = useRef(0);
 
   const groupIdStr = groupId || '';
 
@@ -121,19 +123,26 @@ const GroupDetailSession = () => {
           return;
         }
 
-        const [members, posts, status, postsResult, memberRows] = await Promise.all([
-          getGroupMemberCount(groupIdStr).catch(() => groupDoc.memberCount ?? 0),
-          getGroupPostsWeekCount(groupIdStr).catch(() => 0),
-          user
-            ? getGroupJoinStatus(groupIdStr, user.uid)
-            : Promise.resolve('none' as GroupJoinStatus),
-          getPostsByGroup(groupIdStr, 3).catch(() => ({
-            items: [],
-            lastDoc: null,
-            hasMore: false,
-          })),
-          user ? getGroupMembers(groupIdStr, 3).catch(() => []) : Promise.resolve([]),
-        ]);
+        const isGroupOwner = !!user && groupDoc.ownerId === user.uid;
+        const isPrivateGroup = groupDoc.visibility === 'private';
+
+        const status = user
+          ? await getGroupJoinStatus(groupIdStr, user.uid)
+          : ('none' as GroupJoinStatus);
+        const canViewContent = !isPrivateGroup || isGroupOwner || status === 'member';
+
+        const [members, posts, postsResult, memberRows] = canViewContent
+          ? await Promise.all([
+              getGroupMemberCount(groupIdStr).catch(() => groupDoc.memberCount ?? 0),
+              getGroupPostsWeekCount(groupIdStr).catch(() => 0),
+              getPostsByGroup(groupIdStr, 3).catch(() => ({
+                items: [],
+                lastDoc: null,
+                hasMore: false,
+              })),
+              user ? getGroupMembers(groupIdStr, 3).catch(() => []) : Promise.resolve([]),
+            ])
+          : [groupDoc.memberCount ?? 0, 0, { items: [], lastDoc: null, hasMore: false }, []];
 
         const recent = postsResult.items.map((post) => ({
           id: post.id,
@@ -270,7 +279,15 @@ const GroupDetailSession = () => {
       }
     } catch (joinError) {
       console.error('Error joining group:', joinError);
-      showToast('No se pudo procesar la solicitud', 'error');
+      if (joinError instanceof AppError && joinError.code === 'PERMISSION_DENIED') {
+        const refreshedGroup = await getGroup(group.id).catch(() => null);
+        if (refreshedGroup) {
+          setGroup(refreshedGroup);
+        }
+        showToast('No puedes unirte directamente a este grupo.', 'error');
+      } else {
+        showToast('No se pudo procesar la solicitud', 'error');
+      }
     } finally {
       setJoinLoading(false);
     }
@@ -329,6 +346,10 @@ const GroupDetailSession = () => {
 
   const handleOpenMembers = () => {
     if (!groupIdStr) return;
+    if (visibility === 'private' && !isJoined) {
+      showToast('Unete al grupo para ver sus miembros.', 'info');
+      return;
+    }
     setShowMembersPanel(true);
   };
 
@@ -339,6 +360,7 @@ const GroupDetailSession = () => {
   const loadMembersPanel = useCallback(
     async (reset = false) => {
       if (!groupIdStr) return;
+      const seq = ++membersSeqRef.current;
       if (reset) {
         setMembersPanelLoading(true);
         setMembersPanelError(null);
@@ -354,9 +376,11 @@ const GroupDetailSession = () => {
           30,
           reset ? undefined : (membersPanelLastDocRef.current ?? undefined),
         );
+        if (seq !== membersSeqRef.current) return;
         const profiles = await Promise.all(
           result.items.map((member) => getUserProfile(member.uid).catch(() => null)),
         );
+        if (seq !== membersSeqRef.current) return;
         const items: GroupMemberItem[] = result.items.map((member, index) => ({
           uid: member.uid,
           role: member.role,
@@ -376,17 +400,23 @@ const GroupDetailSession = () => {
         setMembersPanelHasMore(result.hasMore);
       } catch (membersError) {
         console.error('Error loading members:', membersError);
+        if (seq !== membersSeqRef.current) return;
         setMembersPanelError('No se pudieron cargar los miembros.');
       } finally {
-        setMembersPanelLoading(false);
-        setMembersPanelLoadingMore(false);
+        if (seq === membersSeqRef.current) {
+          setMembersPanelLoading(false);
+          setMembersPanelLoadingMore(false);
+        }
       }
     },
     [groupIdStr],
   );
 
   useEffect(() => {
-    if (!showMembersPanel) return;
+    if (!showMembersPanel) {
+      membersSeqRef.current += 1;
+      return;
+    }
     setMembersPanelSearch('');
     void loadMembersPanel(true);
   }, [showMembersPanel, loadMembersPanel]);
@@ -407,6 +437,9 @@ const GroupDetailSession = () => {
       await updateGroupMemberRole(groupIdStr, uid, role);
       setMembersPanelItems((prev) =>
         prev.map((member) => (member.uid === uid ? { ...member, role } : member)),
+      );
+      setTopMembers((prev) =>
+        prev.map((member) => (member.id === uid ? { ...member, role: formatRole(role) } : member)),
       );
       showToast('Rol actualizado', 'success');
     } catch (roleError) {
@@ -434,6 +467,7 @@ const GroupDetailSession = () => {
     try {
       await removeGroupMember(groupIdStr, uid);
       setMembersPanelItems((prev) => prev.filter((member) => member.uid !== uid));
+      setTopMembers((prev) => prev.filter((member) => member.id !== uid));
       setMembersCount((prev) => Math.max(0, prev - 1));
       showToast('Miembro expulsado', 'success');
     } catch (removeError) {
@@ -485,9 +519,12 @@ const GroupDetailSession = () => {
       setJoinStatus('none');
       setIsCreatePostOpen(false);
       setMembersCount((prev) => Math.max(0, prev - 1));
+      setTopMembers((prev) => prev.filter((member) => member.id !== user.uid));
       if (visibility === 'private') {
         refreshSeqRef.current += 1;
+        setShowMembersPanel(false);
         setRecentPosts([]);
+        setTopMembers([]);
       }
       showToast('Saliste del grupo', 'success');
     } catch (leaveError) {
@@ -512,6 +549,7 @@ const GroupDetailSession = () => {
         canCreatePost={canCreatePost}
         canEditGroup={isOwner}
         canLeaveGroup={canLeaveGroup}
+        isPrivateLocked={visibility === 'private' && !isJoined}
         onJoinGroup={handleJoinGroup}
         onGoBack={handleGoBack}
         onNavigateToCategory={handleNavigateToCategory}

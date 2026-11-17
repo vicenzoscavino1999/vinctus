@@ -42,6 +42,7 @@ import { getPersonaById, type Debate } from '@/features/arena/types';
 import { getGlobalFeed, type PostCursor, type PostRead } from '@/features/posts/api';
 import { appendToStream, type AppendOnlyStream } from '@/features/discover/model/appendOnlyStream';
 import { toDate } from '@/shared/lib/formatUtils';
+import { AppError } from '@/shared/lib/errors';
 import { getYouTubeThumbnailUrl } from '@/shared/lib/youtube';
 import { fetchYouTubeSearchVideos, type YouTubeSearchVideo } from '@/shared/lib/youtubeSearchApi';
 
@@ -1186,8 +1187,11 @@ const DiscoverSession = () => {
   }, []);
 
   useEffect(() => {
+    setGroupJoinStatusMap({});
+  }, [user?.uid]);
+
+  useEffect(() => {
     if (!user || groups.length === 0) {
-      if (!user) setGroupJoinStatusMap({});
       return;
     }
     let isActive = true;
@@ -1260,7 +1264,11 @@ const DiscoverSession = () => {
       }
     } catch (actionError) {
       console.error('Error joining group:', actionError);
-      showToast('No se pudo procesar la solicitud', 'error');
+      if (actionError instanceof AppError && actionError.code === 'PERMISSION_DENIED') {
+        showToast('No puedes unirte directamente a este grupo.', 'error');
+      } else {
+        showToast('No se pudo procesar la solicitud', 'error');
+      }
     } finally {
       setGroupActionLoading(null);
     }

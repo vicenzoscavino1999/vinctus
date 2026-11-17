@@ -50,6 +50,7 @@ export interface GroupDetailViewProps {
   canCreatePost: boolean;
   canEditGroup: boolean;
   canLeaveGroup: boolean;
+  isPrivateLocked?: boolean;
 
   // Callbacks
   onJoinGroup: () => void;
@@ -79,6 +80,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
   canCreatePost,
   canEditGroup,
   canLeaveGroup,
+  isPrivateLocked = false,
   onJoinGroup,
   onGoBack,
   onNavigateToCategory,
@@ -248,7 +250,11 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
           )}
         </div>
         <div className="space-y-3 stagger-premium">
-          {group.recentPosts.length === 0 ? (
+          {isPrivateLocked ? (
+            <div className="text-center text-neutral-500 py-6">
+              Este grupo es privado. Solicita acceso para ver las publicaciones.
+            </div>
+          ) : group.recentPosts.length === 0 ? (
             <div className="text-center text-neutral-500 py-6">
               Aun no hay publicaciones en este grupo.
             </div>
@@ -286,14 +292,20 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-heading-lg font-display text-white">Miembros destacados</h2>
-          <button
-            onClick={onOpenMembers}
-            className="text-xs uppercase tracking-wider text-amber-400 hover:text-amber-300 transition-colors"
-          >
-            Ver miembros
-          </button>
+          {!isPrivateLocked && (
+            <button
+              onClick={onOpenMembers}
+              className="text-xs uppercase tracking-wider text-amber-400 hover:text-amber-300 transition-colors"
+            >
+              Ver miembros
+            </button>
+          )}
         </div>
-        {group.topMembers.length === 0 ? (
+        {isPrivateLocked ? (
+          <div className="text-center text-neutral-500 py-6">
+            Solo los miembros pueden ver la lista de participantes.
+          </div>
+        ) : group.topMembers.length === 0 ? (
           <div className="text-center text-neutral-500 py-6">
             No hay miembros destacados por ahora.
           </div>

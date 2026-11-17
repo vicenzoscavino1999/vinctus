@@ -55,7 +55,7 @@ export const sendGroupJoinRequestInputSchema = z.object({
   groupName: z.string().trim().min(1).max(LIMITS.groupRequests.groupNameMaxLength),
   fromUid: uidSchema,
   toUid: uidSchema,
-  message: z.string().trim().max(1000).nullable(),
+  message: z.string().trim().max(LIMITS.groupRequests.messageMaxLength).nullable(),
   fromUserName: z.string().trim().max(LIMITS.groupRequests.fromUserNameMaxLength).nullable(),
   fromUserPhoto: urlSchema.nullable(),
 });

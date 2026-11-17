@@ -1011,4 +1011,198 @@ describe('Firestore Rules - critical access controls', () => {
       }),
     );
   });
+
+  it('enforces group member visibility, server-managed memberCount, blocks, and join request lifecycle', async () => {
+    const env = await getRulesTestEnv();
+    const ownerDb = env.authenticatedContext('user_a').firestore();
+    const memberDb = env.authenticatedContext('user_b').firestore();
+    const outsiderDb = env.authenticatedContext('user_c').firestore();
+    const blockedDb = env.authenticatedContext('user_d').firestore();
+
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('users/user_a/blockedUsers/user_d').set({
+        blockedUid: 'user_d',
+        status: 'active',
+        blockedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('groups/group_pub').set({
+        name: 'Grupo Publico',
+        description: 'Abierto',
+        categoryId: null,
+        visibility: 'public',
+        ownerId: 'user_a',
+        iconUrl: null,
+        memberCount: 1,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('groups/group_pub/members/user_a').set({
+        uid: 'user_a',
+        groupId: 'group_pub',
+        role: 'admin',
+        joinedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('groups/group_priv').set({
+        name: 'Grupo Privado',
+        description: 'Solo miembros',
+        categoryId: null,
+        visibility: 'private',
+        ownerId: 'user_a',
+        iconUrl: null,
+        memberCount: 2,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('groups/group_priv/members/user_a').set({
+        uid: 'user_a',
+        groupId: 'group_priv',
+        role: 'admin',
+        joinedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('groups/group_priv/members/user_b').set({
+        uid: 'user_b',
+        groupId: 'group_priv',
+        role: 'member',
+        joinedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+    });
+
+    // Spoofed initial memberCount is denied; memberCount update by owner is denied.
+    await assertFails(
+      ownerDb.doc('groups/group_spoofed').set({
+        name: 'Grupo Fake',
+        description: 'Desc',
+        categoryId: null,
+        visibility: 'public',
+        ownerId: 'user_a',
+        iconUrl: null,
+        memberCount: 500,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      ownerDb.doc('groups/group_pub').update({
+        memberCount: 99,
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    // Public group: non-member can list members and self-join as member (not admin); blocked user cannot join.
+    await assertSucceeds(outsiderDb.collection('groups/group_pub/members').get());
+    await assertFails(
+      outsiderDb.doc('groups/group_pub/members/user_c').set({
+        uid: 'user_c',
+        groupId: 'group_pub',
+        role: 'admin',
+        joinedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      blockedDb.doc('groups/group_pub/members/user_d').set({
+        uid: 'user_d',
+        groupId: 'group_pub',
+        role: 'member',
+        joinedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      outsiderDb.doc('groups/group_pub/members/user_c').set({
+        uid: 'user_c',
+        groupId: 'group_pub',
+        role: 'member',
+        joinedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      outsiderDb.doc('users/user_c/memberships/group_pub').set({
+        groupId: 'group_pub',
+        joinedAt: serverTimestamp(),
+      }),
+    );
+    // JoinedAt on membership cannot be mutated or spoofed with extra keys.
+    await assertFails(
+      outsiderDb.doc('users/user_c/memberships/group_pub').update({
+        joinedAt: new Date('2025-01-01T00:00:00Z'),
+      }),
+    );
+
+    // Private group: outsider can check own status doc (missing) but cannot list or read other members.
+    await assertSucceeds(outsiderDb.doc('groups/group_priv/members/user_c').get());
+    await assertFails(outsiderDb.doc('groups/group_priv/members/user_b').get());
+    await assertFails(outsiderDb.collection('groups/group_priv/members').get());
+    await assertSucceeds(memberDb.collection('groups/group_priv/members').get());
+    await assertSucceeds(ownerDb.collection('groups/group_priv/members').get());
+
+    // Owner cannot self-demote or delete own member doc; other members can leave and be role-edited.
+    await assertFails(
+      ownerDb.doc('groups/group_priv/members/user_a').update({
+        role: 'member',
+      }),
+    );
+    await assertFails(ownerDb.doc('groups/group_priv/members/user_a').delete());
+    await assertSucceeds(
+      ownerDb.doc('groups/group_priv/members/user_b').update({
+        role: 'moderator',
+      }),
+    );
+
+    // Join requests: blocked user denied, existing member denied, outsider can create & cancel, owner cannot accept after rejection.
+    await assertFails(
+      blockedDb.doc('group_requests/req_blocked').set({
+        groupId: 'group_priv',
+        groupName: 'Grupo Privado',
+        fromUid: 'user_d',
+        toUid: 'user_a',
+        status: 'pending',
+        message: null,
+        fromUserName: 'Blocked',
+        fromUserPhoto: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      memberDb.doc('group_requests/req_member').set({
+        groupId: 'group_priv',
+        groupName: 'Grupo Privado',
+        fromUid: 'user_b',
+        toUid: 'user_a',
+        status: 'pending',
+        message: null,
+        fromUserName: 'Member',
+        fromUserPhoto: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      outsiderDb.doc('group_requests/req_outsider').set({
+        groupId: 'group_priv',
+        groupName: 'Grupo Privado',
+        fromUid: 'user_c',
+        toUid: 'user_a',
+        status: 'pending',
+        message: null,
+        fromUserName: 'Carol',
+        fromUserPhoto: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      ownerDb.doc('group_requests/req_outsider').update({
+        status: 'rejected',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      ownerDb.doc('group_requests/req_outsider').update({
+        status: 'accepted',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(outsiderDb.doc('group_requests/req_outsider').delete());
+  });
 });

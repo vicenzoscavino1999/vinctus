@@ -146,8 +146,12 @@ export const LIMITS = {
   groupRequests: {
     /** Group name copied into a join request (group_requests). */
     groupNameMaxLength: 120,
+    /** Optional message included with a group join request. */
+    messageMaxLength: 1000,
     /** Requester's display name copied into a join request. */
     fromUserNameMaxLength: 80,
+    /** Requester's photo URL copied into a join request. */
+    fromUserPhotoMaxLength: 600,
   },
   moderation: {
     /** Note a moderator adds when reviewing a moderation_queue item (also cut to this by the moderationTakeAction Cloud Function). */

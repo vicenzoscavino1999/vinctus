@@ -258,10 +258,20 @@
         "doc": "Group name copied into a join request (group_requests).",
         "rules": [{ "in": "isValidGroupJoinRequestCreate", "field": "data.groupName" }]
       },
+      "messageMaxLength": {
+        "value": 1000,
+        "doc": "Optional message included with a group join request.",
+        "rules": [{ "in": "isValidGroupJoinRequestCreate", "field": "data.message" }]
+      },
       "fromUserNameMaxLength": {
         "value": 80,
         "doc": "Requester's display name copied into a join request.",
         "rules": [{ "in": "isValidGroupJoinRequestCreate", "field": "data.fromUserName" }]
+      },
+      "fromUserPhotoMaxLength": {
+        "value": 600,
+        "doc": "Requester's photo URL copied into a join request.",
+        "rules": [{ "in": "isValidGroupJoinRequestCreate", "field": "data.fromUserPhoto" }]
       }
     },
     "moderation": {

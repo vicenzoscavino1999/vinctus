@@ -70,21 +70,33 @@ const CreateGroupModal = ({
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen || !user?.uid) return;
+    if (!isOpen || !user?.uid) {
+      setAvailableUsers([]);
+      setIsLoadingUsers(false);
+      return;
+    }
 
+    let isActive = true;
     const loadFollowing = async () => {
       setIsLoadingUsers(true);
       try {
         const following = await getFollowing(user.uid);
-        setAvailableUsers(following);
+        if (isActive) {
+          setAvailableUsers(following);
+        }
       } catch (err) {
         console.error('Error loading following:', err);
       } finally {
-        setIsLoadingUsers(false);
+        if (isActive) {
+          setIsLoadingUsers(false);
+        }
       }
     };
 
     void loadFollowing();
+    return () => {
+      isActive = false;
+    };
   }, [isOpen, user?.uid]);
 
   useEffect(() => {
@@ -224,9 +236,9 @@ const CreateGroupModal = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 safe-area-inset">
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={handleClose} />
-        <div className="relative w-full max-w-2xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
+        <div className="relative w-full max-w-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-2xl">
           <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
             <h2 className="text-xl font-serif text-white">Crear grupo</h2>
             <button

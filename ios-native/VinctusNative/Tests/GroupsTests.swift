@@ -58,6 +58,18 @@ final class GroupMembershipTests: XCTestCase {
     XCTAssertEqual(repo.joinCalls, 0)
   }
 
+  func testSigningOutClearsLoadedMembership() async {
+    let repo = FakeGroupsRepo()
+    repo.members = ["me"]
+    let vm = await loadedViewModel(repo)
+    XCTAssertEqual(vm.membership, .member)
+
+    await vm.loadMembership(uid: nil)
+
+    XCTAssertNil(vm.membership)
+    XCTAssertNil(vm.isMember)
+  }
+
   func testButtonTitlesMatchTheWeb() {
     XCTAssertEqual(GroupMembershipStatus.owner.buttonTitle(isPrivate: false), "Tu grupo")
     XCTAssertEqual(GroupMembershipStatus.member.buttonTitle(isPrivate: true), "Unido")
@@ -138,5 +150,20 @@ final class EditGroupTests: XCTestCase {
     XCTAssertFalse(saved)
     XCTAssertEqual(vm.errorMessage, "No se pudo actualizar el grupo.")
     XCTAssertFalse(vm.isSaving)
+  }
+
+  func testRemovingIconSendsNilIconURL() async {
+    let repo = FakeGroupsRepo()
+    let vm = EditGroupViewModel(detail: detail, repo: repo)
+    XCTAssertTrue(vm.hasIcon)
+
+    vm.removeIcon()
+    XCTAssertFalse(vm.hasIcon)
+
+    let saved = await vm.save(ownerID: "me")
+
+    XCTAssertTrue(saved)
+    XCTAssertEqual(repo.uploadedIcons, 0)
+    XCTAssertNil(repo.updates.first?.iconURL)
   }
 }

@@ -30,13 +30,23 @@ import {
   isUnfinishedPostStatus,
   reserveDeletedUnfinishedPost,
 } from './postUploadCleanup';
+import {
+  cleanupDeletedGroupJoinRequests,
+  cleanupDeletedGroupMembersAndMemberships,
+  reconcileGroupMemberCount,
+} from './groupCounts';
 export {
   readPosts,
   readPostMedia,
   onPostMediaFinalized,
   onPostMediaMetadataUpdated,
 } from './postReadEndpoints';
-import { COLLECTIONS, SERVER_COLLECTIONS, SUBCOLLECTIONS } from './firestoreContract';
+import {
+  COLLECTIONS,
+  SERVER_COLLECTIONS,
+  SUBCOLLECTIONS,
+  storagePrefix,
+} from './firestoreContract';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -701,16 +711,16 @@ export const onUserBlockedCreated = functions.firestore
   });
 
 // ==========================================================
-// 📈 GROUP MEMBER COUNTERS (With Deduplication)
+// 📈 GROUP MEMBER COUNTERS (Current-state Reconciliation)
 // ==========================================================
 
 /**
- * Increment memberCount when a user joins a group
+ * Reconcile memberCount and group conversation membership when a user joins a group
  * Trigger: onCreate groups/{groupId}/members/{userId}
  */
 export const onGroupMemberCreated = functions.firestore
   .document(`${COLLECTIONS.groups}/{groupId}/${SUBCOLLECTIONS.members}/{userId}`)
-  .onCreate(async (snap, context) => {
+  .onCreate(async (_snap, context) => {
     const { groupId, userId } = context.params;
     const eventId = context.eventId;
 
@@ -721,11 +731,10 @@ export const onGroupMemberCreated = functions.firestore
     });
 
     try {
-      const groupRef = db.doc(`${COLLECTIONS.groups}/${groupId}`);
-      await deduplicatedIncrement(eventId, groupRef, 'memberCount', 1);
-      functions.logger.info('Member count incremented', { groupId, eventId });
+      await reconcileGroupMemberCount(db, groupId);
+      functions.logger.info('Member count reconciled', { groupId, eventId });
     } catch (error) {
-      functions.logger.error('Failed to increment member count', {
+      functions.logger.error('Failed to reconcile member count on create', {
         groupId,
         userId,
         eventId,
@@ -745,24 +754,21 @@ export const onGroupMemberCreated = functions.firestore
   });
 
 /**
- * Decrement memberCount when a user leaves a group
+ * Reconcile memberCount and group conversation membership when a user leaves a group
  * Trigger: onDelete groups/{groupId}/members/{userId}
  */
 export const onGroupMemberDeleted = functions.firestore
   .document(`${COLLECTIONS.groups}/{groupId}/${SUBCOLLECTIONS.members}/{userId}`)
-  .onDelete(async (snap, context) => {
+  .onDelete(async (_snap, context) => {
     const { groupId, userId } = context.params;
     const eventId = context.eventId;
 
     try {
       functions.logger.info('Member left group', { groupId, userId, eventId });
-
-      const groupRef = db.doc(`${COLLECTIONS.groups}/${groupId}`);
-      await deduplicatedDecrement(eventId, groupRef, 'memberCount');
-
-      functions.logger.info('Member count decremented', { groupId, eventId });
+      await reconcileGroupMemberCount(db, groupId);
+      functions.logger.info('Member count reconciled on delete', { groupId, eventId });
     } catch (error) {
-      functions.logger.error('Failed to decrement member count', {
+      functions.logger.error('Failed to reconcile member count on delete', {
         groupId,
         userId,
         eventId,
@@ -786,13 +792,27 @@ export const onGroupMemberDeleted = functions.firestore
 
 async function ensureGroupConversationForMember(groupId: string, uid: string): Promise<void> {
   const conversationId = `grp_${groupId}`;
+  const groupRef = db.doc(`${COLLECTIONS.groups}/${groupId}`);
+  const groupMemberRef = db.doc(
+    `${COLLECTIONS.groups}/${groupId}/${SUBCOLLECTIONS.members}/${uid}`,
+  );
   const convRef = db.doc(`${COLLECTIONS.conversations}/${conversationId}`);
   const memberRef = db.doc(
     `${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.members}/${uid}`,
   );
 
   await db.runTransaction(async (tx) => {
-    const [convSnap, memberSnap] = await Promise.all([tx.get(convRef), tx.get(memberRef)]);
+    const [groupSnap, groupMemberSnap, convSnap, memberSnap] = await Promise.all([
+      tx.get(groupRef),
+      tx.get(groupMemberRef),
+      tx.get(convRef),
+      tx.get(memberRef),
+    ]);
+
+    // Never recreate a group conversation after the group was deleted or the user left.
+    if (!groupSnap.exists || !groupMemberSnap.exists) {
+      return;
+    }
 
     if (!convSnap.exists) {
       tx.create(convRef, {
@@ -1007,37 +1027,66 @@ export const onGroupDeleted = functions.firestore
   .document(`${COLLECTIONS.groups}/{groupId}`)
   .onDelete(async (snap, context) => {
     const { groupId } = context.params;
+    const ownerId = snap.data()?.ownerId;
+
+    functions.logger.info('Group deleted, cleaning up members, requests, chat, and storage', {
+      groupId,
+    });
 
     try {
-      functions.logger.info('Group deleted, cleaning up subcollections', { groupId });
-
-      // Delete all members in batches (max 500 per batch)
-      const membersRef = db.collection(
-        `${COLLECTIONS.groups}/${groupId}/${SUBCOLLECTIONS.members}`,
-      );
-      const membersSnapshot = await membersRef.get();
-
-      if (membersSnapshot.empty) {
-        functions.logger.info('No members to clean up', { groupId });
-        return;
-      }
-
-      // Firestore batch has a hard limit of 500 writes.
-      const batchSize = 450;
-      const batchCount = await commitInBatches(membersSnapshot.docs, batchSize, (batch, doc) => {
-        batch.delete(doc.ref);
-      });
-
-      functions.logger.info('Members cleaned up', {
+      const membersDeleted = await cleanupDeletedGroupMembersAndMemberships(db, groupId, ownerId);
+      functions.logger.info('Group members and memberships cleaned up', {
         groupId,
-        totalDeleted: membersSnapshot.size,
-        batchCount,
+        membersDeleted,
       });
     } catch (error) {
       functions.logger.error('Failed to clean up group members', {
         groupId,
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+
+    try {
+      const requestsDeleted = await cleanupDeletedGroupJoinRequests(db, groupId);
+      functions.logger.info('Group join requests cleaned up', {
+        groupId,
+        requestsDeleted,
+      });
+    } catch (error) {
+      functions.logger.error('Failed to clean up group join requests', {
+        groupId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    const conversationId = `grp_${groupId}`;
+    try {
+      await db.recursiveDelete(db.doc(`${COLLECTIONS.conversations}/${conversationId}`));
+      functions.logger.info('Group conversation cleaned up', { groupId, conversationId });
+    } catch (error) {
+      functions.logger.error('Failed to clean up group conversation', {
+        groupId,
+        conversationId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    const bucket = admin.storage().bucket();
+    const prefixes = [storagePrefix('conversationAttachment', { conversationId })];
+    if (typeof ownerId === 'string' && ownerId.length > 0 && !ownerId.includes('/')) {
+      prefixes.push(storagePrefix('groupIcon', { userId: ownerId, groupId }));
+    }
+
+    for (const prefix of prefixes) {
+      try {
+        await bucket.deleteFiles({ prefix, force: true });
+      } catch (error) {
+        functions.logger.warn('Failed to clean up group storage prefix', {
+          groupId,
+          prefix,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   });
 

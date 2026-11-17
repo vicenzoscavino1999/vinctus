@@ -143,7 +143,10 @@ final class GroupCardViewModel: ObservableObject {
   }
 
   func loadStatus(uid: String?) async {
-    guard let uid else { return }
+    guard let uid else {
+      status = nil
+      return
+    }
     status = try? await repo.membershipStatus(groupID: group.id, ownerID: group.ownerID, uid: uid)
   }
 
@@ -227,7 +230,10 @@ final class GroupDetailViewModel: ObservableObject {
 
   /// Needs the detail loaded first, to know the owner.
   func loadMembership(uid: String?) async {
-    guard let uid else { return }
+    guard let uid else {
+      membership = nil
+      return
+    }
     do {
       membership = try await repo.membershipStatus(groupID: groupID, ownerID: detail?.ownerID, uid: uid)
     } catch {
