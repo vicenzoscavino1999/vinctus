@@ -7,7 +7,7 @@ Este archivo conserva el avance por módulos. A partir de conversaciones, revisa
 - [x] Conversaciones de la app nativa: revisión, correcciones y pruebas automatizadas.
 - [x] Conversaciones de la web: correcciones y validación local con Firebase y navegador.
 - [ ] Publicaciones / Comunidad — implementación y CI completadas en ambas versiones ([PR #120](https://github.com/vicenzoscavino1999/vinctus/pull/120)); pendiente despliegue coordinado y prueba en iPhone real.
-- [ ] Perfiles y seguidores — revisión y correcciones aplicadas en backend compartido, web e iOS ([detalle](revision-perfiles-seguidores.md)); validando CI completa antes de pasar al despliegue coordinado y prueba en iPhone real.
+- [ ] Perfiles y seguidores — implementación y CI completadas en ambas versiones ([PR #121](https://github.com/vicenzoscavino1999/vinctus/pull/121), [detalle](revision-perfiles-seguidores.md)); pendiente despliegue coordinado y prueba en iPhone real.
 - [ ] Grupos — ambas versiones.
 - [ ] Historias — ambas versiones.
 - [ ] Descubrir y búsqueda — ambas versiones.
@@ -198,3 +198,13 @@ y convierte las tarjetas de `Publicaciones recientes` del grupo en enlaces a
 `PostDetailView` con su `FeedItem` completo. Con esto queda terminada toda la
 implementación y validación automatizada del módulo; la casilla permanece abierta
 únicamente a la espera del despliegue coordinado y de las pruebas en iPhone real.
+
+## Perfiles y seguidores: implementación y CI completadas
+
+En el [PR #121](https://github.com/vicenzoscavino1999/vinctus/pull/121) ([detalle técnico](revision-perfiles-seguidores.md)), la implementación y la validación automatizada de **Perfiles y seguidores** quedan cerradas tanto en la web como en la app nativa iOS y el backend compartido:
+
+- **Backend compartido**: reconciliación transaccional por `.count()` en `followers`/`following` (`functions/src/followCounts.ts`), validación de bloqueos y preservación de `createdAt` al aceptar solicitudes, limpieza simétrica en servidor mediante `onUserBlockedCreated`, bloqueo de escritura directa sobre contadores de perfil y límites de campos vinculados en `shared/firestore-contract.json` y `firestore.rules`.
+- **Web (`src`)**: limpieza explícita con `null` y reinicio limpio al reabrir `EditProfileModal`, respeto de MIME real al subir avatar, separación de solicitudes entrantes frente a seguimiento saliente y comprobación/desbloqueo en `UserProfilePage`, manejo de `PERMISSION_DENIED` y filtrado de bloqueados en `FollowListPage`, y eliminación de contribuciones con borrado en Storage.
+- **App nativa iOS (`ios-native/VinctusNative`)**: lectura de estado en servidor con retry explícito en `FollowButton`, transacciones de seguimiento respetando privacidad y `createdAt`, detección concurrente al cancelar/aceptar solicitudes, aislamiento por sesión/perfil en `ProfileView` y manejo explícito de errores/rollback en `FollowListView` y `EditProfileSheet`.
+
+En el commit `83448f4` pasaron completas tanto `CI` (`44028606410`: 517 pruebas web, 81 pruebas API/Functions, 83 pruebas de reglas, 13+13 pruebas reales de contadores/lecturas, build, Lighthouse y 12 flujos E2E en Chromium sin reintentos) como `iOS native` (`44028606337`: compilación `ReleaseProd`, suite unitaria y `passed: 35 failed: 0` de integración con emuladores Firebase). La casilla permanece sin marcar únicamente hasta ejecutar en la etapa final el despliegue coordinado (`staging` + reglas + Cloud Functions + web + TestFlight) y las pruebas en iPhone real.

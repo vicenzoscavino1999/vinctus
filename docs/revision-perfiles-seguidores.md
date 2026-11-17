@@ -20,8 +20,9 @@ Módulo revisado y corregido de extremo a extremo siguiendo el plan por módulos
 
 ### 2. Web (`src`)
 
-- **Edición y foto de perfil (`EditProfileModal.tsx`, `profile/api/types.ts`, `profile/api/mutations.ts`, `shared/lib/firestore/profile.ts`, `shared/lib/firestore/sharedTypes.ts`, `shared/lib/storage.ts`)**:
+- **Edición y foto de perfil (`EditProfileModal.tsx`, `ProfilePage.tsx`, `profile/api/types.ts`, `profile/api/mutations.ts`, `shared/lib/firestore/profile.ts`, `shared/lib/firestore/sharedTypes.ts`, `shared/lib/storage.ts`)**:
   - Permite limpiar explícitamente `bio`, `role` y `location` enviando `null` (en lugar de `undefined`), exige nombre no vacío y respeta límites de `LIMITS.profile` en el formulario y el esquema Zod.
+  - `EditProfileModal` reinicia su estado de carga al cerrarse/reabrirse e ignora respuestas tardías al desmontar o cambiar de usuario, y `ProfilePage` lo monta solo mientras está abierto, evitando que al reabrir rápido se muestre o guarde texto obsoleto de la sesión anterior.
   - `uploadProfilePhoto` respeta el `contentType` real de la imagen comprimida (`image/webp`, `image/jpeg`, `image/png`, `image/gif`) en lugar de forzar `image/jpeg`.
 - **Estado de seguimiento, perfil ajeno y listas (`shared/lib/firestore/follows.ts`, `UserProfilePage.tsx`, `FollowListPage.tsx`, `profile/api/queries.ts`)**:
   - `getFollowStatus` preserva solicitudes entrantes (`hasIncomingRequest` / `incomingRequestId`) aun cuando el usuario ya sigue al solicitante o cuando el perfil visitado es público.
@@ -45,14 +46,21 @@ Módulo revisado y corregido de extremo a extremo siguiendo el plan por módulos
 
 ## Validación ejecutada
 
-- Local (Windows):
-  - `npm run contract:check` y `vitest` de contrato: `77/77` pruebas aprobadas.
-  - `npm run functions:build` y `npm run test:api`: compilación limpia y `81/81` pruebas aprobadas (incluidas 4 nuevas en `functions/src/followCounts.test.ts`).
-  - `eslint` sobre `src`, `functions`, `e2e`, `scripts`, `api` + `check:cycles` + `check:stubs` + `check:raw-onsnapshot` + `metrics:phase6:gate`: todo aprobado.
-  - `npm run test:run`: `72` archivos / `516` pruebas aprobadas (incluidas `follows.test.ts` y `ProfileAndFollowFlows.test.tsx`).
-  - `npm run build`: `tsc --noEmit` + `vite build` sin errores.
-- En curso / pendiente de confirmación en GitHub Actions (`CI` + `iOS native`):
-  - Reglas de Firestore (`firestore.rules.cases.ts`), triggers reales en emulador (`scripts/follow-counts.integration.test.mjs`), E2E Playwright (`e2e/profiles-followers.spec.ts`) y compilación/pruebas unitarias/integración de iOS en macOS.
+- **Local (Windows)** tras la corrección final de código (`83448f4`):
+  - `npx tsc --noEmit` y `npm run build`: compilación limpia (`dist` + PWA).
+  - `npm run test:run`: `72` archivos / `517` pruebas aprobadas (incluidas `follows.test.ts` y `ProfileAndFollowFlows.test.tsx`).
+  - `eslint` sobre archivos modificados, `npm run contract:check` (`77/77` en `firestoreContract.test.ts`), `npm run functions:build`, `npm run test:api` (`81/81`), `check:cycles`, `check:stubs`, `check:raw-onsnapshot` y `metrics:phase6:gate` aprobados en el desarrollo de la rama.
+- **GitHub Actions `CI` (`44028606410`, commit `83448f4`) — `success`**:
+  - `cost-gates`, `lint`, `typecheck`, `build`, `lhci`: todos en verde.
+  - `test`: `72` archivos / `517` pruebas web (`npm run test:run`) y `11` archivos / `81` pruebas API/Functions (`npm run test:api`, incluidas 4 en `functions/src/followCounts.test.ts`).
+  - `rules`: `3` archivos / `83` pruebas de reglas Firestore/Storage aprobadas (`firestore.rules.cases.ts`).
+  - `post-counts`: `13/13` aprobadas en `test:post-counts` (incluidos triggers reales de seguidores/bloqueos en `scripts/follow-counts.integration.test.mjs`) y `13/13` en `test:post-reads`.
+  - `e2e`: `12 passed (3.4m)` en Chromium contra emuladores Firebase sin reintentos ni `flaky` (incluido `@smoke editar perfil con limpieza de bio y flujo seguir/dejar de seguir` en `e2e/profiles-followers.spec.ts`).
+- **GitHub Actions `iOS native` (`44028606337`, commit `83448f4`) — `success`**:
+  - `ios-native`: compilación `ReleaseProd` + suite unitaria (`xcodebuild test`) en macOS aprobadas.
+  - `ios-native-integration`: `passed: 35 failed: 0` contra emuladores Firebase (`SocialIntegrationTests`, `ProfileAndPostsIntegrationTests`, `GroupsAndCollectionsIntegrationTests`, etc.).
+- **GitHub Actions `iOS screenshots` (`44020660770`, commit `cfc12cc`) — `success`**:
+  - Capturas visuales iOS generadas sin errores.
 
 ## Pendiente para cierre definitivo del módulo
 
