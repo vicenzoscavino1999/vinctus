@@ -246,10 +246,10 @@ struct ProfileContributionsSection: View {
             .lineLimit(3)
         }
         HStack(spacing: VinctusTokens.Spacing.md) {
-          if let link = item.link, let url = URL(string: link) {
+          if let url = Self.safeWebURL(item.link) {
             Button("Abrir enlace") { openURL(url) }
           }
-          if let file = item.fileURL, let url = URL(string: file) {
+          if let url = Self.safeWebURL(item.fileURL) {
             Button(item.fileName ?? "Ver archivo") { openURL(url) }
               .lineLimit(1)
           }
@@ -263,6 +263,18 @@ struct ProfileContributionsSection: View {
       }
     }
     .padding(.vertical, 6)
+  }
+
+  static func safeWebURL(_ rawValue: String?) -> URL? {
+    guard
+      let rawValue = FirestoreValue.string(rawValue),
+      let url = URL(string: rawValue),
+      let scheme = url.scheme?.lowercased(),
+      scheme == "http" || scheme == "https"
+    else {
+      return nil
+    }
+    return url
   }
 }
 

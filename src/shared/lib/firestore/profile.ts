@@ -42,10 +42,10 @@ interface UserProfileReadModel {
 interface UserProfileUpdateInput {
   displayName?: string;
   photoURL?: string | null;
-  bio?: string;
-  role?: string;
-  location?: string;
-  username?: string;
+  bio?: string | null;
+  role?: string | null;
+  location?: string | null;
+  username?: string | null;
 }
 
 interface NotificationSettingsInput {
@@ -251,7 +251,8 @@ export async function getUserProfile(uid: string): Promise<UserProfileReadModel 
         ? publicData.karmaGlobal
         : undefined;
   const karmaByInterest = (privateData?.karmaByInterest ?? publicData?.karmaByInterest) as
-    Record<string, number> | undefined;
+    | Record<string, number>
+    | undefined;
 
   // 4. Merge data (private first, complement with public)
   return {

@@ -17,6 +17,12 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { messageReportKey, moderateUserText, newlyMatchedTerms } from './moderation';
 import { clearLastMessagePreview } from './moderationActions';
 import { reconcileUserPostCount } from './postCounts';
+import {
+  acceptFollowRequestInTransaction,
+  cleanupFollowStateOnBlock,
+  reconcileUserFollowersCount,
+  reconcileUserFollowingCount,
+} from './followCounts';
 import { reconcilePostLikes, reconcilePostComments } from './postEngagementCounts';
 import {
   ABANDONED_POST_STATUS,
@@ -504,48 +510,8 @@ async function handleArenaDebateLikeChange(
 }
 
 // ==========================================================
-// FOLLOW COUNTERS (With Deduplication)
+// FOLLOW COUNTERS (Reconciled from subcollection counts)
 // ==========================================================
-
-async function deduplicatedUserCounterUpdate(
-  eventId: string,
-  userId: string,
-  field: string,
-  delta: number,
-): Promise<void> {
-  const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(eventId);
-  const userRef = db.doc(`${COLLECTIONS.users}/${userId}`);
-  const publicRef = db.doc(`${COLLECTIONS.usersPublic}/${userId}`);
-
-  await db.runTransaction(async (tx) => {
-    const dedupDoc = await tx.get(dedupRef);
-
-    if (dedupDoc.exists) {
-      functions.logger.info('Event already processed, skipping', { eventId });
-      return;
-    }
-
-    const userSnap = await tx.get(userRef);
-    if (!userSnap.exists) {
-      tx.create(dedupRef, {
-        createdAt: FieldValue.serverTimestamp(),
-        processedAt: new Date().toISOString(),
-      });
-      functions.logger.warn('User document missing for counter update', { userId, field });
-      return;
-    }
-
-    const currentValue = (userSnap.data()?.[field] ?? 0) as number;
-    const nextValue = Math.max(0, currentValue + delta);
-
-    tx.create(dedupRef, {
-      createdAt: FieldValue.serverTimestamp(),
-      processedAt: new Date().toISOString(),
-    });
-    tx.set(userRef, { [field]: nextValue }, { merge: true });
-    tx.set(publicRef, { [field]: nextValue }, { merge: true });
-  });
-}
 
 export const onUserFollowerCreated = functions.firestore
   .document(`${COLLECTIONS.users}/{uid}/${SUBCOLLECTIONS.followers}/{followerUid}`)
@@ -555,9 +521,9 @@ export const onUserFollowerCreated = functions.firestore
 
     try {
       functions.logger.info('Follower added', { uid, followerUid, eventId });
-      await deduplicatedUserCounterUpdate(eventId, uid, 'followersCount', 1);
+      await reconcileUserFollowersCount(db, uid);
     } catch (error) {
-      functions.logger.error('Failed to increment followersCount', {
+      functions.logger.error('Failed to reconcile followersCount on create', {
         uid,
         followerUid,
         eventId,
@@ -625,9 +591,9 @@ export const onUserFollowerDeleted = functions.firestore
 
     try {
       functions.logger.info('Follower removed', { uid, followerUid, eventId });
-      await deduplicatedUserCounterUpdate(eventId, uid, 'followersCount', -1);
+      await reconcileUserFollowersCount(db, uid);
     } catch (error) {
-      functions.logger.error('Failed to decrement followersCount', {
+      functions.logger.error('Failed to reconcile followersCount on delete', {
         uid,
         followerUid,
         eventId,
@@ -644,9 +610,9 @@ export const onUserFollowingCreated = functions.firestore
 
     try {
       functions.logger.info('Following added', { uid, targetUid, eventId });
-      await deduplicatedUserCounterUpdate(eventId, uid, 'followingCount', 1);
+      await reconcileUserFollowingCount(db, uid);
     } catch (error) {
-      functions.logger.error('Failed to increment followingCount', {
+      functions.logger.error('Failed to reconcile followingCount on create', {
         uid,
         targetUid,
         eventId,
@@ -663,9 +629,9 @@ export const onUserFollowingDeleted = functions.firestore
 
     try {
       functions.logger.info('Following removed', { uid, targetUid, eventId });
-      await deduplicatedUserCounterUpdate(eventId, uid, 'followingCount', -1);
+      await reconcileUserFollowingCount(db, uid);
     } catch (error) {
-      functions.logger.error('Failed to decrement followingCount', {
+      functions.logger.error('Failed to reconcile followingCount on delete', {
         uid,
         targetUid,
         eventId,
@@ -693,46 +659,41 @@ export const onFollowRequestUpdated = functions.firestore
     }
 
     try {
-      const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(eventId);
-      const followerRef = db.doc(
-        `${COLLECTIONS.users}/${toUid}/${SUBCOLLECTIONS.followers}/${fromUid}`,
-      );
-      const followingRef = db.doc(
-        `${COLLECTIONS.users}/${fromUid}/${SUBCOLLECTIONS.following}/${toUid}`,
-      );
-
-      await db.runTransaction(async (tx) => {
-        const dedupDoc = await tx.get(dedupRef);
-        if (dedupDoc.exists) {
-          functions.logger.info('Event already processed, skipping', { eventId });
-          return;
-        }
-
-        tx.create(dedupRef, {
-          createdAt: FieldValue.serverTimestamp(),
-          processedAt: new Date().toISOString(),
+      const outcome = await acceptFollowRequestInTransaction(db, fromUid, toUid);
+      if (outcome !== 'accepted') {
+        functions.logger.info('Skipped follow edges on request acceptance', {
+          requestId: context.params.requestId,
+          fromUid,
+          toUid,
+          outcome,
+          eventId,
         });
-        tx.set(
-          followerRef,
-          {
-            uid: fromUid,
-            createdAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
-        tx.set(
-          followingRef,
-          {
-            uid: toUid,
-            createdAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
-      });
+        if (outcome === 'blocked') {
+          await change.after.ref.delete().catch(() => undefined);
+        }
+      }
     } catch (error) {
       functions.logger.error('Failed to accept follow request', {
         fromUid,
         toUid,
+        eventId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+export const onUserBlockedCreated = functions.firestore
+  .document(`${COLLECTIONS.users}/{uid}/${SUBCOLLECTIONS.blockedUsers}/{blockedUid}`)
+  .onCreate(async (_snap, context) => {
+    const { uid, blockedUid } = context.params;
+    const eventId = context.eventId;
+
+    try {
+      await cleanupFollowStateOnBlock(db, uid, blockedUid);
+    } catch (error) {
+      functions.logger.error('Failed to clean up follow state on block', {
+        uid,
+        blockedUid,
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });

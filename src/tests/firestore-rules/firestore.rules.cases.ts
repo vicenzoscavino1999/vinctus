@@ -835,4 +835,180 @@ describe('Firestore Rules - critical access controls', () => {
       }),
     );
   });
+
+  it('protects user counters and validates profile text limits on users and users_public', async () => {
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      const base = {
+        uid: 'user_a',
+        displayName: 'Alice',
+        reputation: 0,
+        karmaGlobal: 0,
+        karmaByInterest: {},
+        followersCount: 3,
+        followingCount: 2,
+        postsCount: 1,
+      };
+      await db.doc('users/user_a').set(base);
+      await db.doc('users_public/user_a').set(base);
+    });
+
+    const userAdb = env.authenticatedContext('user_a').firestore();
+    await assertFails(userAdb.doc('users/user_a').update({ followersCount: 99 }));
+    await assertFails(userAdb.doc('users_public/user_a').update({ followingCount: 99 }));
+    await assertFails(userAdb.doc('users/user_a').update({ postsCount: 99 }));
+    await assertFails(userAdb.doc('users/user_a').update({ bio: 'x'.repeat(501) }));
+    await assertFails(userAdb.doc('users_public/user_a').update({ displayName: 'x'.repeat(121) }));
+
+    await assertSucceeds(
+      userAdb.doc('users/user_a').update({
+        displayName: 'Alice Actualizada',
+        bio: null,
+        role: null,
+        location: null,
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      userAdb.doc('users_public/user_a').update({
+        displayName: 'Alice Actualizada',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    await assertFails(
+      userAdb.doc('users/user_new_bad').set({
+        uid: 'user_new_bad',
+        followersCount: 10,
+      }),
+    );
+  });
+
+  it('enforces blocks, self-follow denial, list privacy, and strict follow_request transitions', async () => {
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('users_public/user_a').set({ uid: 'user_a', accountVisibility: 'public' });
+      await db.doc('users_public/user_b').set({ uid: 'user_b', accountVisibility: 'private' });
+      await db.doc('users_public/user_c').set({ uid: 'user_c', accountVisibility: 'public' });
+      await db
+        .doc('users_public/user_blocked')
+        .set({ uid: 'user_blocked', accountVisibility: 'public' });
+    });
+    await seedBlockedUser('user_b', 'user_blocked');
+    await seedBlockedUser('user_c', 'user_blocked');
+    await seedFollower('user_c', 'user_a');
+
+    const blockedDb = env.authenticatedContext('user_blocked').firestore();
+    const userAdb = env.authenticatedContext('user_a').firestore();
+    const userBdb = env.authenticatedContext('user_b').firestore();
+
+    // Blocked user cannot send follow request, create public follow, or view follow lists.
+    await assertFails(
+      blockedDb.doc('follow_requests/user_blocked_user_b').set({
+        fromUid: 'user_blocked',
+        toUid: 'user_b',
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      blockedDb.doc('users/user_c/followers/user_blocked').set({
+        uid: 'user_blocked',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(blockedDb.collection('users/user_c/followers').get());
+
+    // Self-follow and phantom target follow are denied.
+    await assertFails(
+      userAdb.doc('users/user_a/followers/user_a').set({
+        uid: 'user_a',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      userAdb.doc('users/ghost_uid/followers/user_a').set({
+        uid: 'user_a',
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Valid follow edge cannot mutate createdAt on update.
+    await assertSucceeds(
+      userAdb.doc('users/user_a/following/user_c').set({
+        uid: 'user_c',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      userAdb.doc('users/user_a/following/user_c').update({
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Follow request lifecycle: pending -> declined -> pending -> accepted; accepted cannot be flipped.
+    await assertSucceeds(
+      userAdb.doc('follow_requests/user_a_user_b').set({
+        fromUid: 'user_a',
+        toUid: 'user_b',
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      userBdb.doc('follow_requests/user_a_user_b').update({
+        status: 'declined',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      userBdb.doc('follow_requests/user_a_user_b').update({
+        status: 'accepted',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      userAdb.doc('follow_requests/user_a_user_b').update({
+        status: 'pending',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      userBdb.doc('follow_requests/user_a_user_b').update({
+        status: 'accepted',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    // While still following (seed follower edge), requester cannot revert accepted -> pending.
+    await seedFollower('user_b', 'user_a');
+    await assertFails(
+      userAdb.doc('follow_requests/user_a_user_b').update({
+        status: 'pending',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    // After unfollowing, re-requesting from accepted tombstone is permitted.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc('users/user_b/followers/user_a').delete();
+    });
+    await assertSucceeds(
+      userAdb.doc('follow_requests/user_a_user_b').update({
+        status: 'pending',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    // Self-blocking is denied.
+    await assertFails(
+      userAdb.doc('users/user_a/blockedUsers/user_a').set({
+        blockedUid: 'user_a',
+        status: 'active',
+        blockedAt: serverTimestamp(),
+      }),
+    );
+  });
 });

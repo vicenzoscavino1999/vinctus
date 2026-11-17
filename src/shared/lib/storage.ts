@@ -7,7 +7,7 @@ import {
   deleteObject,
 } from 'firebase/storage';
 import { storage } from './firebase';
-import { STORAGE_PATHS } from './firestore/firestoreContract';
+import { STORAGE_CONTENT_TYPES, STORAGE_PATHS } from './firestore/firestoreContract';
 import { validateChatFile } from './chat-media';
 import { validatePostFile } from './post-media';
 
@@ -553,7 +553,8 @@ export function uploadProfilePhoto(
       filename: `${Date.now()}_${safeName}`,
     });
     const storageRef = ref(storage, storagePath);
-    const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'image/jpeg');
+    const contentType = STORAGE_CONTENT_TYPES.image.includes(file.type) ? file.type : 'image/jpeg';
+    const uploadTask = uploadBytesResumableWithCache(storageRef, file, contentType);
 
     uploadTask.on(
       'state_changed',

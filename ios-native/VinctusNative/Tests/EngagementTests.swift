@@ -196,13 +196,25 @@ final class FollowViewModelTests: XCTestCase {
     XCTAssertFalse(vm.isSaving)
   }
 
-  func testAFailedStatusLoadMeansNotFollowing() async {
+  func testAFailedStatusLoadEntersRetryStateAndRecoversOnRetry() async {
     let repo = FakeEngagementRepo()
     repo.fails = true
     let vm = FollowViewModel(targetUID: "u2", repo: repo)
 
     await vm.load()
 
-    XCTAssertEqual(vm.status, FollowStatus.none)
+    XCTAssertNil(vm.status)
+    XCTAssertTrue(vm.loadFailed)
+    XCTAssertEqual(vm.title, "Reintentar")
+    XCTAssertNotNil(vm.errorMessage)
+
+    repo.fails = false
+    repo.status = .following
+    await vm.load()
+
+    XCTAssertEqual(vm.status, .following)
+    XCTAssertFalse(vm.loadFailed)
+    XCTAssertNil(vm.errorMessage)
+    XCTAssertEqual(vm.title, "Siguiendo")
   }
 }

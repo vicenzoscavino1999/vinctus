@@ -14,6 +14,7 @@ final class FakeProfileContentRepo: ProfileContentRepo {
   var removedDebateIDs: [String] = []
   var deletedContributionIDs: [String] = []
   var failsToLoad = false
+  var failsToLoadRequests = false
   var failsToWrite = false
   var fetchFollowListCalls = 0
 
@@ -31,7 +32,7 @@ final class FakeProfileContentRepo: ProfileContentRepo {
   }
 
   func fetchIncomingFollowRequests() async throws -> [IncomingFollowRequest] {
-    if failsToLoad { throw FakeError() }
+    if failsToLoad || failsToLoadRequests { throw FakeError() }
     return incomingRequests
   }
 

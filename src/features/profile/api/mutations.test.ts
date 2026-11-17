@@ -2,11 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppError } from '@/shared/lib/errors';
 import {
   acceptFollowRequest,
+  blockUser,
   createContribution,
+  deleteContribution,
   followCategoryWithSync,
   getOrCreateDirectConversation,
   saveCategoryWithSync,
   sendFollowRequest,
+  unblockUser,
   unfollowCategoryWithSync,
   updateContributionFile,
   updateUserProfile,
@@ -14,14 +17,17 @@ import {
 
 vi.mock('@/shared/lib/firestore', () => ({
   acceptFollowRequest: vi.fn(),
+  blockUser: vi.fn(),
   cancelFollowRequest: vi.fn(),
   createContribution: vi.fn(),
   declineFollowRequest: vi.fn(),
+  deleteContribution: vi.fn(),
   followCategoryWithSync: vi.fn(),
   followPublicUser: vi.fn(),
   getOrCreateDirectConversation: vi.fn(),
   saveCategoryWithSync: vi.fn(),
   sendFollowRequest: vi.fn(),
+  unblockUser: vi.fn(),
   unfollowCategoryWithSync: vi.fn(),
   unfollowUser: vi.fn(),
   unsaveCategoryWithSync: vi.fn(),
@@ -29,7 +35,12 @@ vi.mock('@/shared/lib/firestore', () => ({
   updateUserProfile: vi.fn(),
 }));
 
+vi.mock('@/shared/lib/storage', () => ({
+  deleteCollectionFile: vi.fn(),
+}));
+
 const firestore = await import('@/shared/lib/firestore');
+const storage = await import('@/shared/lib/storage');
 
 describe('profile api mutations', () => {
   beforeEach(() => {
@@ -56,12 +67,47 @@ describe('profile api mutations', () => {
 
     expect(firestore.updateUserProfile).toHaveBeenCalledWith('user_1', {
       displayName: 'Ana',
-      bio: undefined,
+      bio: null,
       role: 'Dev',
       location: undefined,
       photoURL: undefined,
       username: undefined,
     });
+  });
+
+  it('deletes contribution storage attachment before removing the document', async () => {
+    vi.mocked(storage.deleteCollectionFile).mockResolvedValueOnce();
+    vi.mocked(firestore.deleteContribution).mockResolvedValueOnce();
+
+    await expect(
+      deleteContribution('contrib_1', 'contributions/user_1/contrib_1/doc.pdf'),
+    ).resolves.toBeUndefined();
+    expect(storage.deleteCollectionFile).toHaveBeenCalledWith(
+      'contributions/user_1/contrib_1/doc.pdf',
+    );
+    expect(firestore.deleteContribution).toHaveBeenCalledWith('contrib_1');
+  });
+
+  it('deletes contribution document even when storage attachment is already missing', async () => {
+    vi.mocked(storage.deleteCollectionFile).mockRejectedValueOnce({
+      code: 'storage/object-not-found',
+    });
+    vi.mocked(firestore.deleteContribution).mockResolvedValueOnce();
+
+    await expect(
+      deleteContribution('contrib_2', 'contributions/user_1/contrib_2/missing.pdf'),
+    ).resolves.toBeUndefined();
+    expect(firestore.deleteContribution).toHaveBeenCalledWith('contrib_2');
+  });
+
+  it('validates block and unblock user ids', async () => {
+    vi.mocked(firestore.blockUser).mockResolvedValueOnce();
+    vi.mocked(firestore.unblockUser).mockResolvedValueOnce();
+
+    await expect(blockUser('user_1', 'user_2')).resolves.toBeUndefined();
+    await expect(unblockUser('user_1', 'user_2')).resolves.toBeUndefined();
+    expect(firestore.blockUser).toHaveBeenCalledWith('user_1', 'user_2');
+    expect(firestore.unblockUser).toHaveBeenCalledWith('user_1', 'user_2');
   });
 
   it('validates and normalizes contribution creation', async () => {

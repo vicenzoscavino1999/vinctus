@@ -75,8 +75,9 @@ final class PostReactionViewModel: ObservableObject {
 /// State of the follow button on another user's profile. Private accounts get a follow request.
 @MainActor
 final class FollowViewModel: ObservableObject {
-  /// nil until loaded.
+  /// nil until loaded (or when status verification failed).
   @Published private(set) var status: FollowStatus?
+  @Published private(set) var loadFailed = false
   @Published private(set) var isSaving = false
   @Published private(set) var errorMessage: String?
 
@@ -89,6 +90,9 @@ final class FollowViewModel: ObservableObject {
   }
 
   var title: String {
+    if loadFailed {
+      return "Reintentar"
+    }
     switch status {
     case .some(.following):
       return "Siguiendo"
@@ -100,7 +104,15 @@ final class FollowViewModel: ObservableObject {
   }
 
   func load() async {
-    status = (try? await repo.followStatus(targetUID: targetUID)) ?? FollowStatus.none
+    loadFailed = false
+    errorMessage = nil
+    do {
+      status = try await repo.followStatus(targetUID: targetUID)
+    } catch {
+      status = nil
+      loadFailed = true
+      errorMessage = "No se pudo verificar el estado de seguimiento."
+    }
   }
 
   /// Follows (or asks to follow a private account), or undoes the follow or the request.

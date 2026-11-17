@@ -456,11 +456,13 @@ const ProfilePage = () => {
       {activeSection === 'collections' && <CollectionsPanel />}
 
       {/* Edit Profile Modal */}
-      <EditProfileModal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        onSave={handleProfileSaved}
-      />
+      {isEditModalOpen && (
+        <EditProfileModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          onSave={handleProfileSaved}
+        />
+      )}
     </div>
   );
 };

@@ -72,11 +72,36 @@
     "profile": {
       "displayNameMaxLength": {
         "value": 120,
-        "doc": "Profile display name (userProfileUpdateSchema)."
+        "doc": "Profile display name (userProfileUpdateSchema).",
+        "rules": [
+          { "in": "isValidProfileTextFieldsOnCreate", "field": "data.displayName" },
+          { "in": "isValidProfileTextUpdate", "field": "data.displayName" }
+        ]
       },
-      "roleMaxLength": { "value": 120, "doc": "Profile role (userProfileUpdateSchema)." },
-      "bioMaxLength": { "value": 500, "doc": "Profile bio (userProfileUpdateSchema)." },
-      "locationMaxLength": { "value": 120, "doc": "Profile location (userProfileUpdateSchema)." }
+      "roleMaxLength": {
+        "value": 120,
+        "doc": "Profile role (userProfileUpdateSchema).",
+        "rules": [
+          { "in": "isValidProfileTextFieldsOnCreate", "field": "data.role" },
+          { "in": "isValidProfileTextUpdate", "field": "data.role" }
+        ]
+      },
+      "bioMaxLength": {
+        "value": 500,
+        "doc": "Profile bio (userProfileUpdateSchema).",
+        "rules": [
+          { "in": "isValidProfileTextFieldsOnCreate", "field": "data.bio" },
+          { "in": "isValidProfileTextUpdate", "field": "data.bio" }
+        ]
+      },
+      "locationMaxLength": {
+        "value": 120,
+        "doc": "Profile location (userProfileUpdateSchema).",
+        "rules": [
+          { "in": "isValidProfileTextFieldsOnCreate", "field": "data.location" },
+          { "in": "isValidProfileTextUpdate", "field": "data.location" }
+        ]
+      }
     },
     "aiChat": {
       "messageMaxLength": {

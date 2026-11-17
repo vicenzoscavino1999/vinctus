@@ -40,10 +40,15 @@ service cloud.firestore {
     }
 
     function canViewFollowLists(viewerUid, ownerUid) {
-      return isAccountPublic(ownerUid)
-        || viewerUid == ownerUid
-        || isFriend(viewerUid, ownerUid)
-        || isFollower(viewerUid, ownerUid);
+      return viewerUid == ownerUid
+        || (
+          !isConversationBlocked(viewerUid, ownerUid)
+          && (
+            isAccountPublic(ownerUid)
+            || isFriend(viewerUid, ownerUid)
+            || isFollower(viewerUid, ownerUid)
+          )
+        );
     }
 
     function isAccountPrivate(uid) {
@@ -55,6 +60,11 @@ service cloud.firestore {
 
     function isAccountPublic(uid) {
       return !isAccountPrivate(uid);
+    }
+
+    function canFollowPublicUser(uid) {
+      return exists(/databases/$(database)/documents/users_public/$(uid))
+        && isAccountPublic(uid);
     }
 
     function isValidFollowDoc(uid) {
@@ -148,6 +158,35 @@ service cloud.firestore {
           && request.resource.data.karmaByInterest == resource.data.karmaByInterest
         );
     }
+
+    function isUserCountersValidOnCreate() {
+      let data = request.resource.data;
+      return (!('followersCount' in data) || data.followersCount == null || data.followersCount == 0)
+        && (!('followingCount' in data) || data.followingCount == null || data.followingCount == 0)
+        && (!('postsCount' in data) || data.postsCount == null || data.postsCount == 0);
+    }
+
+    function isUserCountersUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['followersCount', 'followingCount', 'postsCount']);
+    }
+
+    function isValidProfileTextFieldsOnCreate() {
+      let data = request.resource.data;
+      return (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 120))
+        && (!('role' in data) || data.role == null || (data.role is string && data.role.size() <= 120))
+        && (!('bio' in data) || data.bio == null || (data.bio is string && data.bio.size() <= 500))
+        && (!('location' in data) || data.location == null || (data.location is string && data.location.size() <= 120));
+    }
+
+    function isValidProfileTextUpdate() {
+      let data = request.resource.data;
+      let changed = data.diff(resource.data).affectedKeys();
+      return (!changed.hasAny(['displayName']) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 120))
+        && (!changed.hasAny(['role']) || data.role == null || (data.role is string && data.role.size() <= 120))
+        && (!changed.hasAny(['bio']) || data.bio == null || (data.bio is string && data.bio.size() <= 500))
+        && (!changed.hasAny(['location']) || data.location == null || (data.location is string && data.location.size() <= 120));
+    }
     
     // ==================== User Data Collections ====================
 
@@ -155,8 +194,14 @@ service cloud.firestore {
     // User profile document
     match /users/{uid} {
       allow read: if isOwner(uid);
-      allow create: if isOwner(uid) && isKarmaFieldsValidOnCreate();
-      allow update: if isOwner(uid) && isKarmaFieldsUnchanged();
+      allow create: if isOwner(uid)
+        && isKarmaFieldsValidOnCreate()
+        && isUserCountersValidOnCreate()
+        && isValidProfileTextFieldsOnCreate();
+      allow update: if isOwner(uid)
+        && isKarmaFieldsUnchanged()
+        && isUserCountersUnchanged()
+        && isValidProfileTextUpdate();
       allow delete: if isOwner(uid);
     }
 
@@ -164,8 +209,14 @@ service cloud.firestore {
     // Public user profile for search
     match /users_public/{uid} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(uid) && isKarmaFieldsValidOnCreate();
-      allow update: if isOwner(uid) && isKarmaFieldsUnchanged();
+      allow create: if isOwner(uid)
+        && isKarmaFieldsValidOnCreate()
+        && isUserCountersValidOnCreate()
+        && isValidProfileTextFieldsOnCreate();
+      allow update: if isOwner(uid)
+        && isKarmaFieldsUnchanged()
+        && isUserCountersUnchanged()
+        && isValidProfileTextUpdate();
       allow delete: if isOwner(uid);
     }
 
@@ -250,9 +301,11 @@ service cloud.firestore {
 
       allow create: if isAuthenticated()
         && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUid is string
         && request.resource.data.toUid != request.auth.uid
         && requestId == request.resource.data.fromUid + '_' + request.resource.data.toUid
         && isAccountPrivate(request.resource.data.toUid)
+        && !isConversationBlocked(request.auth.uid, request.resource.data.toUid)
         && request.resource.data.keys().hasOnly(['fromUid', 'toUid', 'status', 'createdAt', 'updatedAt'])
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt == request.time
@@ -265,9 +318,21 @@ service cloud.firestore {
         && request.resource.data.toUid == resource.data.toUid
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.updatedAt == request.time
+        && !isConversationBlocked(resource.data.fromUid, resource.data.toUid)
         && (
-          (resource.data.toUid == request.auth.uid && request.resource.data.status in ['accepted', 'declined'])
-          || (resource.data.fromUid == request.auth.uid && request.resource.data.status == 'pending')
+          (
+            resource.data.toUid == request.auth.uid
+            && resource.data.status == 'pending'
+            && request.resource.data.status in ['accepted', 'declined']
+          )
+          || (
+            resource.data.fromUid == request.auth.uid
+            && request.resource.data.status == 'pending'
+            && (
+              resource.data.status == 'declined'
+              || (resource.data.status == 'accepted' && !isFollower(resource.data.fromUid, resource.data.toUid))
+            )
+          )
         );
 
       allow delete: if isAuthenticated()
@@ -276,25 +341,33 @@ service cloud.firestore {
 
     // users/{uid}/followers/{followerUid}
     match /users/{uid}/followers/{followerUid} {
-      // Allow followers to read their own follower doc even for private accounts.
+      // Allow followers to read their own follower doc even for private accounts unless blocked.
       allow get: if isAuthenticated()
-        && (canViewFollowLists(request.auth.uid, uid) || request.auth.uid == followerUid);
+        && (
+          canViewFollowLists(request.auth.uid, uid)
+          || (request.auth.uid == followerUid && !isConversationBlocked(request.auth.uid, uid))
+        );
       allow list: if isAuthenticated() && canViewFollowLists(request.auth.uid, uid);
 
-      // Only allow direct follows to public accounts (private handled by server)
+      // Only allow direct follows to existing public accounts (private handled by server).
       allow create: if isAuthenticated()
         && request.auth.uid == followerUid
-        && isAccountPublic(uid)
+        && followerUid != uid
+        && canFollowPublicUser(uid)
+        && !isConversationBlocked(uid, followerUid)
         && isValidFollowDoc(followerUid);
 
       allow delete: if isAuthenticated()
         && (request.auth.uid == followerUid || request.auth.uid == uid);
 
-      // Allow idempotent updates (e.g. duplicate follow attempts) without opening extra fields.
+      // Allow strict no-op idempotent writes only; never overwrite createdAt or bypass blocks.
       allow update: if isAuthenticated()
         && request.auth.uid == followerUid
+        && followerUid != uid
+        && !isConversationBlocked(uid, followerUid)
         && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
-        && request.resource.data.uid == followerUid;
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.createdAt == resource.data.createdAt;
     }
 
     // users/{uid}/following/{targetUid}
@@ -304,18 +377,23 @@ service cloud.firestore {
 
       allow create: if isAuthenticated()
         && request.auth.uid == uid
-        && isAccountPublic(targetUid)
+        && targetUid != uid
+        && canFollowPublicUser(targetUid)
+        && !isConversationBlocked(uid, targetUid)
         && isValidFollowDoc(targetUid);
 
       // Either side can end the relationship: the follower unfollows, or the followed user
       // removes the follower (e.g. when blocking them). Mirrors the followers rule above.
       allow delete: if isAuthenticated()
         && (request.auth.uid == uid || request.auth.uid == targetUid);
-      // Allow idempotent updates (e.g. duplicate follow attempts) without opening extra fields.
+      // Allow strict no-op idempotent writes only; never overwrite createdAt or bypass blocks.
       allow update: if isAuthenticated()
         && request.auth.uid == uid
+        && targetUid != uid
+        && !isConversationBlocked(uid, targetUid)
         && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
-        && request.resource.data.uid == targetUid;
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.createdAt == resource.data.createdAt;
     }
 
     // notifications/{notificationId}
@@ -592,7 +670,13 @@ service cloud.firestore {
     // User's blocked list (private)
     match /users/{uid}/blockedUsers/{blockedUid} {
       allow read: if isOwner(uid);
-      allow create, delete: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && blockedUid != uid
+        && request.resource.data.keys().hasOnly(['blockedUid', 'status', 'blockedAt'])
+        && request.resource.data.blockedUid == blockedUid
+        && request.resource.data.status == 'active'
+        && request.resource.data.blockedAt == request.time;
+      allow delete: if isOwner(uid);
       allow update: if false;
     }
 

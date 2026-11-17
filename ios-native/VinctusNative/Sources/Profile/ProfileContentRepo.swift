@@ -1,6 +1,7 @@
 import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
+import FirebaseStorage
 import Foundation
 
 /// Interest categories, same ids and names as `CATEGORIES` in `src/shared/constants/mockData.ts`.
@@ -310,7 +311,18 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
   }
 
   func deleteContribution(id: String) async throws {
-    try await database().collection(FirestoreCollections.contributions).document(id).delete()
+    let ref = try database().collection(FirestoreCollections.contributions).document(id)
+    if let snapshot = try? await ref.getDocument(),
+       let filePath = FirestoreValue.string(snapshot.data()?["filePath"]) {
+      do {
+        try await Storage.storage().reference(withPath: filePath).delete()
+      } catch let error as NSError where error.domain == StorageErrorDomain && error.code == StorageErrorCode.objectNotFound.rawValue {
+        // Already removed in Storage.
+      } catch {
+        // Ignore best-effort Storage cleanup failures before deleting metadata, matching web.
+      }
+    }
+    try await ref.delete()
   }
 
   // MARK: Followed categories
