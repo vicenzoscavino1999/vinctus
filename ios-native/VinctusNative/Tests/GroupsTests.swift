@@ -82,14 +82,40 @@ final class GroupMembershipTests: XCTestCase {
 
   func testStalePendingRequestJoinsAPublicGroup() async {
     let repo = FakeGroupsRepo()
+    repo.stubDetail = GroupDetail(
+      id: "g1", name: "Física", description: "Charlas", categoryID: "science", ownerID: "owner",
+      visibility: .public, iconURL: nil, memberCount: 3, postsPerWeek: 0,
+      createdAt: nil, updatedAt: nil, recentPosts: [], topMembers: [], isFromCache: false
+    )
     repo.requests = ["me"]
-    let vm = await loadedViewModel(repo)
+    let vm = GroupDetailViewModel(repo: repo, groupID: "g1")
+    await vm.refresh()
+    await vm.loadMembership(uid: "me")
     XCTAssertEqual(vm.membership, .pending)
 
     await vm.performMembershipAction(uid: "me")
 
     XCTAssertEqual(vm.membership, .member)
     XCTAssertEqual(repo.joinCalls, 1)
+  }
+
+  func testPendingRequestOnPrivateGroupDoesNothing() async {
+    let repo = FakeGroupsRepo()
+    repo.stubDetail = GroupDetail(
+      id: "g1", name: "Física", description: "Charlas", categoryID: "science", ownerID: "owner",
+      visibility: .private, iconURL: nil, memberCount: 3, postsPerWeek: 0,
+      createdAt: nil, updatedAt: nil, recentPosts: [], topMembers: [], isFromCache: false
+    )
+    repo.requests = ["me"]
+    let vm = GroupDetailViewModel(repo: repo, groupID: "g1")
+    await vm.refresh()
+    await vm.loadMembership(uid: "me")
+    XCTAssertEqual(vm.membership, .pending)
+
+    await vm.performMembershipAction(uid: "me")
+
+    XCTAssertEqual(vm.membership, .pending)
+    XCTAssertEqual(repo.joinCalls, 0)
   }
 
   func testMemberRoles() {

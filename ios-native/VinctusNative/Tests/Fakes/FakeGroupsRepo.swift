@@ -9,6 +9,7 @@ final class FakeGroupsRepo: GroupsRepo {
   var listedGroups: [GroupSummary] = []
   var failsToList = false
   var requestedLimits: [Int] = []
+  var stubDetail: GroupDetail?
 
   func fetchGroups(limit: Int) async throws -> GroupsPage {
     requestedLimits.append(limit)
@@ -17,7 +18,7 @@ final class FakeGroupsRepo: GroupsRepo {
   }
 
   func fetchGroupDetail(groupID: String, recentPostLimit: Int, topMemberLimit: Int) async throws -> GroupDetail? {
-    nil
+    stubDetail
   }
 
   func isMember(groupID: String, uid: String) async throws -> Bool {
