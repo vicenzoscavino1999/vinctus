@@ -1,4 +1,4 @@
-import FirebaseAuth from FirebaseAuth
+import FirebaseAuth
 import FirebaseFirestore
 import FirebaseStorage
 import XCTest
@@ -18,7 +18,7 @@ final class StoriesIntegrationTests: EmulatorTestCase {
     let ownerMeta = try await Storage.storage().reference(withPath: published.mediaPath).getMetadata()
     XCTAssertGreaterThan(ownerMeta.size, 0)
 
-    let bruno = try await makeUser("Bruno")
+    _ = try await makeUser("Bruno")
     let beforeFollow = try await repo.fetchStoryGroups()
     XCTAssertFalse(beforeFollow.contains(where: { $0.ownerID == ana.uid }))
 
@@ -39,7 +39,7 @@ final class StoriesIntegrationTests: EmulatorTestCase {
     try await FirebaseModerationRepo().report(
       .story(storyID: published.id, ownerID: ana.uid),
       reason: .abuse,
-      details: "Prueba de reporte",
+      details: "Prueba de reporte"
     )
 
     try await FirebaseModerationRepo().blockUser(ana.uid)

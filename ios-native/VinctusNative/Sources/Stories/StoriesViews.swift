@@ -123,8 +123,9 @@ struct StoriesBar: View {
       .buttonStyle(.plain)
       .disabled(ownGroup == nil)
 
+      let isPublishing = vm.isPublishing
       PhotosPicker(selection: $photoItem, matching: .images) {
-        Image(systemName: vm.isPublishing ? "hourglass" : "plus")
+        Image(systemName: isPublishing ? "hourglass" : "plus")
           .font(.system(size: 12, weight: .bold))
           .foregroundStyle(.black)
           .frame(width: 24, height: 24)
@@ -132,7 +133,7 @@ struct StoriesBar: View {
           .clipShape(Circle())
           .overlay(Circle().stroke(VinctusTokens.Color.background, lineWidth: 2))
       }
-      .disabled(vm.isPublishing)
+      .disabled(isPublishing)
       .accessibilityLabel("Agregar historia")
       .offset(x: 2, y: -24)
     }
