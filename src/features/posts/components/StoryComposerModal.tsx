@@ -116,14 +116,14 @@ const StoryComposerModal = ({ isOpen, onClose, onCreated }: StoryComposerModalPr
     setProgress(0);
   }, [user?.uid, setDraftSafe]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
       isMountedRef.current = false;
       revokePreview(draftRef.current);
       draftRef.current = null;
-    },
-    [revokePreview],
-  );
+    };
+  }, [revokePreview]);
 
   useEffect(() => {
     if (!isOpen) return;

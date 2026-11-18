@@ -145,7 +145,7 @@ final class FirebaseStoriesRepo: StoriesRepo {
   /// Mirrors `uploadStoryImage` + `createStory` (paths and fields checked by storage.rules and
   /// `isValidStoryCreate` in firestore.rules).
   func publishImageStory(jpegData: Data) async throws {
-    guard jpegData.count < Limits.StorageMaxBytes.image else { throw StoriesRepoError.imageTooLarge }
+    guard jpegData.count < StorageMaxBytes.image else { throw StoriesRepoError.imageTooLarge }
     let (db, uid) = try context()
     let storyRef = db.collection(FirestoreCollections.stories).document()
     let millis = Int64(Date().timeIntervalSince1970 * 1000)

@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StoryComposerModal from '@/features/posts/components/StoryComposerModal';
@@ -68,6 +69,24 @@ describe('StoryComposerModal', () => {
       'error',
     );
     expect(mockUploadStoryVideo).not.toHaveBeenCalled();
+  });
+
+  it('prepara y habilita la publicación de imagen incluso bajo React StrictMode', async () => {
+    mockImageCompression.mockResolvedValue(new Blob(['webp'], { type: 'image/webp' }));
+    render(
+      <StrictMode>
+        <StoryComposerModal isOpen onClose={vi.fn()} />
+      </StrictMode>,
+    );
+
+    const imageInput = document.querySelector('input[accept*="image"]') as HTMLInputElement;
+    const validImage = new File(['png-bytes'], 'photo.png', { type: 'image/png' });
+
+    fireEvent.change(imageInput, { target: { files: [validImage] } });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Publicar historia/i })).toBeEnabled();
+    });
   });
 
   it('limpia archivos huérfanos en Storage si falla createStory y bloquea cerrar durante la subida', async () => {

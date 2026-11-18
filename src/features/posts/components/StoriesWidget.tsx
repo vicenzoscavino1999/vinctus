@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
@@ -42,21 +42,24 @@ const saveSeenStoryIds = (uid: string | undefined, ids: Set<string>) => {
 const StoriesWidget = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const [composerOpenUid, setComposerOpenUid] = useState<string | null>(null);
   const [viewerState, setViewerState] = useState<{
+    uid: string | null;
     isOpen: boolean;
     initialGroupIndex: number;
     initialStoryIndex: number;
-  }>({ isOpen: false, initialGroupIndex: 0, initialStoryIndex: 0 });
+  }>({ uid: null, isOpen: false, initialGroupIndex: 0, initialStoryIndex: 0 });
   const [seenByUser, setSeenByUser] = useState<{ uid: string | null; ids: Set<string> }>(() => ({
     uid: user?.uid ?? null,
     ids: loadSeenStoryIds(user?.uid),
   }));
 
-  useEffect(() => {
-    setIsComposerOpen(false);
-    setViewerState({ isOpen: false, initialGroupIndex: 0, initialStoryIndex: 0 });
-  }, [user?.uid]);
+  const currentUid = user?.uid ?? null;
+  const isComposerOpen = Boolean(currentUid && composerOpenUid === currentUid);
+  const activeViewerState =
+    viewerState.isOpen && currentUid && viewerState.uid === currentUid
+      ? viewerState
+      : { uid: currentUid, isOpen: false, initialGroupIndex: 0, initialStoryIndex: 0 };
 
   const seenStoryIds = useMemo(() => {
     if ((user?.uid ?? null) === seenByUser.uid) {
@@ -145,6 +148,7 @@ const StoriesWidget = () => {
     const groupIndex = viewerGroups.findIndex((item) => item.ownerId === group.ownerId);
     if (groupIndex < 0) return;
     setViewerState({
+      uid: user.uid,
       isOpen: true,
       initialGroupIndex: groupIndex,
       initialStoryIndex,
@@ -155,7 +159,7 @@ const StoriesWidget = () => {
     if (ownGroup) {
       openViewer(ownGroup);
     } else {
-      setIsComposerOpen(true);
+      setComposerOpenUid(user.uid);
     }
   };
 
@@ -187,7 +191,7 @@ const StoriesWidget = () => {
               )}
             </button>
             <button
-              onClick={() => setIsComposerOpen(true)}
+              onClick={() => setComposerOpenUid(user.uid)}
               className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-amber-500 text-black flex items-center justify-center shadow-md hover:bg-amber-400 transition-colors"
               aria-label="Agregar historia"
             >
@@ -238,7 +242,7 @@ const StoriesWidget = () => {
 
       <StoryComposerModal
         isOpen={isComposerOpen}
-        onClose={() => setIsComposerOpen(false)}
+        onClose={() => setComposerOpenUid(null)}
         onCreated={() => {
           refreshStories().catch(() => {
             showToast('No se pudieron actualizar las historias.', 'warning');
@@ -246,12 +250,12 @@ const StoriesWidget = () => {
         }}
       />
 
-      {viewerState.isOpen && (
+      {activeViewerState.isOpen && (
         <StoryViewerModal
-          isOpen={viewerState.isOpen}
+          isOpen={activeViewerState.isOpen}
           groups={viewerGroups}
-          initialGroupIndex={viewerState.initialGroupIndex}
-          initialStoryIndex={viewerState.initialStoryIndex}
+          initialGroupIndex={activeViewerState.initialGroupIndex}
+          initialStoryIndex={activeViewerState.initialStoryIndex}
           currentUserId={user.uid}
           onStorySeen={markStorySeen}
           onDeleteStory={handleDeleteStory}
@@ -259,6 +263,7 @@ const StoriesWidget = () => {
           onBlockUser={handleBlockUser}
           onClose={() =>
             setViewerState({
+              uid: null,
               isOpen: false,
               initialGroupIndex: 0,
               initialStoryIndex: 0,
