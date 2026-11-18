@@ -11,6 +11,7 @@ import {
 } from '@/features/collaborations/api';
 import {
   acceptGroupJoinRequest,
+  getBlockedUsers,
   getPendingGroupJoinRequests,
   rejectGroupJoinRequest,
   type GroupJoinRequestRead,
@@ -29,6 +30,7 @@ import {
   type PaginatedResult,
 } from '@/features/notifications/api';
 import { useToast } from '@/shared/ui/Toast';
+import { AppError } from '@/shared/lib/errors';
 
 type FollowRequestWithUser = FollowRequestRead & { fromUser: FollowUserRead | null };
 
@@ -83,8 +85,12 @@ const NotificationsPage = () => {
     try {
       setGroupError(null);
       setGroupLoading(true);
-      const data = await getPendingGroupJoinRequests(user.uid);
-      setGroupRequests(data);
+      const [data, blockedUids] = await Promise.all([
+        getPendingGroupJoinRequests(user.uid),
+        getBlockedUsers(user.uid).catch(() => []),
+      ]);
+      const blockedSet = new Set(blockedUids);
+      setGroupRequests(data.filter((req) => !blockedSet.has(req.fromUid)));
     } catch (loadError) {
       console.error('Error loading group requests:', loadError);
       setGroupError('No se pudieron cargar las solicitudes de grupos.');
@@ -195,7 +201,17 @@ const NotificationsPage = () => {
       showToast('Solicitud de grupo aceptada.', 'success');
     } catch (acceptError) {
       console.error('Error accepting group request:', acceptError);
-      showToast('No se pudo aceptar la solicitud de grupo.', 'error');
+      if (acceptError instanceof Error && acceptError.message.includes('Grupo no encontrado')) {
+        showToast('Este grupo ya no existe.', 'info');
+        void loadGroupRequests();
+      } else if (acceptError instanceof AppError && acceptError.code === 'PERMISSION_DENIED') {
+        showToast(
+          'No se pudo aceptar: la solicitud ya no está vigente o existe un bloqueo.',
+          'error',
+        );
+      } else {
+        showToast('No se pudo aceptar la solicitud de grupo.', 'error');
+      }
     } finally {
       setGroupActionLoading(null);
     }

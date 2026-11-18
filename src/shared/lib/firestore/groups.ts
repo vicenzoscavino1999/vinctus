@@ -5,7 +5,6 @@ import {
   getCountFromServer as _getCountFromServer,
   getDoc as _getDoc,
   getDocs as _getDocs,
-  increment,
   limit,
   orderBy,
   query,
@@ -22,7 +21,7 @@ import {
 import { trackFirestoreRead, trackFirestoreWrite } from '@/shared/lib/devMetrics';
 import { db } from '@/shared/lib/firebase';
 import { readPostRecords } from '@/shared/lib/post-reads-client';
-import { COLLECTIONS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
+import { COLLECTIONS, LIMITS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
 const DEFAULT_LIMIT = 30;
 const SMALL_LIST_LIMIT = 50;
@@ -192,27 +191,39 @@ export const getGroup = async (groupId: string): Promise<FirestoreGroup | null> 
 export const joinGroupWithSync = async (groupId: string, uid: string): Promise<void> => {
   const memberRef = doc(db, COLLECTIONS.groups, groupId, SUBCOLLECTIONS.members, uid);
   const membershipRef = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.memberships, groupId);
+  const [memberSnap, membershipSnap] = await Promise.all([
+    getDoc(memberRef),
+    getDoc(membershipRef),
+  ]);
+
+  if (memberSnap.exists() && membershipSnap.exists()) {
+    return;
+  }
+
   const batch = writeBatch(db);
+  if (!memberSnap.exists()) {
+    batch.set(
+      memberRef,
+      {
+        uid,
+        groupId,
+        role: 'member',
+        joinedAt: serverTimestamp(),
+      } as GroupMemberWrite,
+      { merge: false },
+    );
+  }
 
-  batch.set(
-    memberRef,
-    {
-      uid,
-      groupId,
-      role: 'member',
-      joinedAt: serverTimestamp(),
-    } as GroupMemberWrite,
-    { merge: false },
-  );
-
-  batch.set(
-    membershipRef,
-    {
-      groupId,
-      joinedAt: serverTimestamp(),
-    } as UserMembershipWrite,
-    { merge: false },
-  );
+  if (!membershipSnap.exists()) {
+    batch.set(
+      membershipRef,
+      {
+        groupId,
+        joinedAt: serverTimestamp(),
+      } as UserMembershipWrite,
+      { merge: false },
+    );
+  }
 
   await batch.commit();
 };
@@ -300,44 +311,33 @@ export async function addGroupMember(
 ): Promise<void> {
   const memberRef = doc(db, COLLECTIONS.groups, groupId, SUBCOLLECTIONS.members, uid);
   const membershipRef = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.memberships, groupId);
-  const groupRef = doc(db, COLLECTIONS.groups, groupId);
-  const [memberSnap, membershipSnap] = await Promise.all([
-    getDoc(memberRef),
-    getDoc(membershipRef),
-  ]);
+  const memberSnap = await getDoc(memberRef);
+
+  if (memberSnap.exists()) {
+    return;
+  }
+
   const batch = writeBatch(db);
+  batch.set(
+    memberRef,
+    {
+      uid,
+      groupId,
+      role,
+      joinedAt: serverTimestamp(),
+    } as GroupMemberWrite,
+    { merge: false },
+  );
+  batch.set(
+    membershipRef,
+    {
+      groupId,
+      joinedAt: serverTimestamp(),
+    } as UserMembershipWrite,
+    { merge: false },
+  );
 
-  if (!memberSnap.exists()) {
-    batch.set(
-      memberRef,
-      {
-        uid,
-        groupId,
-        role,
-        joinedAt: serverTimestamp(),
-      } as GroupMemberWrite,
-      { merge: false },
-    );
-  }
-
-  if (!membershipSnap.exists()) {
-    batch.set(
-      membershipRef,
-      {
-        groupId,
-        joinedAt: serverTimestamp(),
-      } as UserMembershipWrite,
-      { merge: false },
-    );
-  }
-
-  if (!memberSnap.exists()) {
-    batch.update(groupRef, {
-      memberCount: increment(1),
-      updatedAt: serverTimestamp(),
-    });
-  }
-
+  // memberCount is maintained server-side by onGroupMemberCreated reconciliation.
   await batch.commit();
 }
 
@@ -381,35 +381,54 @@ export async function sendGroupJoinRequest(input: {
   fromUserName: string | null;
   fromUserPhoto: string | null;
 }): Promise<string> {
-  const existingQuery = query(
+  if (input.fromUid === input.toUid) {
+    throw new Error('No puedes solicitar unirte a tu propio grupo.');
+  }
+
+  // Verify real current membership before creating a new request so former members
+  // who previously had an accepted request can apply again.
+  const memberSnap = await getDoc(
+    doc(db, COLLECTIONS.groups, input.groupId, SUBCOLLECTIONS.members, input.fromUid),
+  );
+  if (memberSnap.exists()) {
+    throw new Error('Ya eres miembro de este grupo.');
+  }
+
+  const existingPendingQuery = query(
     collection(db, COLLECTIONS.groupRequests),
     where('fromUid', '==', input.fromUid),
     where('groupId', '==', input.groupId),
+    where('status', '==', 'pending'),
     limit(1),
   );
-  const existing = await getDocs(existingQuery);
+  const existingPending = await getDocs(existingPendingQuery);
 
-  if (!existing.empty) {
-    const existingDoc = existing.docs[0];
-    const data = existingDoc.data();
-    if (data.status === 'pending') {
-      throw new Error('Ya enviaste una solicitud para este grupo.');
-    }
-    if (data.status === 'accepted') {
-      throw new Error('Ya eres miembro de este grupo.');
-    }
+  if (!existingPending.empty) {
+    throw new Error('Ya enviaste una solicitud para este grupo.');
   }
+
+  const safeGroupName = input.groupName.trim().slice(0, LIMITS.groupRequests.groupNameMaxLength);
+  const safeMessage = input.message?.trim()
+    ? input.message.trim().slice(0, LIMITS.groupRequests.messageMaxLength)
+    : null;
+  const safeFromUserName = input.fromUserName?.trim()
+    ? input.fromUserName.trim().slice(0, LIMITS.groupRequests.fromUserNameMaxLength)
+    : null;
+  const safeFromUserPhoto =
+    input.fromUserPhoto && input.fromUserPhoto.length <= LIMITS.groupRequests.fromUserPhotoMaxLength
+      ? input.fromUserPhoto
+      : null;
 
   const requestRef = doc(collection(db, COLLECTIONS.groupRequests));
   await setDoc(requestRef, {
     groupId: input.groupId,
-    groupName: input.groupName,
+    groupName: safeGroupName,
     fromUid: input.fromUid,
     toUid: input.toUid,
     status: 'pending',
-    message: input.message,
-    fromUserName: input.fromUserName,
-    fromUserPhoto: input.fromUserPhoto,
+    message: safeMessage,
+    fromUserName: safeFromUserName,
+    fromUserPhoto: safeFromUserPhoto,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -459,31 +478,42 @@ export async function acceptGroupJoinRequest(requestId: string): Promise<void> {
 
   const groupId = data.groupId as string;
   const memberUid = data.fromUid as string;
+  const groupSnap = await getDoc(doc(db, COLLECTIONS.groups, groupId));
+  if (!groupSnap.exists()) {
+    throw new Error('Grupo no encontrado');
+  }
+
   const memberRef = doc(db, COLLECTIONS.groups, groupId, SUBCOLLECTIONS.members, memberUid);
   const membershipRef = doc(db, COLLECTIONS.users, memberUid, SUBCOLLECTIONS.memberships, groupId);
+  // Group owners cannot read users/{memberUid}/memberships/* per rules (isOwner(uid)),
+  // so check groups/{groupId}/members/{memberUid} before writing both docs together.
+  const memberSnap = await getDoc(memberRef);
+
   const batch = writeBatch(db);
   batch.update(requestRef, {
     status: 'accepted',
     updatedAt: serverTimestamp(),
   });
-  batch.set(
-    memberRef,
-    {
-      uid: memberUid,
-      groupId,
-      role: 'member',
-      joinedAt: serverTimestamp(),
-    } as GroupMemberWrite,
-    { merge: false },
-  );
-  batch.set(
-    membershipRef,
-    {
-      groupId,
-      joinedAt: serverTimestamp(),
-    } as UserMembershipWrite,
-    { merge: false },
-  );
+  if (!memberSnap.exists()) {
+    batch.set(
+      memberRef,
+      {
+        uid: memberUid,
+        groupId,
+        role: 'member',
+        joinedAt: serverTimestamp(),
+      } as GroupMemberWrite,
+      { merge: false },
+    );
+    batch.set(
+      membershipRef,
+      {
+        groupId,
+        joinedAt: serverTimestamp(),
+      } as UserMembershipWrite,
+      { merge: false },
+    );
+  }
   await batch.commit();
 }
 

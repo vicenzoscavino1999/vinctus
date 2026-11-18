@@ -60,4 +60,29 @@ final class GroupCardViewModelTests: XCTestCase {
     XCTAssertEqual(vm.status, .member)
     XCTAssertEqual(repo.joinCalls, 0)
   }
+
+  func testSigningOutClearsLoadedStatus() async {
+    let repo = FakeGroupsRepo()
+    repo.members = ["me"]
+    let vm = GroupCardViewModel(group: group(visibility: .public), repo: repo)
+    await vm.loadStatus(uid: "me")
+    XCTAssertEqual(vm.status, .member)
+
+    await vm.loadStatus(uid: nil)
+
+    XCTAssertNil(vm.status)
+  }
+
+  func testStalePendingRequestStillJoinsAPublicGroup() async {
+    let repo = FakeGroupsRepo()
+    repo.requests = ["me"]
+    let vm = GroupCardViewModel(group: group(visibility: .public), repo: repo)
+    await vm.loadStatus(uid: "me")
+    XCTAssertEqual(vm.status, .pending)
+
+    await vm.join(uid: "me")
+
+    XCTAssertEqual(vm.status, .member)
+    XCTAssertEqual(repo.joinCalls, 1)
+  }
 }

@@ -8,6 +8,7 @@ import type {
 import { AppError } from '@/shared/lib/errors';
 import type { PostPage } from '@/shared/lib/post-reads-client';
 import {
+  getBlockedUsers,
   getFollowing,
   getGroup,
   getGroupJoinStatus,
@@ -23,6 +24,7 @@ import {
 } from '@/features/groups/api/queries';
 
 vi.mock('@/shared/lib/firestore', () => ({
+  getBlockedUsers: vi.fn(),
   getFollowing: vi.fn(),
   getGroup: vi.fn(),
   getGroupJoinStatus: vi.fn(),
@@ -96,13 +98,16 @@ describe('groups api queries', () => {
     await expect(getGroupPostsWeekCount('group_1')).resolves.toBe(4);
   });
 
-  it('loads following and profile by uid', async () => {
+  it('loads following, blocked users and profile by uid', async () => {
     vi.mocked(firestore.getFollowing).mockResolvedValueOnce([{ uid: 'user_2' }] as never);
+    vi.mocked(firestore.getBlockedUsers).mockResolvedValueOnce(['user_3']);
     vi.mocked(firestore.getUserProfile).mockResolvedValueOnce({ uid: 'user_1' } as never);
 
     await expect(getFollowing('user_1')).resolves.toMatchObject([{ uid: 'user_2' }]);
+    await expect(getBlockedUsers('user_1')).resolves.toEqual(['user_3']);
     await expect(getUserProfile('user_1')).resolves.toMatchObject({ uid: 'user_1' });
     expect(firestore.getFollowing).toHaveBeenCalledWith('user_1');
+    expect(firestore.getBlockedUsers).toHaveBeenCalledWith('user_1');
     expect(firestore.getUserProfile).toHaveBeenCalledWith('user_1');
   });
 

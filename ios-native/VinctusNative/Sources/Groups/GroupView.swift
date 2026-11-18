@@ -65,7 +65,7 @@ struct GroupView: View {
     .background(VinctusTokens.Color.background)
     .navigationTitle("")
     .navigationBarTitleDisplayMode(.inline)
-    .task {
+    .task(id: "\(groupID):\(currentUserID ?? "anon")") {
       vm.handleConnectivityChange(connectivity.isOnline)
       await vm.refresh()
       await vm.loadMembership(uid: currentUserID)
@@ -170,17 +170,18 @@ struct GroupView: View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: 10) {
         if let membership = vm.membership, membership != .owner {
-          if membership == .member {
+          let effectiveMembership = (!isPrivate && membership == .pending) ? GroupMembershipStatus.none : membership
+          if effectiveMembership == .member {
             GroupActionButton(title: "Unido", systemImage: "checkmark", style: .gold) {}
               .disabled(true)
           } else {
             GroupActionButton(
-              title: vm.isUpdatingMembership ? "Procesando..." : membership.buttonTitle(isPrivate: isPrivate).uppercased(),
-              style: membership == .pending ? .muted : .neutral
+              title: vm.isUpdatingMembership ? "Procesando..." : effectiveMembership.buttonTitle(isPrivate: isPrivate).uppercased(),
+              style: effectiveMembership == .pending ? .muted : .neutral
             ) {
               Task { await vm.performMembershipAction(uid: currentUserID) }
             }
-            .disabled(vm.isUpdatingMembership || membership == .pending)
+            .disabled(vm.isUpdatingMembership || effectiveMembership == .pending)
           }
         }
 
@@ -232,8 +233,14 @@ struct GroupView: View {
         }
       }
 
+      let isPrivateLocked = detail.visibility == .private && !isJoined
       let posts = detail.recentPosts.filter { !blockedUsers.isBlocked($0.authorID) }
-      if posts.isEmpty {
+      if isPrivateLocked {
+        Text("Este grupo es privado. Solicita acceso para ver las publicaciones.")
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 20)
+      } else if posts.isEmpty {
         Text("Aún no hay publicaciones en este grupo.")
           .foregroundStyle(VinctusTokens.Color.textMuted)
           .frame(maxWidth: .infinity)
@@ -300,13 +307,20 @@ struct GroupView: View {
         .font(VinctusTokens.Typography.serif(24))
         .foregroundStyle(VinctusTokens.Color.textPrimary)
 
-      if detail.topMembers.isEmpty {
+      let isPrivateLocked = detail.visibility == .private && !isJoined
+      let members = detail.topMembers.filter { !blockedUsers.isBlocked($0.uid) }
+      if isPrivateLocked {
+        Text("Solo los miembros pueden ver la lista de participantes.")
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 20)
+      } else if members.isEmpty {
         Text("Sin miembros destacados por ahora.")
           .foregroundStyle(VinctusTokens.Color.textMuted)
           .frame(maxWidth: .infinity)
           .padding(.vertical, 20)
       } else {
-        ForEach(detail.topMembers.filter { !blockedUsers.isBlocked($0.uid) }) { member in
+        ForEach(members) { member in
           Button {
             openedProfileID = member.uid
           } label: {

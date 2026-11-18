@@ -195,6 +195,71 @@ final class GroupsIntegrationTests: EmulatorTestCase {
     XCTAssertEqual(recentPost.resolvedFeedItem.title, "Salida al observatorio")
     XCTAssertEqual(recentPost.resolvedFeedItem.text, "Nos vemos este sábado a las 8pm con telescopios.")
   }
+
+  func testJoiningTwiceIsIdempotentAndReApplyingWorksAfterLeavingPrivateGroup() async throws {
+    let bruno = try await makeUser("Bruno")
+    let pubGroupID = try await makeGroup(name: "Grupo Idempotente", visibility: .public)
+    let privGroupID = try await makeGroup(name: "Club Selecto", visibility: .private)
+
+    try await Firestore.firestore().collection("groups").document(privGroupID)
+      .collection("members").document(bruno.uid).setData([
+        "uid": bruno.uid, "groupId": privGroupID, "role": "admin",
+        "joinedAt": FieldValue.serverTimestamp(),
+      ])
+
+    let ana = try await makeUser("Ana")
+    let groups = FirebaseGroupsRepo()
+
+    // Public group idempotency: joining twice does not fail or violate immutable joinedAt rules.
+    try await groups.joinGroup(groupID: pubGroupID, uid: ana.uid)
+    try await groups.joinGroup(groupID: pubGroupID, uid: ana.uid)
+    let pubStatus = try await groups.membershipStatus(groupID: pubGroupID, ownerID: bruno.uid, uid: ana.uid)
+    XCTAssertEqual(pubStatus, .member)
+
+    // Private group: outsider can fetch group metadata cleanly without failing on restricted members list.
+    let outsiderDetail = try await groups.fetchGroupDetail(groupID: privGroupID, recentPostLimit: 5, topMemberLimit: 5)
+    XCTAssertEqual(outsiderDetail?.visibility, .private)
+    XCTAssertEqual(outsiderDetail?.topMembers.isEmpty, true)
+
+    // Ana requests access, Bruno accepts, Ana leaves, and Ana can request again cleanly.
+    try await groups.requestToJoin(groupID: privGroupID, groupName: "Club Selecto", ownerID: bruno.uid, uid: ana.uid)
+    try await signIn(bruno)
+    let reqSnap = try await Firestore.firestore().collection("group_requests")
+      .whereField("toUid", isEqualTo: bruno.uid)
+      .whereField("groupId", isEqualTo: privGroupID)
+      .whereField("status", isEqualTo: "pending")
+      .getDocuments()
+    let reqDoc = try XCTUnwrap(reqSnap.documents.first)
+    let batch = Firestore.firestore().batch()
+    batch.updateData(["status": "accepted", "updatedAt": FieldValue.serverTimestamp()], forDocument: reqDoc.reference)
+    batch.setData([
+      "uid": ana.uid,
+      "groupId": privGroupID,
+      "role": "member",
+      "joinedAt": FieldValue.serverTimestamp(),
+    ], forDocument: Firestore.firestore().collection("groups").document(privGroupID).collection("members").document(ana.uid))
+    batch.setData([
+      "groupId": privGroupID,
+      "joinedAt": FieldValue.serverTimestamp(),
+    ], forDocument: Firestore.firestore().collection("users").document(ana.uid).collection("memberships").document(privGroupID))
+    try await batch.commit()
+
+    try await signIn(ana)
+    do {
+      try await groups.requestToJoin(groupID: privGroupID, groupName: "Club Selecto", ownerID: bruno.uid, uid: ana.uid)
+      XCTFail("Existing member must not send a new join request")
+    } catch GroupsRepoError.alreadyMember {
+      // Expected.
+    }
+
+    try await groups.leaveGroup(groupID: privGroupID, uid: ana.uid)
+    let afterLeave = try await groups.membershipStatus(groupID: privGroupID, ownerID: bruno.uid, uid: ana.uid)
+    XCTAssertEqual(afterLeave, GroupMembershipStatus.none)
+
+    try await groups.requestToJoin(groupID: privGroupID, groupName: "Club Selecto", ownerID: bruno.uid, uid: ana.uid)
+    let afterReRequest = try await groups.membershipStatus(groupID: privGroupID, ownerID: bruno.uid, uid: ana.uid)
+    XCTAssertEqual(afterReRequest, .pending)
+  }
 }
 
 final class CollectionsIntegrationTests: EmulatorTestCase {

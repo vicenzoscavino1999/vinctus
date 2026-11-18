@@ -157,8 +157,12 @@ enum Limits {
   enum GroupRequests {
     /// Group name copied into a join request (group_requests).
     static let groupNameMaxLength = 120
+    /// Optional message included with a group join request.
+    static let messageMaxLength = 1000
     /// Requester's display name copied into a join request.
     static let fromUserNameMaxLength = 80
+    /// Requester's photo URL copied into a join request.
+    static let fromUserPhotoMaxLength = 600
   }
 
   enum Moderation {

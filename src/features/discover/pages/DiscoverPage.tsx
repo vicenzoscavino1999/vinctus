@@ -42,6 +42,7 @@ import { getPersonaById, type Debate } from '@/features/arena/types';
 import { getGlobalFeed, type PostCursor, type PostRead } from '@/features/posts/api';
 import { appendToStream, type AppendOnlyStream } from '@/features/discover/model/appendOnlyStream';
 import { toDate } from '@/shared/lib/formatUtils';
+import { AppError } from '@/shared/lib/errors';
 import { getYouTubeThumbnailUrl } from '@/shared/lib/youtube';
 import { fetchYouTubeSearchVideos, type YouTubeSearchVideo } from '@/shared/lib/youtubeSearchApi';
 
@@ -1186,8 +1187,11 @@ const DiscoverSession = () => {
   }, []);
 
   useEffect(() => {
+    setGroupJoinStatusMap({});
+  }, [user?.uid]);
+
+  useEffect(() => {
     if (!user || groups.length === 0) {
-      if (!user) setGroupJoinStatusMap({});
       return;
     }
     let isActive = true;
@@ -1224,7 +1228,9 @@ const DiscoverSession = () => {
       return;
     }
 
-    const status = groupJoinStatusMap[group.id] ?? 'none';
+    const rawStatus = groupJoinStatusMap[group.id] ?? 'none';
+    const visibility = group.visibility ?? 'public';
+    const status = visibility === 'public' && rawStatus === 'pending' ? 'none' : rawStatus;
     const isOwner = group.ownerId && group.ownerId === user.uid;
     if (isOwner || status === 'member') {
       navigate(`/group/${group.id}`);
@@ -1237,7 +1243,6 @@ const DiscoverSession = () => {
 
     setGroupActionLoading(group.id);
     try {
-      const visibility = group.visibility ?? 'public';
       if (visibility === 'public') {
         await joinPublicGroup(group.id, user.uid);
         setGroupJoinStatusMap((prev) => ({ ...prev, [group.id]: 'member' }));
@@ -1260,7 +1265,11 @@ const DiscoverSession = () => {
       }
     } catch (actionError) {
       console.error('Error joining group:', actionError);
-      showToast('No se pudo procesar la solicitud', 'error');
+      if (actionError instanceof AppError && actionError.code === 'PERMISSION_DENIED') {
+        showToast('No puedes unirte directamente a este grupo.', 'error');
+      } else {
+        showToast('No se pudo procesar la solicitud', 'error');
+      }
     } finally {
       setGroupActionLoading(null);
     }
@@ -1268,10 +1277,12 @@ const DiscoverSession = () => {
 
   const getGroupActionLabel = (group: FirestoreGroup): string => {
     if (user && group.ownerId === user.uid) return 'Tu grupo';
-    const status = groupJoinStatusMap[group.id] ?? 'none';
+    const rawStatus = groupJoinStatusMap[group.id] ?? 'none';
+    const visibility = group.visibility ?? 'public';
+    const status = visibility === 'public' && rawStatus === 'pending' ? 'none' : rawStatus;
     if (status === 'member') return 'Unido';
     if (status === 'pending') return 'Pendiente';
-    return (group.visibility ?? 'public') === 'public' ? 'Unirme' : 'Solicitar';
+    return visibility === 'public' ? 'Unirme' : 'Solicitar';
   };
 
   const getGroupStats = (group: FirestoreGroup): { members: number; postsWeek: number } => {
