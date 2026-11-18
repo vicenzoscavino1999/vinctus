@@ -45,13 +45,13 @@ export const ownerIdsSchema = z.array(idSchema).min(1).max(OWNER_IDS_READ_CHUNK_
 export const createStoryInputSchema = z.object({
   storyId: idSchema.optional(),
   ownerId: idSchema,
-  ownerName: z.string().trim().min(1).max(120).nullable(),
-  ownerPhoto: urlSchema.nullable(),
+  ownerName: z.string().trim().min(1).max(LIMITS.stories.ownerNameMaxLength).nullable(),
+  ownerPhoto: urlSchema.max(LIMITS.stories.photoURLMaxLength).nullable(),
   mediaType: z.enum(['image', 'video']),
-  mediaUrl: urlSchema,
-  mediaPath: z.string().trim().min(1).max(500),
-  thumbUrl: urlSchema.nullable().optional(),
-  thumbPath: z.string().trim().min(1).max(500).nullable().optional(),
+  mediaUrl: urlSchema.max(LIMITS.stories.mediaUrlMaxLength),
+  mediaPath: z.string().trim().min(1).max(LIMITS.stories.mediaPathMaxLength),
+  thumbUrl: urlSchema.max(LIMITS.stories.mediaUrlMaxLength).nullable().optional(),
+  thumbPath: z.string().trim().min(1).max(LIMITS.stories.mediaPathMaxLength).nullable().optional(),
   visibility: z.literal('friends').optional(),
 });
 
@@ -98,6 +98,14 @@ export const createPostCommentReportInputSchema = z.object({
   postId: postIdSchema,
   commentId: idSchema,
   commentAuthorId: userIdSchema.nullable().optional(),
+  reason: reportReasonSchema,
+  details: reportDetailsSchema,
+});
+
+export const createStoryReportInputSchema = z.object({
+  reporterUid: userIdSchema,
+  storyId: storyIdSchema,
+  storyOwnerId: userIdSchema.nullable().optional(),
   reason: reportReasonSchema,
   details: reportDetailsSchema,
 });

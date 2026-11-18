@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  getBlockedUsers,
   getFriendIds,
   getFollowingIds,
   getStoriesForOwners,
@@ -46,6 +47,7 @@ export type StoryFeedItem = {
   mediaUrl: string;
   mediaPath: string | null;
   thumbUrl: string | null;
+  thumbPath?: string | null;
   createdAt: Date;
   expiresAt: Date;
 };
@@ -85,6 +87,7 @@ const mapStoryToFeedItem = (story: StoryRead): StoryFeedItem => ({
   mediaUrl: story.mediaUrl,
   mediaPath: story.mediaPath,
   thumbUrl: story.thumbUrl,
+  thumbPath: story.thumbPath,
   createdAt: story.createdAt,
   expiresAt: story.expiresAt,
 });
@@ -207,6 +210,7 @@ export const useStories = ({ userId, userDisplayName, userPhotoURL }: UseStories
 
     let hadFailure = false;
     let nextItems: StoryFeedItem[] = [];
+    const blockedSet = new Set<string>();
 
     try {
       const ownStories = await getStoriesForOwners([currentUid]);
@@ -219,14 +223,20 @@ export const useStories = ({ userId, userDisplayName, userPhotoURL }: UseStories
 
     let relationshipOwnerIds: string[] = [];
     try {
-      const [friendResult, followingResult] = await Promise.allSettled([
+      const [friendResult, followingResult, blockedResult] = await Promise.allSettled([
         getFriendIds(currentUid),
         getFollowingIds(currentUid),
+        getBlockedUsers(currentUid),
       ]);
       if (isStale()) return;
 
       const friendIds = friendResult.status === 'fulfilled' ? friendResult.value : [];
       const followingIds = followingResult.status === 'fulfilled' ? followingResult.value : [];
+      if (blockedResult.status === 'fulfilled') {
+        blockedResult.value.forEach((blockedUid) => blockedSet.add(blockedUid));
+      } else {
+        console.warn('Error loading blocked users for stories:', blockedResult.reason);
+      }
 
       if (friendResult.status === 'rejected') {
         hadFailure = true;
@@ -238,7 +248,11 @@ export const useStories = ({ userId, userDisplayName, userPhotoURL }: UseStories
       }
 
       relationshipOwnerIds = Array.from(
-        new Set([...friendIds, ...followingIds].filter((id) => id && id !== currentUid)),
+        new Set(
+          [...friendIds, ...followingIds].filter(
+            (id) => id && id !== currentUid && !blockedSet.has(id),
+          ),
+        ),
       );
     } catch (relationError) {
       hadFailure = true;
@@ -250,9 +264,9 @@ export const useStories = ({ userId, userDisplayName, userPhotoURL }: UseStories
         const friendStories = await getStoriesForOwners(relationshipOwnerIds);
         if (isStale()) return;
         const merged = new Map<string, StoryFeedItem>();
-        [...nextItems, ...friendStories.map(mapStoryToFeedItem)].forEach((item) =>
-          merged.set(item.id, item),
-        );
+        [...nextItems, ...friendStories.map(mapStoryToFeedItem)]
+          .filter((item) => !blockedSet.has(item.ownerId))
+          .forEach((item) => merged.set(item.id, item));
         nextItems = Array.from(merged.values());
       } catch (friendStoryError) {
         hadFailure = true;
@@ -274,15 +288,24 @@ export const useStories = ({ userId, userDisplayName, userPhotoURL }: UseStories
       seededShortItems = buildRotatingShortItems(buildFallbackShortVideos());
     }
 
+    const realItemsCount = nextItems.length;
     const mergedItems = mergeActiveItems([...nextItems, ...seededShortItems]);
     safeCommit(() => {
-      if (mergedItems.length === 0 && hadFailure) {
+      if (hadFailure && realItemsCount === 0) {
         setError('No se pudieron cargar historias.');
       }
       setItems(mergedItems);
       setLoading(false);
     });
   }, [userId]);
+
+  const removeStory = useCallback((storyId: string) => {
+    setItems((prev) => prev.filter((item) => item.id !== storyId));
+  }, []);
+
+  const excludeOwner = useCallback((ownerId: string) => {
+    setItems((prev) => prev.filter((item) => item.ownerId !== ownerId));
+  }, []);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -365,10 +388,12 @@ export const useStories = ({ userId, userDisplayName, userPhotoURL }: UseStories
 
   return {
     error,
+    excludeOwner,
     friendGroups,
     groups,
     loading,
     ownGroup,
     refreshStories,
+    removeStory,
   };
 };

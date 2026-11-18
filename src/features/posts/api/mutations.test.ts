@@ -2,10 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppError } from '@/shared/lib/errors';
 import {
   addPostComment,
+  blockUser,
   createPostCommentReport,
   createPostReport,
+  createStoryReport,
   createPostUploading,
   createStory,
+  deleteStory,
   getNewPostId,
   likePostWithSync,
   savePostWithSync,
@@ -16,9 +19,12 @@ import {
 
 vi.mock('@/shared/lib/firestore', () => ({
   addPostComment: vi.fn(),
+  blockUser: vi.fn(),
   createPostCommentReport: vi.fn(),
   createPostReport: vi.fn(),
+  createStoryReport: vi.fn(),
   createStory: vi.fn(),
+  deleteStory: vi.fn(),
   getNewPostId: vi.fn(),
   likePostWithSync: vi.fn(),
   savePostWithSync: vi.fn(),
@@ -243,6 +249,43 @@ describe('posts api mutations', () => {
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
     expect(firestore.createStory).not.toHaveBeenCalled();
+  });
+
+  it('validates deleteStory, createStoryReport, and blockUser payloads', async () => {
+    vi.mocked(firestore.deleteStory).mockResolvedValueOnce();
+    vi.mocked(firestore.createStoryReport).mockResolvedValueOnce('report_story_1');
+    vi.mocked(firestore.blockUser).mockResolvedValueOnce();
+
+    await expect(
+      deleteStory('story_1', {
+        mediaPath: 'stories/user_1/story_1/original/pic.webp',
+        thumbPath: null,
+      }),
+    ).resolves.toBeUndefined();
+    expect(firestore.deleteStory).toHaveBeenCalledWith('story_1', {
+      mediaPath: 'stories/user_1/story_1/original/pic.webp',
+      thumbPath: null,
+    });
+
+    await expect(
+      createStoryReport({
+        reporterUid: 'user_1',
+        storyId: 'story_2',
+        storyOwnerId: 'user_2',
+        reason: 'abuse',
+        details: '  Contenido inapropiado ',
+      }),
+    ).resolves.toBe('report_story_1');
+    expect(firestore.createStoryReport).toHaveBeenCalledWith({
+      reporterUid: 'user_1',
+      storyId: 'story_2',
+      storyOwnerId: 'user_2',
+      reason: 'abuse',
+      details: 'Contenido inapropiado',
+    });
+
+    await expect(blockUser('user_1', 'user_2')).resolves.toBeUndefined();
+    expect(firestore.blockUser).toHaveBeenCalledWith('user_1', 'user_2');
   });
 
   it('updates post with non-empty patch', async () => {

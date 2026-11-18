@@ -60,6 +60,65 @@ final class StoriesTests: XCTestCase {
     XCTAssertEqual(fields.details, "[Historia s1] ofensiva")
     XCTAssertEqual(ReportFields(target: .story(storyID: "s1", ownerID: "u1"), details: nil).details, "[Historia s1]")
   }
+
+  func testEmptyYouTubeEmbedIDProducesBlankPage() {
+    let html = YouTubeEmbedView.html(videoID: "!!!")
+    XCTAssertFalse(html.contains("<iframe"))
+  }
+
+  @MainActor
+  func testStoriesViewModelDeleteResetAndExcludeOwner() async {
+    let repo = FakeStoriesRepo()
+    let s1 = story("s1", owner: "me", minutesAgo: 5)
+    let s2 = story("s2", owner: "me", minutesAgo: 2)
+    let other = story("s3", owner: "other", minutesAgo: 1)
+    repo.stored = [s1, s2, other]
+
+    let vm = StoriesViewModel(repo: repo)
+    await vm.load()
+    XCTAssertEqual(vm.groups.count, 2)
+    XCTAssertFalse(vm.isSeen(StoryGroup(ownerID: "empty", ownerName: "Empty", ownerPhotoURL: nil, stories: [])))
+
+    vm.markSeen(s1)
+    XCTAssertFalse(vm.isSeen(vm.groups[0]))
+    vm.markSeen(s2)
+    XCTAssertTrue(vm.isSeen(vm.groups[0]))
+
+    repo.failsOnDelete = true
+    let failedDelete = await vm.delete(s1)
+    XCTAssertFalse(failedDelete)
+    XCTAssertEqual(vm.errorMessage, "No se pudo eliminar la historia.")
+
+    repo.failsOnDelete = false
+    let succeededDelete = await vm.delete(s1)
+    XCTAssertTrue(succeededDelete)
+    XCTAssertNil(vm.errorMessage)
+    XCTAssertEqual(vm.groups.first?.stories.map(\.id), ["s2"])
+
+    vm.excludeOwner("other")
+    XCTAssertEqual(vm.groups.map(\.ownerID), ["me"])
+
+    vm.reset()
+    XCTAssertTrue(vm.groups.isEmpty)
+    XCTAssertTrue(vm.seenStoryIDs.isEmpty)
+    XCTAssertNil(vm.errorMessage)
+  }
+}
+
+private final class FakeStoriesRepo: StoriesRepo {
+  var stored: [Story] = []
+  var failsOnDelete = false
+
+  func fetchStoryGroups() async throws -> [StoryGroup] {
+    StoryGroup.make(from: stored, currentUID: "me")
+  }
+
+  func publishImageStory(jpegData: Data) async throws {}
+
+  func deleteStory(_ story: Story) async throws {
+    if failsOnDelete { throw FakeError() }
+    stored.removeAll { $0.id == story.id }
+  }
 }
 
 /// Collections must pass `isValidCollectionCreate` / `isValidCollectionItemCreate`.

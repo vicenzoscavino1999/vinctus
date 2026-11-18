@@ -158,12 +158,14 @@ describe('followCounts', () => {
     expect(docs.has('users/ghost/followers/alice')).toBe(false);
   });
 
-  it('cleans up symmetric follow edges and requests on block', async () => {
+  it('cleans up symmetric follow edges, friend indexes, and requests on block', async () => {
     const { db, docs } = createFakeStore({
       'users/alice/followers/bob': { uid: 'bob' },
       'users/alice/following/bob': { uid: 'bob' },
+      'users/alice/friends/bob': { uid: 'bob' },
       'users/bob/followers/alice': { uid: 'alice' },
       'users/bob/following/alice': { uid: 'alice' },
+      'users/bob/friends/alice': { uid: 'alice' },
       'follow_requests/alice_bob': { fromUid: 'alice', toUid: 'bob', status: 'pending' },
       'follow_requests/bob_alice': { fromUid: 'bob', toUid: 'alice', status: 'accepted' },
     });

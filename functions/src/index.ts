@@ -35,6 +35,7 @@ import {
   cleanupDeletedGroupMembersAndMemberships,
   reconcileGroupMemberCount,
 } from './groupCounts';
+import { cleanupDeletedStoryMedia } from './storyCleanup';
 export {
   readPosts,
   readPostMedia,
@@ -1087,6 +1088,28 @@ export const onGroupDeleted = functions.firestore
           error: error instanceof Error ? error.message : String(error),
         });
       }
+    }
+  });
+
+/**
+ * Clean up story media in Storage when a story document is deleted
+ * (owner delete, moderation removal, or Firestore TTL expiration).
+ * Trigger: onDelete stories/{storyId}
+ */
+export const onStoryDeleted = functions.firestore
+  .document(`${COLLECTIONS.stories}/{storyId}`)
+  .onDelete(async (snap, context) => {
+    const { storyId } = context.params;
+    const data = (snap.data() || {}) as Record<string, unknown>;
+
+    try {
+      const filesDeleted = await cleanupDeletedStoryMedia(admin.storage().bucket(), storyId, data);
+      functions.logger.info('Story storage media cleaned up', { storyId, filesDeleted });
+    } catch (error) {
+      functions.logger.warn('Failed to clean up story storage media', {
+        storyId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   });
 

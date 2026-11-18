@@ -2,25 +2,82 @@ import { useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
+import {
+  blockUser,
+  createStoryReport,
+  deleteStory,
+  type UserReportReason,
+} from '@/features/posts/api';
 import StoryComposerModal from '@/features/posts/components/StoryComposerModal';
 import StoryViewerModal, {
   type StoryViewerGroup,
 } from '@/features/posts/components/StoryViewerModal';
-import { type StoryGroup, useStories } from '@/features/posts/hooks/useStories';
+import { type StoryFeedItem, type StoryGroup, useStories } from '@/features/posts/hooks/useStories';
+
+const SEEN_STORIES_STORAGE_PREFIX = 'vinctus:seen-stories:';
+
+const loadSeenStoryIds = (uid: string | undefined): Set<string> => {
+  if (!uid || typeof window === 'undefined') return new Set();
+  try {
+    const raw = window.sessionStorage.getItem(`${SEEN_STORIES_STORAGE_PREFIX}${uid}`);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? new Set(parsed.filter((id): id is string => typeof id === 'string' && id.length > 0))
+      : new Set();
+  } catch {
+    return new Set();
+  }
+};
+
+const saveSeenStoryIds = (uid: string | undefined, ids: Set<string>) => {
+  if (!uid || typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(`${SEEN_STORIES_STORAGE_PREFIX}${uid}`, JSON.stringify([...ids]));
+  } catch {
+    // Ignore storage quota / private mode failures cleanly.
+  }
+};
 
 const StoriesWidget = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const [composerOpenUid, setComposerOpenUid] = useState<string | null>(null);
   const [viewerState, setViewerState] = useState<{
+    uid: string | null;
     isOpen: boolean;
-    groups: StoryViewerGroup[];
     initialGroupIndex: number;
     initialStoryIndex: number;
-  }>({ isOpen: false, groups: [], initialGroupIndex: 0, initialStoryIndex: 0 });
-  const [seenStoryIds, setSeenStoryIds] = useState<Set<string>>(() => new Set());
+  }>({ uid: null, isOpen: false, initialGroupIndex: 0, initialStoryIndex: 0 });
+  const [seenByUser, setSeenByUser] = useState<{ uid: string | null; ids: Set<string> }>(() => ({
+    uid: user?.uid ?? null,
+    ids: loadSeenStoryIds(user?.uid),
+  }));
 
-  const { error, friendGroups, groups, loading, ownGroup, refreshStories } = useStories({
+  const currentUid = user?.uid ?? null;
+  const isComposerOpen = Boolean(currentUid && composerOpenUid === currentUid);
+  const activeViewerState =
+    viewerState.isOpen && currentUid && viewerState.uid === currentUid
+      ? viewerState
+      : { uid: currentUid, isOpen: false, initialGroupIndex: 0, initialStoryIndex: 0 };
+
+  const seenStoryIds = useMemo(() => {
+    if ((user?.uid ?? null) === seenByUser.uid) {
+      return seenByUser.ids;
+    }
+    return loadSeenStoryIds(user?.uid);
+  }, [seenByUser, user?.uid]);
+
+  const {
+    error,
+    excludeOwner,
+    friendGroups,
+    groups,
+    loading,
+    ownGroup,
+    refreshStories,
+    removeStory,
+  } = useStories({
     userDisplayName: user?.displayName ?? null,
     userId: user?.uid ?? null,
     userPhotoURL: user?.photoURL ?? null,
@@ -43,20 +100,56 @@ const StoriesWidget = () => {
     group.items.length > 0 && group.items.every((item) => seenStoryIds.has(item.id));
 
   const markStorySeen = (storyId: string) => {
-    setSeenStoryIds((previous) => {
-      if (previous.has(storyId)) return previous;
-      const next = new Set(previous);
+    const activeUid = user.uid;
+    setSeenByUser((previous) => {
+      const base = previous.uid === activeUid ? previous.ids : loadSeenStoryIds(activeUid);
+      if (base.has(storyId))
+        return previous.uid === activeUid ? previous : { uid: activeUid, ids: base };
+      const next = new Set(base);
       next.add(storyId);
-      return next;
+      saveSeenStoryIds(activeUid, next);
+      return { uid: activeUid, ids: next };
     });
+  };
+
+  const handleDeleteStory = async (story: StoryFeedItem) => {
+    await deleteStory(story.id, {
+      mediaPath: story.mediaPath,
+      thumbPath: story.thumbPath ?? null,
+    });
+    removeStory(story.id);
+    showToast('Historia eliminada', 'success');
+    refreshStories().catch(() => undefined);
+  };
+
+  const handleReportStory = async (
+    story: StoryFeedItem,
+    reason: UserReportReason,
+    details: string,
+  ) => {
+    await createStoryReport({
+      reporterUid: user.uid,
+      storyId: story.id,
+      storyOwnerId: story.ownerId,
+      reason,
+      details: details || null,
+    });
+    showToast('Reporte enviado', 'success');
+  };
+
+  const handleBlockUser = async (ownerId: string, ownerName: string) => {
+    await blockUser(user.uid, ownerId);
+    excludeOwner(ownerId);
+    showToast(`Usuario bloqueado: ${ownerName}`, 'info');
+    refreshStories().catch(() => undefined);
   };
 
   const openViewer = (group: StoryGroup, initialStoryIndex: number = 0) => {
     const groupIndex = viewerGroups.findIndex((item) => item.ownerId === group.ownerId);
     if (groupIndex < 0) return;
     setViewerState({
+      uid: user.uid,
       isOpen: true,
-      groups: viewerGroups,
       initialGroupIndex: groupIndex,
       initialStoryIndex,
     });
@@ -66,7 +159,7 @@ const StoriesWidget = () => {
     if (ownGroup) {
       openViewer(ownGroup);
     } else {
-      setIsComposerOpen(true);
+      setComposerOpenUid(user.uid);
     }
   };
 
@@ -98,7 +191,7 @@ const StoriesWidget = () => {
               )}
             </button>
             <button
-              onClick={() => setIsComposerOpen(true)}
+              onClick={() => setComposerOpenUid(user.uid)}
               className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-amber-500 text-black flex items-center justify-center shadow-md hover:bg-amber-400 transition-colors"
               aria-label="Agregar historia"
             >
@@ -149,7 +242,7 @@ const StoriesWidget = () => {
 
       <StoryComposerModal
         isOpen={isComposerOpen}
-        onClose={() => setIsComposerOpen(false)}
+        onClose={() => setComposerOpenUid(null)}
         onCreated={() => {
           refreshStories().catch(() => {
             showToast('No se pudieron actualizar las historias.', 'warning');
@@ -157,17 +250,21 @@ const StoriesWidget = () => {
         }}
       />
 
-      {viewerState.isOpen && (
+      {activeViewerState.isOpen && (
         <StoryViewerModal
-          isOpen={viewerState.isOpen}
-          groups={viewerState.groups}
-          initialGroupIndex={viewerState.initialGroupIndex}
-          initialStoryIndex={viewerState.initialStoryIndex}
+          isOpen={activeViewerState.isOpen}
+          groups={viewerGroups}
+          initialGroupIndex={activeViewerState.initialGroupIndex}
+          initialStoryIndex={activeViewerState.initialStoryIndex}
+          currentUserId={user.uid}
           onStorySeen={markStorySeen}
+          onDeleteStory={handleDeleteStory}
+          onReportStory={handleReportStory}
+          onBlockUser={handleBlockUser}
           onClose={() =>
             setViewerState({
+              uid: null,
               isOpen: false,
-              groups: [],
               initialGroupIndex: 0,
               initialStoryIndex: 0,
             })

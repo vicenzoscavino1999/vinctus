@@ -134,8 +134,10 @@ export async function cleanupFollowStateOnBlock(
   await Promise.all([
     db.doc(`${COLLECTIONS.users}/${uid}/${SUBCOLLECTIONS.followers}/${blockedUid}`).delete(),
     db.doc(`${COLLECTIONS.users}/${uid}/${SUBCOLLECTIONS.following}/${blockedUid}`).delete(),
+    db.doc(`${COLLECTIONS.users}/${uid}/${SUBCOLLECTIONS.friends}/${blockedUid}`).delete(),
     db.doc(`${COLLECTIONS.users}/${blockedUid}/${SUBCOLLECTIONS.followers}/${uid}`).delete(),
     db.doc(`${COLLECTIONS.users}/${blockedUid}/${SUBCOLLECTIONS.following}/${uid}`).delete(),
+    db.doc(`${COLLECTIONS.users}/${blockedUid}/${SUBCOLLECTIONS.friends}/${uid}`).delete(),
     db.doc(`${COLLECTIONS.followRequests}/${uid}_${blockedUid}`).delete(),
     db.doc(`${COLLECTIONS.followRequests}/${blockedUid}_${uid}`).delete(),
   ]);

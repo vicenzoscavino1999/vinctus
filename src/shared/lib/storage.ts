@@ -632,6 +632,39 @@ export function uploadGroupIcon(
   });
 }
 
+const resolveStoryContentType = (
+  file: File,
+  allowed: readonly string[],
+  fallback: string,
+): string => (file.type && allowed.includes(file.type) ? file.type : fallback);
+
+export async function deleteStoryFiles(paths: Array<string | null | undefined>): Promise<void> {
+  const uniquePaths = Array.from(
+    new Set(
+      paths.filter(
+        (path): path is string =>
+          typeof path === 'string' &&
+          path.length > 0 &&
+          !path.startsWith('http://') &&
+          !path.startsWith('https://') &&
+          !path.startsWith('youtube:'),
+      ),
+    ),
+  );
+
+  await Promise.all(
+    uniquePaths.map(async (path) => {
+      try {
+        await deleteObject(ref(storage, path));
+      } catch (error) {
+        if ((error as { code?: string }).code !== 'storage/object-not-found') {
+          throw error;
+        }
+      }
+    }),
+  );
+}
+
 /**
  * Upload story image + thumbnail
  */
@@ -646,7 +679,11 @@ export async function uploadStoryImage(
   const storageName = `${Date.now()}_${safeName}`;
   const storagePath = STORAGE_PATHS.storyOriginal({ userId, storyId, filename: storageName });
   const storageRef = ref(storage, storagePath);
-  const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'image/jpeg');
+  const uploadTask = uploadBytesResumableWithCache(
+    storageRef,
+    file,
+    resolveStoryContentType(file, STORAGE_CONTENT_TYPES.image, 'image/webp'),
+  );
 
   const url = await new Promise<string>((resolve, reject) => {
     uploadTask.on(
@@ -707,7 +744,11 @@ export function uploadStoryVideo(
     const storageName = `${Date.now()}_${safeName}`;
     const storagePath = STORAGE_PATHS.storyOriginal({ userId, storyId, filename: storageName });
     const storageRef = ref(storage, storagePath);
-    const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'video/mp4');
+    const uploadTask = uploadBytesResumableWithCache(
+      storageRef,
+      file,
+      resolveStoryContentType(file, STORAGE_CONTENT_TYPES.video, 'video/mp4'),
+    );
 
     uploadTask.on(
       'state_changed',

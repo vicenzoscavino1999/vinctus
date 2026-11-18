@@ -46,6 +46,7 @@ struct ModerationMenu: View {
   let authorID: String?
   let authorName: String
   var onBlocked: (() -> Void)? = nil
+  var onInteractionChange: ((Bool) -> Void)? = nil
 
   @EnvironmentObject private var authVM: AuthViewModel
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
@@ -89,6 +90,15 @@ struct ModerationMenu: View {
     .disabled(isUpdatingBlock)
     .sheet(isPresented: $isShowingReport) {
       ReportSheet(target: target, repo: blockedUsers.repo)
+    }
+    .onChange(of: isShowingReport) { _, showing in
+      onInteractionChange?(showing || isConfirmingBlock || isUpdatingBlock)
+    }
+    .onChange(of: isConfirmingBlock) { _, confirming in
+      onInteractionChange?(confirming || isShowingReport || isUpdatingBlock)
+    }
+    .onChange(of: isUpdatingBlock) { _, updating in
+      onInteractionChange?(updating || isShowingReport || isConfirmingBlock)
     }
     .confirmationDialog(
       "Bloquear a \(authorName)",

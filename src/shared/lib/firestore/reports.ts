@@ -101,3 +101,24 @@ export async function createPostCommentReport(input: {
     conversationId: `post_${input.postId}_comment_${input.commentId}`,
   });
 }
+
+export async function createStoryReport(input: {
+  reporterUid: string;
+  storyId: string;
+  storyOwnerId?: string | null;
+  reason: UserReportReason;
+  details?: string | null;
+}): Promise<string> {
+  const details = input.details?.trim();
+  const mergedDetails = details
+    ? `[Historia ${input.storyId}] ${details}`
+    : `[Historia ${input.storyId}]`;
+
+  return createUserReport({
+    reporterUid: input.reporterUid,
+    reportedUid: input.storyOwnerId?.trim() || input.storyId,
+    reason: input.reason,
+    details: mergedDetails,
+    conversationId: `story_${input.storyId}`,
+  });
+}

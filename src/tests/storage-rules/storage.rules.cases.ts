@@ -345,4 +345,35 @@ describe('Storage Rules - upload security', () => {
       friendStorage.ref('stories/user_b/story_visible/original/story.jpg').getMetadata(),
     );
   });
+
+  it('allows follower to read story media and denies blocked user', async () => {
+    await seedStory('story_follower_visible', 'user_b');
+    await seedStorageFile('stories/user_b/story_follower_visible/original/story.jpg', 'image/jpeg');
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('users/user_b/followers/user_a').set({
+        uid: 'user_a',
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+      });
+    });
+
+    const followerStorage = env.authenticatedContext('user_a').storage();
+    await assertSucceeds(
+      followerStorage.ref('stories/user_b/story_follower_visible/original/story.jpg').getMetadata(),
+    );
+
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('users/user_b/blockedUsers/user_a').set({
+        blockedUid: 'user_a',
+        status: 'active',
+        blockedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+    });
+
+    await assertFails(
+      followerStorage.ref('stories/user_b/story_follower_visible/original/story.jpg').getMetadata(),
+    );
+  });
 });

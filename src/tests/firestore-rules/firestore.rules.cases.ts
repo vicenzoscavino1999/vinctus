@@ -619,6 +619,84 @@ describe('Firestore Rules - critical access controls', () => {
     await assertFails(outsiderDb.doc('stories/story_not_friend').get());
   });
 
+  it('denies story read when blocked even if friend index or follower exists', async () => {
+    await seedStory('story_blocked', 'user_b');
+    await seedFriendIndex('user_a', 'user_b');
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('users/user_b/followers/user_a').set({
+        uid: 'user_a',
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('users/user_b/blockedUsers/user_a').set({
+        blockedUid: 'user_a',
+        status: 'active',
+        blockedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+    });
+
+    const blockedViewerDb = env.authenticatedContext('user_a').firestore();
+    await assertFails(blockedViewerDb.doc('stories/story_blocked').get());
+
+    const ownerDb = env.authenticatedContext('user_b').firestore();
+    await assertSucceeds(ownerDb.doc('stories/story_blocked').get());
+  });
+
+  it('validates story creation paths and field limits strictly', async () => {
+    const env = await getRulesTestEnv();
+    const ownerDb = env.authenticatedContext('user_a').firestore();
+    const validExpiresAt = firebase.firestore.Timestamp.fromMillis(
+      Date.now() + 24 * 60 * 60 * 1000,
+    );
+
+    await assertSucceeds(
+      ownerDb.doc('stories/story_valid').set({
+        ownerId: 'user_a',
+        ownerSnapshot: { displayName: 'Alicia', photoURL: null },
+        mediaType: 'image',
+        mediaUrl: 'https://example.com/story.jpg',
+        mediaPath: 'stories/user_a/story_valid/original/pic.webp',
+        thumbUrl: 'https://example.com/thumb.webp',
+        thumbPath: 'stories/user_a/story_valid/thumb/thumb.webp',
+        visibility: 'friends',
+        createdAt: serverTimestamp(),
+        expiresAt: validExpiresAt,
+      }),
+    );
+
+    // Rejects cross-user or non-storyId-scoped Storage mediaPath / thumbPath.
+    await assertFails(
+      ownerDb.doc('stories/story_bad_path').set({
+        ownerId: 'user_a',
+        ownerSnapshot: { displayName: 'Alicia', photoURL: null },
+        mediaType: 'image',
+        mediaUrl: 'https://example.com/story.jpg',
+        mediaPath: 'stories/user_b/other/original/victim.jpg',
+        thumbUrl: null,
+        thumbPath: null,
+        visibility: 'friends',
+        createdAt: serverTimestamp(),
+        expiresAt: validExpiresAt,
+      }),
+    );
+
+    await assertFails(
+      ownerDb.doc('stories/story_bad_thumb').set({
+        ownerId: 'user_a',
+        ownerSnapshot: { displayName: 'Alicia', photoURL: null },
+        mediaType: 'image',
+        mediaUrl: 'https://example.com/story.jpg',
+        mediaPath: 'stories/user_a/story_bad_thumb/original/pic.webp',
+        thumbUrl: 'https://example.com/thumb.webp',
+        thumbPath: 'posts/user_a/post_1/images/wrong.webp',
+        visibility: 'friends',
+        createdAt: serverTimestamp(),
+        expiresAt: validExpiresAt,
+      }),
+    );
+  });
+
   it('protects follow_requests listing and keeps missing-get scoped by requestId', async () => {
     await seedFollowRequest('user_a_user_b', 'user_a', 'user_b', 'pending');
     await seedFollowRequest('user_c_user_d', 'user_c', 'user_d', 'pending');

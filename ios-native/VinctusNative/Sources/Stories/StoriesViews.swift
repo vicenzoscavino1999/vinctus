@@ -75,7 +75,12 @@ struct StoriesBar: View {
         .padding(.vertical, 2)
       }
     }
-    .task {
+    .task(id: authVM.currentUserID ?? "anon") {
+      viewer = nil
+      draftPhoto = nil
+      photoItem = nil
+      vm.reset()
+      guard authVM.currentUserID != nil else { return }
       await vm.load()
       // Screenshot builds open the first story of a kind with `-VinctusOpenStory shorts|people`.
       if let kind = AppRepos.demoArgument("-VinctusOpenStory"),
@@ -118,8 +123,9 @@ struct StoriesBar: View {
       .buttonStyle(.plain)
       .disabled(ownGroup == nil)
 
+      let isPublishing = vm.isPublishing
       PhotosPicker(selection: $photoItem, matching: .images) {
-        Image(systemName: vm.isPublishing ? "hourglass" : "plus")
+        Image(systemName: isPublishing ? "hourglass" : "plus")
           .font(.system(size: 12, weight: .bold))
           .foregroundStyle(.black)
           .frame(width: 24, height: 24)
@@ -127,7 +133,7 @@ struct StoriesBar: View {
           .clipShape(Circle())
           .overlay(Circle().stroke(VinctusTokens.Color.background, lineWidth: 2))
       }
-      .disabled(vm.isPublishing)
+      .disabled(isPublishing)
       .accessibilityLabel("Agregar historia")
       .offset(x: 2, y: -24)
     }
