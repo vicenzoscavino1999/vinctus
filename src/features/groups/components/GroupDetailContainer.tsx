@@ -16,6 +16,7 @@ import { FEED_CACHE_INVALIDATED_EVENT } from '@/features/posts/model/feedCache';
 import GroupMembersPanel, { type GroupMemberItem } from './GroupMembersPanel';
 import { useToast } from '@/shared/ui/Toast';
 import {
+  getBlockedUsers,
   getGroup,
   getGroupJoinStatus,
   getGroupMembers,
@@ -92,6 +93,7 @@ const GroupDetailSession = () => {
   const [error, setError] = useState<string | null>(null);
   const refreshSeqRef = useRef(0);
   const membersSeqRef = useRef(0);
+  const blockedUidsRef = useRef<Set<string>>(new Set());
 
   const groupIdStr = groupId || '';
 
@@ -131,18 +133,27 @@ const GroupDetailSession = () => {
           : ('none' as GroupJoinStatus);
         const canViewContent = !isPrivateGroup || isGroupOwner || status === 'member';
 
-        const [members, posts, postsResult, memberRows] = canViewContent
-          ? await Promise.all([
-              getGroupMemberCount(groupIdStr).catch(() => groupDoc.memberCount ?? 0),
-              getGroupPostsWeekCount(groupIdStr).catch(() => 0),
-              getPostsByGroup(groupIdStr, 3).catch(() => ({
+        const [members, posts, postsResult, memberRows, blockedUids] = await Promise.all([
+          canViewContent
+            ? getGroupMemberCount(groupIdStr).catch(() => groupDoc.memberCount ?? 0)
+            : Promise.resolve(groupDoc.memberCount ?? 0),
+          canViewContent ? getGroupPostsWeekCount(groupIdStr).catch(() => 0) : Promise.resolve(0),
+          canViewContent
+            ? getPostsByGroup(groupIdStr, 3).catch(() => ({
                 items: [],
                 lastDoc: null,
                 hasMore: false,
-              })),
-              user ? getGroupMembers(groupIdStr, 3).catch(() => []) : Promise.resolve([]),
-            ])
-          : [groupDoc.memberCount ?? 0, 0, { items: [], lastDoc: null, hasMore: false }, []];
+              }))
+            : Promise.resolve({ items: [], lastDoc: null, hasMore: false }),
+          canViewContent && user
+            ? getGroupMembers(groupIdStr, 3).catch(() => [])
+            : Promise.resolve([]),
+          user ? getBlockedUsers(user.uid).catch(() => []) : Promise.resolve([]),
+        ]);
+
+        const blockedSet = new Set(blockedUids);
+        blockedUidsRef.current = blockedSet;
+        const visibleMemberRows = memberRows.filter((member) => !blockedSet.has(member.uid));
 
         const recent = postsResult.items.map((post) => ({
           id: post.id,
@@ -153,11 +164,12 @@ const GroupDetailSession = () => {
 
         if (!isActive) return;
 
-        const baseTopMembers = memberRows.map(
+        const baseTopMembers = visibleMemberRows.map(
           (member) =>
             ({
               id: member.uid,
               name: 'Usuario',
+              photoURL: null,
               role: formatRole(member.role),
               posts: 0,
             }) as TopMember,
@@ -172,11 +184,12 @@ const GroupDetailSession = () => {
         setIsLoading(false);
 
         void Promise.all(
-          memberRows.map(async (member) => {
-            const profile = await getUserProfile(member.uid);
+          visibleMemberRows.map(async (member) => {
+            const profile = await getUserProfile(member.uid).catch(() => null);
             return {
               id: member.uid,
               name: profile?.displayName ?? 'Usuario',
+              photoURL: profile?.photoURL ?? null,
               role: formatRole(member.role),
               posts: 0,
             } as TopMember;
@@ -218,16 +231,18 @@ const GroupDetailSession = () => {
   const canCreatePost = !!user && isJoined;
   const canLeaveGroup = !!user && isJoined && !isOwner;
   const visibility = group?.visibility ?? 'public';
+  const effectiveJoinStatus: GroupJoinStatus =
+    visibility === 'public' && joinStatus === 'pending' ? 'none' : joinStatus;
   const joinLabel = isOwner
     ? 'Tu grupo'
-    : joinStatus === 'member'
+    : effectiveJoinStatus === 'member'
       ? 'Unido'
-      : joinStatus === 'pending'
+      : effectiveJoinStatus === 'pending'
         ? 'Pendiente'
         : visibility === 'private'
           ? 'Solicitar'
           : 'Unirme al grupo';
-  const joinDisabled = joinLoading || isOwner || joinStatus !== 'none';
+  const joinDisabled = joinLoading || isOwner || effectiveJoinStatus !== 'none';
   const canOpenChat = isJoined || isOwner;
 
   const groupData: GroupData | null = group
@@ -251,7 +266,7 @@ const GroupDetailSession = () => {
       return;
     }
     if (!group) return;
-    if (isOwner || joinStatus !== 'none') return;
+    if (isOwner || effectiveJoinStatus !== 'none') return;
 
     setJoinLoading(true);
     try {
@@ -377,11 +392,14 @@ const GroupDetailSession = () => {
           reset ? undefined : (membersPanelLastDocRef.current ?? undefined),
         );
         if (seq !== membersSeqRef.current) return;
+        const visibleRows = isOwner
+          ? result.items
+          : result.items.filter((member) => !blockedUidsRef.current.has(member.uid));
         const profiles = await Promise.all(
-          result.items.map((member) => getUserProfile(member.uid).catch(() => null)),
+          visibleRows.map((member) => getUserProfile(member.uid).catch(() => null)),
         );
         if (seq !== membersSeqRef.current) return;
-        const items: GroupMemberItem[] = result.items.map((member, index) => ({
+        const items: GroupMemberItem[] = visibleRows.map((member, index) => ({
           uid: member.uid,
           role: member.role,
           name: profiles[index]?.displayName ?? 'Usuario',
@@ -409,7 +427,7 @@ const GroupDetailSession = () => {
         }
       }
     },
-    [groupIdStr],
+    [groupIdStr, isOwner],
   );
 
   useEffect(() => {
@@ -554,6 +572,7 @@ const GroupDetailSession = () => {
         onGoBack={handleGoBack}
         onNavigateToCategory={handleNavigateToCategory}
         onOpenPost={handleOpenPost}
+        onOpenMember={(uid) => navigate(user?.uid === uid ? '/profile' : `/user/${uid}`)}
         onOpenGroupChat={handleOpenGroupChat}
         onOpenCreatePost={handleOpenCreatePost}
         onEditGroup={() => navigate(`/group/${groupIdStr}/edit`)}

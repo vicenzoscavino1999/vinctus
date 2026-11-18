@@ -152,7 +152,10 @@ final class GroupCardViewModel: ObservableObject {
 
   /// Only acts when the user is not in the group yet; leaving happens on the group's screen.
   func join(uid: String?) async {
-    guard let uid, status == GroupMembershipStatus.none, !isWorking else { return }
+    let canJoinPublicWithStaleRequest = status == .pending && group.visibility == .public
+    guard let uid, !isWorking, status == GroupMembershipStatus.none || canJoinPublicWithStaleRequest else {
+      return
+    }
     isWorking = true
     errorMessage = nil
     defer { isWorking = false }
@@ -260,6 +263,15 @@ final class GroupDetailViewModel: ObservableObject {
           groupName: detail?.name ?? "",
           ownerID: detail?.ownerID,
           isPrivate: detail?.visibility == .private,
+          uid: uid
+        )
+        if detail != nil, self.membership == .member { await refresh() }
+      case .pending where detail?.visibility == .public:
+        self.membership = try await repo.joinOrRequest(
+          groupID: groupID,
+          groupName: detail?.name ?? "",
+          ownerID: detail?.ownerID,
+          isPrivate: false,
           uid: uid
         )
         if detail != nil, self.membership == .member { await refresh() }

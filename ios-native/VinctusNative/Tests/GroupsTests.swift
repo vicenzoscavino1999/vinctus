@@ -80,6 +80,18 @@ final class GroupMembershipTests: XCTestCase {
     XCTAssertFalse(GroupMembershipStatus.pending.isJoined)
   }
 
+  func testStalePendingRequestJoinsAPublicGroup() async {
+    let repo = FakeGroupsRepo()
+    repo.requests = ["me"]
+    let vm = await loadedViewModel(repo)
+    XCTAssertEqual(vm.membership, .pending)
+
+    await vm.performMembershipAction(uid: "me")
+
+    XCTAssertEqual(vm.membership, .member)
+    XCTAssertEqual(repo.joinCalls, 1)
+  }
+
   func testMemberRoles() {
     XCTAssertEqual(GroupView.roleTitle("admin"), "ADMIN")
     XCTAssertEqual(GroupView.roleTitle("moderator"), "MODERADOR")

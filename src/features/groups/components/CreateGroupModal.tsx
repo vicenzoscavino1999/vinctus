@@ -8,6 +8,7 @@ import {
   createGroup,
   updateGroup,
   addGroupMember,
+  getBlockedUsers,
   getFollowing,
   type CreateGroupInput,
   type GroupVisibility,
@@ -80,9 +81,13 @@ const CreateGroupModal = ({
     const loadFollowing = async () => {
       setIsLoadingUsers(true);
       try {
-        const following = await getFollowing(user.uid);
+        const [following, blocked] = await Promise.all([
+          getFollowing(user.uid),
+          getBlockedUsers(user.uid).catch(() => []),
+        ]);
+        const blockedSet = new Set(blocked);
         if (isActive) {
-          setAvailableUsers(following);
+          setAvailableUsers(following.filter((profile) => !blockedSet.has(profile.uid)));
         }
       } catch (err) {
         console.error('Error loading following:', err);
@@ -207,17 +212,15 @@ const CreateGroupModal = ({
         }
       }
 
-      // Add selected members to the group
+      // Add selected members to the group without aborting the rest if one user fails (e.g. block)
       if (selectedMembers.length > 0) {
-        try {
-          // Filter out the creator (already added by createGroup)
-          const membersToAdd = selectedMembers.filter((profile) => profile.uid !== user.uid);
-
-          await Promise.all(
-            membersToAdd.map((profile) => addGroupMember(groupId, profile.uid, 'member')),
-          );
-        } catch (memberError) {
-          console.error('Error adding selected members:', memberError);
+        const membersToAdd = selectedMembers.filter((profile) => profile.uid !== user.uid);
+        const results = await Promise.allSettled(
+          membersToAdd.map((profile) => addGroupMember(groupId, profile.uid, 'member')),
+        );
+        const failed = results.filter((result) => result.status === 'rejected');
+        if (failed.length > 0) {
+          console.error('Error adding some selected members:', failed);
           showToast('Grupo creado, pero algunos miembros no se pudieron agregar.', 'warning');
         }
       }

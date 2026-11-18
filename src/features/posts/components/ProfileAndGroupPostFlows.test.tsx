@@ -36,6 +36,7 @@ vi.mock('@/features/posts/api', () => ({
 
 vi.mock('@/features/groups/api', () => ({
   getGroup: (...args: unknown[]) => mockGetGroup(...args),
+  getBlockedUsers: vi.fn(async () => []),
   getGroupMemberCount: (...args: unknown[]) => mockGetGroupMemberCount(...args),
   getGroupPostsWeekCount: (...args: unknown[]) => mockGetGroupPostsWeekCount(...args),
   getGroupJoinStatus: (...args: unknown[]) => mockGetGroupJoinStatus(...args),

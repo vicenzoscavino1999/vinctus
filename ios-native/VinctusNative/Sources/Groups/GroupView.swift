@@ -170,17 +170,18 @@ struct GroupView: View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: 10) {
         if let membership = vm.membership, membership != .owner {
-          if membership == .member {
+          let effectiveMembership = (!isPrivate && membership == .pending) ? GroupMembershipStatus.none : membership
+          if effectiveMembership == .member {
             GroupActionButton(title: "Unido", systemImage: "checkmark", style: .gold) {}
               .disabled(true)
           } else {
             GroupActionButton(
-              title: vm.isUpdatingMembership ? "Procesando..." : membership.buttonTitle(isPrivate: isPrivate).uppercased(),
-              style: membership == .pending ? .muted : .neutral
+              title: vm.isUpdatingMembership ? "Procesando..." : effectiveMembership.buttonTitle(isPrivate: isPrivate).uppercased(),
+              style: effectiveMembership == .pending ? .muted : .neutral
             ) {
               Task { await vm.performMembershipAction(uid: currentUserID) }
             }
-            .disabled(vm.isUpdatingMembership || membership == .pending)
+            .disabled(vm.isUpdatingMembership || effectiveMembership == .pending)
           }
         }
 

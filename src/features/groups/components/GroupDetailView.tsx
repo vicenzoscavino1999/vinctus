@@ -13,6 +13,7 @@ export interface RecentPost {
 export interface TopMember {
   id: string;
   name: string;
+  photoURL?: string | null;
   role: string;
   posts: number;
 }
@@ -57,6 +58,7 @@ export interface GroupDetailViewProps {
   onGoBack: () => void;
   onNavigateToCategory: () => void;
   onOpenPost?: (postId: string) => void;
+  onOpenMember?: (uid: string) => void;
   onOpenGroupChat: () => void;
   onOpenCreatePost: () => void;
   onEditGroup: () => void;
@@ -85,6 +87,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
   onGoBack,
   onNavigateToCategory,
   onOpenPost,
+  onOpenMember,
   onOpenGroupChat,
   onOpenCreatePost,
   onEditGroup,
@@ -314,10 +317,31 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
             {group.topMembers.map((member) => (
               <div
                 key={member.id}
-                className="bg-surface-overlay border border-neutral-800/50 rounded-card p-4 text-center"
+                onClick={() => onOpenMember?.(member.id)}
+                onKeyDown={(event) => {
+                  if (!onOpenMember) return;
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onOpenMember(member.id);
+                  }
+                }}
+                role={onOpenMember ? 'button' : undefined}
+                tabIndex={onOpenMember ? 0 : undefined}
+                aria-label={onOpenMember ? `Abrir perfil de ${member.name}` : undefined}
+                className={`bg-surface-overlay border border-neutral-800/50 rounded-card p-4 text-center ${
+                  onOpenMember ? 'cursor-pointer hover:border-neutral-700 transition-colors' : ''
+                }`}
               >
-                <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center mx-auto mb-3">
-                  <span className="text-lg">{member.name.charAt(0)}</span>
+                <div className="w-12 h-12 rounded-full bg-neutral-800 overflow-hidden flex items-center justify-center mx-auto mb-3">
+                  {member.photoURL ? (
+                    <img
+                      src={member.photoURL}
+                      alt={member.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-lg">{member.name.charAt(0)}</span>
+                  )}
                 </div>
                 <p className="text-white font-medium">{member.name}</p>
                 <p className="text-brand-gold text-xs uppercase tracking-wider">{member.role}</p>

@@ -94,4 +94,52 @@ describe('GroupDetailView', () => {
     expect(onEditGroup).toHaveBeenCalledTimes(1);
     expect(screen.getByText('4 miembros')).toBeInTheDocument();
   });
+
+  it('renders top member avatar and triggers onOpenMember when clicked', () => {
+    const onOpenMember = vi.fn();
+    const groupWithAvatar: GroupData = {
+      ...sampleGroup,
+      topMembers: [
+        {
+          id: 'u1',
+          name: 'Alice',
+          role: 'Admin',
+          posts: 3,
+          photoURL: 'https://example.com/alice.jpg',
+        },
+      ],
+    };
+
+    const { container } = render(
+      <GroupDetailView
+        isLoading={false}
+        error={null}
+        group={groupWithAvatar}
+        category={null}
+        isJoined={true}
+        joinLabel="Tu grupo"
+        joinDisabled={true}
+        canOpenChat={false}
+        openingChat={false}
+        isAuthenticated={true}
+        canCreatePost={false}
+        canEditGroup={false}
+        canLeaveGroup={false}
+        isPrivateLocked={false}
+        onJoinGroup={vi.fn()}
+        onGoBack={vi.fn()}
+        onNavigateToCategory={vi.fn()}
+        onOpenGroupChat={vi.fn()}
+        onOpenCreatePost={vi.fn()}
+        onEditGroup={vi.fn()}
+        onOpenMembers={vi.fn()}
+        onOpenMember={onOpenMember}
+        onLeaveGroup={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector('img[src="https://example.com/alice.jpg"]')).not.toBeNull();
+    fireEvent.click(screen.getByText('Alice'));
+    expect(onOpenMember).toHaveBeenCalledWith('u1');
+  });
 });

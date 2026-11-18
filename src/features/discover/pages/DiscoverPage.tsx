@@ -1228,7 +1228,9 @@ const DiscoverSession = () => {
       return;
     }
 
-    const status = groupJoinStatusMap[group.id] ?? 'none';
+    const rawStatus = groupJoinStatusMap[group.id] ?? 'none';
+    const visibility = group.visibility ?? 'public';
+    const status = visibility === 'public' && rawStatus === 'pending' ? 'none' : rawStatus;
     const isOwner = group.ownerId && group.ownerId === user.uid;
     if (isOwner || status === 'member') {
       navigate(`/group/${group.id}`);
@@ -1241,7 +1243,6 @@ const DiscoverSession = () => {
 
     setGroupActionLoading(group.id);
     try {
-      const visibility = group.visibility ?? 'public';
       if (visibility === 'public') {
         await joinPublicGroup(group.id, user.uid);
         setGroupJoinStatusMap((prev) => ({ ...prev, [group.id]: 'member' }));
@@ -1276,10 +1277,12 @@ const DiscoverSession = () => {
 
   const getGroupActionLabel = (group: FirestoreGroup): string => {
     if (user && group.ownerId === user.uid) return 'Tu grupo';
-    const status = groupJoinStatusMap[group.id] ?? 'none';
+    const rawStatus = groupJoinStatusMap[group.id] ?? 'none';
+    const visibility = group.visibility ?? 'public';
+    const status = visibility === 'public' && rawStatus === 'pending' ? 'none' : rawStatus;
     if (status === 'member') return 'Unido';
     if (status === 'pending') return 'Pendiente';
-    return (group.visibility ?? 'public') === 'public' ? 'Unirme' : 'Solicitar';
+    return visibility === 'public' ? 'Unirme' : 'Solicitar';
   };
 
   const getGroupStats = (group: FirestoreGroup): { members: number; postsWeek: number } => {
