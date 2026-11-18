@@ -187,6 +187,12 @@ enum Limits {
   enum Stories {
     /// Owner display name copied into a story (ownerSnapshot.displayName).
     static let ownerNameMaxLength = 80
+    /// Owner photo URL copied into a story (ownerSnapshot.photoURL).
+    static let photoURLMaxLength = 600
+    /// Media and thumbnail download URL length in a story document.
+    static let mediaUrlMaxLength = 1000
+    /// Storage object path length in a story document.
+    static let mediaPathMaxLength = 600
   }
 }
 

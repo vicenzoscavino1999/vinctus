@@ -33,6 +33,9 @@ struct YouTubeEmbedView: UIViewRepresentable {
   /// Only the characters of YouTube's video ids get into the page.
   static func html(videoID: String) -> String {
     let safeID = videoID.filter { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }
+    guard !safeID.isEmpty else {
+      return "<!doctype html><html><body style=\"margin:0;background:#000\"></body></html>"
+    }
     return """
     <!doctype html><html><head>
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">

@@ -88,15 +88,33 @@ struct StoryViewer: View {
     .confirmationDialog("¿Eliminar esta historia?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
       Button("Eliminar", role: .destructive) {
         guard let story else { return }
+        isPaused = true
         Task {
-          await vm.delete(story)
-          dismiss()
+          let deleted = await vm.delete(story)
+          isPaused = false
+          if deleted { dismiss() }
         }
       }
     }
+    .alert(
+      "No se pudo eliminar",
+      isPresented: Binding(
+        get: { vm.errorMessage != nil && story?.ownerID == authVM.currentUserID },
+        set: { presented in
+          if !presented { vm.errorMessage = nil }
+        }
+      )
+    ) {
+      Button("OK", role: .cancel) {}
+    } message: {
+      Text(vm.errorMessage ?? "")
+    }
     .onChange(of: isConfirmingDelete) { _, showing in isPaused = showing }
     .task(id: story?.id) { await play() }
-    .onDisappear { player?.pause() }
+    .onDisappear {
+      player?.pause()
+      player = nil
+    }
   }
 
   @ViewBuilder
@@ -209,10 +227,15 @@ struct StoryViewer: View {
           target: .story(storyID: story.id, ownerID: story.ownerID),
           authorID: story.ownerID,
           authorName: group?.ownerName ?? "esta persona",
-          onBlocked: { dismiss() }
+          onBlocked: {
+            vm.excludeOwner(story.ownerID)
+            dismiss()
+          },
+          onInteractionChange: { active in
+            isPaused = active
+          }
         )
         .foregroundStyle(VinctusTokens.Color.textSecondary)
-        .simultaneousGesture(TapGesture().onEnded { isPaused = true })
       }
       Button {
         dismiss()
@@ -254,6 +277,10 @@ struct StoryViewer: View {
         duration = min(seconds, 60)
       } else {
         duration = 15
+      }
+      if Task.isCancelled {
+        newPlayer.pause()
+        return
       }
     }
 

@@ -75,7 +75,12 @@ struct StoriesBar: View {
         .padding(.vertical, 2)
       }
     }
-    .task {
+    .task(id: authVM.currentUserID ?? "anon") {
+      viewer = nil
+      draftPhoto = nil
+      photoItem = nil
+      vm.reset()
+      guard authVM.currentUserID != nil else { return }
       await vm.load()
       // Screenshot builds open the first story of a kind with `-VinctusOpenStory shorts|people`.
       if let kind = AppRepos.demoArgument("-VinctusOpenStory"),

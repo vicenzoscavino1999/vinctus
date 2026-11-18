@@ -547,10 +547,10 @@ service cloud.firestore {
       return snapshot is map
         && snapshot.keys().hasOnly(['displayName', 'photoURL'])
         && (snapshot.displayName == null || (snapshot.displayName is string && snapshot.displayName.size() <= 80))
-        && (snapshot.photoURL == null || snapshot.photoURL is string);
+        && (snapshot.photoURL == null || (snapshot.photoURL is string && snapshot.photoURL.size() <= 600));
     }
 
-    function isValidStoryCreate() {
+    function isValidStoryCreate(storyId) {
       let data = request.resource.data;
       return data.keys().hasOnly([
           'ownerId', 'ownerSnapshot', 'mediaType', 'mediaUrl', 'mediaPath',
@@ -561,10 +561,18 @@ service cloud.firestore {
         && data.mediaType in ['image', 'video']
         && data.mediaUrl is string
         && data.mediaUrl.size() > 0
+        && data.mediaUrl.size() <= 1000
         && data.mediaPath is string
         && data.mediaPath.size() > 0
-        && (data.thumbUrl == null || (data.thumbUrl is string && data.thumbUrl.size() > 0))
-        && (data.thumbPath == null || (data.thumbPath is string && data.thumbPath.size() > 0))
+        && data.mediaPath.size() <= 600
+        && data.mediaPath.matches('stories/' + request.auth.uid + '/' + storyId + '/original/[^/]+')
+        && (data.thumbUrl == null || (data.thumbUrl is string && data.thumbUrl.size() > 0 && data.thumbUrl.size() <= 1000))
+        && (data.thumbPath == null || (
+          data.thumbPath is string
+          && data.thumbPath.size() > 0
+          && data.thumbPath.size() <= 600
+          && data.thumbPath.matches('stories/' + request.auth.uid + '/' + storyId + '/thumb/[^/]+')
+        ))
         && data.visibility in ['friends']
         && data.createdAt == request.time
         && data.expiresAt is timestamp
@@ -616,19 +624,24 @@ service cloud.firestore {
     }
 
     // stories/{storyId}
-      // Stories (friends-only)
+      // Stories (friends and followers, excluding blocked users)
       // Note: Simplified for Safari mobile compatibility - frontend filters appropriately
       match /stories/{storyId} {
         allow read: if isAuthenticated()
           && resource.data.visibility == 'friends'
           && (
             resource.data.ownerId == request.auth.uid
-            || isFriend(request.auth.uid, resource.data.ownerId)
-            || isFriendByIndex(request.auth.uid, resource.data.ownerId)
-            || isFollower(request.auth.uid, resource.data.ownerId)
+            || (
+              !isConversationBlocked(request.auth.uid, resource.data.ownerId)
+              && (
+                isFriend(request.auth.uid, resource.data.ownerId)
+                || isFriendByIndex(request.auth.uid, resource.data.ownerId)
+                || isFollower(request.auth.uid, resource.data.ownerId)
+              )
+            )
           );
 
-      allow create: if isAuthenticated() && isValidStoryCreate();
+      allow create: if isAuthenticated() && isValidStoryCreate(storyId);
       allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
       allow update: if false;
     }

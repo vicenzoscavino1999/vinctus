@@ -28,17 +28,28 @@ service firebase.storage {
         || firestore.exists(/databases/(default)/documents/users/$(ownerUid)/friends/$(viewerUid));
     }
 
+    function isFollower(viewerUid, ownerUid) {
+      return firestore.exists(/databases/(default)/documents/users/$(ownerUid)/followers/$(viewerUid));
+    }
+
+    function isBlockedBetween(uidA, uidB) {
+      return firestore.exists(/databases/(default)/documents/users/$(uidA)/blockedUsers/$(uidB))
+        || firestore.exists(/databases/(default)/documents/users/$(uidB)/blockedUsers/$(uidA));
+    }
+
     function canReadStoryMedia(userId, storyId) {
       return isAuthenticated()
         && (
           isOwner(userId)
           || (
-            firestore.exists(/databases/(default)/documents/stories/$(storyId))
+            !isBlockedBetween(request.auth.uid, userId)
+            && firestore.exists(/databases/(default)/documents/stories/$(storyId))
             && firestore.get(/databases/(default)/documents/stories/$(storyId)).data.ownerId == userId
             && firestore.get(/databases/(default)/documents/stories/$(storyId)).data.visibility == 'friends'
             && (
               isMutualFollower(request.auth.uid, userId)
               || isFriendByIndex(request.auth.uid, userId)
+              || isFollower(request.auth.uid, userId)
             )
           )
         );

@@ -1,8 +1,11 @@
 import {
   addPostComment as addPostCommentRaw,
+  blockUser as blockUserRaw,
   createPostCommentReport as createPostCommentReportRaw,
   createPostReport as createPostReportRaw,
+  createStoryReport as createStoryReportRaw,
   createStory as createStoryRaw,
+  deleteStory as deleteStoryRaw,
   getNewStoryId as getNewStoryIdRaw,
   getNewPostId as getNewPostIdRaw,
   likePostWithSync as likePostWithSyncRaw,
@@ -25,6 +28,7 @@ import {
   commentTextSchema,
   createPostCommentReportInputSchema,
   createPostReportInputSchema,
+  createStoryReportInputSchema,
   createPostUploadingInputSchema,
   createStoryInputSchema,
   postIdSchema,
@@ -141,6 +145,31 @@ export const createPostCommentReport = async (input: {
 export const createStory = async (input: CreateStoryInput): Promise<string> => {
   const safeInput = validate(createStoryInputSchema, input, { field: 'input' });
   return runWrite('posts.createStory', () => createStoryRaw(safeInput));
+};
+
+export const deleteStory = async (
+  storyId: string,
+  mediaPaths?: { mediaPath?: string | null; thumbPath?: string | null },
+): Promise<void> => {
+  const safeStoryId = validate(storyIdSchema, storyId, { field: 'storyId' });
+  return runWrite('posts.deleteStory', () => deleteStoryRaw(safeStoryId, mediaPaths));
+};
+
+export const createStoryReport = async (input: {
+  reporterUid: string;
+  storyId: string;
+  storyOwnerId?: string | null;
+  reason: UserReportReason;
+  details?: string | null;
+}): Promise<string> => {
+  const safeInput = validate(createStoryReportInputSchema, input, { field: 'input' });
+  return runWrite('posts.createStoryReport', () => createStoryReportRaw(safeInput));
+};
+
+export const blockUser = async (currentUid: string, blockedUid: string): Promise<void> => {
+  const safeCurrentUid = validate(userIdSchema, currentUid, { field: 'currentUid' });
+  const safeBlockedUid = validate(userIdSchema, blockedUid, { field: 'blockedUid' });
+  return runWrite('posts.blockUser', () => blockUserRaw(safeCurrentUid, safeBlockedUid));
 };
 
 export const createPostUploading = async (input: CreatePostUploadingInput): Promise<boolean> => {
