@@ -453,11 +453,13 @@ const DiscoverSession = () => {
   const [allGroups, setAllGroups] = useState<FirestoreGroup[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
+  const [groupsReloadToken, setGroupsReloadToken] = useState(0);
   const [groupJoinStatusMap, setGroupJoinStatusMap] = useState<Record<string, GroupJoinStatus>>({});
   const [groupActionLoading, setGroupActionLoading] = useState<string | null>(null);
   const [arenaDebates, setArenaDebates] = useState<Debate[]>([]);
   const [arenaDebatesLoading, setArenaDebatesLoading] = useState(false);
   const [arenaDebatesError, setArenaDebatesError] = useState<string | null>(null);
+  const [arenaReloadToken, setArenaReloadToken] = useState(0);
   const [activeTrendCategoryId, setActiveTrendCategoryId] = useState<string | null>(null);
   const [trendPreviewState, setTrendPreviewState] = useState<Record<string, TrendPreviewState>>({});
   const previewRequestedRef = useRef<Set<string>>(new Set());
@@ -1264,7 +1266,7 @@ const DiscoverSession = () => {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [groupsReloadToken]);
 
   useEffect(() => {
     let isActive = true;
@@ -1294,7 +1296,7 @@ const DiscoverSession = () => {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [arenaReloadToken]);
 
   useEffect(() => {
     if (!user || groups.length === 0) {
@@ -1305,23 +1307,26 @@ const DiscoverSession = () => {
     if (pending.length === 0) return;
 
     const loadStatuses = async () => {
-      try {
-        const updates: Record<string, GroupJoinStatus> = {};
-        await Promise.all(
-          pending.map(async (group) => {
-            const status = await getGroupJoinStatus(group.id, user.uid);
-            updates[group.id] = status;
-          }),
-        );
-        if (isActive) {
-          setGroupJoinStatusMap((prev) => ({ ...prev, ...updates }));
+      const updates: Record<string, GroupJoinStatus> = {};
+      const settled = await Promise.allSettled(
+        pending.map(async (group) => {
+          const status = await getGroupJoinStatus(group.id, user.uid);
+          return { groupId: group.id, status };
+        }),
+      );
+      for (const result of settled) {
+        if (result.status === 'fulfilled') {
+          updates[result.value.groupId] = result.value.status;
+        } else {
+          console.error('Error loading group status:', result.reason);
         }
-      } catch (statusError) {
-        console.error('Error loading group status:', statusError);
+      }
+      if (isActive && Object.keys(updates).length > 0) {
+        setGroupJoinStatusMap((prev) => ({ ...prev, ...updates }));
       }
     };
 
-    loadStatuses();
+    void loadStatuses();
 
     return () => {
       isActive = false;
@@ -1400,7 +1405,18 @@ const DiscoverSession = () => {
 
   const handleSearch = (e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    setSearchParams(value ? { q: value } : {}, { replace: true });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) {
+          next.set('q', value);
+        } else {
+          next.delete('q');
+        }
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   const activateTrendCategory = (category: Category) => {
@@ -1862,7 +1878,16 @@ const DiscoverSession = () => {
             {searchQuery && (
               <button
                 type="button"
-                onClick={() => setSearchParams({}, { replace: true })}
+                onClick={() =>
+                  setSearchParams(
+                    (prev) => {
+                      const next = new URLSearchParams(prev);
+                      next.delete('q');
+                      return next;
+                    },
+                    { replace: true },
+                  )
+                }
                 aria-label="Limpiar búsqueda"
                 className="p-1 text-neutral-500 hover:text-white transition-colors"
               >
@@ -1927,7 +1952,16 @@ const DiscoverSession = () => {
         {arenaDebatesLoading ? (
           <div className="text-center text-neutral-500 py-6">Cargando debates de Arena IA...</div>
         ) : arenaDebatesError ? (
-          <div className="text-center text-red-400 py-6">{arenaDebatesError}</div>
+          <div className="text-center py-6 space-y-3">
+            <p className="text-red-400">{arenaDebatesError}</p>
+            <button
+              type="button"
+              onClick={() => setArenaReloadToken((prev) => prev + 1)}
+              className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+            >
+              Reintentar
+            </button>
+          </div>
         ) : curatedArenaDebates.length === 0 ? (
           <div className="text-center text-neutral-500 py-6">
             Aun no hay debates con fuentes detectadas. Cuando aparezcan referencias, se mostraran
@@ -2034,7 +2068,16 @@ const DiscoverSession = () => {
         {groupsLoading ? (
           <div className="text-center text-neutral-500 py-6">Cargando grupos...</div>
         ) : groupsError ? (
-          <div className="text-center text-red-400 py-6">{groupsError}</div>
+          <div className="text-center py-6 space-y-3">
+            <p className="text-red-400">{groupsError}</p>
+            <button
+              type="button"
+              onClick={() => setGroupsReloadToken((prev) => prev + 1)}
+              className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+            >
+              Reintentar
+            </button>
+          </div>
         ) : groups.length === 0 ? (
           <div className="text-center text-neutral-500 py-6">
             {searchQuery.trim() || filters.category
@@ -2135,11 +2178,22 @@ const DiscoverSession = () => {
             />
             <input
               type="text"
+              aria-label="Buscar videos en YouTube"
               value={youtubeQueryInput}
               onChange={(event) => setYoutubeQueryInput(event.target.value)}
               placeholder="Buscar videos en YouTube dentro de Vinctus..."
-              className="w-full rounded-full border border-neutral-700 bg-neutral-900/70 py-2 pl-9 pr-4 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none"
+              className="w-full rounded-full border border-neutral-700 bg-neutral-900/70 py-2 pl-9 pr-9 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none"
             />
+            {youtubeQueryInput.trim() && youtubeQueryInput !== YOUTUBE_FALLBACK_QUERY && (
+              <button
+                type="button"
+                onClick={() => setYoutubeQueryInput(YOUTUBE_FALLBACK_QUERY)}
+                aria-label="Restablecer búsqueda de YouTube"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors"
+              >
+                <X size={14} />
+              </button>
+            )}
           </label>
           <span className="text-[10px] uppercase tracking-[0.22em] text-neutral-500">
             {youtubeLoading
@@ -2206,6 +2260,9 @@ const DiscoverSession = () => {
         typeof document !== 'undefined' &&
         createPortal(
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={activeYouTubePublication.title}
             className="fixed inset-0 z-[320] overflow-y-auto safe-area-inset bg-black/80 backdrop-blur-sm p-4 md:p-8"
             onClick={() => setActiveYouTubePublication(null)}
           >
@@ -2249,7 +2306,7 @@ const DiscoverSession = () => {
                         activeYouTubePublication.group}
                     </p>
                   </div>
-                  {activeYouTubePublication.youtubeUrl && (
+                  {isSafeHttpUrl(activeYouTubePublication.youtubeUrl) && (
                     <a
                       href={activeYouTubePublication.youtubeUrl}
                       target="_blank"

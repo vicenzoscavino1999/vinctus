@@ -103,6 +103,8 @@ struct ConnectionsSearchView: View {
         }
         .listRowSeparator(.hidden)
         .listRowBackground(SwiftUI.Color.clear)
+      } else if vm.isSearching, visibleDisplayedUsers.isEmpty {
+        EmptyView()
       } else if visibleDisplayedUsers.isEmpty {
         VCard {
           VStack(alignment: .leading, spacing: 6) {
@@ -158,14 +160,18 @@ struct ConnectionsSearchView: View {
     .task(id: authVM.currentUserID) {
       if authVM.currentUserID == nil && !AppRepos.isDemo {
         vm.reset()
+        suggestedGroups.reset()
         return
       }
       await refreshData()
     }
     .refreshable {
-      await refreshData()
       if vm.isSearchActive {
+        vm.currentUserID = authVM.currentUserID
         await vm.refreshSearchNow()
+        await suggestedGroups.refresh()
+      } else {
+        await refreshData()
       }
     }
   }

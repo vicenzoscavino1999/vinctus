@@ -28,6 +28,9 @@ type ApiContentCardProps = {
   type: string;
 };
 
+const isSafeHttpUrl = (value: string | null | undefined): value is string =>
+  typeof value === 'string' && /^https?:\/\//i.test(value.trim());
+
 // Generic card for API content - clicking opens the source link
 const ApiContentCard = ({ item, type }: ApiContentCardProps) => {
   // Get the appropriate link based on type
@@ -52,7 +55,7 @@ const ApiContentCard = ({ item, type }: ApiContentCardProps) => {
 
   const handleClick = () => {
     const link = getLink()?.trim();
-    if (link && /^https?:\/\//i.test(link)) {
+    if (isSafeHttpUrl(link)) {
       window.open(link, '_blank', 'noopener,noreferrer');
     }
   };
@@ -115,7 +118,7 @@ const ApiContentCard = ({ item, type }: ApiContentCardProps) => {
         return (
           <>
             <div className="flex gap-4">
-              {item.cover && (
+              {isSafeHttpUrl(item.cover) && (
                 <img src={item.cover} alt={item.title} className="w-16 h-24 object-cover rounded" />
               )}
               <div className="flex-1">
@@ -142,7 +145,7 @@ const ApiContentCard = ({ item, type }: ApiContentCardProps) => {
         return (
           <>
             <div className="flex gap-4">
-              {item.thumbnail && (
+              {isSafeHttpUrl(item.thumbnail) && (
                 <img
                   src={item.thumbnail}
                   alt={item.title}
@@ -171,7 +174,7 @@ const ApiContentCard = ({ item, type }: ApiContentCardProps) => {
       case 'inaturalist':
         return (
           <>
-            {item.photo && (
+            {isSafeHttpUrl(item.photo) && (
               <img
                 src={item.photo}
                 alt={item.species}

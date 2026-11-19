@@ -227,11 +227,15 @@ function decodeHtmlEntities(value: string): string {
     .replace(/&nbsp;/g, ' ')
     .replace(/&#(\d+);/g, (_, code) => {
       const parsed = Number.parseInt(code, 10);
-      return Number.isFinite(parsed) && parsed > 0 ? String.fromCodePoint(parsed) : '';
+      return Number.isFinite(parsed) && parsed > 0 && parsed <= 0x10ffff
+        ? String.fromCodePoint(parsed)
+        : '';
     })
     .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
       const parsed = Number.parseInt(hex, 16);
-      return Number.isFinite(parsed) && parsed > 0 ? String.fromCodePoint(parsed) : '';
+      return Number.isFinite(parsed) && parsed > 0 && parsed <= 0x10ffff
+        ? String.fromCodePoint(parsed)
+        : '';
     })
     .replace(/&amp;/g, '&');
 }
@@ -243,8 +247,9 @@ function normalizeString(value: string | undefined): string | null {
 }
 
 function normalizeDecodedString(value: string | undefined): string | null {
-  const normalized = normalizeString(value);
-  return normalized ? decodeHtmlEntities(normalized) : null;
+  if (!value) return null;
+  const decoded = decodeHtmlEntities(value).trim();
+  return decoded.length > 0 ? decoded : null;
 }
 
 function getThumbnailUrl(item: YouTubeApiItem): string | null {

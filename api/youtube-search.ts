@@ -102,11 +102,15 @@ function decodeHtmlEntities(value: string): string {
     .replace(/&nbsp;/g, ' ')
     .replace(/&#(\d+);/g, (_, code) => {
       const parsed = Number.parseInt(code, 10);
-      return Number.isFinite(parsed) && parsed > 0 ? String.fromCodePoint(parsed) : '';
+      return Number.isFinite(parsed) && parsed > 0 && parsed <= 0x10ffff
+        ? String.fromCodePoint(parsed)
+        : '';
     })
     .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
       const parsed = Number.parseInt(hex, 16);
-      return Number.isFinite(parsed) && parsed > 0 ? String.fromCodePoint(parsed) : '';
+      return Number.isFinite(parsed) && parsed > 0 && parsed <= 0x10ffff
+        ? String.fromCodePoint(parsed)
+        : '';
     })
     .replace(/&amp;/g, '&');
 }
@@ -118,8 +122,9 @@ function normalizeString(value: string | undefined): string | null {
 }
 
 function normalizeDecodedString(value: string | undefined): string | null {
-  const normalized = normalizeString(value);
-  return normalized ? decodeHtmlEntities(normalized) : null;
+  if (!value) return null;
+  const decoded = decodeHtmlEntities(value).trim();
+  return decoded.length > 0 ? decoded : null;
 }
 
 function normalizeQuery(rawQuery: string | null): string {
@@ -134,7 +139,11 @@ function normalizeQuery(rawQuery: string | null): string {
 
 function parseLimit(rawLimit: string | null): number {
   if (!rawLimit) return 6;
-  const parsed = Number.parseInt(rawLimit, 10);
+  const trimmed = rawLimit.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    throw new RequestError('Invalid "limit"', 400);
+  }
+  const parsed = Number.parseInt(trimmed, 10);
   if (!Number.isFinite(parsed)) {
     throw new RequestError('Invalid "limit"', 400);
   }

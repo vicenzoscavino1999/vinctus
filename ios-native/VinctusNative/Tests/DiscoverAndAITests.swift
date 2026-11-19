@@ -54,6 +54,23 @@ final class GroupSuggestionsViewModelTests: XCTestCase {
     XCTAssertEqual(vm.filtered(by: "acustica").map(\.id), ["g2"])
     XCTAssertTrue(vm.filtered(by: "física").isEmpty)
   }
+
+  func testResetClearsLoadedGroupsAndError() async {
+    let repo = FakeGroupsRepo()
+    repo.listedGroups = [group("g1", name: "Astronomía")]
+    let vm = GroupSuggestionsViewModel(repo: repo, limit: 12)
+    await vm.refresh()
+    repo.failsToList = true
+    await vm.refresh()
+    XCTAssertEqual(vm.groups.count, 1)
+    XCTAssertNotNil(vm.errorMessage)
+
+    vm.reset()
+
+    XCTAssertTrue(vm.groups.isEmpty)
+    XCTAssertNil(vm.errorMessage)
+    XCTAssertFalse(vm.isShowingCachedData)
+  }
 }
 
 @MainActor

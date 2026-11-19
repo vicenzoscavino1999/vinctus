@@ -369,4 +369,93 @@ describe('api/discover', () => {
       }),
     ]);
   });
+
+  it('ignores out-of-range numeric HTML entities and unsafe iNaturalist/iTunes URLs', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        json: vi.fn(async () => ({
+          pages: [
+            {
+              excerpt: 'Safe &#9999999; &amp; &#x110000; text',
+              id: 77,
+              key: 'Safe_Text',
+              title: 'Title &#9999999;',
+            },
+          ],
+        })),
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        json: vi.fn(async () => ({
+          results: [
+            {
+              id: 501,
+              observed_on: '2026-01-02',
+              photos: [{ url: 'javascript:alert(1)' }],
+              place_guess: 'Andes',
+              taxon: { name: 'Vultur gryphus', preferred_common_name: 'Condor' },
+              user: { login: 'ana' },
+            },
+          ],
+        })),
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        json: vi.fn(async () => ({
+          results: [
+            {
+              artistName: 'Miles Davis',
+              trackId: 9,
+              trackName: 'So What',
+              trackViewUrl: 'javascript:alert(2)',
+            },
+          ],
+        })),
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+      } as unknown as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const wikiResult: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({ query: { limit: '1', query: 'Safe', source: 'wikipedia' } }),
+      createRes(wikiResult),
+    );
+    expect(wikiResult.statusCode).toBe(200);
+    expect(wikiResult.payload).toEqual(
+      expect.objectContaining({
+        data: [expect.objectContaining({ summary: 'Safe & text', title: 'Title' })],
+      }),
+    );
+
+    const natureResult: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({ query: { limit: '1', query: 'birds', source: 'inaturalist' } }),
+      createRes(natureResult),
+    );
+    expect(natureResult.statusCode).toBe(200);
+    expect(natureResult.payload).toEqual(
+      expect.objectContaining({
+        data: [expect.objectContaining({ photo: null, species: 'Condor' })],
+      }),
+    );
+
+    const musicResult: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({ query: { limit: '1', query: 'jazz', source: 'lastfm' } }),
+      createRes(musicResult),
+    );
+    expect(musicResult.statusCode).toBe(200);
+    expect(musicResult.payload).toEqual(
+      expect.objectContaining({
+        data: [expect.objectContaining({ link: undefined, title: 'So What' })],
+      }),
+    );
+  });
 });

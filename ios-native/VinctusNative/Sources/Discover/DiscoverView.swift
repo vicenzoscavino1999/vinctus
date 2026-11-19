@@ -231,7 +231,9 @@ struct DiscoverView: View {
     }
     .task(id: authVM.currentUserID) {
       if authVM.currentUserID == nil && !AppRepos.isDemo {
+        discoverQuery = ""
         vm.reset()
+        suggestedGroups.reset()
         return
       }
       await refreshDiscoverData()

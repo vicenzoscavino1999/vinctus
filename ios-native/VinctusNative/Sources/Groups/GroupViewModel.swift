@@ -50,6 +50,12 @@ final class GroupSuggestionsViewModel: ObservableObject {
     self.limit = limit
   }
 
+  func reset() {
+    groups = []
+    errorMessage = nil
+    isShowingCachedData = false
+  }
+
   func refresh() async {
     guard !isLoading else { return }
     isLoading = true

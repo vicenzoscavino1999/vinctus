@@ -168,4 +168,46 @@ describe('api/youtube-shorts', () => {
       }),
     );
   });
+
+  it('decodes HTML entities in shorts metadata and rejects non-integer limits', async () => {
+    const invalidLimit: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(createReq({ query: { limit: '10abc', q: 'shorts' } }), createRes(invalidLimit));
+    expect(invalidLimit.statusCode).toBe(400);
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: vi.fn(async () => ({
+        items: [
+          {
+            id: { videoId: 'dQw4w9WgXcQ' },
+            snippet: {
+              channelTitle: 'Ciencia &amp; Arte',
+              description: 'Resumen &quot;breve&quot; &#9999999;',
+              title: 'Física &amp; &#39;Cuántica&#39;',
+            },
+          },
+        ],
+      })),
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: vi.fn(async () => ''),
+    } as unknown as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(createReq({ query: { limit: '5', q: 'shorts fisica' } }), createRes(result));
+
+    expect(result.statusCode).toBe(200);
+    expect(result.payload).toEqual(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            channelTitle: 'Ciencia & Arte',
+            description: 'Resumen "breve"',
+            title: "Física & 'Cuántica'",
+          }),
+        ],
+      }),
+    );
+  });
 });

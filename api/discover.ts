@@ -218,11 +218,15 @@ const decodeHtmlEntities = (value: string): string =>
     .replace(/&nbsp;/g, ' ')
     .replace(/&#(\d+);/g, (_, code) => {
       const parsed = Number.parseInt(code, 10);
-      return Number.isFinite(parsed) && parsed > 0 ? String.fromCodePoint(parsed) : '';
+      return Number.isFinite(parsed) && parsed > 0 && parsed <= 0x10ffff
+        ? String.fromCodePoint(parsed)
+        : '';
     })
     .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
       const parsed = Number.parseInt(hex, 16);
-      return Number.isFinite(parsed) && parsed > 0 ? String.fromCodePoint(parsed) : '';
+      return Number.isFinite(parsed) && parsed > 0 && parsed <= 0x10ffff
+        ? String.fromCodePoint(parsed)
+        : '';
     })
     .replace(/&amp;/g, '&');
 
@@ -381,7 +385,8 @@ const fetchWikipedia = async (query: string, limit: number): Promise<WikipediaAr
   const mapFromRestSearch = (pages: WikipediaSearchPage[]): WikipediaArticle[] =>
     pages.slice(0, limit).map((page, index) => {
       const pageId = Number(page.id);
-      const title = decodeHtmlEntities(page.title?.trim() || 'Sin titulo');
+      const title =
+        normalizeText(decodeHtmlEntities(page.title?.trim() || 'Sin titulo')) || 'Sin titulo';
       const summaryRaw = page.excerpt || page.description || 'Sin resumen disponible';
       const summary = withEllipsis(
         normalizeText(decodeHtmlEntities(stripHtmlTags(summaryRaw))),
@@ -404,7 +409,8 @@ const fetchWikipedia = async (query: string, limit: number): Promise<WikipediaAr
       .slice(0, limit)
       .map((page, index) => {
         const pageId = Number(page.pageid);
-        const title = decodeHtmlEntities(page.title?.trim() || 'Sin titulo');
+        const title =
+          normalizeText(decodeHtmlEntities(page.title?.trim() || 'Sin titulo')) || 'Sin titulo';
         const summary = withEllipsis(
           normalizeText(
             decodeHtmlEntities(stripHtmlTags(page.extract || 'Sin resumen disponible')),
@@ -496,7 +502,7 @@ const fetchOpenLibrary = async (query: string, limit: number): Promise<Book[]> =
   );
   const works = Array.isArray(payload.works) ? payload.works : [];
 
-  return works.map((work) => {
+  return works.map((work, index) => {
     const authorsRaw = Array.isArray(work.authors) ? work.authors : [];
     const authors = authorsRaw
       .map((author) =>
@@ -511,8 +517,8 @@ const fetchOpenLibrary = async (query: string, limit: number): Promise<Book[]> =
     const safeKey = rawKey.startsWith('/') ? rawKey : '';
 
     return {
-      id: rawKey,
-      title: String(work.title ?? 'Sin titulo'),
+      id: rawKey || `book-${index + 1}`,
+      title: decodeHtmlEntities(String(work.title ?? 'Sin titulo')),
       authors: authors || 'Anonimo',
       cover:
         Number.isFinite(coverId) && coverId > 0
@@ -554,7 +560,9 @@ const fetchINaturalist = async (query: string, limit: number): Promise<NatureObs
       species: taxon.preferred_common_name || taxon.name || 'Especie desconocida',
       scientificName: taxon.name || '',
       location: String(observation.place_guess ?? 'Ubicacion desconocida'),
-      photo: firstPhoto?.url ? firstPhoto.url.replace('square', 'medium') : null,
+      photo: isSafeHttpUrl(firstPhoto?.url)
+        ? firstPhoto.url.trim().replace('square', 'medium')
+        : null,
       observer: observer || 'Anonimo',
       date: String(observation.observed_on ?? ''),
       link: `https://www.inaturalist.org/observations/${String(observation.id ?? '')}`,
@@ -579,12 +587,11 @@ const fetchMusic = async (query: string, limit: number): Promise<MusicTrack[]> =
     const trackId = track.trackId ?? track.collectionId ?? `track-${index + 1}`;
     const title = String(track.trackName ?? track.collectionName ?? 'Sin titulo');
     const artist = String(track.artistName ?? 'Desconocido');
-    const link =
-      typeof track.trackViewUrl === 'string'
-        ? track.trackViewUrl
-        : typeof track.collectionViewUrl === 'string'
-          ? track.collectionViewUrl
-          : undefined;
+    const link = isSafeHttpUrl(track.trackViewUrl)
+      ? track.trackViewUrl.trim()
+      : isSafeHttpUrl(track.collectionViewUrl)
+        ? track.collectionViewUrl.trim()
+        : undefined;
 
     return {
       id:

@@ -305,5 +305,56 @@ describe('Discover and Search flows', () => {
     expect(await screen.findByText('Fisico Visible')).toBeInTheDocument();
     expect(screen.queryByText('Fisico Bloqueado')).not.toBeInTheDocument();
     expect(screen.getByText('Física Cuántica Hoy')).toBeInTheDocument();
+
+    // Matches groups by localized category label even if user search fails
+    mockSearchUsersByDisplayName.mockRejectedValueOnce(new Error('search down'));
+    fireEvent.change(searchInput, { target: { value: 'ciencia' } });
+    expect(await screen.findByText('No se pudo buscar usuarios.')).toBeInTheDocument();
+    expect(screen.getByText('Física Cuántica Hoy')).toBeInTheDocument();
+  });
+
+  it('DiscoverPage retries failed groups load and tolerates individual join-status failures', async () => {
+    mockGetGroups.mockRejectedValueOnce(new Error('groups down')).mockResolvedValueOnce([
+      {
+        id: 'g_sci',
+        name: 'Física Cuántica Hoy',
+        description: 'Debates de partículas',
+        categoryId: 'science',
+        visibility: 'public',
+        memberCount: 42,
+        ownerId: 'owner_1',
+        createdAt: new Date('2026-01-10T00:00:00Z'),
+      },
+      {
+        id: 'g_mus',
+        name: 'Jazz Nocturno',
+        description: 'Improvisación',
+        categoryId: 'music',
+        visibility: 'public',
+        memberCount: 15,
+        ownerId: 'owner_2',
+        createdAt: new Date('2026-01-05T00:00:00Z'),
+      },
+    ]);
+    mockGetGroupJoinStatus.mockImplementation(async (groupId: string) => {
+      if (groupId === 'g_sci') throw new Error('status unavailable');
+      return 'member';
+    });
+
+    render(
+      <ToastProvider>
+        <MemoryRouter initialEntries={['/discover']}>
+          <Routes>
+            <Route path="/discover" element={<DiscoverPage />} />
+          </Routes>
+        </MemoryRouter>
+      </ToastProvider>,
+    );
+
+    expect(await screen.findByText('No se pudieron cargar grupos.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+
+    expect(await screen.findByText('Física Cuántica Hoy')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Unido' })).toBeInTheDocument();
   });
 });

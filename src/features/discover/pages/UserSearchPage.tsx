@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Search, UserPlus, UserCheck, Check, Clock, X, MessageCircle, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AppError } from '@/shared/lib/errors';
+import { CATEGORIES } from '@/shared/constants';
 import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
 import { getGroups, type FirestoreGroup } from '@/features/groups/api';
@@ -30,6 +31,9 @@ const normalizeSearchTerm = (value: string): string =>
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
+
+const isSafeHttpUrl = (value: string | null | undefined): value is string =>
+  typeof value === 'string' && /^https?:\/\//i.test(value.trim());
 
 const isPermissionDeniedError = (err: unknown): boolean => {
   if (err instanceof AppError) return err.code === 'PERMISSION_DENIED';
@@ -204,18 +208,23 @@ export default function UserSearchPage() {
     if (trimmed.length < MIN_QUERY_LENGTH) return [];
     const normalized = normalizeSearchTerm(trimmed);
     return allGroups
-      .filter(
-        (group) =>
+      .filter((group) => {
+        const categoryLabel = group.categoryId
+          ? (CATEGORIES.find((cat) => cat.id === group.categoryId)?.label ?? '')
+          : '';
+        return (
           normalizeSearchTerm(group.name || '').includes(normalized) ||
           normalizeSearchTerm(group.description || '').includes(normalized) ||
-          normalizeSearchTerm(group.categoryId || '').includes(normalized),
-      )
+          normalizeSearchTerm(group.categoryId || '').includes(normalized) ||
+          normalizeSearchTerm(categoryLabel).includes(normalized)
+        );
+      })
       .slice(0, 6);
   }, [allGroups, queryText]);
 
   const updateUserStatus = (uid: string, updater: (item: UserWithStatus) => UserWithStatus) => {
-    setResults((prev) => prev.map((item) => (item.uid == uid ? updater(item) : item)));
-    setSuggestedUsers((prev) => prev.map((item) => (item.uid == uid ? updater(item) : item)));
+    setResults((prev) => prev.map((item) => (item.uid === uid ? updater(item) : item)));
+    setSuggestedUsers((prev) => prev.map((item) => (item.uid === uid ? updater(item) : item)));
   };
 
   const handleFollow = async (target: UserWithStatus) => {
@@ -598,77 +607,81 @@ export default function UserSearchPage() {
                 className="flex items-center gap-4 bg-neutral-900/20 border border-neutral-800/50 rounded-lg p-4"
               >
                 <div
-                  className="w-12 h-12 rounded-full bg-neutral-800/80 flex items-center justify-center text-lg font-medium text-neutral-300 cursor-pointer hover:ring-2 hover:ring-amber-500/50 transition-all overflow-hidden"
+                  role="button"
+                  tabIndex={0}
+                  className="flex flex-1 min-w-0 items-center gap-4 cursor-pointer"
                   onClick={() => navigate(`/user/${result.uid}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      navigate(`/user/${result.uid}`);
+                    }
+                  }}
                 >
-                  {result.photoURL ? (
-                    <img
-                      src={result.photoURL}
-                      alt={result.displayName ?? 'Usuario'}
-                      className="w-full h-full rounded-full object-cover"
-                    />
-                  ) : (
-                    initial
-                  )}
-                </div>
-                <div
-                  className="flex-1 min-w-0 cursor-pointer"
-                  onClick={() => navigate(`/user/${result.uid}`)}
-                >
-                  <div className="text-white font-medium truncate hover:text-amber-400 transition-colors">
-                    {result.displayName ?? 'Usuario sin nombre'}
+                  <div className="w-12 h-12 rounded-full bg-neutral-800/80 flex items-center justify-center text-lg font-medium text-neutral-300 hover:ring-2 hover:ring-amber-500/50 transition-all overflow-hidden shrink-0">
+                    {isSafeHttpUrl(result.photoURL) ? (
+                      <img
+                        src={result.photoURL}
+                        alt={result.displayName ?? 'Usuario'}
+                        className="w-full h-full rounded-full object-cover"
+                      />
+                    ) : (
+                      initial
+                    )}
                   </div>
-                  <div className="text-neutral-600 text-xs truncate">Toca para ver perfil</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-white font-medium truncate hover:text-amber-400 transition-colors">
+                      {result.displayName ?? 'Usuario sin nombre'}
+                    </div>
+                    <div className="text-neutral-600 text-xs truncate">Toca para ver perfil</div>
+                  </div>
                 </div>
                 {renderActionButton(result)}
               </div>
             );
           })}
 
-        {!loading &&
-          !error &&
-          trimmedQuery.length >= MIN_QUERY_LENGTH &&
-          matchingGroups.length > 0 && (
-            <section className="pt-6 space-y-2" aria-label="Grupos encontrados">
-              <h2 className="text-xs uppercase tracking-[0.2em] text-neutral-500 mb-2">Grupos</h2>
-              {matchingGroups.map((group) => (
-                <div
-                  key={group.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => navigate(`/group/${group.id}`)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      navigate(`/group/${group.id}`);
-                    }
-                  }}
-                  className="flex items-center gap-4 bg-neutral-900/20 border border-neutral-800/50 rounded-lg p-4 cursor-pointer hover:border-neutral-700 transition-colors"
-                >
-                  <div className="w-12 h-12 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center overflow-hidden shrink-0">
-                    {group.iconUrl ? (
-                      <img
-                        src={group.iconUrl}
-                        alt={group.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <Users size={18} className="text-neutral-500" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-white font-medium truncate">{group.name}</div>
-                    <div className="text-neutral-500 text-xs truncate">
-                      {group.description || 'Grupo en Vinctus'}
-                    </div>
-                  </div>
-                  <span className="text-xs text-neutral-500 shrink-0">
-                    {(group.memberCount ?? 0).toLocaleString('es-ES')} miembros
-                  </span>
+        {trimmedQuery.length >= MIN_QUERY_LENGTH && matchingGroups.length > 0 && (
+          <section className="pt-6 space-y-2" aria-label="Grupos encontrados">
+            <h2 className="text-xs uppercase tracking-[0.2em] text-neutral-500 mb-2">Grupos</h2>
+            {matchingGroups.map((group) => (
+              <div
+                key={group.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/group/${group.id}`)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    navigate(`/group/${group.id}`);
+                  }
+                }}
+                className="flex items-center gap-4 bg-neutral-900/20 border border-neutral-800/50 rounded-lg p-4 cursor-pointer hover:border-neutral-700 transition-colors"
+              >
+                <div className="w-12 h-12 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center overflow-hidden shrink-0">
+                  {isSafeHttpUrl(group.iconUrl) ? (
+                    <img
+                      src={group.iconUrl}
+                      alt={group.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Users size={18} className="text-neutral-500" />
+                  )}
                 </div>
-              ))}
-            </section>
-          )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-white font-medium truncate">{group.name}</div>
+                  <div className="text-neutral-500 text-xs truncate">
+                    {group.description || 'Grupo en Vinctus'}
+                  </div>
+                </div>
+                <span className="text-xs text-neutral-500 shrink-0">
+                  {(group.memberCount ?? 0).toLocaleString('es-ES')} miembros
+                </span>
+              </div>
+            ))}
+          </section>
+        )}
 
         {/* Empty state for suggested users */}
         {showHint && !loadingSuggested && !suggestedError && suggestedUsers.length === 0 && (

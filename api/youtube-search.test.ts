@@ -203,4 +203,12 @@ describe('api/youtube-search', () => {
       }),
     );
   });
+
+  it('rejects non-integer limit strings', async () => {
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(createReq({ query: { limit: '6abc', q: 'ciencia' } }), createRes(result));
+
+    expect(result.statusCode).toBe(400);
+    expect(result.payload).toEqual({ error: 'Invalid "limit"' });
+  });
 });

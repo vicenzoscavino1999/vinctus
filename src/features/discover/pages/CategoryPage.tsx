@@ -302,7 +302,7 @@ const CategoryPage = () => {
           {loading && <SkeletonContentGrid count={4} />}
 
           {/* Error state - Premium */}
-          {error && <ErrorState message={error} onRetry={retryLiveContent} />}
+          {!loading && error && <ErrorState message={error} onRetry={retryLiveContent} />}
 
           {/* Content grid */}
           {!loading && !error && liveContent.length > 0 && (

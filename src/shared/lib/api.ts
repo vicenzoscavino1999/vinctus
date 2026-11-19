@@ -192,11 +192,15 @@ const decodeHtmlEntities = (value: string): string =>
     .replace(/&nbsp;/g, ' ')
     .replace(/&#(\d+);/g, (_, code) => {
       const parsed = Number.parseInt(code, 10);
-      return Number.isFinite(parsed) && parsed > 0 ? String.fromCodePoint(parsed) : '';
+      return Number.isFinite(parsed) && parsed > 0 && parsed <= 0x10ffff
+        ? String.fromCodePoint(parsed)
+        : '';
     })
     .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
       const parsed = Number.parseInt(hex, 16);
-      return Number.isFinite(parsed) && parsed > 0 ? String.fromCodePoint(parsed) : '';
+      return Number.isFinite(parsed) && parsed > 0 && parsed <= 0x10ffff
+        ? String.fromCodePoint(parsed)
+        : '';
     })
     .replace(/&amp;/g, '&');
 
@@ -426,13 +430,13 @@ async function fetchBooksDirect(subject: string = 'fiction', limit: number = 10)
   const url = `https://openlibrary.org/subjects/${encodeURIComponent(subject)}.json?limit=${limit}`;
   const data = await fetchJsonOrThrow<{ works?: OpenLibraryWork[] }>(url, 'Open Library');
 
-  return (data.works || []).map((work) => {
+  return (data.works || []).map((work, index) => {
     const coverId = typeof work.cover_id === 'number' ? work.cover_id : Number.NaN;
     const rawKey = typeof work.key === 'string' ? work.key.trim() : '';
     const safeKey = rawKey.startsWith('/') ? rawKey : '';
     return {
-      id: rawKey,
-      title: work.title || 'Sin titulo',
+      id: rawKey || `book-${index + 1}`,
+      title: decodeHtmlEntities(work.title || 'Sin titulo').trim() || 'Sin titulo',
       authors:
         work.authors
           ?.map((author) => author.name)
@@ -465,17 +469,20 @@ async function fetchNatureObservationsDirect(
   const url = `https://api.inaturalist.org/v1/observations?taxon_id=${encodeURIComponent(taxonId)}&quality_grade=research&per_page=${limit}&order=desc&order_by=created_at`;
   const data = await fetchJsonOrThrow<{ results?: INaturalistObservation[] }>(url, 'iNaturalist');
 
-  return (data.results || []).map((obs) => ({
-    id: obs.id,
-    species: obs.taxon?.preferred_common_name || obs.taxon?.name || 'Especie desconocida',
-    scientificName: obs.taxon?.name || '',
-    location: obs.place_guess || 'Ubicacion desconocida',
-    photo: obs.photos?.[0]?.url?.replace('square', 'medium') || null,
-    observer: obs.user?.login || 'Anonimo',
-    date: obs.observed_on || '',
-    link: `https://www.inaturalist.org/observations/${obs.id}`,
-    type: 'Observacion',
-  }));
+  return (data.results || []).map((obs) => {
+    const rawPhoto = obs.photos?.[0]?.url;
+    return {
+      id: obs.id,
+      species: obs.taxon?.preferred_common_name || obs.taxon?.name || 'Especie desconocida',
+      scientificName: obs.taxon?.name || '',
+      location: obs.place_guess || 'Ubicacion desconocida',
+      photo: isSafeHttpUrl(rawPhoto) ? rawPhoto.trim().replace('square', 'medium') : null,
+      observer: obs.user?.login || 'Anonimo',
+      date: obs.observed_on || '',
+      link: `https://www.inaturalist.org/observations/${obs.id}`,
+      type: 'Observacion',
+    };
+  });
 }
 
 async function fetchMusicInfoDirect(
@@ -492,7 +499,11 @@ async function fetchMusicInfoDirect(
     id: track.trackId || track.collectionId || `track-${index}`,
     title: track.trackName || track.collectionName || 'Sin titulo',
     artist: track.artistName || 'Desconocido',
-    link: track.trackViewUrl || track.collectionViewUrl || undefined,
+    link: isSafeHttpUrl(track.trackViewUrl)
+      ? track.trackViewUrl.trim()
+      : isSafeHttpUrl(track.collectionViewUrl)
+        ? track.collectionViewUrl.trim()
+        : undefined,
     type: 'Cancion',
   }));
 }
