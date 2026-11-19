@@ -13,16 +13,28 @@ import {
 import { SkeletonContentGrid, EmptyState, ErrorState } from '@/shared/ui/SkeletonLoader';
 import { useToast } from '@/shared/ui/Toast';
 import { useAppState } from '@/context/app-state';
+import { useAuth } from '@/context/auth';
 import ApiContentCard from '@/features/discover/components/ApiContentCard';
 import { useApiContent } from '@/shared/hooks';
 import { CATEGORIES } from '@/shared/constants';
 import { getGroupsByCategory, type FirestoreGroup } from '@/features/groups/api';
 import {
+  getBlockedUsers,
   getContributionsByCategory,
   getUserProfile,
   type ContributionRead,
   type ContributionType,
 } from '@/features/profile/api';
+
+const isSafeHttpUrl = (value: string | null | undefined): value is string => {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
 
 type ContributionLibraryItem = ContributionRead & {
   authorName: string;
@@ -53,14 +65,22 @@ const CategoryPage = () => {
   const { categoryId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const [viewMode, setViewMode] = useState('live');
-  const [selectedSubgroupId, setSelectedSubgroupId] = useState<string | null>(null);
+  const { user } = useAuth();
+  const [viewMode, setViewMode] = useState<'live' | 'subgroups' | 'library'>('live');
+  const [selectedSubgroupSelection, setSelectedSubgroupSelection] = useState<{
+    categoryId: string;
+    subgroupId: string;
+  } | null>(null);
   const { showToast } = useToast();
   const { toggleFollowCategory, isCategoryFollowed } = useAppState();
   const navigationState = (location.state as CategoryNavigationState | null) ?? null;
   const cameFromDiscover = navigationState?.fromDiscover === true;
 
   const category = CATEGORIES.find((c) => c.id === categoryId);
+  const selectedSubgroupId =
+    selectedSubgroupSelection && selectedSubgroupSelection.categoryId === category?.id
+      ? selectedSubgroupSelection.subgroupId
+      : null;
   const selectedSubgroup =
     category?.subgroups.find((subgroup) => subgroup.id === selectedSubgroupId) || null;
   const activeSubgroupId = selectedSubgroup?.id || category?.subgroups[0]?.id || null;
@@ -68,10 +88,12 @@ const CategoryPage = () => {
   const [communityGroups, setCommunityGroups] = useState<FirestoreGroup[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
+  const [groupsReloadToken, setGroupsReloadToken] = useState(0);
 
   const [libraryItems, setLibraryItems] = useState<ContributionLibraryItem[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [libraryReloadToken, setLibraryReloadToken] = useState(0);
 
   const categoryIsFollowed = category ? isCategoryFollowed(category.id) : false;
   const pageTransitionClass = cameFromDiscover
@@ -94,7 +116,12 @@ const CategoryPage = () => {
   const apiSource = viewMode === 'live' ? category?.apiSource || null : null;
 
   // Fetch live content from API with toast notifications
-  const { data: liveContent, loading, error } = useApiContent(apiSource, apiQuery, 8, showToast);
+  const {
+    data: liveContent,
+    loading,
+    error,
+    retry: retryLiveContent,
+  } = useApiContent(apiSource, apiQuery, 8, showToast);
 
   useEffect(() => {
     if (!category?.id) return;
@@ -102,6 +129,7 @@ const CategoryPage = () => {
     const loadGroups = async () => {
       setGroupsLoading(true);
       setGroupsError(null);
+      setCommunityGroups([]);
       try {
         const items = await getGroupsByCategory(category.id);
         if (!active) return;
@@ -118,7 +146,7 @@ const CategoryPage = () => {
     return () => {
       active = false;
     };
-  }, [category?.id]);
+  }, [category?.id, groupsReloadToken]);
 
   useEffect(() => {
     if (!category?.id) return;
@@ -126,9 +154,15 @@ const CategoryPage = () => {
     const loadLibrary = async () => {
       setLibraryLoading(true);
       setLibraryError(null);
+      setLibraryItems([]);
       try {
-        const contributions = await getContributionsByCategory(category.id, 16);
-        const uniqueAuthors = Array.from(new Set(contributions.map((item) => item.userId)));
+        const [contributions, blockedIds] = await Promise.all([
+          getContributionsByCategory(category.id, 16),
+          user?.uid ? getBlockedUsers(user.uid).catch(() => []) : Promise.resolve<string[]>([]),
+        ]);
+        const blockedSet = new Set(blockedIds);
+        const visibleContributions = contributions.filter((item) => !blockedSet.has(item.userId));
+        const uniqueAuthors = Array.from(new Set(visibleContributions.map((item) => item.userId)));
         const profiles = await Promise.all(
           uniqueAuthors.map(async (uid) => {
             try {
@@ -140,7 +174,7 @@ const CategoryPage = () => {
           }),
         );
         const profileMap = new Map(profiles.map(({ uid, profile }) => [uid, profile]));
-        const items: ContributionLibraryItem[] = contributions.map((item) => {
+        const items: ContributionLibraryItem[] = visibleContributions.map((item) => {
           const profile = profileMap.get(item.userId);
           return {
             ...item,
@@ -162,7 +196,7 @@ const CategoryPage = () => {
     return () => {
       active = false;
     };
-  }, [category?.id]);
+  }, [category?.id, user?.uid, libraryReloadToken]);
 
   if (!category) {
     return (
@@ -250,7 +284,9 @@ const CategoryPage = () => {
             {category.subgroups.map((group) => (
               <button
                 key={group.id}
-                onClick={() => setSelectedSubgroupId(group.id)}
+                onClick={() =>
+                  setSelectedSubgroupSelection({ categoryId: category.id, subgroupId: group.id })
+                }
                 className={`text-xs px-4 py-2 rounded-full border transition-colors ${
                   activeSubgroupId === group.id
                     ? 'bg-white text-black border-white'
@@ -266,7 +302,7 @@ const CategoryPage = () => {
           {loading && <SkeletonContentGrid count={4} />}
 
           {/* Error state - Premium */}
-          {error && <ErrorState message={error} onRetry={() => window.location.reload()} />}
+          {!loading && error && <ErrorState message={error} onRetry={retryLiveContent} />}
 
           {/* Content grid */}
           {!loading && !error && liveContent.length > 0 && (
@@ -297,7 +333,16 @@ const CategoryPage = () => {
               Cargando comunidades...
             </div>
           ) : groupsError ? (
-            <div className="py-16 text-center text-red-400">{groupsError}</div>
+            <div className="py-16 text-center space-y-3">
+              <p className="text-red-400">{groupsError}</p>
+              <button
+                type="button"
+                onClick={() => setGroupsReloadToken((prev) => prev + 1)}
+                className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+              >
+                Reintentar
+              </button>
+            </div>
           ) : communityGroups.length === 0 ? (
             <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
               <p className="text-neutral-500">Aun no hay comunidades en esta categoria.</p>
@@ -356,7 +401,16 @@ const CategoryPage = () => {
               Cargando biblioteca...
             </div>
           ) : libraryError ? (
-            <div className="py-16 text-center text-red-400">{libraryError}</div>
+            <div className="py-16 text-center space-y-3">
+              <p className="text-red-400">{libraryError}</p>
+              <button
+                type="button"
+                onClick={() => setLibraryReloadToken((prev) => prev + 1)}
+                className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+              >
+                Reintentar
+              </button>
+            </div>
           ) : libraryItems.length === 0 ? (
             <div className="py-20 text-center border border-dashed border-neutral-800 rounded-lg">
               <p className="text-neutral-500 font-light italic">
@@ -381,7 +435,7 @@ const CategoryPage = () => {
                     <p className="text-sm text-neutral-400 mb-3">{item.description}</p>
                   )}
                   <div className="flex flex-wrap gap-2">
-                    {item.link && (
+                    {isSafeHttpUrl(item.link) && (
                       <a
                         href={item.link}
                         target="_blank"
@@ -392,7 +446,7 @@ const CategoryPage = () => {
                         Ver enlace
                       </a>
                     )}
-                    {item.fileUrl && (
+                    {isSafeHttpUrl(item.fileUrl) && (
                       <a
                         href={item.fileUrl}
                         target="_blank"

@@ -2,9 +2,11 @@ import SwiftUI
 import UIKit
 
 struct MainTabView: View {
+  @EnvironmentObject private var authVM: AuthViewModel
   private let discoverRepo = AppRepos.discover()
   private let feedRepo = AppRepos.feed()
   private let profileRepo = AppRepos.profile()
+  private let profileContentRepo = AppRepos.profileContent()
   private let groupsRepo = AppRepos.groups()
   private let aiRepo = AppRepos.ai()
   private let chatRepo = AppRepos.chat()
@@ -22,7 +24,8 @@ struct MainTabView: View {
           repo: discoverRepo,
           profileRepo: profileRepo,
           groupsRepo: groupsRepo,
-          aiRepo: aiRepo
+          aiRepo: aiRepo,
+          profileContentRepo: profileContentRepo
         )
       }
       .toolbar(.hidden, for: .tabBar)
@@ -75,7 +78,7 @@ struct MainTabView: View {
     .environment(\.setBottomNavigationHidden) { hidden in
       isBottomNavigationHidden = hidden
     }
-    .task {
+    .task(id: authVM.currentUserID) {
       await blockedUsers.refresh()
     }
   }

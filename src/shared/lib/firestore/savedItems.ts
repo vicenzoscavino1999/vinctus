@@ -107,12 +107,17 @@ export const isPostSaved = async (postId: string, uid: string): Promise<boolean>
 };
 
 /**
- * Save a category
+ * Save a category (idempotent so retries preserve createdAt under strict rules)
  */
 export const saveCategoryWithSync = async (categoryId: string, uid: string): Promise<void> => {
+  const ref = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedCategories, categoryId);
+  const existing = await getDoc(ref);
+  if (existing.exists()) {
+    return;
+  }
   const batch = writeBatch(db);
   batch.set(
-    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedCategories, categoryId),
+    ref,
     {
       categoryId,
       createdAt: serverTimestamp(),
@@ -143,12 +148,17 @@ export const isCategorySaved = async (categoryId: string, uid: string): Promise<
 };
 
 /**
- * Follow a category
+ * Follow a category (idempotent so retries preserve createdAt under strict rules)
  */
 export const followCategoryWithSync = async (categoryId: string, uid: string): Promise<void> => {
+  const ref = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.followedCategories, categoryId);
+  const existing = await getDoc(ref);
+  if (existing.exists()) {
+    return;
+  }
   const batch = writeBatch(db);
   batch.set(
-    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.followedCategories, categoryId),
+    ref,
     {
       categoryId,
       createdAt: serverTimestamp(),

@@ -466,6 +466,43 @@ describe('Firestore Rules - critical access controls', () => {
     );
   });
 
+  it('enforces strict schema and immutable createdAt on savedCategories', async () => {
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertFails(
+      db.doc('users/user_a/savedCategories/science').set({
+        categoryId: 'music',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      db.doc('users/user_a/savedCategories/science').set({
+        categoryId: 'science',
+        createdAt: serverTimestamp(),
+        extraField: true,
+      }),
+    );
+    await assertSucceeds(
+      db.doc('users/user_a/savedCategories/science').set({
+        categoryId: 'science',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      db.doc('users/user_a/savedCategories/science').update({
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      env
+        .authenticatedContext('user_b')
+        .firestore()
+        .doc('users/user_a/savedCategories/science')
+        .get(),
+    );
+  });
+
   it('denies writing saved arena debates for another user', async () => {
     const env = await getRulesTestEnv();
     const db = env.authenticatedContext('user_a').firestore();

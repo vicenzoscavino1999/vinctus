@@ -184,6 +184,30 @@ describe('useApiContent Hook', () => {
 
       expect(mockShowToast).toHaveBeenCalledWith('Error al cargar contenido', 'error');
     });
+
+    it('permite reintentar sin recargar la pagina mediante retry()', async () => {
+      fetchArxivPapers
+        .mockRejectedValueOnce(new Error('Temporary outage'))
+        .mockResolvedValueOnce([{ id: 'p9', title: 'Recovered Paper', type: 'Paper' }]);
+
+      const { result } = renderHook(() => useApiContent('arxiv', 'physics', 5));
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+      expect(result.current.error).toBe('Temporary outage');
+
+      result.current.retry();
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+        expect(result.current.data).toEqual([
+          { id: 'p9', title: 'Recovered Paper', type: 'Paper' },
+        ]);
+      });
+      expect(result.current.error).toBe(null);
+      expect(fetchArxivPapers).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('Datos vacios', () => {
