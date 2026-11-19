@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   GENERIC_DELETION_FAILURE_MESSAGE,
   STALE_PROCESSING_MS,
+  STALE_QUEUED_MS,
+  isStaleDeletionJob,
   isStaleProcessingJob,
+  isStaleQueuedJob,
   sanitizeDeletionErrorMessage,
 } from './deleteAccountHelpers';
 
@@ -30,6 +33,23 @@ describe('deleteAccountHelpers', () => {
       ),
     ).toBe(true);
     expect(isStaleProcessingJob({ status: 'processing' }, now)).toBe(true);
+  });
+
+  it('detects stale queued jobs so missed triggers can be recovered', () => {
+    const now = 1_700_000_000_000;
+    expect(isStaleQueuedJob({ status: 'queued', updatedAt: new Date(now - 30_000) }, now)).toBe(
+      false,
+    );
+    expect(
+      isStaleQueuedJob({ status: 'queued', updatedAt: new Date(now - STALE_QUEUED_MS) }, now),
+    ).toBe(true);
+    expect(
+      isStaleDeletionJob(
+        { status: 'queued', requestedAt: new Date(now - STALE_QUEUED_MS - 1_000) },
+        now,
+      ),
+    ).toBe(true);
+    expect(isStaleDeletionJob({ status: 'completed', updatedAt: new Date(0) }, now)).toBe(false);
   });
 
   it('sanitizes internal error strings before exposing lastError to clients', () => {

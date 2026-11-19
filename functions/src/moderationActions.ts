@@ -184,7 +184,8 @@ export const moderationTakeAction = functions.https.onCall(
         reviewAction = 'story_removed';
         const story = (await db.doc(target).get()).data();
         const mediaPaths = [story?.mediaPath, story?.thumbPath].filter(
-          (path): path is string => typeof path === 'string' && path.length > 0,
+          (path): path is string =>
+            typeof path === 'string' && path.length > 0 && path.startsWith('stories/'),
         );
         // The files go too; a missing file must not stop the removal.
         await Promise.all(

@@ -429,6 +429,7 @@ service cloud.firestore {
       return changed.hasOnly(['createdAt', 'fromUserName', 'fromUserPhoto', 'postSnippet'])
         && request.resource.data.fromUid == resource.data.fromUid
         && request.resource.data.toUid == resource.data.toUid
+        && !isConversationBlocked(resource.data.fromUid, resource.data.toUid)
         && request.resource.data.type == resource.data.type
         && request.resource.data.postId == resource.data.postId
         && request.resource.data.postSnippet == null
@@ -1769,6 +1770,7 @@ service cloud.firestore {
         && memberIds[0] is string
         && memberIds[1] is string
         && memberIds.hasAny([request.auth.uid])
+        && !isConversationBlocked(memberIds[0], memberIds[1])
         && (
           conversationId == 'dm_' + memberIds[0] + '_' + memberIds[1]
           || conversationId == 'dm_' + memberIds[1] + '_' + memberIds[0]

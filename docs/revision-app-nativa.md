@@ -25,7 +25,7 @@ Por indicación del propietario (16 de noviembre de 2026), mientras el despliegu
   2. **Despliegue coordinado** (`staging` aislado con observación de 24–48 h, reglas, índices/TTL, Cloud Functions, migraciones de datos existentes, producción web y nuevo build de TestFlight).
   3. **Pruebas en iPhone real**.
 - **Criterio de casillas y ramas**: las casillas cuyos despliegues o pruebas físicas en iPhone sigan pendientes no se marcan como cierre total del módulo. Cada módulo nuevo se trabaja en una rama y PR borrador apilados sobre el módulo anterior para mantener diffs limpios sin fusionar a `main` antes del despliegue coordinado.
-- **Fase final**: una vez completada la revisión por módulos en código y CI, el propietario se encargará del aprovisionamiento de credenciales/staging, despliegues coordinados, migraciones, subida a TestFlight y pruebas físicas en iPhone.
+- **Fase final**: una vez completada la revisión por módulos en código y CI, el propietario se encargará del aprovisionamiento de credenciales/staging, despliegues coordinados, migraciones, subida a TestFlight y pruebas físicas en iPhone. Ver la guía operativa consolidada en [plan-despliegue-coordinado.md](plan-despliegue-coordinado.md).
 
 ## Conversaciones nativas
 

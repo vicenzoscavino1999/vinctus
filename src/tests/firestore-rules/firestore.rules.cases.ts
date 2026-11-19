@@ -1718,6 +1718,18 @@ describe('Firestore Rules - critical access controls', () => {
         createdAt: new Date('2026-01-01T00:00:00Z'),
         updatedAt: new Date('2026-01-01T00:00:00Z'),
       });
+      await db.doc('notifications/notif_existing_blocked').set({
+        type: 'post_like',
+        toUid: 'user_b',
+        fromUid: 'user_a',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        postId: 'post_1',
+        postSnippet: null,
+        commentText: null,
+        read: true,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+      });
     });
     await seedBlockedUser('user_b', 'user_a');
 
@@ -1761,6 +1773,11 @@ describe('Firestore Rules - critical access controls', () => {
         postSnippet: null,
         commentText: null,
         read: false,
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      blockedDb.doc('notifications/notif_existing_blocked').update({
         createdAt: serverTimestamp(),
       }),
     );

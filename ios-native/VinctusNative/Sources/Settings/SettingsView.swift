@@ -255,7 +255,11 @@ struct SettingsView: View {
             Text("Refrescar estado")
           }
         }
-        .disabled(authVM.currentUserID == nil || viewModel.isLoadingDeletionStatus)
+        .disabled(
+          authVM.currentUserID == nil ||
+            viewModel.isLoadingDeletionStatus ||
+            viewModel.isSubmittingDeletionRequest
+        )
 
         Button(role: .destructive) {
           if authVM.isSignedInWithApple {

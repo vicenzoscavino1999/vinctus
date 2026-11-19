@@ -22,7 +22,20 @@ Módulo revisado y corregido de extremo a extremo siguiendo el plan por módulos
 - **Pruebas backend, reglas y emuladores**:
   - Ampliadas `functions/src/followCounts.test.ts` y `functions/src/moderation.test.ts`, y creada `functions/src/deleteAccountHelpers.test.ts`.
   - Ampliadas `src/tests/firestore-rules/firestore.rules.cases.ts` (auto-denuncia, límites de `reports`, `app_admins`, `moderation_queue`, `support_tickets` y bloqueos en solicitudes/notificaciones/DM/`typing`) y `src/tests/storage-rules/storage.rules.cases.ts` (denegación de adjuntos/miniaturas en DM bloqueado).
-  - Creada `scripts/account-security.integration.test.mjs` conectada a `npm run test:post-counts:run` verificando en emuladores reales `onUserBlockedCreated`, `onReportCreatedQueue`, `moderationTakeAction` (eliminación de mensaje+adjunto+preview, suspensión/reactivación y rechazo a no-admin), `revokeUserSessions` y `requestAccountDeletion` extremo a extremo con borrado del usuario en Auth.
+  - Creada `scripts/account-security.integration.test.mjs` conectada a `npm run test:post-counts:run` verificando en emuladores reales `onUserBlockedCreated`, `onReportCreatedQueue`, `moderationTakeAction` (eliminación de mensaje+adjunto+preview, suspensión/reactivación y rechazo a no-admin), `revokeUserSessions` y `requestAccountDeletion` extremo a extremo con borrado del usuario en Auth y limpieza de `app_admins/{uid}`.
+
+### 1b. Hallazgos de segunda pasada corregidos
+
+- **Índices de producción críticos (`firestore.indexes.json`, `docs/firestore-indexes.md`)**:
+  - Se añadieron los **13 `fieldOverrides` de `COLLECTION_GROUP`** que `deleteAccount.ts` necesita obligatoriamente en Cloud Firestore de producción (el emulador no los exige, pero producción rechaza con `FAILED_PRECONDITION` cada `collectionGroup(...).where(...)` sin ellos): `followers.uid`, `following.uid`, `friends.uid`, `blockedUsers.blockedUid`, `members.uid`, `attendees.uid`, `likes.uid`, `likes.postId`, `savedPosts.postId`, `comments.authorId`, `messages.senderId`, `savedArenaDebates.debateId` y `likedArenaDebates.debateId`.
+  - Se corrigió el `queryScope` del índice compuesto de `messages` (`senderId ASC`, `createdAt DESC`) de `COLLECTION` a `COLLECTION_GROUP` para `onUserPublicProfileUpdated`.
+- **Endurecimiento adicional de reglas y Functions (`firestore.rules`, `functions/src/deleteAccount.ts`, `deleteAccountHelpers.ts`, `index.ts`, `moderationActions.ts`)**:
+  - `firestore.rules`: se cerró el bypass de bloqueo en `isValidNotificationSenderUpdate` (evitando que un remitente bloqueado actualice notificaciones previas) y en `isValidDirectConversationRepair`.
+  - `deleteAccount.ts` / `deleteAccountHelpers.ts`: recuperación automática de jobs atascados también en estado `'queued'` (>5 min) mediante `requeueNonce` y transición atómica a `'failed'` en `getAccountDeletionStatus` (desbloqueando el reintento en web e iOS), más borrado de `app_admins/{uid}` al eliminar la cuenta.
+  - `index.ts` / `moderationActions.ts`: `onDirectConversationWrite` omite re-indexar DMs bloqueados en ambos sentidos, `onFriendRequestWrite` verifica bloqueos antes de sincronizar `friends`, y la eliminación de historias moderadas exige prefijo `stories/`.
+- **Web e iOS (`SettingsPrivacySecurityPage.tsx`, `ConversationDetailsPage.tsx`, `SettingsView.swift`, `SettingsViewModel.swift`)**:
+  - Validación `http(s)://` en avatares de usuarios bloqueados en `SettingsPrivacySecurityPage.tsx` y dependencias estables por `user?.uid` / `otherUserProfile?.uid` en `ConversationDetailsPage.tsx`.
+  - En iOS, `Refrescar estado` se deshabilita mientras `isSubmittingDeletionRequest` está en curso (evitando invalidar una solicitud en vuelo), y `SettingsViewModel.isUnauthenticatedError` reconoce también errores `AuthErrorDomain` (`.userTokenExpired`, `.userNotFound`, `.userDisabled`).
 
 ### 2. Web (`src`)
 

@@ -288,8 +288,9 @@ test('requestAccountDeletion removes owned group memberships, arena refs, group 
       clientCreatedAt: 12345,
       clientId: groupMsgId,
     }),
-    // AI image usage doc
+    // AI image usage doc + admin role doc
     db.doc(`aiImageUsage/${dayKey}/users/${uid}`).set({ count: 2 }),
+    db.doc(`app_admins/${uid}`).set({ role: 'admin' }),
   ]);
 
   const requestAccountDeletion = httpsCallable(clientFunctions, 'requestAccountDeletion');
@@ -328,6 +329,7 @@ test('requestAccountDeletion removes owned group memberships, arena refs, group 
     db.doc(`users/${peerUid}/directConversations/${dmId}`).get(),
     db.doc(`conversations/grp_${otherGroupId}/messages/${groupMsgId}`).get(),
     db.doc(`aiImageUsage/${dayKey}/users/${uid}`).get(),
+    db.doc(`app_admins/${uid}`).get(),
   ]);
   for (const snap of deletedDocs) {
     assert.equal(snap.exists, false, `Expected ${snap.ref.path} to be deleted`);

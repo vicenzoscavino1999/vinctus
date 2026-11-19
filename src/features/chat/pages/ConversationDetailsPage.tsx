@@ -64,9 +64,11 @@ export default function ConversationDetailsPage() {
   const [showMuteModal, setShowMuteModal] = useState(false);
   const [isTogglingMute, setIsTogglingMute] = useState(false);
 
+  const currentUid = user?.uid ?? null;
+
   useEffect(() => {
     // Guard 1: Wait for auth
-    if (!user?.uid) {
+    if (!currentUid) {
       setLoading(true);
       return;
     }
@@ -79,7 +81,7 @@ export default function ConversationDetailsPage() {
     }
 
     // Parse otherUserId
-    const otherId = directParticipants(conversationId, user.uid)?.find((id) => id !== user.uid);
+    const otherId = directParticipants(conversationId, currentUid)?.find((id) => id !== currentUid);
 
     // Guard 3: Validate otherUserId was parsed successfully
     if (!otherId) {
@@ -116,21 +118,21 @@ export default function ConversationDetailsPage() {
     return () => {
       active = false;
     };
-  }, [conversationId, user, navigate]);
+  }, [conversationId, currentUid, navigate]);
 
   // Load member data for mute state
   useEffect(() => {
-    if (!conversationId || !user?.uid) return;
+    if (!conversationId || !currentUid) return;
 
     let active = true;
     const loadMemberData = async () => {
       try {
-        const member = await getConversationMember(conversationId, user.uid);
+        const member = await getConversationMember(conversationId, currentUid);
         if (!active) return;
         if (member) {
           // Auto-unmute if mutedUntil has passed
           if (member.muted && member.mutedUntil && member.mutedUntil < new Date()) {
-            await clearConversationMute(conversationId, user.uid);
+            await clearConversationMute(conversationId, currentUid);
             if (!active) return;
             setMemberData({ ...member, muted: false, mutedUntil: null });
           } else {
@@ -146,14 +148,16 @@ export default function ConversationDetailsPage() {
     return () => {
       active = false;
     };
-  }, [conversationId, user]);
+  }, [conversationId, currentUid]);
+
+  const otherProfileUid = otherUserProfile?.uid ?? null;
 
   useEffect(() => {
-    if (!user?.uid || !otherUserProfile) return;
+    if (!currentUid || !otherProfileUid) return;
     let active = true;
     const loadBlockStatus = async () => {
       try {
-        const blocked = await isUserBlocked(user.uid, otherUserProfile.uid);
+        const blocked = await isUserBlocked(currentUid, otherProfileUid);
         if (active) setIsBlocked(blocked);
       } catch (err) {
         console.error('[ConversationDetailsPage] Error loading block status:', err);
@@ -163,7 +167,7 @@ export default function ConversationDetailsPage() {
     return () => {
       active = false;
     };
-  }, [user, otherUserProfile]);
+  }, [currentUid, otherProfileUid]);
 
   const handleGoBack = () => {
     navigate('/messages');

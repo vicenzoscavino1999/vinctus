@@ -170,6 +170,12 @@ final class AccountSecuritySettingsTests: XCTestCase {
     XCTAssertEqual(vm.deletionStatus.status, .completed)
     XCTAssertNil(vm.deletionErrorMessage)
     XCTAssertTrue(vm.shouldOfferSignOutForDeletion)
+
+    let expiredToken = NSError(
+      domain: AuthErrorDomain,
+      code: AuthErrorCode.userTokenExpired.rawValue
+    )
+    XCTAssertTrue(SettingsViewModel.isUnauthenticatedError(expiredToken))
   }
 
   func testLegacyDeletionModeRequestsImmediateSignOut() async {

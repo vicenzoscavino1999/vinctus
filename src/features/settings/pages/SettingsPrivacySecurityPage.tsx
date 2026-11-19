@@ -394,7 +394,7 @@ const SettingsPrivacySecurityPage = () => {
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-10 h-10 rounded-full bg-neutral-900 border border-neutral-800 overflow-hidden flex items-center justify-center shrink-0">
-                          {blocked.photoURL ? (
+                          {blocked.photoURL && /^https?:\/\//i.test(blocked.photoURL) ? (
                             <img
                               src={blocked.photoURL}
                               alt={blocked.displayName}

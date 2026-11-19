@@ -1741,6 +1741,14 @@ export const onFriendRequestWrite = functions.firestore
 
     try {
       if (isAccepted) {
+        const [firstBlockedSnap, secondBlockedSnap] = await Promise.all([
+          db.doc(`${COLLECTIONS.users}/${fromUid}/${SUBCOLLECTIONS.blockedUsers}/${toUid}`).get(),
+          db.doc(`${COLLECTIONS.users}/${toUid}/${SUBCOLLECTIONS.blockedUsers}/${fromUid}`).get(),
+        ]);
+        if (firstBlockedSnap.exists || secondBlockedSnap.exists) {
+          functions.logger.info('Skipping friend index sync due to block', { fromUid, toUid });
+          return;
+        }
         const payload = {
           uid: toUid,
           createdAt: FieldValue.serverTimestamp(),
@@ -1842,58 +1850,43 @@ export const onDirectConversationWrite = functions.firestore
       db.doc(`${COLLECTIONS.users}/${secondUid}/${SUBCOLLECTIONS.blockedUsers}/${firstUid}`).get(),
     ]);
 
-    const writes: Promise<unknown>[] = [];
-    if (!firstBlockedSnap.exists) {
-      writes.push(
-        db
-          .doc(
-            `${COLLECTIONS.users}/${firstUid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`,
-          )
-          .set(
-            {
-              conversationId,
-              otherUid: secondUid,
-              type: 'direct',
-              updatedAt,
-            },
-            { merge: true },
-          ),
-      );
-    } else {
-      functions.logger.info('Skipping direct conversation index for blocked user', {
+    if (firstBlockedSnap.exists || secondBlockedSnap.exists) {
+      functions.logger.info('Skipping direct conversation index due to block', {
         conversationId,
-        uid: firstUid,
-        blockedUid: secondUid,
+        firstUid,
+        secondUid,
       });
+      return;
     }
 
-    if (!secondBlockedSnap.exists) {
-      writes.push(
-        db
-          .doc(
-            `${COLLECTIONS.users}/${secondUid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`,
-          )
-          .set(
-            {
-              conversationId,
-              otherUid: firstUid,
-              type: 'direct',
-              updatedAt,
-            },
-            { merge: true },
-          ),
-      );
-    } else {
-      functions.logger.info('Skipping direct conversation index for blocked user', {
-        conversationId,
-        uid: secondUid,
-        blockedUid: firstUid,
-      });
-    }
-
-    if (writes.length > 0) {
-      await Promise.all(writes);
-    }
+    await Promise.all([
+      db
+        .doc(
+          `${COLLECTIONS.users}/${firstUid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`,
+        )
+        .set(
+          {
+            conversationId,
+            otherUid: secondUid,
+            type: 'direct',
+            updatedAt,
+          },
+          { merge: true },
+        ),
+      db
+        .doc(
+          `${COLLECTIONS.users}/${secondUid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`,
+        )
+        .set(
+          {
+            conversationId,
+            otherUid: firstUid,
+            type: 'direct',
+            updatedAt,
+          },
+          { merge: true },
+        ),
+    ]);
   });
 
 // ==========================================================

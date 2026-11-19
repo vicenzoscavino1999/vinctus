@@ -1,3 +1,4 @@
+import FirebaseAuth
 import FirebaseFunctions
 import Foundation
 
@@ -367,6 +368,11 @@ final class SettingsViewModel: ObservableObject {
       let code = FunctionsErrorCode(rawValue: nsError.code)
     {
       return code == .unauthenticated
+    }
+    if nsError.domain == AuthErrorDomain,
+      let code = AuthErrorCode(rawValue: nsError.code)
+    {
+      return code == .userTokenExpired || code == .userNotFound || code == .userDisabled
     }
     let lower = nsError.localizedDescription.lowercased()
     return lower.contains("unauthenticated") || lower.contains("user-not-found")

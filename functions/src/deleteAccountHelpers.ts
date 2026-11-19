@@ -1,4 +1,5 @@
 export const STALE_PROCESSING_MS = 15 * 60 * 1000;
+export const STALE_QUEUED_MS = 5 * 60 * 1000;
 export const GENERIC_DELETION_FAILURE_MESSAGE =
   'No se pudo completar la eliminacion de la cuenta. Intenta solicitarla de nuevo.';
 
@@ -51,6 +52,32 @@ export function isStaleProcessingJob(
     return true;
   }
   return nowMs - referenceMs >= staleMs;
+}
+
+/**
+ * Returns true if a `queued` deletion job was never picked up past `staleMs`
+ * (e.g. missed trigger delivery), so a retry can safely re-trigger it.
+ */
+export function isStaleQueuedJob(
+  data: Record<string, unknown> | undefined,
+  nowMs = Date.now(),
+  staleMs = STALE_QUEUED_MS,
+): boolean {
+  if (!data || data.status !== 'queued') {
+    return false;
+  }
+  const referenceMs = timestampToMillis(data.updatedAt) ?? timestampToMillis(data.requestedAt);
+  if (referenceMs === null) {
+    return true;
+  }
+  return nowMs - referenceMs >= staleMs;
+}
+
+export function isStaleDeletionJob(
+  data: Record<string, unknown> | undefined,
+  nowMs = Date.now(),
+): boolean {
+  return isStaleProcessingJob(data, nowMs) || isStaleQueuedJob(data, nowMs);
 }
 
 /**

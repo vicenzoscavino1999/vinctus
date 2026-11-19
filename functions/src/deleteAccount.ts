@@ -9,7 +9,9 @@ import {
 } from './firestoreContract';
 import {
   GENERIC_DELETION_FAILURE_MESSAGE,
+  isStaleDeletionJob,
   isStaleProcessingJob,
+  isStaleQueuedJob,
   sanitizeDeletionErrorMessage,
 } from './deleteAccountHelpers';
 import {
@@ -788,6 +790,13 @@ async function executeAccountDeletion(uid: string): Promise<DeletionStats> {
     }
   });
 
+  const adminRef = db.collection(COLLECTIONS.appAdmins).doc(uid);
+  const adminSnap = await adminRef.get();
+  if (adminSnap.exists) {
+    await adminRef.delete();
+    incrementStat(stats, 'appAdminDocsDeleted', 1);
+  }
+
   // 7) Finally delete Auth user.
   await deleteAuthUserIdempotent(uid);
 
@@ -816,9 +825,10 @@ async function upsertDeletionJobFromCallable(uid: string): Promise<DeletionJobSt
 
     const existingData = snapshot.data() as Record<string, unknown> | undefined;
     const staleProcessing = currentStatus === 'processing' && isStaleProcessingJob(existingData);
+    const staleQueued = currentStatus === 'queued' && isStaleQueuedJob(existingData);
 
     if (
-      currentStatus === 'queued' ||
+      (currentStatus === 'queued' && !staleQueued) ||
       (currentStatus === 'processing' && !staleProcessing) ||
       currentStatus === 'completed'
     ) {
@@ -832,6 +842,8 @@ async function upsertDeletionJobFromCallable(uid: string): Promise<DeletionJobSt
       return currentStatus;
     }
 
+    const prevNonce =
+      typeof existingData?.requeueNonce === 'number' ? existingData.requeueNonce : 0;
     tx.set(
       jobRef,
       {
@@ -839,6 +851,7 @@ async function upsertDeletionJobFromCallable(uid: string): Promise<DeletionJobSt
         status: 'queued',
         requestedAt: now,
         updatedAt: now,
+        requeueNonce: prevNonce + 1,
         lastError: null,
       },
       { merge: true },
@@ -968,7 +981,8 @@ export const getAccountDeletionStatus = functions
     }
 
     const uid = context.auth.uid;
-    const snapshot = await createDeletionJobRef(uid).get();
+    const jobRef = createDeletionJobRef(uid);
+    const snapshot = await jobRef.get();
     if (!snapshot.exists) {
       return {
         status: 'not_requested',
@@ -979,7 +993,37 @@ export const getAccountDeletionStatus = functions
       };
     }
 
-    const data = snapshot.data() || {};
+    const data = (snapshot.data() || {}) as Record<string, unknown>;
+    if (isStaleDeletionJob(data)) {
+      const recovered = await db.runTransaction(async (tx) => {
+        const fresh = await tx.get(jobRef);
+        const freshData = (fresh.data() || {}) as Record<string, unknown>;
+        if (!fresh.exists || !isStaleDeletionJob(freshData)) {
+          return false;
+        }
+        tx.set(
+          jobRef,
+          {
+            status: 'failed',
+            failedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+            lastError: GENERIC_DELETION_FAILURE_MESSAGE,
+          },
+          { merge: true },
+        );
+        return true;
+      });
+      if (recovered) {
+        return {
+          status: 'failed',
+          jobId: uid,
+          updatedAt: new Date().toISOString(),
+          completedAt: null,
+          lastError: GENERIC_DELETION_FAILURE_MESSAGE,
+        };
+      }
+    }
+
     return {
       status: parseDeletionJobStatus(data.status) ?? 'failed',
       jobId: uid,
@@ -1001,9 +1045,15 @@ export const onDeletionJobUpdated = functions
   .runWith({ timeoutSeconds: 540, memory: '1GB' })
   .firestore.document(`${DELETION_JOB_COLLECTION}/{uid}`)
   .onUpdate(async (change, context) => {
-    const beforeStatus = parseDeletionJobStatus(change.before.data()?.status);
-    const afterStatus = parseDeletionJobStatus(change.after.data()?.status);
-    if (afterStatus !== 'queued' || beforeStatus === 'queued') {
+    const beforeData = change.before.data() || {};
+    const afterData = change.after.data() || {};
+    const beforeStatus = parseDeletionJobStatus(beforeData.status);
+    const afterStatus = parseDeletionJobStatus(afterData.status);
+    const isRequeued =
+      afterStatus === 'queued' &&
+      beforeStatus === 'queued' &&
+      afterData.requeueNonce !== beforeData.requeueNonce;
+    if (afterStatus !== 'queued' || (beforeStatus === 'queued' && !isRequeued)) {
       return;
     }
 
