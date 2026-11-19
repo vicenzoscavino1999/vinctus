@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct CollectionDetailView: View {
   let collection: UserCollection
@@ -22,6 +23,20 @@ struct CollectionDetailView: View {
       if vm.isLoading {
         ProgressView()
           .frame(maxWidth: .infinity)
+      } else if let error = vm.errorMessage, vm.items.isEmpty {
+        VStack(spacing: 10) {
+          Text(error)
+            .font(.footnote)
+            .foregroundStyle(.red)
+            .multilineTextAlignment(.center)
+          Button("Reintentar") {
+            Task { await vm.load() }
+          }
+          .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+        .listRowBackground(SwiftUI.Color.clear)
       } else if vm.items.isEmpty {
         VStack(spacing: 8) {
           Image(systemName: collection.icon.systemImage)
@@ -29,9 +44,10 @@ struct CollectionDetailView: View {
             .foregroundStyle(VinctusTokens.Color.accent)
           Text("Esta colección está vacía")
             .font(.headline)
-          Text("Toca + para guardar un enlace o una nota.")
+          Text("Toca + para guardar un enlace, una nota o un archivo.")
             .font(.footnote)
             .foregroundStyle(VinctusTokens.Color.textMuted)
+            .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
@@ -52,11 +68,11 @@ struct CollectionDetailView: View {
             }
           }
         }
-      }
-      if let errorMessage = vm.errorMessage {
-        Text(errorMessage)
-          .font(.footnote)
-          .foregroundStyle(.red)
+        if let errorMessage = vm.errorMessage {
+          Text(errorMessage)
+            .font(.footnote)
+            .foregroundStyle(.red)
+        }
       }
     }
     .navigationTitle(collection.name)
@@ -103,7 +119,7 @@ struct CollectionDetailView: View {
         Text(item.title)
           .font(.subheadline.weight(.semibold))
           .foregroundStyle(VinctusTokens.Color.textPrimary)
-        if let detail = item.url ?? item.text ?? item.fileName {
+        if let detail = subtitle(for: item) {
           Text(detail)
             .font(.caption)
             .foregroundStyle(VinctusTokens.Color.textMuted)
@@ -114,6 +130,22 @@ struct CollectionDetailView: View {
     }
     .contentShape(Rectangle())
     .padding(.vertical, 2)
+  }
+
+  private func subtitle(for item: CollectionItem) -> String? {
+    switch item.type {
+    case .file:
+      let name = item.fileName ?? "Archivo"
+      if let size = item.fileSize, size > 0 {
+        let formatted = ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
+        return "\(name) · \(formatted)"
+      }
+      return name
+    case .link:
+      return item.url
+    case .note:
+      return item.text
+    }
   }
 
   private func icon(for type: CollectionItemType) -> String {
@@ -127,7 +159,7 @@ struct CollectionDetailView: View {
   private func open(_ item: CollectionItem) {
     if item.type == .note {
       openedNote = item
-    } else if let link = item.url, let url = URL(string: link) {
+    } else if let url = NewCollectionItem.safeHTTPURL(item.url) {
       openURL(url)
     }
   }
@@ -139,6 +171,7 @@ private struct NewCollectionItemSheet: View {
 
   @Environment(\.dismiss) private var dismiss
   @StateObject private var vm: NewCollectionItemViewModel
+  @State private var isImportingFile = false
 
   init(collection: UserCollection, repo: CollectionsRepo, onSaved: @escaping () -> Void) {
     self.onSaved = onSaved
@@ -161,20 +194,62 @@ private struct NewCollectionItemSheet: View {
         }
         switch vm.draft.kind {
         case .link:
-          Section {
+          Section("Enlace") {
             TextField("https://", text: $vm.draft.url)
               .keyboardType(.URL)
               .textInputAutocapitalization(.never)
               .autocorrectionDisabled()
-          } header: {
-            Text("Enlace")
-          } footer: {
-            Text("Para guardar archivos, usa la versión web.")
           }
         case .note:
-          Section("Nota") {
+          Section {
             TextField("Escribe tu nota", text: $vm.draft.text, axis: .vertical)
               .lineLimit(4...10)
+          } header: {
+            Text("Nota")
+          } footer: {
+            Text("\(vm.draft.text.count)/\(Limits.CollectionItems.noteMaxLength)")
+              .foregroundStyle(
+                vm.draft.text.count > Limits.CollectionItems.noteMaxLength
+                  ? .red
+                  : VinctusTokens.Color.textMuted
+              )
+          }
+        case .file:
+          Section {
+            if vm.isImportingFile {
+              ProgressView("Preparando archivo…")
+            } else if let file = vm.draft.file {
+              HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                  Text(file.fileName)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                  Text(ByteCountFormatter.string(fromByteCount: Int64(file.size), countStyle: .file))
+                    .font(.caption)
+                    .foregroundStyle(VinctusTokens.Color.textMuted)
+                }
+                Spacer()
+                Button("Quitar", role: .destructive) {
+                  vm.clearFile()
+                }
+                .disabled(vm.isSaving)
+              }
+              Button("Cambiar archivo") {
+                isImportingFile = true
+              }
+              .disabled(vm.isSaving)
+            } else {
+              Button {
+                isImportingFile = true
+              } label: {
+                Label("Seleccionar archivo", systemImage: "doc.badge.plus")
+              }
+              .disabled(vm.isSaving)
+            }
+          } header: {
+            Text("Archivo")
+          } footer: {
+            Text("PDF, texto, Markdown, JSON, ZIP, Office, imágenes, audio o video (máx. \(StorageMaxBytes.file / 1024 / 1024) MB).")
           }
         }
         if let errorMessage = vm.errorMessage {
@@ -189,6 +264,7 @@ private struct NewCollectionItemSheet: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancelar") { dismiss() }
+            .disabled(vm.isSaving || vm.isImportingFile)
         }
         ToolbarItem(placement: .confirmationAction) {
           Button("Guardar") {
@@ -199,9 +275,18 @@ private struct NewCollectionItemSheet: View {
               }
             }
           }
-          .disabled(vm.isSaving)
+          .disabled(vm.isSaving || vm.isImportingFile)
         }
       }
+      .fileImporter(isPresented: $isImportingFile, allowedContentTypes: [.data]) { result in
+        switch result {
+        case .success(let url):
+          Task { await vm.importFile(from: url) }
+        case .failure(let error):
+          vm.errorMessage = error.localizedDescription
+        }
+      }
+      .interactiveDismissDisabled(vm.isSaving)
       .vinctusLoading(vm.isSaving)
     }
   }

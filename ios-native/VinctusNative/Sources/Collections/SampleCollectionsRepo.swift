@@ -20,6 +20,7 @@ struct SampleCollectionsRepo: CollectionsRepo {
     [
       CollectionItem(id: "i1", type: .link, title: "Cosmos, de Carl Sagan", url: "https://example.com/cosmos", text: nil, fileName: nil, createdAt: Date()),
       CollectionItem(id: "i2", type: .note, title: "Para el club", url: nil, text: "Proponer un libro de divulgación al mes.", fileName: nil, createdAt: Date()),
+      CollectionItem(id: "i3", type: .file, title: "Guía de lectura", url: "https://example.com/guia.pdf", text: nil, fileName: "guia-lectura.pdf", createdAt: Date(), fileSize: 245_760),
     ]
   }
 

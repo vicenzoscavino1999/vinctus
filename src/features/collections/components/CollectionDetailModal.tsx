@@ -1,11 +1,16 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { formatBytes, formatRelativeTime } from '@/shared/lib/formatUtils';
-import { STORAGE_CONTENT_TYPES, STORAGE_MAX_BYTES } from '@/shared/lib/firestore/firestoreContract';
-import { File, FileText, Link2, Trash2, X } from 'lucide-react';
+import {
+  LIMITS,
+  STORAGE_CONTENT_TYPES,
+  STORAGE_MAX_BYTES,
+} from '@/shared/lib/firestore/firestoreContract';
+import { ExternalLink, File, FileText, Link2, Pencil, Trash2, X } from 'lucide-react';
 
 import { useAuth } from '@/context/auth';
 import {
   createCollectionItem,
+  deleteCollection,
   deleteCollectionItem,
   getCollectionItems,
   type CollectionItemRead,
@@ -15,12 +20,13 @@ import {
 import { deleteCollectionFile, uploadCollectionFile } from '@/shared/lib/storage';
 import { useToast } from '@/shared/ui/Toast';
 import { getCollectionIcon } from './collectionIcons';
-import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 interface CollectionDetailModalProps {
   isOpen: boolean;
   collection: CollectionRead | null;
   onClose: () => void;
+  onEditCollection?: (collection: CollectionRead) => void;
+  onCollectionDeleted?: (collectionId: string) => void;
   onItemCreated?: () => void;
   onItemDeleted?: () => void;
 }
@@ -30,48 +36,89 @@ const MAX_COLLECTION_FILE_SIZE = STORAGE_MAX_BYTES.file;
 const COLLECTION_FILE_TYPES = STORAGE_CONTENT_TYPES.collectionFile;
 const COLLECTION_FILE_ACCEPT = COLLECTION_FILE_TYPES.join(',');
 
-const CollectionDetailModal = ({
-  isOpen,
+const isSafeHttpUrl = (value: string | null | undefined): value is string => {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+const createStableItemId = (): string =>
+  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID().replace(/-/g, '')
+    : `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+const CollectionDetailDialog = ({
   collection,
   onClose,
+  onEditCollection,
+  onCollectionDeleted,
   onItemCreated,
   onItemDeleted,
-}: CollectionDetailModalProps) => {
+}: Omit<CollectionDetailModalProps, 'isOpen' | 'collection'> & { collection: CollectionRead }) => {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [items, setItems] = useState<CollectionItemRead[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
   const [itemType, setItemType] = useState<CollectionItemType>('link');
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [confirmDeleteItemId, setConfirmDeleteItemId] = useState<string | null>(null);
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
+  const [confirmDeleteCollection, setConfirmDeleteCollection] = useState(false);
+  const [isDeletingCollection, setIsDeletingCollection] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const isMountedRef = useRef(true);
+  const isBusy = isSubmitting || isDeletingCollection || deletingItemId !== null;
+
   useEffect(() => {
-    if (!isOpen || !collection || !user) {
-      setItems([]);
-      setError(null);
-      setFile(null);
-      setUploadProgress(null);
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isBusy) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isBusy, onClose]);
+
+  useEffect(() => {
+    if (!user) {
       return;
     }
 
     let isActive = true;
     const loadItems = async () => {
       try {
-        setError(null);
+        setLoadError(null);
         setIsLoading(true);
         const data = await getCollectionItems(user.uid, collection.id, 50);
         if (isActive) {
           setItems(data);
         }
-      } catch (loadError) {
-        console.error('Error loading collection items:', loadError);
+      } catch (err) {
+        console.error('Error loading collection items:', err);
         if (isActive) {
-          setError('No se pudieron cargar los elementos.');
+          setLoadError('No se pudieron cargar los elementos.');
         }
       } finally {
         if (isActive) {
@@ -80,33 +127,36 @@ const CollectionDetailModal = ({
       }
     };
 
-    loadItems();
+    void loadItems();
 
     return () => {
       isActive = false;
     };
-  }, [isOpen, collection, user]);
+  }, [collection.id, user, reloadToken]);
 
-  useEffect(() => {
-    setError(null);
-    if (itemType !== 'link') {
-      setUrl('');
-    }
-    if (itemType !== 'note') {
-      setText('');
-    }
-    if (itemType !== 'file') {
+  const handleClose = () => {
+    if (isBusy) return;
+    onClose();
+  };
+
+  const handleTypeChange = (nextType: CollectionItemType) => {
+    setItemType(nextType);
+    setFormError(null);
+    if (nextType !== 'link') setUrl('');
+    if (nextType !== 'note') setText('');
+    if (nextType !== 'file') {
       setFile(null);
       setUploadProgress(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
-  }, [itemType]);
+  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    setError(null);
+    setFormError(null);
 
-    if (!user || !collection) {
-      setError('Debes iniciar sesion.');
+    if (!user) {
+      setFormError('Debes iniciar sesión.');
       return;
     }
 
@@ -115,31 +165,57 @@ const CollectionDetailModal = ({
     const trimmedText = text.trim();
 
     if (!trimmedTitle) {
-      setError('El titulo es obligatorio.');
+      setFormError('El título es obligatorio.');
+      return;
+    }
+    if (trimmedTitle.length > LIMITS.collectionItems.titleMaxLength) {
+      setFormError(
+        `El título no puede superar ${LIMITS.collectionItems.titleMaxLength} caracteres.`,
+      );
       return;
     }
 
-    if (itemType === 'link' && !trimmedUrl) {
-      setError('Ingresa un enlace valido.');
-      return;
+    if (itemType === 'link') {
+      if (!isSafeHttpUrl(trimmedUrl)) {
+        setFormError('Ingresa un enlace http:// o https:// válido.');
+        return;
+      }
+      if (trimmedUrl.length > LIMITS.collectionItems.urlMaxLength) {
+        setFormError(
+          `El enlace no puede superar ${LIMITS.collectionItems.urlMaxLength} caracteres.`,
+        );
+        return;
+      }
     }
 
-    if (itemType === 'note' && !trimmedText) {
-      setError('Ingresa una nota.');
-      return;
+    if (itemType === 'note') {
+      if (!trimmedText) {
+        setFormError('Ingresa una nota.');
+        return;
+      }
+      if (trimmedText.length > LIMITS.collectionItems.noteMaxLength) {
+        setFormError(
+          `La nota no puede superar ${LIMITS.collectionItems.noteMaxLength} caracteres.`,
+        );
+        return;
+      }
     }
 
     if (itemType === 'file') {
       if (!file) {
-        setError('Selecciona un archivo.');
+        setFormError('Selecciona un archivo.');
         return;
       }
       if (!file.type || !COLLECTION_FILE_TYPES.includes(file.type)) {
-        setError('Tipo de archivo no permitido.');
+        setFormError('Tipo de archivo no permitido.');
+        return;
+      }
+      if (file.size <= 0) {
+        setFormError('El archivo está vacío.');
         return;
       }
       if (file.size >= MAX_COLLECTION_FILE_SIZE) {
-        setError(`El archivo supera ${MAX_COLLECTION_FILE_SIZE / (1024 * 1024)}MB.`);
+        setFormError(`El archivo supera ${MAX_COLLECTION_FILE_SIZE / (1024 * 1024)}MB.`);
         return;
       }
     }
@@ -153,18 +229,15 @@ const CollectionDetailModal = ({
       size: number;
     } | null = null;
     try {
+      const stableItemId = createStableItemId();
       if (itemType === 'file' && file) {
-        const uploadId =
-          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         uploadedFile = await uploadCollectionFile(
           file,
           user.uid,
           collection.id,
-          uploadId,
+          stableItemId,
           (progress) => {
-            if (progress.totalBytes > 0) {
+            if (isMountedRef.current && progress.totalBytes > 0) {
               setUploadProgress(
                 Math.round((progress.bytesTransferred / progress.totalBytes) * 100),
               );
@@ -174,24 +247,30 @@ const CollectionDetailModal = ({
       }
 
       await createCollectionItem(user.uid, collection.id, {
+        itemId: stableItemId,
         collectionName: collection.name,
         type: itemType,
         title: trimmedTitle,
         url: itemType === 'link' ? trimmedUrl : (uploadedFile?.url ?? null),
         text: itemType === 'note' ? trimmedText : null,
-        fileName: itemType === 'file' ? (uploadedFile?.fileName ?? null) : null,
+        fileName: itemType === 'file' ? (uploadedFile?.fileName.slice(0, 200) ?? null) : null,
         fileSize: itemType === 'file' ? (uploadedFile?.size ?? null) : null,
         contentType: itemType === 'file' ? (uploadedFile?.contentType ?? null) : null,
         storagePath: itemType === 'file' ? (uploadedFile?.path ?? null) : null,
       });
+
+      if (!isMountedRef.current) return;
       setTitle('');
       setUrl('');
       setText('');
       setFile(null);
       setUploadProgress(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       onItemCreated?.();
       const data = await getCollectionItems(user.uid, collection.id, 50);
-      setItems(data);
+      if (isMountedRef.current) {
+        setItems(data);
+      }
       showToast('Elemento agregado', 'success');
     } catch (submitError) {
       console.error('Error creating collection item:', submitError);
@@ -202,72 +281,168 @@ const CollectionDetailModal = ({
           console.error('Cleanup failed for collection file:', cleanupError);
         }
       }
-      setError('No se pudo agregar el elemento.');
+      if (isMountedRef.current) {
+        setFormError('No se pudo agregar el elemento.');
+      }
     } finally {
-      setIsSubmitting(false);
+      if (isMountedRef.current) {
+        setIsSubmitting(false);
+      }
     }
   };
 
-  const handleDelete = async (item: CollectionItemRead) => {
-    if (!user || !collection) return;
-    const confirmed = window.confirm('Eliminar este elemento?');
-    if (!confirmed) return;
+  const handleDeleteItem = async (item: CollectionItemRead) => {
+    if (!user || deletingItemId) return;
+    setDeletingItemId(item.id);
+    setFormError(null);
     try {
+      await deleteCollectionItem(user.uid, collection.id, item.id);
       if (item.type === 'file' && item.storagePath) {
         try {
           await deleteCollectionFile(item.storagePath);
-        } catch (deleteError) {
-          console.error('Failed to delete file from storage:', deleteError);
+        } catch (storageDeleteError) {
+          console.error('Failed to delete file from storage:', storageDeleteError);
         }
       }
-      await deleteCollectionItem(user.uid, collection.id, item.id);
+      if (!isMountedRef.current) return;
+      setConfirmDeleteItemId(null);
+      setItems((prev) => prev.filter((existing) => existing.id !== item.id));
       onItemDeleted?.();
-      const data = await getCollectionItems(user.uid, collection.id, 50);
-      setItems(data);
       showToast('Elemento eliminado', 'success');
     } catch (deleteError) {
       console.error('Error deleting collection item:', deleteError);
-      setError('No se pudo eliminar el elemento.');
+      if (isMountedRef.current) {
+        setFormError('No se pudo eliminar el elemento.');
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setDeletingItemId(null);
+      }
     }
   };
 
-  if (!isOpen || !collection) return null;
+  const handleDeleteCollection = async () => {
+    if (!user || isDeletingCollection) return;
+    setIsDeletingCollection(true);
+    setFormError(null);
+    try {
+      await deleteCollection(user.uid, collection.id);
+      if (!isMountedRef.current) return;
+      showToast('Carpeta eliminada', 'info');
+      onCollectionDeleted?.(collection.id);
+      onClose();
+    } catch (deleteError) {
+      console.error('Error deleting collection:', deleteError);
+      if (isMountedRef.current) {
+        setFormError('No se pudo eliminar la carpeta.');
+        setConfirmDeleteCollection(false);
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsDeletingCollection(false);
+      }
+    }
+  };
 
   const iconOption = getCollectionIcon(collection.icon);
+  const displayedCount = isLoading && items.length === 0 ? collection.itemCount : items.length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto safe-area-inset py-6">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="collection-detail-title"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto safe-area-inset py-6"
+    >
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={handleClose} />
       <div className="relative w-full max-w-3xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-neutral-800/80 flex items-center justify-center text-neutral-200">
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-neutral-800 flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-lg bg-neutral-800/80 flex items-center justify-center text-neutral-200 shrink-0">
               <iconOption.Icon size={18} />
             </div>
-            <div>
-              <h2 className="text-xl font-serif text-white">{collection.name}</h2>
-              <p className="text-xs text-neutral-500">{collection.itemCount} guardados</p>
+            <div className="min-w-0">
+              <h2 id="collection-detail-title" className="text-xl font-serif text-white truncate">
+                {collection.name}
+              </h2>
+              <p className="text-xs text-neutral-500">
+                {displayedCount === 1 ? '1 guardado' : `${displayedCount} guardados`}
+              </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
-            aria-label="Cerrar"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            {onEditCollection && (
+              <button
+                type="button"
+                onClick={() => onEditCollection(collection)}
+                disabled={isBusy}
+                className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800 disabled:opacity-50"
+                aria-label="Editar carpeta"
+              >
+                <Pencil size={17} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setConfirmDeleteCollection((prev) => !prev)}
+              disabled={isBusy}
+              className="p-2 text-neutral-400 hover:text-red-400 transition-colors rounded-full hover:bg-neutral-800 disabled:opacity-50"
+              aria-label="Eliminar carpeta"
+            >
+              <Trash2 size={17} />
+            </button>
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={isBusy}
+              className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800 disabled:opacity-50"
+              aria-label="Cerrar"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
+        {confirmDeleteCollection && (
+          <div className="px-6 py-3 bg-red-950/40 border-b border-red-900/50 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-red-200">
+              ¿Eliminar &ldquo;{collection.name}&rdquo; junto con todo su contenido?
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteCollection(false)}
+                disabled={isDeletingCollection}
+                className="px-3 py-1.5 rounded-lg border border-neutral-700 text-xs text-neutral-300 hover:text-white disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteCollection()}
+                disabled={isDeletingCollection}
+                className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium hover:bg-red-500 disabled:opacity-50"
+              >
+                {isDeletingCollection ? 'Eliminando...' : 'Confirmar eliminación'}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="p-6 space-y-6 overflow-y-auto flex-1">
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
+                <label
+                  htmlFor="collection-item-type"
+                  className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block"
+                >
                   Tipo
                 </label>
                 <select
+                  id="collection-item-type"
                   value={itemType}
-                  onChange={(event) => setItemType(event.target.value as CollectionItemType)}
+                  onChange={(event) => handleTypeChange(event.target.value as CollectionItemType)}
                   className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-amber-500/50 transition-colors"
                 >
                   <option value="link">Enlace</option>
@@ -276,10 +451,14 @@ const CollectionDetailModal = ({
                 </select>
               </div>
               <div>
-                <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
-                  Titulo *
+                <label
+                  htmlFor="collection-item-title"
+                  className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block"
+                >
+                  Título *
                 </label>
                 <input
+                  id="collection-item-title"
                   type="text"
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
@@ -291,24 +470,33 @@ const CollectionDetailModal = ({
             </div>
 
             {itemType === 'link' ? (
-              <div>
-                <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
+              <div key="collection-item-link-field">
+                <label
+                  htmlFor="collection-item-url"
+                  className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block"
+                >
                   Enlace *
                 </label>
                 <input
+                  id="collection-item-url"
                   type="url"
                   value={url}
                   onChange={(event) => setUrl(event.target.value)}
+                  maxLength={LIMITS.collectionItems.urlMaxLength}
                   className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
                   placeholder="https://..."
                 />
               </div>
             ) : itemType === 'note' ? (
-              <div>
-                <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
+              <div key="collection-item-note-field">
+                <label
+                  htmlFor="collection-item-note"
+                  className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block"
+                >
                   Nota *
                 </label>
                 <textarea
+                  id="collection-item-note"
                   value={text}
                   onChange={(event) => setText(event.target.value)}
                   maxLength={LIMITS.collectionItems.noteMaxLength}
@@ -318,11 +506,16 @@ const CollectionDetailModal = ({
                 />
               </div>
             ) : (
-              <div>
-                <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
+              <div key="collection-item-file-field">
+                <label
+                  htmlFor="collection-item-file"
+                  className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block"
+                >
                   Archivo *
                 </label>
                 <input
+                  ref={fileInputRef}
+                  id="collection-item-file"
                   type="file"
                   accept={COLLECTION_FILE_ACCEPT}
                   onChange={(event) => {
@@ -342,16 +535,19 @@ const CollectionDetailModal = ({
               </div>
             )}
 
-            {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
-                {error}
+            {formError && (
+              <div
+                role="alert"
+                className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm"
+              >
+                {formError}
               </div>
             )}
 
             <div className="flex items-center justify-end">
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isBusy}
                 className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-medium rounded-lg hover:from-amber-600 hover:to-amber-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? 'Guardando...' : 'Agregar'}
@@ -363,17 +559,32 @@ const CollectionDetailModal = ({
             <h3 className="text-xs text-neutral-500 uppercase tracking-widest">Elementos</h3>
             {isLoading ? (
               <div className="text-sm text-neutral-500 text-center py-6">Cargando elementos...</div>
+            ) : loadError ? (
+              <div className="text-center py-6 space-y-3">
+                <p className="text-sm text-red-400">{loadError}</p>
+                <button
+                  type="button"
+                  onClick={() => setReloadToken((prev) => prev + 1)}
+                  className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+                >
+                  Reintentar
+                </button>
+              </div>
             ) : items.length === 0 ? (
-              <div className="text-sm text-neutral-500 text-center py-6">Aun no hay elementos.</div>
+              <div className="text-sm text-neutral-500 text-center py-6">Aún no hay elementos.</div>
             ) : (
               items.map((item) => {
                 const isLink = item.type === 'link';
                 const isFile = item.type === 'file';
                 const subtitle = isLink ? item.url : isFile ? item.fileName : item.text;
+                const openableUrl = (isLink || isFile) && isSafeHttpUrl(item.url) ? item.url : null;
+                const isConfirmingDelete = confirmDeleteItemId === item.id;
+                const isDeletingThis = deletingItemId === item.id;
+
                 return (
                   <div
                     key={item.id}
-                    className="flex items-center gap-4 bg-neutral-900/30 border border-neutral-800 rounded-lg p-4"
+                    className="flex items-start gap-4 bg-neutral-900/30 border border-neutral-800 rounded-lg p-4"
                   >
                     <div className="w-12 h-12 rounded-lg bg-neutral-800/80 flex items-center justify-center flex-shrink-0 text-neutral-300">
                       {isLink ? (
@@ -386,8 +597,8 @@ const CollectionDetailModal = ({
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4 className="text-white text-sm font-medium truncate">{item.title}</h4>
-                      <p className="text-neutral-500 text-xs mt-0.5">
-                        {subtitle || 'Sin descripcion'}
+                      <p className="text-neutral-500 text-xs mt-0.5 whitespace-pre-wrap break-words">
+                        {subtitle || 'Sin descripción'}
                       </p>
                       {isFile && item.fileSize ? (
                         <p className="text-neutral-600 text-xs mt-1">
@@ -397,24 +608,47 @@ const CollectionDetailModal = ({
                     </div>
                     <div className="flex items-center gap-3 text-neutral-500 text-xs flex-shrink-0">
                       <span>{formatRelativeTime(item.createdAt)}</span>
-                      {isFile && item.url ? (
+                      {openableUrl && (
                         <a
-                          href={item.url}
+                          href={openableUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-amber-400 hover:text-amber-300 transition-colors"
+                          className="inline-flex items-center gap-1 text-amber-400 hover:text-amber-300 transition-colors"
                         >
                           Abrir
+                          <ExternalLink size={12} />
                         </a>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(item)}
-                        className="text-red-400 hover:text-red-300 transition-colors"
-                        aria-label="Eliminar"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      )}
+                      {isConfirmingDelete ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteItem(item)}
+                            disabled={isDeletingThis}
+                            className="px-2 py-1 rounded bg-red-600 text-white hover:bg-red-500 disabled:opacity-50"
+                          >
+                            {isDeletingThis ? '...' : 'Confirmar'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteItemId(null)}
+                            disabled={isDeletingThis}
+                            className="px-2 py-1 rounded border border-neutral-700 text-neutral-300 hover:text-white disabled:opacity-50"
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteItemId(item.id)}
+                          disabled={isBusy}
+                          className="text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
+                          aria-label={`Eliminar ${item.title}`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -424,6 +658,30 @@ const CollectionDetailModal = ({
         </div>
       </div>
     </div>
+  );
+};
+
+const CollectionDetailModal = ({
+  isOpen,
+  collection,
+  onClose,
+  onEditCollection,
+  onCollectionDeleted,
+  onItemCreated,
+  onItemDeleted,
+}: CollectionDetailModalProps) => {
+  if (!isOpen || !collection) return null;
+
+  return (
+    <CollectionDetailDialog
+      key={collection.id}
+      collection={collection}
+      onClose={onClose}
+      onEditCollection={onEditCollection}
+      onCollectionDeleted={onCollectionDeleted}
+      onItemCreated={onItemCreated}
+      onItemDeleted={onItemDeleted}
+    />
   );
 };
 

@@ -922,6 +922,7 @@ service cloud.firestore {
         && data.title.size() <= 160
         && (isLink
           ? (data.url is string && data.url.size() > 0 && data.url.size() <= 600
+            && data.url.matches('^https?://.+')
             && data.text == null
             && data.fileName == null
             && data.fileSize == null
@@ -938,10 +939,12 @@ service cloud.firestore {
           : true)
         && (isFile
           ? (data.url is string && data.url.size() > 0 && data.url.size() <= 600
+            && data.url.matches('^https?://.+')
             && data.fileName is string && data.fileName.size() > 0 && data.fileName.size() <= 200
             && data.fileSize is int && data.fileSize > 0 && data.fileSize < 26214400
             && data.contentType is string && data.contentType.size() > 0 && data.contentType.size() <= 120
             && data.storagePath is string && data.storagePath.size() > 0 && data.storagePath.size() <= 600
+            && data.storagePath.matches('^collections/' + request.auth.uid + '/' + collectionId + '/[^/]+/[^/]+$')
             && data.text == null)
           : true)
         && data.createdAt == request.time;

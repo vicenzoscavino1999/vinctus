@@ -376,4 +376,34 @@ describe('Storage Rules - upload security', () => {
       followerStorage.ref('stories/user_b/story_follower_visible/original/story.jpg').getMetadata(),
     );
   });
+
+  it('restricts collection files to the owner and validates content type', async () => {
+    const env = await getRulesTestEnv();
+    const ownerStorage = env.authenticatedContext('user_a').storage();
+    const otherStorage = env.authenticatedContext('user_b').storage();
+    const validPath = 'collections/user_a/col_1/item_1/paper.pdf';
+
+    await assertSucceeds(
+      ownerStorage
+        .ref(validPath)
+        .putString('%PDF-1.4 sample', 'raw', { contentType: 'application/pdf' })
+        .then((snapshot) => snapshot),
+    );
+    await assertSucceeds(ownerStorage.ref(validPath).getMetadata());
+    await assertFails(otherStorage.ref(validPath).getMetadata());
+    await assertFails(otherStorage.ref(validPath).delete());
+    await assertFails(
+      otherStorage
+        .ref('collections/user_a/col_1/item_2/spoof.pdf')
+        .putString('%PDF-1.4 spoof', 'raw', { contentType: 'application/pdf' })
+        .then((snapshot) => snapshot),
+    );
+    await assertFails(
+      ownerStorage
+        .ref('collections/user_a/col_1/item_3/script.js')
+        .putString('alert(1)', 'raw', { contentType: 'application/javascript' })
+        .then((snapshot) => snapshot),
+    );
+    await assertSucceeds(ownerStorage.ref(validPath).delete());
+  });
 });

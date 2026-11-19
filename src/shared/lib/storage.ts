@@ -410,6 +410,9 @@ export async function deleteCollectionFile(path: string): Promise<void> {
   try {
     await deleteObject(ref(storage, path));
   } catch (error) {
+    if ((error as { code?: string })?.code === 'storage/object-not-found') {
+      return;
+    }
     console.error('Delete failed:', error);
     throw new Error('No se pudo eliminar el archivo');
   }

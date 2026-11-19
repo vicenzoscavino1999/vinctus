@@ -7,37 +7,66 @@ final class CollectionsViewModel: ObservableObject {
   @Published private(set) var isLoading = true
   @Published var errorMessage: String?
   @Published var searchText = ""
+  @Published private(set) var deletingIDs: Set<String> = []
 
   let repo: CollectionsRepo
+  private var loadGeneration = 0
 
   init(repo: CollectionsRepo) {
     self.repo = repo
   }
 
-  /// Same search as the web's CollectionsPanel: by name, ignoring case.
+  /// Same search as the web's CollectionsPanel: by name, ignoring case and diacritics.
   var visibleCollections: [UserCollection] {
-    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let query = DiscoverCategory.normalizedSearch(searchText)
     guard !query.isEmpty else { return collections }
-    return collections.filter { $0.name.localizedCaseInsensitiveContains(query) }
+    return collections.filter { DiscoverCategory.normalizedSearch($0.name).contains(query) }
+  }
+
+  func reset() {
+    loadGeneration += 1
+    collections = []
+    searchText = ""
+    errorMessage = nil
+    deletingIDs = []
+    isLoading = false
   }
 
   func load() async {
+    loadGeneration += 1
+    let gen = loadGeneration
+    if collections.isEmpty {
+      isLoading = true
+    }
     do {
-      collections = try await repo.fetchCollections()
+      let fetched = try await repo.fetchCollections()
+      guard !Task.isCancelled, gen == loadGeneration else { return }
+      collections = fetched
       errorMessage = nil
     } catch {
+      guard !Task.isCancelled, gen == loadGeneration else { return }
       errorMessage = "No se pudieron cargar tus colecciones."
     }
     isLoading = false
   }
 
   func delete(_ collection: UserCollection) async {
-    let previous = collections
+    guard !deletingIDs.contains(collection.id) else { return }
+    let gen = loadGeneration
+    deletingIDs.insert(collection.id)
+    defer { deletingIDs.remove(collection.id) }
+
+    let originalIndex = collections.firstIndex(where: { $0.id == collection.id })
     collections.removeAll { $0.id == collection.id }
+    errorMessage = nil
     do {
       try await repo.deleteCollection(id: collection.id)
     } catch {
-      collections = previous
+      guard gen == loadGeneration else { return }
+      if !collections.contains(where: { $0.id == collection.id }) {
+        let index = min(originalIndex ?? collections.count, collections.count)
+        collections.insert(collection, at: index)
+      }
       errorMessage = "No se pudo eliminar la colección."
     }
   }
@@ -73,7 +102,8 @@ final class CollectionEditorViewModel: ObservableObject {
   }
 
   var canSave: Bool {
-    !isSaving && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    return !isSaving && !trimmed.isEmpty && trimmed.count <= Limits.Collections.nameMaxLength
   }
 
   /// Returns true when the collection was saved.
@@ -97,15 +127,17 @@ final class CollectionEditorViewModel: ObservableObject {
   }
 }
 
-/// The links and notes saved in one collection.
+/// The links, notes and files saved in one collection.
 @MainActor
 final class CollectionDetailViewModel: ObservableObject {
   @Published private(set) var items: [CollectionItem] = []
   @Published private(set) var isLoading = true
   @Published private(set) var errorMessage: String?
+  @Published private(set) var deletingIDs: Set<String> = []
 
   let collection: UserCollection
   private let repo: CollectionsRepo
+  private var loadGeneration = 0
 
   init(collection: UserCollection, repo: CollectionsRepo) {
     self.collection = collection
@@ -113,10 +145,18 @@ final class CollectionDetailViewModel: ObservableObject {
   }
 
   func load() async {
+    loadGeneration += 1
+    let gen = loadGeneration
+    if items.isEmpty {
+      isLoading = true
+    }
     do {
-      items = try await repo.fetchItems(collectionID: collection.id)
+      let fetched = try await repo.fetchItems(collectionID: collection.id)
+      guard !Task.isCancelled, gen == loadGeneration else { return }
+      items = fetched
       errorMessage = nil
     } catch {
+      guard !Task.isCancelled, gen == loadGeneration else { return }
       errorMessage = "No se pudo cargar la colección."
     }
     isLoading = false
@@ -124,25 +164,35 @@ final class CollectionDetailViewModel: ObservableObject {
 
   /// Removes right away and puts the item back if the delete fails. Returns true when deleted.
   func delete(_ item: CollectionItem) async -> Bool {
-    let previous = items
+    guard !deletingIDs.contains(item.id) else { return false }
+    let gen = loadGeneration
+    deletingIDs.insert(item.id)
+    defer { deletingIDs.remove(item.id) }
+
+    let originalIndex = items.firstIndex(where: { $0.id == item.id })
     items.removeAll { $0.id == item.id }
+    errorMessage = nil
     do {
       try await repo.deleteItem(id: item.id, from: collection.id)
       return true
     } catch {
-      items = previous
+      if gen == loadGeneration && !items.contains(where: { $0.id == item.id }) {
+        let index = min(originalIndex ?? items.count, items.count)
+        items.insert(item, at: index)
+      }
       errorMessage = "No se pudo eliminar."
       return false
     }
   }
 }
 
-/// Adding a link or a note to a collection.
+/// Adding a link, note or file to a collection.
 @MainActor
 final class NewCollectionItemViewModel: ObservableObject {
   @Published var draft = NewCollectionItem()
   @Published private(set) var isSaving = false
-  @Published private(set) var errorMessage: String?
+  @Published private(set) var isImportingFile = false
+  @Published var errorMessage: String?
 
   let collection: UserCollection
   private let repo: CollectionsRepo
@@ -152,9 +202,32 @@ final class NewCollectionItemViewModel: ObservableObject {
     self.repo = repo
   }
 
+  func importFile(from url: URL) async {
+    guard !isSaving, !isImportingFile else { return }
+    isImportingFile = true
+    errorMessage = nil
+    defer { isImportingFile = false }
+    do {
+      let upload = try await Task.detached {
+        try CollectionUploadFile.load(from: url)
+      }.value
+      draft.file = upload
+      if draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        draft.title = String(upload.fileName.prefix(Limits.CollectionItems.titleMaxLength))
+      }
+    } catch {
+      errorMessage = (error as? LocalizedError)?.errorDescription ?? "No se pudo abrir el archivo."
+    }
+  }
+
+  func clearFile() {
+    guard !isSaving else { return }
+    draft.file = nil
+  }
+
   /// Returns true when the item was added.
   func save() async -> Bool {
-    guard !isSaving else { return false }
+    guard !isSaving, !isImportingFile else { return false }
     isSaving = true
     errorMessage = nil
     defer { isSaving = false }
