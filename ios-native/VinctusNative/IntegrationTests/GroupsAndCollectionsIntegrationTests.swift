@@ -304,7 +304,8 @@ final class CollectionsIntegrationTests: EmulatorTestCase {
     let repo = FirebaseCollectionsRepo()
 
     try await repo.createCollection(name: "Archivos privados", icon: .folder)
-    let collection = try XCTUnwrap(try await repo.fetchCollections().first)
+    let fetchedCollections = try await repo.fetchCollections()
+    let collection = try XCTUnwrap(fetchedCollections.first)
 
     let pdfData = Data("%PDF-1.4\nContenido de prueba".utf8)
     var firstFile = NewCollectionItem()
@@ -375,7 +376,8 @@ final class CollectionsIntegrationTests: EmulatorTestCase {
       contentType: "application/pdf"
     )
     try await repo.addItem(secondFile, to: collection)
-    let savedSecond = try XCTUnwrap(try await repo.fetchItems(collectionID: collection.id).first)
+    let itemsAfterSecondAdd = try await repo.fetchItems(collectionID: collection.id)
+    let savedSecond = try XCTUnwrap(itemsAfterSecondAdd.first)
     let secondStoragePath = try XCTUnwrap(savedSecond.storagePath)
 
     try await repo.deleteCollection(id: collection.id)
