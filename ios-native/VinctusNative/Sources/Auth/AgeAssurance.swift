@@ -75,6 +75,9 @@ enum AgeAssurance {
 
   @MainActor
   private static func topViewController() -> UIViewController? {
+    if let active = SignInPresenter.topViewController() {
+      return active
+    }
     let root = UIApplication.shared.connectedScenes
       .compactMap { $0 as? UIWindowScene }
       .flatMap(\.windows)

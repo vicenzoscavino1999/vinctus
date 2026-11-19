@@ -20,7 +20,9 @@ const mockDeclineFollowRequest = vi.fn();
 const mockCancelFollowRequest = vi.fn();
 const mockFollowPublicUser = vi.fn();
 const mockUnfollowUser = vi.fn();
+const mockBlockUser = vi.fn();
 const mockUnblockUser = vi.fn();
+const mockReportUserProfile = vi.fn();
 const mockIsUserBlocked = vi.fn();
 const mockGetBlockedUsers = vi.fn();
 const mockGetFollowList = vi.fn();
@@ -74,7 +76,9 @@ vi.mock('@/features/profile/api', () => ({
   cancelFollowRequest: (...args: unknown[]) => mockCancelFollowRequest(...args),
   followPublicUser: (...args: unknown[]) => mockFollowPublicUser(...args),
   unfollowUser: (...args: unknown[]) => mockUnfollowUser(...args),
+  blockUser: (...args: unknown[]) => mockBlockUser(...args),
   unblockUser: (...args: unknown[]) => mockUnblockUser(...args),
+  reportUserProfile: (...args: unknown[]) => mockReportUserProfile(...args),
   isUserBlocked: (...args: unknown[]) => mockIsUserBlocked(...args),
   getBlockedUsers: (...args: unknown[]) => mockGetBlockedUsers(...args),
   getFollowList: (...args: unknown[]) => mockGetFollowList(...args),
@@ -364,11 +368,64 @@ describe('Perfiles y seguidores flows', () => {
     );
 
     const unblockButton = await screen.findByRole('button', { name: 'Desbloquear usuario' });
+    expect(screen.getByText('Has bloqueado a este usuario')).toBeInTheDocument();
+    expect(screen.queryByText('Cuenta privada')).not.toBeInTheDocument();
     fireEvent.click(unblockButton);
 
     await waitFor(() => {
       expect(mockUnblockUser).toHaveBeenCalledWith('user_1', 'user_blocked');
       expect(screen.getByRole('button', { name: 'Seguir' })).toBeInTheDocument();
+    });
+  });
+
+  it('UserProfilePage allows blocking with confirmation and reporting another user profile', async () => {
+    mockGetUserProfile.mockResolvedValue({
+      uid: 'user_target',
+      displayName: 'Carlos M.',
+      photoURL: null,
+      bio: null,
+      role: null,
+      location: null,
+      accountVisibility: 'public',
+      followersCount: 1,
+      followingCount: 1,
+      postsCount: 0,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    });
+    mockIsUserBlocked.mockResolvedValueOnce(false);
+    mockGetFollowStatus.mockResolvedValueOnce({ status: 'none', isMutual: false });
+    mockBlockUser.mockResolvedValueOnce(undefined);
+    mockReportUserProfile.mockResolvedValueOnce(undefined);
+
+    render(
+      <ToastProvider>
+        <MemoryRouter initialEntries={['/user/user_target']}>
+          <Routes>
+            <Route path="/user/:userId" element={<UserProfilePage />} />
+          </Routes>
+        </MemoryRouter>
+      </ToastProvider>,
+    );
+
+    const blockButton = await screen.findByRole('button', { name: 'Bloquear usuario' });
+    fireEvent.click(blockButton);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar bloqueo' }));
+
+    await waitFor(() => {
+      expect(mockBlockUser).toHaveBeenCalledWith('user_1', 'user_target');
+      expect(screen.getByText('Has bloqueado a este usuario')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reportar usuario' }));
+    fireEvent.click(screen.getByRole('button', { name: /Enviar reporte/i }));
+
+    await waitFor(() => {
+      expect(mockReportUserProfile).toHaveBeenCalledWith({
+        reporterUid: 'user_1',
+        reportedUid: 'user_target',
+        reason: 'spam',
+        details: null,
+      });
     });
   });
 

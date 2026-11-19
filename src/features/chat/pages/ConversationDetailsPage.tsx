@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
+  Ban,
+  ShieldOff,
   User as UserIcon,
   Users,
   AlertCircle,
@@ -120,13 +122,16 @@ export default function ConversationDetailsPage() {
   useEffect(() => {
     if (!conversationId || !user?.uid) return;
 
+    let active = true;
     const loadMemberData = async () => {
       try {
         const member = await getConversationMember(conversationId, user.uid);
+        if (!active) return;
         if (member) {
           // Auto-unmute if mutedUntil has passed
           if (member.muted && member.mutedUntil && member.mutedUntil < new Date()) {
             await clearConversationMute(conversationId, user.uid);
+            if (!active) return;
             setMemberData({ ...member, muted: false, mutedUntil: null });
           } else {
             setMemberData(member);
@@ -138,19 +143,26 @@ export default function ConversationDetailsPage() {
     };
 
     void loadMemberData();
+    return () => {
+      active = false;
+    };
   }, [conversationId, user]);
 
   useEffect(() => {
     if (!user?.uid || !otherUserProfile) return;
+    let active = true;
     const loadBlockStatus = async () => {
       try {
         const blocked = await isUserBlocked(user.uid, otherUserProfile.uid);
-        setIsBlocked(blocked);
+        if (active) setIsBlocked(blocked);
       } catch (err) {
         console.error('[ConversationDetailsPage] Error loading block status:', err);
       }
     };
     void loadBlockStatus();
+    return () => {
+      active = false;
+    };
   }, [user, otherUserProfile]);
 
   const handleGoBack = () => {
@@ -199,7 +211,7 @@ export default function ConversationDetailsPage() {
   };
 
   const handleSubmitReport = async () => {
-    if (!user?.uid || !otherUserProfile) return;
+    if (!user?.uid || !otherUserProfile || isSubmittingReport) return;
     setIsSubmittingReport(true);
     setReportError(null);
     try {
@@ -222,7 +234,7 @@ export default function ConversationDetailsPage() {
   };
 
   const handleToggleBlock = async () => {
-    if (!user?.uid || !otherUserProfile) return;
+    if (!user?.uid || !otherUserProfile || isBlocking) return;
     setIsBlocking(true);
     try {
       if (isBlocked) {
@@ -392,7 +404,11 @@ export default function ConversationDetailsPage() {
           className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-red-500/10 border border-neutral-800/50 hover:border-red-500/30 rounded-xl transition-all text-left cursor-pointer"
         >
           <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center flex-shrink-0">
-            <span className="text-red-400 text-lg">{isBlocked ? '?' : '??'}</span>
+            {isBlocked ? (
+              <ShieldOff size={18} className="text-amber-400" />
+            ) : (
+              <Ban size={18} className="text-red-400" />
+            )}
           </div>
           <div className="flex-1">
             <p className="text-white font-medium">{isBlocked ? 'Desbloquear' : 'Bloquear'}</p>

@@ -1,6 +1,8 @@
 import {
   DEFAULT_NOTIFICATION_SETTINGS as DEFAULT_NOTIFICATION_SETTINGS_RAW,
   DEFAULT_PRIVACY_SETTINGS as DEFAULT_PRIVACY_SETTINGS_RAW,
+  getBlockedUsers as getBlockedUsersRaw,
+  getUserProfile as getUserProfileRaw,
   getUserSettings as getUserSettingsRaw,
 } from '@/shared/lib/firestore';
 import { toAppError } from '@/shared/lib/errors';
@@ -49,10 +51,45 @@ export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = validate(
   { field: 'DEFAULT_PRIVACY_SETTINGS' },
 );
 
+export interface BlockedUserSummary {
+  uid: string;
+  displayName: string;
+  username: string | null;
+  photoURL: string | null;
+}
+
 export const getUserSettings = async (uid: string): Promise<UserSettingsRead> => {
   const safeUid = validate(uidSchema, uid, { field: 'uid' });
   return runRead('settings.getUserSettings', async () => {
     const settings = await getUserSettingsRaw(safeUid);
     return validate(userSettingsReadSchema, settings, { field: 'settings' });
+  });
+};
+
+export const getBlockedUsersProfiles = async (uid: string): Promise<BlockedUserSummary[]> => {
+  const safeUid = validate(uidSchema, uid, { field: 'uid' });
+  return runRead('settings.getBlockedUsersProfiles', async () => {
+    const blockedIds = await getBlockedUsersRaw(safeUid);
+    const profiles = await Promise.all(
+      blockedIds.map(async (blockedUid) => {
+        try {
+          const profile = await getUserProfileRaw(blockedUid);
+          return {
+            uid: blockedUid,
+            displayName: profile?.displayName?.trim() || 'Usuario',
+            username: profile?.username ?? null,
+            photoURL: profile?.photoURL ?? null,
+          };
+        } catch {
+          return {
+            uid: blockedUid,
+            displayName: 'Usuario',
+            username: null,
+            photoURL: null,
+          };
+        }
+      }),
+    );
+    return profiles.sort((a, b) => a.displayName.localeCompare(b.displayName, 'es'));
   });
 };

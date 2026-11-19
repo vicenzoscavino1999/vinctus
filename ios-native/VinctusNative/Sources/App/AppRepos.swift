@@ -107,5 +107,6 @@ enum AppRepos {
   static func moderation() -> ModerationRepo { FirebaseModerationRepo() }
   static func ai() -> AIRepo { FirebaseAIRepo() }
   static func aiConsent() -> AIConsentRepo { FirebaseAIConsentRepo() }
+  static func accountSecurity() -> AccountSecurityRepo { FirebaseAccountSecurityRepo() }
   static func deleteAccount() -> DeleteAccountRepo { FirebaseDeleteAccountRepo() }
 }

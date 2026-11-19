@@ -74,7 +74,10 @@ final class FirebaseAuthRepo: AuthRepo {
   func createAccount(email: String, password: String) async throws {
     guard FirebaseApp.app() != nil else { throw AuthRepoError.firebaseNotConfigured }
 
-    _ = try await Auth.auth().createUser(withEmail: email, password: password)
+    Auth.auth().languageCode = "es"
+    let result = try await Auth.auth().createUser(withEmail: email, password: password)
+    // Best-effort verification email (matches web signup without blocking profile setup).
+    _ = try? await result.user.sendEmailVerification()
   }
 
   @MainActor

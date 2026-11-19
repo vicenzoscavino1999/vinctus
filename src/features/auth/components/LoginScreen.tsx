@@ -23,6 +23,7 @@ const LoginScreen = () => {
   const [mode, setMode] = useState<AuthMode>('login');
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   // Form state
   const [email, setEmail] = useState('');
@@ -35,9 +36,13 @@ const LoginScreen = () => {
     setMetricsFlow('login');
   }, []);
 
+  const displayedError = localError || authError;
+
   const handleGoogleSignIn = async () => {
+    if (isLoading) return;
     setIsLoading(true);
     clearError();
+    setLocalError(null);
     setSuccessMessage(null);
     try {
       await signInWithGoogle();
@@ -49,8 +54,10 @@ const LoginScreen = () => {
   };
 
   const handleAppleSignIn = async () => {
+    if (isLoading) return;
     setIsLoading(true);
     clearError();
+    setLocalError(null);
     setSuccessMessage(null);
     try {
       await signInWithApple();
@@ -63,19 +70,26 @@ const LoginScreen = () => {
 
   const handleEmailSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setLocalError('Ingresa un correo electrónico válido.');
+      return;
+    }
     setIsLoading(true);
     clearError();
+    setLocalError(null);
     setSuccessMessage(null);
 
     try {
       if (mode === 'login') {
-        await signInWithEmail(email, password);
+        await signInWithEmail(trimmedEmail, password);
       } else if (mode === 'register') {
-        await signUpWithEmail(email, password, displayName || undefined);
+        await signUpWithEmail(trimmedEmail, password, displayName.trim() || undefined);
         setSuccessMessage('¡Cuenta creada! Revisa tu correo para verificar tu cuenta.');
         // Optional: switch to login mod or auto-login (already handled by context)
       } else if (mode === 'forgot_password') {
-        await resetPassword(email);
+        await resetPassword(trimmedEmail);
         setSuccessMessage('Si el correo existe, recibirás un enlace para recuperar tu contraseña.');
         // Keep them on this screen or switch to login logic
       }
@@ -88,14 +102,25 @@ const LoginScreen = () => {
 
   const handlePhoneSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    if (isLoading) return;
     clearError();
+    setLocalError(null);
     setSuccessMessage(null);
 
+    if (!phoneCodeSent && phoneNumber.length !== 9) {
+      setLocalError('Ingresa un número de celular válido de 9 dígitos.');
+      return;
+    }
+    if (phoneCodeSent && verificationCode.length !== 6) {
+      setLocalError('Ingresa el código de verificación de 6 dígitos.');
+      return;
+    }
+
+    setIsLoading(true);
     try {
       if (!phoneCodeSent) {
         // Format phone number with Peru country code (+51)
-        // Input is always digits-only (9 chars max) due to sanitization on line 157
+        // Input is always digits-only (9 chars max) due to sanitization below
         const formattedPhone = `+51${phoneNumber}`;
         await sendPhoneCode(formattedPhone, 'recaptcha-container');
       } else {
@@ -111,6 +136,7 @@ const LoginScreen = () => {
   const switchMode = (newMode: AuthMode) => {
     setMode(newMode);
     clearError();
+    setLocalError(null);
     setSuccessMessage(null);
     setPassword('');
     // Don't clear email when switching to forgot password as it might be useful
@@ -235,9 +261,9 @@ const LoginScreen = () => {
               )}
 
               {/* Error message */}
-              {authError && (
+              {displayedError && (
                 <div className="p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm text-center">
-                  {authError}
+                  {displayedError}
                 </div>
               )}
 
@@ -290,9 +316,9 @@ const LoginScreen = () => {
             )}
 
             {/* Error message */}
-            {authError && (
+            {displayedError && (
               <div className="w-full mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm text-center">
-                {authError}
+                {displayedError}
               </div>
             )}
 
@@ -301,7 +327,11 @@ const LoginScreen = () => {
                 type="email"
                 placeholder="Correo electrónico"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (successMessage) setSuccessMessage(null);
+                  if (localError) setLocalError(null);
+                }}
                 required
                 className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
               />
@@ -353,9 +383,9 @@ const LoginScreen = () => {
             )}
 
             {/* Error message */}
-            {authError && (
+            {displayedError && (
               <div className="w-full mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm text-center">
-                {authError}
+                {displayedError}
               </div>
             )}
 
@@ -367,6 +397,7 @@ const LoginScreen = () => {
                   placeholder="Nombre (opcional)"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
+                  maxLength={120}
                   className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
                 />
               )}

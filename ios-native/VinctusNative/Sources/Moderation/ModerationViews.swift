@@ -5,17 +5,40 @@ import SwiftUI
 @MainActor
 final class BlockedUsersStore: ObservableObject {
   @Published private(set) var blockedUserIDs: Set<String> = []
+  @Published private(set) var lastLoadError: String?
 
   let repo: ModerationRepo
+  private var loadGeneration = 0
 
   init(repo: ModerationRepo) {
     self.repo = repo
   }
 
+  func reset() {
+    loadGeneration += 1
+    blockedUserIDs = []
+    lastLoadError = nil
+  }
+
+  func refresh(for userID: String?) async {
+    guard let userID, !userID.isEmpty else {
+      reset()
+      return
+    }
+    await refresh()
+  }
+
   func refresh() async {
+    loadGeneration += 1
+    let generation = loadGeneration
+    lastLoadError = nil
     do {
-      blockedUserIDs = try await repo.fetchBlockedUserIDs()
+      let fetched = try await repo.fetchBlockedUserIDs()
+      guard !Task.isCancelled, generation == loadGeneration else { return }
+      blockedUserIDs = fetched
     } catch {
+      guard !Task.isCancelled, generation == loadGeneration else { return }
+      lastLoadError = "No se pudo cargar la lista de bloqueados."
       AppLog.moderation.error(
         "blocked.load.failed errorType=\(AppLog.errorType(error), privacy: .public)"
       )
@@ -244,7 +267,23 @@ struct BlockedUsersView: View {
 
   var body: some View {
     List {
-      if blockedUsers.blockedUserIDs.isEmpty {
+      if vm.isLoading && blockedUsers.blockedUserIDs.isEmpty {
+        HStack {
+          Spacer()
+          ProgressView()
+          Spacer()
+        }
+      } else if let loadError = vm.loadError, blockedUsers.blockedUserIDs.isEmpty {
+        VStack(alignment: .leading, spacing: 10) {
+          Text(loadError)
+            .font(.footnote)
+            .foregroundStyle(.red)
+          Button("Reintentar") {
+            Task { await vm.reload(blockedUsers) }
+          }
+          .buttonStyle(.bordered)
+        }
+      } else if blockedUsers.blockedUserIDs.isEmpty {
         Text("No has bloqueado a nadie.")
           .foregroundStyle(.secondary)
       } else {
@@ -252,7 +291,7 @@ struct BlockedUsersView: View {
           HStack {
             Text(vm.displayName(for: userID))
             Spacer()
-            Button("Desbloquear") {
+            Button(vm.pendingUserID == userID ? "Desbloqueando..." : "Desbloquear") {
               Task { await vm.unblock(userID, in: blockedUsers) }
             }
             .buttonStyle(.borderless)

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  inferQueuePriority,
+  inferQueueSource,
+  inferReportTargetType,
   messageReportKey,
   moderateUserText,
   newlyMatchedTerms,
@@ -139,5 +142,37 @@ describe('parseReportedStoryTarget', () => {
     expect(parseReportedStoryTarget('story_a/b')).toBeNull();
     expect(parseReportedStoryTarget('story_')).toBeNull();
     expect(parseReportedStoryTarget(undefined)).toBeNull();
+  });
+});
+
+describe('moderation queue inference helpers', () => {
+  it('distinguishes auto-moderation from user reports', () => {
+    expect(inferQueueSource('system_moderation')).toBe('auto_moderation');
+    expect(inferQueueSource('user_a')).toBe('user_report');
+    expect(inferQueueSource(null)).toBe('user_report');
+  });
+
+  it('escalates priority for auto-removed and auto-flagged content', () => {
+    expect(inferQueuePriority('other', 'removed')).toBe('high');
+    expect(inferQueuePriority('other', 'flagged')).toBe('medium');
+    expect(inferQueuePriority('abuse')).toBe('high');
+    expect(inferQueuePriority('harassment')).toBe('high');
+    expect(inferQueuePriority('spam')).toBe('medium');
+    expect(inferQueuePriority('fake')).toBe('medium');
+    expect(inferQueuePriority('other')).toBe('low');
+  });
+
+  it('classifies user profile reports without conversationId as user targets', () => {
+    expect(inferReportTargetType(null, 'user_b')).toBe('user');
+    expect(inferReportTargetType(null, 'user_b', 'profile')).toBe('user');
+    expect(inferReportTargetType('dm_user_a_user_b', 'user_b')).toBe('user');
+    expect(inferReportTargetType('post_p1', 'user_b')).toBe('post');
+    expect(inferReportTargetType('post_p1_comment_c1', 'user_b')).toBe('comment');
+    expect(inferReportTargetType('msg|dm_a_b|m1', 'user_b')).toBe('message');
+    expect(inferReportTargetType('story_s1', 'user_b')).toBe('story');
+    expect(inferReportTargetType('grp_g1', 'g1')).toBe('group');
+    expect(inferReportTargetType('ai_chat', 'ai_assistant')).toBe('unknown');
+    expect(inferReportTargetType(null, 'ai_assistant')).toBe('unknown');
+    expect(inferReportTargetType(null, null)).toBe('unknown');
   });
 });

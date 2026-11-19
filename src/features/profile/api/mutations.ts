@@ -3,6 +3,7 @@ import {
   blockUser as blockUserRaw,
   cancelFollowRequest as cancelFollowRequestRaw,
   createContribution as createContributionRaw,
+  createUserReport as createUserReportRaw,
   declineFollowRequest as declineFollowRequestRaw,
   deleteContribution as deleteContributionRaw,
   followCategoryWithSync as followCategoryWithSyncRaw,
@@ -17,6 +18,8 @@ import {
   updateContributionFile as updateContributionFileRaw,
   updateUserProfile as updateUserProfileRaw,
 } from '@/shared/lib/firestore';
+import type { UserReportReason } from '@/shared/lib/firestore';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 import { deleteCollectionFile } from '@/shared/lib/storage';
 import { toAppError } from '@/shared/lib/errors';
 import { withRetry, withTimeout } from '@/shared/lib/firebase-helpers';
@@ -120,6 +123,34 @@ export const unblockUser = async (currentUid: string, blockedUid: string): Promi
   const safeCurrentUid = validate(uidSchema, currentUid, { field: 'currentUid' });
   const safeBlockedUid = validate(uidSchema, blockedUid, { field: 'blockedUid' });
   return runWrite('profile.unblockUser', () => unblockUserRaw(safeCurrentUid, safeBlockedUid));
+};
+
+export const reportUserProfile = async (input: {
+  reporterUid: string;
+  reportedUid: string;
+  reason: UserReportReason;
+  details?: string | null;
+}): Promise<string> => {
+  const safeReporterUid = validate(uidSchema, input.reporterUid, { field: 'reporterUid' });
+  const safeReportedUid = validate(uidSchema, input.reportedUid, { field: 'reportedUid' });
+  if (safeReporterUid === safeReportedUid) {
+    throw toAppError(new Error('No puedes reportarte a ti mismo.'), {
+      operation: 'profile.reportUserProfile',
+    });
+  }
+  const trimmedDetails = input.details?.trim();
+  const safeDetails = trimmedDetails
+    ? trimmedDetails.slice(0, LIMITS.reports.detailsMaxLength)
+    : null;
+  return runWrite('profile.reportUserProfile', () =>
+    createUserReportRaw({
+      reporterUid: safeReporterUid,
+      reportedUid: safeReportedUid,
+      reason: input.reason,
+      details: safeDetails,
+      conversationId: null,
+    }),
+  );
 };
 
 export const getOrCreateDirectConversation = async (

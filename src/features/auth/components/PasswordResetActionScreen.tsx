@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { confirmPasswordReset, verifyPasswordResetCode } from 'firebase/auth';
 import { auth } from '@/shared/lib/firebase';
 
@@ -19,15 +19,55 @@ const getSafeContinueUrl = (rawContinueUrl: string | null): string | null => {
   }
 };
 
+const mapResetError = (resetError: unknown): string => {
+  const code = (resetError as { code?: string })?.code;
+  if (code === 'auth/expired-action-code' || code === 'auth/invalid-action-code') {
+    return 'El enlace es inválido o ya expiró. Solicita uno nuevo.';
+  }
+  if (code === 'auth/user-disabled') {
+    return 'Esta cuenta ha sido deshabilitada.';
+  }
+  if (code === 'auth/weak-password') {
+    return 'La contraseña es demasiado débil.';
+  }
+  return 'No se pudo restablecer la contraseña.';
+};
+
 const PasswordResetActionScreen = ({ oobCode, continueUrl }: PasswordResetActionScreenProps) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState(true);
+  const [codeInvalidError, setCodeInvalidError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
 
   const redirectPath = useMemo(() => getSafeContinueUrl(continueUrl), [continueUrl]);
+
+  useEffect(() => {
+    let active = true;
+    const verify = async () => {
+      setIsVerifying(true);
+      setCodeInvalidError(null);
+      try {
+        const resolvedEmail = await verifyPasswordResetCode(auth, oobCode);
+        if (!active) return;
+        setEmail(resolvedEmail);
+      } catch (verifyError) {
+        if (!active) return;
+        setCodeInvalidError(mapResetError(verifyError));
+      } finally {
+        if (active) {
+          setIsVerifying(false);
+        }
+      }
+    };
+    void verify();
+    return () => {
+      active = false;
+    };
+  }, [oobCode]);
 
   const openLogin = () => {
     if (typeof window === 'undefined') return;
@@ -36,6 +76,7 @@ const PasswordResetActionScreen = ({ oobCode, continueUrl }: PasswordResetAction
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isSubmitting || isVerifying || codeInvalidError) return;
     setError(null);
 
     if (password.length < 6) {
@@ -50,19 +91,12 @@ const PasswordResetActionScreen = ({ oobCode, continueUrl }: PasswordResetAction
 
     setIsSubmitting(true);
     try {
-      const resolvedEmail = await verifyPasswordResetCode(auth, oobCode);
+      const resolvedEmail = email ?? (await verifyPasswordResetCode(auth, oobCode));
       await confirmPasswordReset(auth, oobCode, password);
       setEmail(resolvedEmail);
       setIsSuccess(true);
     } catch (resetError) {
-      const code = (resetError as { code?: string })?.code;
-      if (code === 'auth/expired-action-code' || code === 'auth/invalid-action-code') {
-        setError('El enlace es inválido o ya expiró. Solicita uno nuevo.');
-      } else if (code === 'auth/weak-password') {
-        setError('La contraseña es demasiado débil.');
-      } else {
-        setError('No se pudo restablecer la contraseña.');
-      }
+      setError(mapResetError(resetError));
     } finally {
       setIsSubmitting(false);
     }
@@ -85,10 +119,32 @@ const PasswordResetActionScreen = ({ oobCode, continueUrl }: PasswordResetAction
             className="w-auto h-14 md:h-16 object-contain mx-auto mb-6"
           />
           <h1 className="text-white font-serif text-2xl mb-2">Restablecer contraseña</h1>
-          <p className="text-neutral-500 text-sm">Ingresa una nueva contraseña para continuar.</p>
+          <p className="text-neutral-500 text-sm">
+            {email
+              ? `Ingresa una nueva contraseña para ${email}.`
+              : 'Ingresa una nueva contraseña para continuar.'}
+          </p>
         </div>
 
-        {isSuccess ? (
+        {isVerifying ? (
+          <div className="py-10 text-center space-y-3">
+            <div className="w-6 h-6 mx-auto border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <p className="text-neutral-400 text-sm">Verificando enlace...</p>
+          </div>
+        ) : codeInvalidError ? (
+          <div className="w-full space-y-4">
+            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm text-center">
+              {codeInvalidError}
+            </div>
+            <button
+              type="button"
+              onClick={openLogin}
+              className="w-full bg-white text-black py-3 px-6 font-medium hover:bg-neutral-100 active:bg-neutral-200 transition-all duration-300 rounded"
+            >
+              Ir a iniciar sesión
+            </button>
+          </div>
+        ) : isSuccess ? (
           <div className="w-full">
             <div className="mb-6 p-3 bg-green-500/10 border border-green-500/30 rounded text-green-400 text-sm text-center">
               Contraseña actualizada correctamente{email ? ` para ${email}.` : '.'}

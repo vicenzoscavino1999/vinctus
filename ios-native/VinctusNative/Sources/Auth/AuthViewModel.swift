@@ -7,15 +7,23 @@ import UIKit
 final class AuthViewModel: ObservableObject {
   @Published private(set) var isSignedIn = false
   @Published private(set) var sessionUserID: String?
+  @Published private(set) var isSubmitting = false
   @Published var errorMessage: String?
   @Published var infoMessage: String?
 
   private let repo: AuthRepo
   private let profileBootstrap: UserProfileBootstrapRepo
+  private var isSigningOut = false
+  private var profileBootstrapTask: Task<Void, Never>?
 
   var currentUserID: String? {
     if AppRepos.isDemo { return AppRepos.demoUserID }
     return sessionUserID
+  }
+
+  var currentUserEmail: String? {
+    let raw = repo.currentUser?.email?.trimmingCharacters(in: .whitespacesAndNewlines)
+    return (raw?.isEmpty == false) ? raw : nil
   }
 
   /// Whether the account can sign in with Apple, so deleting it must also revoke the Apple tokens.
@@ -45,19 +53,42 @@ final class AuthViewModel: ObservableObject {
 
   private func sessionChanged(signedIn: Bool) {
     sessionUserID = signedIn ? repo.currentUser?.uid : nil
-    guard !signedIn, isSignedIn else { return }
+    if signedIn {
+      if !isSignedIn && sessionUserID != nil {
+        isSignedIn = true
+        ensureUserProfile()
+      }
+      return
+    }
+    guard !isSigningOut, isSignedIn else { return }
     AppLog.auth.info("session.endedByFirebase")
+    profileBootstrapTask?.cancel()
+    profileBootstrapTask = nil
     isSignedIn = false
     infoMessage = "Tu sesión se cerró. Vuelve a iniciar sesión."
   }
 
   func signIn(email: String, password: String) {
+    guard !isSubmitting else { return }
+    let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
     errorMessage = nil
     infoMessage = nil
+
+    guard Self.looksLikeEmail(trimmedEmail) else {
+      errorMessage = "Escribe un email válido."
+      return
+    }
+    guard !password.isEmpty else {
+      errorMessage = "Escribe tu contraseña."
+      return
+    }
+
+    isSubmitting = true
     Task {
+      defer { isSubmitting = false }
       do {
         AppLog.auth.info("signIn.email.start")
-        try await repo.signIn(email: email, password: password)
+        try await repo.signIn(email: trimmedEmail, password: password)
         sessionUserID = repo.currentUser?.uid
         isSignedIn = true
         ensureUserProfile()
@@ -70,12 +101,26 @@ final class AuthViewModel: ObservableObject {
   }
 
   func createAccount(email: String, password: String) {
+    guard !isSubmitting else { return }
+    let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
     errorMessage = nil
     infoMessage = nil
+
+    guard Self.looksLikeEmail(trimmedEmail) else {
+      errorMessage = "Escribe un email válido."
+      return
+    }
+    guard password.count >= 6 else {
+      errorMessage = "La contraseña debe tener al menos 6 caracteres."
+      return
+    }
+
+    isSubmitting = true
     Task {
+      defer { isSubmitting = false }
       do {
         AppLog.auth.info("createAccount.email.start")
-        try await repo.createAccount(email: email, password: password)
+        try await repo.createAccount(email: trimmedEmail, password: password)
         sessionUserID = repo.currentUser?.uid
         isSignedIn = true
         ensureUserProfile()
@@ -90,9 +135,12 @@ final class AuthViewModel: ObservableObject {
   }
 
   func signInWithGoogle(presentingViewController: UIViewController) {
+    guard !isSubmitting else { return }
     errorMessage = nil
     infoMessage = nil
+    isSubmitting = true
     Task {
+      defer { isSubmitting = false }
       do {
         AppLog.auth.info("signIn.google.start")
         try await repo.signInWithGoogle(presentingViewController: presentingViewController)
@@ -115,9 +163,12 @@ final class AuthViewModel: ObservableObject {
     rawNonce: String,
     fullName: PersonNameComponents?
   ) {
+    guard !isSubmitting else { return }
     errorMessage = nil
     infoMessage = nil
+    isSubmitting = true
     Task {
+      defer { isSubmitting = false }
       do {
         AppLog.auth.info("signIn.apple.start")
         try await repo.signInWithApple(
@@ -152,7 +203,8 @@ final class AuthViewModel: ObservableObject {
         "passwordReset.failed errorType=\(AppLog.errorType(error), privacy: .public)"
       )
       // Don't reveal whether an account exists for this email.
-      if (error as NSError).code == AuthErrorCode.userNotFound.rawValue {
+      let nsError = error as NSError
+      if nsError.domain == AuthErrorDomain && nsError.code == AuthErrorCode.userNotFound.rawValue {
         return nil
       }
       return Self.message(for: error)
@@ -186,15 +238,22 @@ final class AuthViewModel: ObservableObject {
       return "Sin conexión a internet. Revisa tu conexión e intenta de nuevo."
     case .accountExistsWithDifferentCredential:
       return "Ya tienes una cuenta con ese email usando otro método (Apple, Google o contraseña)."
+    case .userTokenExpired:
+      return "Tu sesión expiró. Vuelve a iniciar sesión."
+    case .requiresRecentLogin:
+      return "Por seguridad, vuelve a iniciar sesión para continuar."
     default:
       return "No se pudo completar. Intenta de nuevo."
     }
   }
 
   func signInAnonymously() {
+    guard !isSubmitting else { return }
     errorMessage = nil
     infoMessage = nil
+    isSubmitting = true
     Task {
+      defer { isSubmitting = false }
       do {
         AppLog.auth.info("signInAnonymously.start")
         try await repo.signInAnonymously()
@@ -213,10 +272,12 @@ final class AuthViewModel: ObservableObject {
   /// Creates or backfills the Firestore profile docs, like the web app does on every sign-in.
   /// Runs in the background so a slow or offline write never blocks entering the app.
   private func ensureUserProfile() {
-    Task {
+    profileBootstrapTask?.cancel()
+    profileBootstrapTask = Task {
       do {
         try await profileBootstrap.ensureCurrentUserProfile()
       } catch {
+        guard !Task.isCancelled else { return }
         AppLog.auth.error(
           "ensureUserProfile.failed errorType=\(AppLog.errorType(error), privacy: .public)"
         )
@@ -227,6 +288,10 @@ final class AuthViewModel: ObservableObject {
   func signOut() {
     errorMessage = nil
     infoMessage = nil
+    isSigningOut = true
+    defer { isSigningOut = false }
+    profileBootstrapTask?.cancel()
+    profileBootstrapTask = nil
     do {
       try repo.signOut()
       sessionUserID = nil

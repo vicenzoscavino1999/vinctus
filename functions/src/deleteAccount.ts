@@ -7,6 +7,16 @@ import {
   SUBCOLLECTIONS,
   storagePrefix,
 } from './firestoreContract';
+import {
+  GENERIC_DELETION_FAILURE_MESSAGE,
+  isStaleProcessingJob,
+  sanitizeDeletionErrorMessage,
+} from './deleteAccountHelpers';
+import {
+  cleanupDeletedGroupJoinRequests,
+  cleanupDeletedGroupMembersAndMemberships,
+} from './groupCounts';
+import { clearLastMessagePreview } from './moderationActions';
 
 if (admin.apps.length === 0) {
   admin.initializeApp();
@@ -410,6 +420,10 @@ async function deleteOwnedGroups(uid: string): Promise<number> {
       const groupId = groupDoc.id;
       const conversationId = `grp_${groupId}`;
 
+      // Clean up other members' `users/{memberUid}/memberships/{groupId}` and pending
+      // join requests before `recursiveDelete` removes `groups/{groupId}/members`.
+      await cleanupDeletedGroupMembersAndMemberships(db, groupId, uid);
+      await cleanupDeletedGroupJoinRequests(db, groupId);
       await deleteStoragePrefix(storagePrefix('groupIcon', { userId: uid, groupId }));
       await deleteStoragePrefix(storagePrefix('conversationAttachment', { conversationId }));
       await db.recursiveDelete(db.doc(`${COLLECTIONS.conversations}/${conversationId}`));
@@ -423,8 +437,12 @@ async function deleteOwnedGroups(uid: string): Promise<number> {
   return totalDeleted;
 }
 
-async function deleteOwnedArenaDebates(uid: string): Promise<number> {
+async function deleteOwnedArenaDebates(
+  uid: string,
+): Promise<{ docs: number; savedRefs: number; likeRefs: number }> {
   let totalDeleted = 0;
+  let savedRefsDeleted = 0;
+  let likeRefsDeleted = 0;
 
   while (true) {
     const snapshot = await db
@@ -435,19 +453,34 @@ async function deleteOwnedArenaDebates(uid: string): Promise<number> {
 
     if (snapshot.empty) break;
 
+    const debateIds: string[] = [];
     for (const debateDoc of snapshot.docs) {
+      debateIds.push(debateDoc.id);
       await db.recursiveDelete(debateDoc.ref);
       totalDeleted += 1;
+    }
+
+    for (const debateId of debateIds) {
+      savedRefsDeleted += await deleteCollectionGroupByField(
+        SUBCOLLECTIONS.savedArenaDebates,
+        'debateId',
+        debateId,
+      );
+      likeRefsDeleted += await deleteCollectionGroupByField(
+        SUBCOLLECTIONS.likedArenaDebates,
+        'debateId',
+        debateId,
+      );
     }
 
     if (snapshot.size < QUERY_BATCH_SIZE) break;
   }
 
-  return totalDeleted;
+  return { docs: totalDeleted, savedRefs: savedRefsDeleted, likeRefs: likeRefsDeleted };
 }
 
 async function deleteDirectConversations(uid: string): Promise<number> {
-  const conversationIds = new Set<string>();
+  const peerByConversation = new Map<string, string | null>();
 
   const userDirectIndex = await db
     .collection(COLLECTIONS.users)
@@ -456,7 +489,9 @@ async function deleteDirectConversations(uid: string): Promise<number> {
     .get();
   userDirectIndex.docs.forEach((docSnap) => {
     if (docSnap.id.startsWith('dm_')) {
-      conversationIds.add(docSnap.id);
+      const otherUid =
+        typeof docSnap.data()?.otherUid === 'string' ? (docSnap.data().otherUid as string) : null;
+      peerByConversation.set(docSnap.id, otherUid);
     }
   });
 
@@ -468,14 +503,31 @@ async function deleteDirectConversations(uid: string): Promise<number> {
     const data = docSnap.data() || {};
     const isDirect = data.type === 'direct' || docSnap.id.startsWith('dm_');
     if (isDirect) {
-      conversationIds.add(docSnap.id);
+      const memberIds = Array.isArray(data.memberIds)
+        ? data.memberIds.filter((id: unknown): id is string => typeof id === 'string')
+        : [];
+      const peerUid =
+        memberIds.find((id) => id !== uid) ?? peerByConversation.get(docSnap.id) ?? null;
+      peerByConversation.set(docSnap.id, peerUid);
     }
   });
 
   let deleted = 0;
-  for (const conversationId of conversationIds) {
+  for (const [conversationId, peerUid] of peerByConversation.entries()) {
     await deleteStoragePrefix(storagePrefix('conversationAttachment', { conversationId }));
     await db.recursiveDelete(db.doc(`${COLLECTIONS.conversations}/${conversationId}`));
+    await db
+      .doc(`${COLLECTIONS.users}/${uid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`)
+      .delete()
+      .catch(() => undefined);
+    if (peerUid && !peerUid.includes('/')) {
+      await db
+        .doc(
+          `${COLLECTIONS.users}/${peerUid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`,
+        )
+        .delete()
+        .catch(() => undefined);
+    }
     deleted += 1;
   }
 
@@ -500,11 +552,12 @@ async function deleteMessagesBySender(
     const messageRefs: admin.firestore.DocumentReference[] = [];
     const attachmentPaths: string[] = [];
     const thumbnailPrefixes = new Set<string>();
+    const previewChecks: Array<{ conversationId: string; data: Record<string, unknown> }> = [];
 
     snapshot.docs.forEach((docSnap) => {
       messageRefs.push(docSnap.ref);
 
-      const data = docSnap.data() || {};
+      const data = (docSnap.data() || {}) as Record<string, unknown>;
       const attachments = Array.isArray(data.attachments) ? data.attachments : [];
       attachments.forEach((attachment) => {
         if (typeof attachment !== 'object' || attachment === null) return;
@@ -520,6 +573,7 @@ async function deleteMessagesBySender(
         thumbnailPrefixes.add(
           storagePrefix('conversationThumbnail', { conversationId, userId: uid }),
         );
+        previewChecks.push({ conversationId, data });
       }
     });
 
@@ -530,10 +584,38 @@ async function deleteMessagesBySender(
       await deleteStoragePrefix(prefix);
     }
 
+    for (const item of previewChecks) {
+      await clearLastMessagePreview(db, item.conversationId, item.data).catch(() => undefined);
+    }
+
     if (snapshot.size < QUERY_BATCH_SIZE) break;
   }
 
   return { messages: messagesDeleted, attachments: attachmentsDeleted };
+}
+
+async function deleteAiImageUsage(uid: string): Promise<number> {
+  try {
+    const dayRefs = await db.collection('aiImageUsage').listDocuments();
+    if (dayRefs.length === 0) return 0;
+
+    let deleted = 0;
+    for (const dayRef of dayRefs) {
+      const userUsageRef = dayRef.collection('users').doc(uid);
+      const snap = await userUsageRef.get();
+      if (snap.exists) {
+        await userUsageRef.delete();
+        deleted += 1;
+      }
+    }
+    return deleted;
+  } catch (error) {
+    functions.logger.warn('AI image usage cleanup failed', {
+      uid,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return 0;
+  }
 }
 
 async function deleteAuthUserIdempotent(uid: string): Promise<void> {
@@ -662,7 +744,10 @@ async function executeAccountDeletion(uid: string): Promise<DeletionStats> {
     'collaborationsDeleted',
     await deleteTopLevelByField(COLLECTIONS.collaborations, 'authorId', uid),
   );
-  incrementStat(stats, 'arenaDebatesDeleted', await deleteOwnedArenaDebates(uid));
+  const arenaCleanup = await deleteOwnedArenaDebates(uid);
+  incrementStat(stats, 'arenaDebatesDeleted', arenaCleanup.docs);
+  incrementStat(stats, 'arenaSavedRefsDeleted', arenaCleanup.savedRefs);
+  incrementStat(stats, 'arenaLikeRefsDeleted', arenaCleanup.likeRefs);
 
   const contributionCleanup = await deleteOwnedContributions(uid);
   incrementStat(stats, 'contributionsDeleted', contributionCleanup.docs);
@@ -682,13 +767,15 @@ async function executeAccountDeletion(uid: string): Promise<DeletionStats> {
     await deleteStoragePrefix(storagePrefix(folder, { userId: uid }));
   }
 
-  // 6) Remove arena usage and user profile docs (with all subcollections).
+  // 6) Remove arena usage, AI image usage, and user profile docs (with all subcollections).
   const arenaUsageRef = db.doc(`${COLLECTIONS.arenaUsage}/${uid}`);
   const arenaUsageSnap = await arenaUsageRef.get();
   if (arenaUsageSnap.exists) {
     await db.recursiveDelete(arenaUsageRef);
     incrementStat(stats, 'arenaUsageDocsDeleted', 1);
   }
+
+  incrementStat(stats, 'aiImageUsageDocsDeleted', await deleteAiImageUsage(uid));
 
   const userRef = db.collection(COLLECTIONS.users).doc(uid);
   await db.recursiveDelete(userRef);
@@ -727,9 +814,12 @@ async function upsertDeletionJobFromCallable(uid: string): Promise<DeletionJobSt
       return 'queued';
     }
 
+    const existingData = snapshot.data() as Record<string, unknown> | undefined;
+    const staleProcessing = currentStatus === 'processing' && isStaleProcessingJob(existingData);
+
     if (
       currentStatus === 'queued' ||
-      currentStatus === 'processing' ||
+      (currentStatus === 'processing' && !staleProcessing) ||
       currentStatus === 'completed'
     ) {
       tx.set(
@@ -798,13 +888,13 @@ async function markDeletionJobCompleted(uid: string, stats: DeletionStats): Prom
   );
 }
 
-async function markDeletionJobFailed(uid: string, error: unknown): Promise<void> {
+async function markDeletionJobFailed(uid: string): Promise<void> {
   await createDeletionJobRef(uid).set(
     {
       status: 'failed',
       failedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-      lastError: error instanceof Error ? error.message : String(error),
+      lastError: GENERIC_DELETION_FAILURE_MESSAGE,
     },
     { merge: true },
   );
@@ -821,7 +911,7 @@ async function processDeletionJob(uid: string): Promise<void> {
     const stats = await executeAccountDeletion(uid);
     await markDeletionJobCompleted(uid, stats);
   } catch (error) {
-    await markDeletionJobFailed(uid, error);
+    await markDeletionJobFailed(uid);
     functions.logger.error('Deletion job failed', {
       uid,
       error: error instanceof Error ? error.message : String(error),
@@ -895,19 +985,21 @@ export const getAccountDeletionStatus = functions
       jobId: uid,
       updatedAt: toIsoOrNull(data.updatedAt),
       completedAt: toIsoOrNull(data.completedAt),
-      lastError: typeof data.lastError === 'string' ? data.lastError : null,
+      lastError: sanitizeDeletionErrorMessage(data.lastError),
     };
   });
 
-export const onDeletionJobCreated = functions.firestore
-  .document(`${DELETION_JOB_COLLECTION}/{uid}`)
+export const onDeletionJobCreated = functions
+  .runWith({ timeoutSeconds: 540, memory: '1GB' })
+  .firestore.document(`${DELETION_JOB_COLLECTION}/{uid}`)
   .onCreate(async (_snap, context) => {
     const uid = context.params.uid as string;
     await processDeletionJob(uid);
   });
 
-export const onDeletionJobUpdated = functions.firestore
-  .document(`${DELETION_JOB_COLLECTION}/{uid}`)
+export const onDeletionJobUpdated = functions
+  .runWith({ timeoutSeconds: 540, memory: '1GB' })
+  .firestore.document(`${DELETION_JOB_COLLECTION}/{uid}`)
   .onUpdate(async (change, context) => {
     const beforeStatus = parseDeletionJobStatus(change.before.data()?.status);
     const afterStatus = parseDeletionJobStatus(change.after.data()?.status);
@@ -936,6 +1028,7 @@ export const deleteUserAccount = functions
       await markDeletionJobCompleted(uid, stats);
       return { success: true, deletedCounts: stats };
     } catch (error) {
+      await markDeletionJobFailed(uid).catch(() => undefined);
       functions.logger.error('Account deletion failed (direct callable)', {
         uid,
         error: error instanceof Error ? error.message : String(error),

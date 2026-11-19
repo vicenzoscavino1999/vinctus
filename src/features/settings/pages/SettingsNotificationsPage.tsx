@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowLeft, Bell, Mail, AtSign, Calendar, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/auth';
@@ -57,37 +57,42 @@ const SettingsNotificationsPage = () => {
   const { showToast } = useToast();
   const [settings, setSettings] = useState<NotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const loadSeqRef = useRef(0);
+
+  const loadSettings = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
+    if (!user?.uid) {
+      setSettings(DEFAULT_NOTIFICATION_SETTINGS);
+      setLoadError(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await getUserSettings(user.uid);
+      if (seq !== loadSeqRef.current) return;
+      setSettings(data.notifications);
+    } catch (error) {
+      if (seq !== loadSeqRef.current) return;
+      console.error('Error loading notification settings:', error);
+      setLoadError('No se pudieron cargar tus preferencias de notificaciones.');
+      showToast('No se pudieron cargar las preferencias.', 'error');
+    } finally {
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [user?.uid, showToast]);
 
   useEffect(() => {
-    let isMounted = true;
-    const loadSettings = async () => {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const data = await getUserSettings(user.uid);
-        if (isMounted) {
-          setSettings(data.notifications);
-        }
-      } catch (error) {
-        console.error('Error loading notification settings:', error);
-        showToast('No se pudieron cargar las preferencias.', 'error');
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
     void loadSettings();
-    return () => {
-      isMounted = false;
-    };
-  }, [user, showToast]);
+  }, [loadSettings]);
 
   const handleUpdate = async (next: NotificationSettings) => {
-    if (!user) return;
+    if (!user || saving || loading || loadError) return;
     const previous = settings;
     setSettings(next);
     setSaving(true);
@@ -102,7 +107,7 @@ const SettingsNotificationsPage = () => {
     }
   };
 
-  const disabled = loading || saving || !user;
+  const disabled = loading || saving || !user || !!loadError;
 
   return (
     <div className="max-w-2xl mx-auto pb-20 fade-in">
@@ -126,6 +131,17 @@ const SettingsNotificationsPage = () => {
         </div>
       ) : loading ? (
         <div className="text-sm text-neutral-500 text-center py-10">Cargando preferencias...</div>
+      ) : loadError ? (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5 space-y-3">
+          <p className="text-sm text-red-200">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => void loadSettings()}
+            className="px-4 py-2 rounded-lg border border-red-400/40 text-xs font-medium text-red-100 hover:bg-red-500/20 transition-colors"
+          >
+            Reintentar
+          </button>
+        </div>
       ) : (
         <div className="space-y-8">
           <section>
