@@ -1362,4 +1362,112 @@ describe('Firestore Rules - critical access controls', () => {
     });
     await assertSucceeds(acceptBatch.commit());
   });
+
+  it('enforces owner privacy, safe URLs, owned storagePath, and non-negative itemCount on collections', async () => {
+    const env = await getRulesTestEnv();
+    const ownerDb = env.authenticatedContext('user_a').firestore();
+    const otherDb = env.authenticatedContext('user_b').firestore();
+
+    await assertSucceeds(
+      ownerDb.doc('users/user_a/collections/col_1').set({
+        name: 'Lecturas',
+        icon: 'book',
+        itemCount: 0,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    // Other users cannot read or mutate private collections.
+    await assertFails(otherDb.doc('users/user_a/collections/col_1').get());
+    await assertFails(
+      otherDb.doc('users/user_a/collections/col_1').update({
+        name: 'Hack',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    // Negative itemCount update is rejected.
+    await assertFails(
+      ownerDb.doc('users/user_a/collections/col_1').update({
+        itemCount: -1,
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    // Link item rejects javascript: URLs and accepts https:// URLs.
+    await assertFails(
+      ownerDb.doc('users/user_a/collections/col_1/items/bad_link').set({
+        ownerId: 'user_a',
+        collectionId: 'col_1',
+        collectionName: 'Lecturas',
+        type: 'link',
+        title: 'Malo',
+        url: 'javascript:alert(1)',
+        text: null,
+        fileName: null,
+        fileSize: null,
+        contentType: null,
+        storagePath: null,
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      ownerDb.doc('users/user_a/collections/col_1/items/good_link').set({
+        ownerId: 'user_a',
+        collectionId: 'col_1',
+        collectionName: 'Lecturas',
+        type: 'link',
+        title: 'Paper',
+        url: 'https://arxiv.org/abs/2401.00001',
+        text: null,
+        fileName: null,
+        fileSize: null,
+        contentType: null,
+        storagePath: null,
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // File item rejects cross-user or cross-collection storagePath and accepts owned path.
+    await assertFails(
+      ownerDb.doc('users/user_a/collections/col_1/items/bad_file').set({
+        ownerId: 'user_a',
+        collectionId: 'col_1',
+        collectionName: 'Lecturas',
+        type: 'file',
+        title: 'Ajeno',
+        url: 'https://example.com/file.pdf',
+        text: null,
+        fileName: 'file.pdf',
+        fileSize: 1200,
+        contentType: 'application/pdf',
+        storagePath: 'collections/user_b/col_1/bad_file/file.pdf',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      ownerDb.doc('users/user_a/collections/col_1/items/good_file').set({
+        ownerId: 'user_a',
+        collectionId: 'col_1',
+        collectionName: 'Lecturas',
+        type: 'file',
+        title: 'Propio',
+        url: 'https://example.com/file.pdf',
+        text: null,
+        fileName: 'file.pdf',
+        fileSize: 1200,
+        contentType: 'application/pdf',
+        storagePath: 'collections/user_a/col_1/good_file/file.pdf',
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Items are immutable once created and private to the owner.
+    await assertFails(
+      ownerDb.doc('users/user_a/collections/col_1/items/good_link').update({ title: 'Editado' }),
+    );
+    await assertFails(otherDb.doc('users/user_a/collections/col_1/items/good_link').get());
+    await assertSucceeds(ownerDb.doc('users/user_a/collections/col_1/items/good_link').delete());
+  });
 });

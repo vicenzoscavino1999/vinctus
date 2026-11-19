@@ -36,6 +36,11 @@ import {
   reconcileGroupMemberCount,
 } from './groupCounts';
 import { cleanupDeletedStoryMedia } from './storyCleanup';
+import {
+  cleanupDeletedCollection,
+  cleanupDeletedCollectionItemMedia,
+  reconcileCollectionItemCount,
+} from './collectionCleanup';
 export {
   readPosts,
   readPostMedia,
@@ -1618,7 +1623,8 @@ export const onReportCreatedQueue = functions.firestore
   });
 
 /**
- * Delete collection files when a collection item is deleted
+ * Delete owned collection files when a collection item is deleted.
+ * Validates the storagePath stays strictly inside `collections/{uid}/{collectionId}/`.
  * Trigger: onDelete users/{uid}/collections/{collectionId}/items/{itemId}
  */
 export const onCollectionItemDeleted = functions.firestore
@@ -1627,50 +1633,78 @@ export const onCollectionItemDeleted = functions.firestore
   )
   .onDelete(async (snap, context) => {
     const { uid, collectionId, itemId } = context.params;
-    const data = snap.data();
-    const storagePath = data?.storagePath as string | undefined;
-
-    if (!storagePath) {
-      return;
-    }
+    const data = (snap.data() || {}) as Record<string, unknown>;
 
     try {
-      const bucket = admin.storage().bucket();
-      await bucket.file(storagePath).delete();
-      functions.logger.info('Deleted collection file', {
+      const deleted = await cleanupDeletedCollectionItemMedia(
+        admin.storage().bucket(),
         uid,
         collectionId,
-        itemId,
-        storagePath,
-      });
+        data,
+      );
+      if (deleted) {
+        functions.logger.info('Deleted collection item storage file', {
+          uid,
+          collectionId,
+          itemId,
+        });
+      }
     } catch (error) {
       functions.logger.warn('Failed to delete collection file (may not exist)', {
         uid,
         collectionId,
         itemId,
-        storagePath,
         error: error instanceof Error ? error.message : String(error),
       });
     }
   });
 
 /**
- * Clean up collection items when a collection is deleted
+ * Reconcile collection.itemCount whenever a collection item is created or deleted.
+ * Trigger: onWrite users/{uid}/collections/{collectionId}/items/{itemId}
+ */
+export const onCollectionItemWritten = functions.firestore
+  .document(
+    `${COLLECTIONS.users}/{uid}/${SUBCOLLECTIONS.collections}/{collectionId}/${SUBCOLLECTIONS.items}/{itemId}`,
+  )
+  .onWrite(async (_change, context) => {
+    const { uid, collectionId, itemId } = context.params;
+
+    try {
+      await reconcileCollectionItemCount(db, uid, collectionId);
+    } catch (error) {
+      functions.logger.error('Failed to reconcile collection itemCount', {
+        uid,
+        collectionId,
+        itemId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+/**
+ * Clean up remaining collection items and owned Storage files when a collection is deleted.
  * Trigger: onDelete users/{uid}/collections/{collectionId}
  */
 export const onCollectionDeleted = functions.firestore
   .document(`${COLLECTIONS.users}/{uid}/${SUBCOLLECTIONS.collections}/{collectionId}`)
-  .onDelete(async (snap, context) => {
+  .onDelete(async (_snap, context) => {
     const { uid, collectionId } = context.params;
 
     try {
-      const itemsRef = db.collection(
-        `${COLLECTIONS.users}/${uid}/${SUBCOLLECTIONS.collections}/${collectionId}/${SUBCOLLECTIONS.items}`,
+      const result = await cleanupDeletedCollection(
+        db,
+        admin.storage().bucket(),
+        uid,
+        collectionId,
       );
-      await db.recursiveDelete(itemsRef);
-      functions.logger.info('Deleted collection items', { uid, collectionId });
+      functions.logger.info('Deleted collection items and media', {
+        uid,
+        collectionId,
+        ...result,
+      });
     } catch (error) {
-      functions.logger.error('Failed to delete collection items', {
+      functions.logger.error('Failed to clean up deleted collection', {
         uid,
         collectionId,
         error: error instanceof Error ? error.message : String(error),

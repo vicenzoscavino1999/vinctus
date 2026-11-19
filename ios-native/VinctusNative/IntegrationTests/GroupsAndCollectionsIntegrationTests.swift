@@ -1,4 +1,5 @@
 import FirebaseFirestore
+import FirebaseStorage
 import XCTest
 @testable import VinctusNative
 
@@ -296,5 +297,96 @@ final class CollectionsIntegrationTests: EmulatorTestCase {
     try await repo.deleteCollection(id: collection.id)
     let remaining = try await repo.fetchCollections()
     XCTAssertTrue(remaining.isEmpty)
+  }
+
+  func testFileUploadDriftedItemCountDeleteAndStorageCleanup() async throws {
+    let ana = try await makeUser("Ana")
+    let repo = FirebaseCollectionsRepo()
+
+    try await repo.createCollection(name: "Archivos privados", icon: .folder)
+    let collection = try XCTUnwrap(try await repo.fetchCollections().first)
+
+    let pdfData = Data("%PDF-1.4\nContenido de prueba".utf8)
+    var firstFile = NewCollectionItem()
+    firstFile.kind = .file
+    firstFile.title = "Guía 1"
+    firstFile.file = CollectionUploadFile(
+      data: pdfData,
+      fileName: "guia-1.pdf",
+      contentType: "application/pdf"
+    )
+    try await repo.addItem(firstFile, to: collection)
+
+    let items = try await repo.fetchItems(collectionID: collection.id)
+    let savedFirst = try XCTUnwrap(items.first)
+    XCTAssertEqual(savedFirst.type, .file)
+    XCTAssertEqual(savedFirst.fileName, "guia-1.pdf")
+    XCTAssertEqual(savedFirst.fileSize, pdfData.count)
+    let firstStoragePath = try XCTUnwrap(savedFirst.storagePath)
+    XCTAssertTrue(firstStoragePath.hasPrefix("collections/\(ana.uid)/\(collection.id)/"))
+
+    let metaBeforeDelete = try await Storage.storage().reference(withPath: firstStoragePath).getMetadata()
+    XCTAssertEqual(metaBeforeDelete.size, Int64(pdfData.count))
+
+    // Another user must not read private collections, items, or Storage objects.
+    _ = try await makeUser("Bruno")
+    do {
+      _ = try await Firestore.firestore()
+        .collection("users").document(ana.uid)
+        .collection("collections").document(collection.id)
+        .getDocument(source: .server)
+      XCTFail("Another user must not read a private collection")
+    } catch {
+      // Expected permission denied.
+    }
+    do {
+      _ = try await Storage.storage().reference(withPath: firstStoragePath).getMetadata()
+      XCTFail("Another user must not read a private collection file")
+    } catch {
+      // Expected permission denied.
+    }
+
+    // Back as Ana: drift itemCount down to 0 and verify deleteItem still succeeds (clamped >= 0)
+    // and deletes the Storage object.
+    try await signIn(ana)
+    try await Firestore.firestore()
+      .collection("users").document(ana.uid)
+      .collection("collections").document(collection.id)
+      .updateData(["itemCount": 0, "updatedAt": FieldValue.serverTimestamp()])
+
+    try await repo.deleteItem(id: savedFirst.id, from: collection.id)
+    let itemsAfterFirstDelete = try await repo.fetchItems(collectionID: collection.id)
+    XCTAssertTrue(itemsAfterFirstDelete.isEmpty)
+
+    do {
+      _ = try await Storage.storage().reference(withPath: firstStoragePath).getMetadata()
+      XCTFail("Deleted collection item file should be removed from Storage")
+    } catch {
+      // Expected object-not-found.
+    }
+
+    // Add a second file and verify deleteCollection cleans up both Firestore and Storage.
+    var secondFile = NewCollectionItem()
+    secondFile.kind = .file
+    secondFile.title = "Guía 2"
+    secondFile.file = CollectionUploadFile(
+      data: pdfData,
+      fileName: "guia-2.pdf",
+      contentType: "application/pdf"
+    )
+    try await repo.addItem(secondFile, to: collection)
+    let savedSecond = try XCTUnwrap(try await repo.fetchItems(collectionID: collection.id).first)
+    let secondStoragePath = try XCTUnwrap(savedSecond.storagePath)
+
+    try await repo.deleteCollection(id: collection.id)
+    let remainingCollections = try await repo.fetchCollections()
+    XCTAssertTrue(remainingCollections.isEmpty)
+
+    do {
+      _ = try await Storage.storage().reference(withPath: secondStoragePath).getMetadata()
+      XCTFail("Deleted collection should also remove its files from Storage")
+    } catch {
+      // Expected object-not-found.
+    }
   }
 }

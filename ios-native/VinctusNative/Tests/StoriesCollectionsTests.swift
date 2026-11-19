@@ -146,9 +146,55 @@ final class CollectionsTests: XCTestCase {
     XCTAssertEqual(fields.title, "Cosmos")
     XCTAssertEqual(fields.url, "https://example.com/cosmos")
     XCTAssertNil(fields.text)
+    XCTAssertNil(fields.file)
 
     item.url = "ftp://example.com"
     XCTAssertThrowsError(try item.validatedFields())
+    item.url = "javascript:alert(1)"
+    XCTAssertThrowsError(try item.validatedFields())
+    item.url = "https://"
+    XCTAssertThrowsError(try item.validatedFields())
+  }
+
+  func testSafeHTTPURL() {
+    XCTAssertNotNil(NewCollectionItem.safeHTTPURL("https://example.com/path"))
+    XCTAssertNotNil(NewCollectionItem.safeHTTPURL(" http://127.0.0.1:9199/file.pdf "))
+    XCTAssertNil(NewCollectionItem.safeHTTPURL("javascript:alert(1)"))
+    XCTAssertNil(NewCollectionItem.safeHTTPURL("ftp://example.com"))
+    XCTAssertNil(NewCollectionItem.safeHTTPURL("https://"))
+    XCTAssertNil(NewCollectionItem.safeHTTPURL("   "))
+    XCTAssertNil(NewCollectionItem.safeHTTPURL(nil))
+  }
+
+  func testFileItemValidation() throws {
+    var item = NewCollectionItem()
+    item.kind = .file
+    item.title = "Guía"
+    XCTAssertThrowsError(try item.validatedFields())
+
+    let emptyFile = CollectionUploadFile(data: Data(), fileName: "vacio.pdf", contentType: "application/pdf")
+    XCTAssertThrowsError(try emptyFile.validated())
+
+    let badMime = CollectionUploadFile(data: Data("<html>".utf8), fileName: "page.html", contentType: "text/html")
+    XCTAssertThrowsError(try badMime.validated())
+
+    let validFile = CollectionUploadFile(
+      data: Data("%PDF-1.4\n".utf8),
+      fileName: " guía (final)/2026.pdf ",
+      contentType: "APPLICATION/PDF; charset=utf-8"
+    )
+    let meta = try validFile.validated()
+    XCTAssertEqual(meta.contentType, "application/pdf")
+    XCTAssertFalse(meta.storageFileName.contains("/"))
+    XCTAssertFalse(meta.storageFileName.contains(" "))
+
+    item.file = validFile
+    let fields = try item.validatedFields()
+    XCTAssertEqual(fields.type, .file)
+    XCTAssertEqual(fields.title, "Guía")
+    XCTAssertNil(fields.url)
+    XCTAssertNil(fields.text)
+    XCTAssertEqual(fields.file, validFile)
   }
 
   func testNoteItem() throws {
@@ -169,14 +215,22 @@ final class CollectionsTests: XCTestCase {
   }
 
   @MainActor
-  func testSearchFiltersByName() async {
+  func testSearchFiltersByNameIgnoringDiacriticsAndResetClearsState() async {
     let vm = CollectionsViewModel(repo: FakeCollectionsRepo())
     await vm.load()
 
     vm.searchText = "JAZZ"
-    XCTAssertEqual(vm.visibleCollections.map(\.name), ["Discos de jazz"])
+    XCTAssertEqual(vm.visibleCollections.map(\.name), ["Música de jazz"])
+    vm.searchText = "musica"
+    XCTAssertEqual(vm.visibleCollections.map(\.name), ["Música de jazz"])
     vm.searchText = " "
     XCTAssertEqual(vm.visibleCollections.count, 2)
+
+    vm.reset()
+    XCTAssertTrue(vm.collections.isEmpty)
+    XCTAssertEqual(vm.searchText, "")
+    XCTAssertNil(vm.errorMessage)
+    XCTAssertFalse(vm.isLoading)
   }
 }
 
@@ -184,7 +238,7 @@ private struct FakeCollectionsRepo: CollectionsRepo {
   func fetchCollections() async throws -> [UserCollection] {
     [
       UserCollection(id: "c1", name: "Libros por leer", icon: .book, itemCount: 1, updatedAt: Date()),
-      UserCollection(id: "c2", name: "Discos de jazz", icon: .music, itemCount: 2, updatedAt: Date()),
+      UserCollection(id: "c2", name: "Música de jazz", icon: .music, itemCount: 2, updatedAt: Date()),
     ]
   }
 

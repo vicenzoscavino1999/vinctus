@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatRelativeTime } from '@/shared/lib/formatUtils';
-import { ArrowRight, File, FileText, FolderPlus, Link2, Search } from 'lucide-react';
+import { ArrowRight, File, FileText, FolderPlus, Link2, Search, X } from 'lucide-react';
 
 import { useAuth } from '@/context/auth';
 import {
@@ -18,77 +18,118 @@ interface CollectionsPanelProps {
   showIntro?: boolean;
 }
 
-const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
-  const { user } = useAuth();
+const normalizeSearch = (value: string): string =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+const CollectionsSession = ({ userId, showIntro }: { userId: string; showIntro: boolean }) => {
   const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [collections, setCollections] = useState<CollectionRead[]>([]);
   const [recents, setRecents] = useState<CollectionItemRead[]>([]);
-  const [loadingCollections, setLoadingCollections] = useState(false);
-  const [loadingRecents, setLoadingRecents] = useState(false);
+  const [loadingCollections, setLoadingCollections] = useState(true);
+  const [loadingRecents, setLoadingRecents] = useState(true);
   const [collectionsError, setCollectionsError] = useState<string | null>(null);
   const [recentsError, setRecentsError] = useState<string | null>(null);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [selectedCollection, setSelectedCollection] = useState<CollectionRead | null>(null);
+  const [editorState, setEditorState] = useState<{
+    open: boolean;
+    collection: CollectionRead | null;
+  }>({ open: false, collection: null });
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [selectedRecent, setSelectedRecent] = useState<CollectionItemRead | null>(null);
-  const userId = user?.uid ?? null;
+  const collectionsSeqRef = useRef(0);
+  const recentsSeqRef = useRef(0);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const loadCollections = useCallback(async () => {
-    if (!userId) return;
+    const seq = ++collectionsSeqRef.current;
     try {
       setCollectionsError(null);
       setLoadingCollections(true);
       const data = await getUserCollections(userId);
+      if (!isMountedRef.current || collectionsSeqRef.current !== seq) return;
       setCollections(data);
     } catch (error) {
       console.error('Error loading collections:', error);
+      if (!isMountedRef.current || collectionsSeqRef.current !== seq) return;
       setCollectionsError('No se pudieron cargar carpetas.');
     } finally {
-      setLoadingCollections(false);
+      if (isMountedRef.current && collectionsSeqRef.current === seq) {
+        setLoadingCollections(false);
+      }
     }
   }, [userId]);
 
   const loadRecents = useCallback(async () => {
-    if (!userId) return;
+    const seq = ++recentsSeqRef.current;
     try {
       setRecentsError(null);
       setLoadingRecents(true);
       const data = await getRecentCollectionItems(userId, 6);
+      if (!isMountedRef.current || recentsSeqRef.current !== seq) return;
       setRecents(data);
     } catch (error) {
       console.error('Error loading recents:', error);
+      if (!isMountedRef.current || recentsSeqRef.current !== seq) return;
       setRecentsError('No se pudieron cargar recientes.');
     } finally {
-      setLoadingRecents(false);
+      if (isMountedRef.current && recentsSeqRef.current === seq) {
+        setLoadingRecents(false);
+      }
     }
   }, [userId]);
 
   useEffect(() => {
-    if (!userId) {
-      setCollections([]);
-      setRecents([]);
-      return;
-    }
     void loadCollections();
     void loadRecents();
-  }, [userId, loadCollections, loadRecents]);
+  }, [loadCollections, loadRecents]);
+
+  useEffect(() => {
+    if (!selectedRecent) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedRecent(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedRecent]);
+
+  const selectedCollection = useMemo(
+    () =>
+      selectedCollectionId
+        ? (collections.find((collection) => collection.id === selectedCollectionId) ?? null)
+        : null,
+    [collections, selectedCollectionId],
+  );
+
+  const normalizedQuery = normalizeSearch(searchQuery.trim());
 
   const filteredCollections = useMemo(() => {
-    if (!searchQuery.trim()) return collections;
-    const query = searchQuery.toLowerCase();
-    return collections.filter((collection) => collection.name.toLowerCase().includes(query));
-  }, [collections, searchQuery]);
+    if (!normalizedQuery) return collections;
+    return collections.filter((collection) =>
+      normalizeSearch(collection.name).includes(normalizedQuery),
+    );
+  }, [collections, normalizedQuery]);
 
   const filteredRecents = useMemo(() => {
-    if (!searchQuery.trim()) return recents;
-    const query = searchQuery.toLowerCase();
+    if (!normalizedQuery) return recents;
     return recents.filter((item) => {
       return (
-        item.title.toLowerCase().includes(query) ||
-        (item.collectionName || '').toLowerCase().includes(query)
+        normalizeSearch(item.title).includes(normalizedQuery) ||
+        normalizeSearch(item.collectionName || '').includes(normalizedQuery)
       );
     });
-  }, [recents, searchQuery]);
+  }, [recents, normalizedQuery]);
 
   const openExternal = (url: string | null, label: string) => {
     if (!url) {
@@ -98,12 +139,12 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
     try {
       const parsed = new URL(url);
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        showToast('Enlace invalido.', 'info');
+        showToast('Enlace inválido.', 'info');
         return;
       }
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch {
-      showToast('Enlace invalido.', 'info');
+      showToast('Enlace inválido.', 'info');
     }
   };
 
@@ -123,36 +164,39 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
     showToast('Vista del elemento disponible pronto', 'info');
   };
 
-  if (!user) {
-    return (
-      <div className="text-center text-neutral-500 text-sm py-12">
-        Inicia sesion para ver tus colecciones.
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-8">
       {showIntro && (
         <p className="text-neutral-500 font-light text-sm text-center">
-          Tu archivo personal de lecturas, recursos, musica y mas.
+          Tu archivo personal de lecturas, recursos, música y más.
         </p>
       )}
 
-      <div className="relative bg-neutral-900/50 border border-neutral-800 rounded-lg px-5 py-3.5">
-        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-neutral-600" size={18} />
+      <div className="relative bg-neutral-900/50 border border-neutral-800 rounded-lg px-5 py-3.5 flex items-center gap-3">
+        <Search className="text-neutral-600 shrink-0" size={18} />
         <input
           type="text"
           aria-label="Buscar en colecciones"
           placeholder="Buscar en colecciones..."
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
-          className="w-full bg-transparent text-white pl-8 focus:outline-none placeholder:text-neutral-600 font-light"
+          className="w-full bg-transparent text-white focus:outline-none placeholder:text-neutral-600 font-light"
         />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            aria-label="Limpiar búsqueda"
+            className="text-neutral-500 hover:text-white transition-colors shrink-0"
+          >
+            <X size={16} />
+          </button>
+        )}
       </div>
 
       <button
-        onClick={() => setIsCreateOpen(true)}
+        type="button"
+        onClick={() => setEditorState({ open: true, collection: null })}
         className="w-full flex items-center justify-between bg-neutral-900/30 border border-neutral-800 rounded-lg px-5 py-4 hover:bg-neutral-900/50 transition-colors group"
       >
         <div className="flex items-center gap-3">
@@ -174,7 +218,16 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
         {loadingCollections ? (
           <div className="text-sm text-neutral-500 text-center py-6">Cargando carpetas...</div>
         ) : collectionsError ? (
-          <div className="text-sm text-red-400 text-center py-6">{collectionsError}</div>
+          <div className="text-center py-6 space-y-3">
+            <p className="text-sm text-red-400">{collectionsError}</p>
+            <button
+              type="button"
+              onClick={() => void loadCollections()}
+              className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+            >
+              Reintentar
+            </button>
+          </div>
         ) : filteredCollections.length === 0 ? (
           <p className="text-neutral-500 text-sm text-center py-6">No se encontraron carpetas</p>
         ) : (
@@ -184,17 +237,20 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
               return (
                 <button
                   key={collection.id}
-                  onClick={() => setSelectedCollection(collection)}
+                  type="button"
+                  onClick={() => setSelectedCollectionId(collection.id)}
                   className="bg-neutral-900/30 border border-neutral-800 rounded-lg p-4 text-left hover:bg-neutral-900/50 hover:border-neutral-700 transition-all"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-neutral-800/80 flex items-center justify-center text-neutral-200">
+                    <div className="w-10 h-10 rounded-lg bg-neutral-800/80 flex items-center justify-center text-neutral-200 shrink-0">
                       <icon.Icon size={18} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-white font-medium text-sm truncate">{collection.name}</h3>
                       <p className="text-neutral-500 text-xs mt-0.5">
-                        {collection.itemCount} guardados
+                        {collection.itemCount === 1
+                          ? '1 guardado'
+                          : `${collection.itemCount} guardados`}
                       </p>
                     </div>
                   </div>
@@ -212,7 +268,16 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
         {loadingRecents ? (
           <div className="text-sm text-neutral-500 text-center py-6">Cargando recientes...</div>
         ) : recentsError ? (
-          <div className="text-sm text-red-400 text-center py-6">{recentsError}</div>
+          <div className="text-center py-6 space-y-3">
+            <p className="text-sm text-red-400">{recentsError}</p>
+            <button
+              type="button"
+              onClick={() => void loadRecents()}
+              className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+            >
+              Reintentar
+            </button>
+          </div>
         ) : filteredRecents.length === 0 ? (
           <p className="text-neutral-500 text-sm text-center py-6">
             No se encontraron elementos recientes
@@ -224,7 +289,8 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
               const isFile = item.type === 'file';
               return (
                 <button
-                  key={item.id}
+                  key={`${item.collectionId}-${item.id}`}
+                  type="button"
                   onClick={() => handleRecentClick(item)}
                   className="w-full text-left flex items-center gap-4 bg-neutral-900/30 border border-neutral-800 rounded-lg p-4 hover:bg-neutral-900/50 hover:border-neutral-700 transition-all group"
                 >
@@ -242,7 +308,7 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
                       {item.title}
                     </h3>
                     <p className="text-neutral-500 text-xs mt-0.5">
-                      Coleccion: {item.collectionName || 'Sin carpeta'}
+                      Colección: {item.collectionName || 'Sin carpeta'}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 text-neutral-500 text-xs flex-shrink-0">
@@ -260,30 +326,46 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
       </section>
 
       <CreateCollectionModal
-        isOpen={isCreateOpen}
-        onClose={() => setIsCreateOpen(false)}
-        onCreated={() => {
-          setIsCreateOpen(false);
-          loadCollections();
-          loadRecents();
+        isOpen={editorState.open}
+        initialCollection={editorState.collection}
+        onClose={() => setEditorState({ open: false, collection: null })}
+        onSaved={() => {
+          setEditorState({ open: false, collection: null });
+          void loadCollections();
+          void loadRecents();
         }}
       />
       <CollectionDetailModal
-        isOpen={!!selectedCollection}
+        isOpen={Boolean(selectedCollection) && !editorState.open}
         collection={selectedCollection}
-        onClose={() => setSelectedCollection(null)}
+        onClose={() => setSelectedCollectionId(null)}
+        onEditCollection={(collection) => {
+          setEditorState({ open: true, collection });
+        }}
+        onCollectionDeleted={(collectionId) => {
+          setSelectedCollectionId(null);
+          setCollections((prev) => prev.filter((item) => item.id !== collectionId));
+          setRecents((prev) => prev.filter((item) => item.collectionId !== collectionId));
+          void loadCollections();
+          void loadRecents();
+        }}
         onItemCreated={() => {
-          loadCollections();
-          loadRecents();
+          void loadCollections();
+          void loadRecents();
         }}
         onItemDeleted={() => {
-          loadCollections();
-          loadRecents();
+          void loadCollections();
+          void loadRecents();
         }}
       />
 
       {selectedRecent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset px-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="recent-note-title"
+          className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset px-4"
+        >
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={() => setSelectedRecent(null)}
@@ -291,12 +373,15 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
           <div className="relative w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-lg font-serif text-white">{selectedRecent.title}</h3>
+                <h3 id="recent-note-title" className="text-lg font-serif text-white">
+                  {selectedRecent.title}
+                </h3>
                 <p className="text-xs text-neutral-500 mt-1">
-                  Coleccion: {selectedRecent.collectionName || 'Sin carpeta'}
+                  Colección: {selectedRecent.collectionName || 'Sin carpeta'}
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedRecent(null)}
                 className="text-neutral-400 hover:text-white transition-colors"
                 aria-label="Cerrar"
@@ -304,7 +389,7 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
                 ×
               </button>
             </div>
-            <div className="mt-4 text-sm text-neutral-300 whitespace-pre-wrap">
+            <div className="mt-4 text-sm text-neutral-300 whitespace-pre-wrap break-words">
               {selectedRecent.text || 'Sin contenido.'}
             </div>
             <div className="mt-5 text-xs text-neutral-500">
@@ -315,6 +400,20 @@ const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
       )}
     </div>
   );
+};
+
+const CollectionsPanel = ({ showIntro = true }: CollectionsPanelProps) => {
+  const { user } = useAuth();
+
+  if (!user) {
+    return (
+      <div className="text-center text-neutral-500 text-sm py-12">
+        Inicia sesión para ver tus colecciones.
+      </div>
+    );
+  }
+
+  return <CollectionsSession key={user.uid} userId={user.uid} showIntro={showIntro} />;
 };
 
 export default CollectionsPanel;
