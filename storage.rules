@@ -37,6 +37,21 @@ service firebase.storage {
         || firestore.exists(/databases/(default)/documents/users/$(uidB)/blockedUsers/$(uidA));
     }
 
+    function isDirectConversationDataBlocked(conv) {
+      return conv != null
+        && conv.get('type', '') == 'direct'
+        && conv.get('memberIds', []) is list
+        && conv.get('memberIds', []).size() == 2
+        && isBlockedBetween(conv.memberIds[0], conv.memberIds[1]);
+    }
+
+    function isDirectConversationBlocked(conversationId) {
+      return firestore.exists(/databases/(default)/documents/conversations/$(conversationId))
+        && isDirectConversationDataBlocked(
+          firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data
+        );
+    }
+
     function canReadStoryMedia(userId, storyId) {
       return isAuthenticated()
         && (
@@ -273,6 +288,7 @@ service firebase.storage {
       allow create: if isAuthenticated()
         && isOwner(userId)
         && isConversationMember(conversationId)
+        && !isDirectConversationBlocked(conversationId)
         && isNewFile()
         && (
           (isValidImageType() && isUnderImageSizeLimit())
@@ -294,6 +310,7 @@ service firebase.storage {
       allow create: if isAuthenticated()
         && isOwner(userId)
         && isConversationMember(conversationId)
+        && !isDirectConversationBlocked(conversationId)
         && isNewFile()
         && isValidImageType()
         && isUnderImageSizeLimit();

@@ -253,3 +253,74 @@ export const parseReportedStoryTarget = (value: unknown): string | null => {
   const match = /^story_([^/|]+)$/.exec(value);
   return match ? match[1] : null;
 };
+
+/**
+ * `reportedUid` values that are not real accounts: auto-moderation and AI replies.
+ * Kept in sync with `ModerationQueuePage.tsx` and `moderationActions.ts`.
+ */
+export const NON_USER_REPORT_IDS: ReadonlySet<string> = new Set([
+  'system_moderation',
+  'unknown_user',
+  'ai_assistant',
+]);
+
+export type ReportQueuePriority = 'low' | 'medium' | 'high';
+export type ReportQueueSource = 'user_report' | 'auto_moderation';
+export type ReportQueueTargetType =
+  | 'user'
+  | 'group'
+  | 'post'
+  | 'comment'
+  | 'message'
+  | 'story'
+  | 'unknown';
+
+export const inferQueueSource = (reporterUid: unknown): ReportQueueSource =>
+  reporterUid === 'system_moderation' ? 'auto_moderation' : 'user_report';
+
+export const inferQueuePriority = (reason: unknown, autoAction?: unknown): ReportQueuePriority => {
+  if (autoAction === 'removed') return 'high';
+  if (reason === 'abuse' || reason === 'harassment') return 'high';
+  if (autoAction === 'flagged') return 'medium';
+  if (reason === 'spam' || reason === 'fake') return 'medium';
+  return 'low';
+};
+
+export const inferReportTargetType = (
+  conversationId: unknown,
+  reportedUid?: unknown,
+  source?: unknown,
+): ReportQueueTargetType => {
+  if (source === 'profile') {
+    return 'user';
+  }
+  if (typeof conversationId === 'string' && conversationId.length > 0) {
+    if (conversationId.startsWith('msg|')) {
+      return 'message';
+    }
+    if (conversationId.startsWith('story_')) {
+      return 'story';
+    }
+    if (conversationId.startsWith('post_') && conversationId.includes('_comment_')) {
+      return 'comment';
+    }
+    if (conversationId.startsWith('post_')) {
+      return 'post';
+    }
+    if (conversationId.startsWith('grp_')) {
+      return 'group';
+    }
+    if (conversationId.startsWith('dm_')) {
+      return 'user';
+    }
+    return 'unknown';
+  }
+  if (
+    typeof reportedUid === 'string' &&
+    reportedUid.trim().length > 0 &&
+    !NON_USER_REPORT_IDS.has(reportedUid.trim())
+  ) {
+    return 'user';
+  }
+  return 'unknown';
+};

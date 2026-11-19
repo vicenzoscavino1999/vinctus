@@ -406,4 +406,33 @@ describe('Storage Rules - upload security', () => {
     );
     await assertSucceeds(ownerStorage.ref(validPath).delete());
   });
+
+  it('denies direct conversation attachment and thumbnail uploads when either participant blocked the other', async () => {
+    await seedDirectConversation('dm_user_b_user_c');
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx
+        .firestore()
+        .doc('users/user_c/blockedUsers/user_b')
+        .set({
+          blockedUid: 'user_b',
+          status: 'active',
+          blockedAt: new Date('2026-01-01T00:00:00Z'),
+        });
+    });
+
+    const blockedStorage = env.authenticatedContext('user_b').storage();
+    await assertFails(
+      blockedStorage
+        .ref('conversations/dm_user_b_user_c/attachments/user_b/msg_blocked/photo.jpg')
+        .putString('image-bytes', 'raw', { contentType: 'image/jpeg' })
+        .then((snapshot) => snapshot),
+    );
+    await assertFails(
+      blockedStorage
+        .ref('conversations/dm_user_b_user_c/thumbnails/user_b/msg_blocked/thumb.jpg')
+        .putString('thumb-bytes', 'raw', { contentType: 'image/jpeg' })
+        .then((snapshot) => snapshot),
+    );
+  });
 });

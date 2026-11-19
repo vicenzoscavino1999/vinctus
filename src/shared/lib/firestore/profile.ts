@@ -437,26 +437,18 @@ const normalizePrivacySettings = (value: unknown): PrivacySettingsInput => {
 };
 
 export async function getUserSettings(uid: string): Promise<UserSettingsReadModel> {
-  try {
-    const snap = await getDoc(doc(db, COLLECTIONS.users, uid));
-    if (!snap.exists()) {
-      return {
-        notifications: DEFAULT_NOTIFICATION_SETTINGS,
-        privacy: DEFAULT_PRIVACY_SETTINGS,
-      };
-    }
-    const data = snap.data() as { settings?: { notifications?: unknown; privacy?: unknown } };
-    return {
-      notifications: normalizeNotificationSettings(data.settings?.notifications),
-      privacy: normalizePrivacySettings(data.settings?.privacy),
-    };
-  } catch (error) {
-    console.error('Error loading user settings:', error);
+  const snap = await getDoc(doc(db, COLLECTIONS.users, uid));
+  if (!snap.exists()) {
     return {
       notifications: DEFAULT_NOTIFICATION_SETTINGS,
       privacy: DEFAULT_PRIVACY_SETTINGS,
     };
   }
+  const data = snap.data() as { settings?: { notifications?: unknown; privacy?: unknown } };
+  return {
+    notifications: normalizeNotificationSettings(data.settings?.notifications),
+    privacy: normalizePrivacySettings(data.settings?.privacy),
+  };
 }
 
 export async function updateNotificationSettings(

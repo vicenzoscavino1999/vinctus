@@ -14,8 +14,15 @@
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
-import { messageReportKey, moderateUserText, newlyMatchedTerms } from './moderation';
-import { clearLastMessagePreview } from './moderationActions';
+import {
+  inferQueuePriority,
+  inferQueueSource,
+  inferReportTargetType,
+  messageReportKey,
+  moderateUserText,
+  newlyMatchedTerms,
+} from './moderation';
+import { clearLastMessagePreview, deleteMessageMedia } from './moderationActions';
 import { reconcileUserPostCount } from './postCounts';
 import {
   acceptFollowRequestInTransaction,
@@ -1475,6 +1482,7 @@ export const onMessageCreatedModeration = functions.firestore
         conversationId: messageReportKey(conversationId, messageId),
       });
 
+      await deleteMessageMedia(admin.storage().bucket(), conversationId, messageId, data);
       await snap.ref.delete();
       await clearLastMessagePreview(db, conversationId, data);
 
@@ -1496,47 +1504,6 @@ export const onMessageCreatedModeration = functions.firestore
 // TRUST & SAFETY - REPORT QUEUE
 // ==========================================================
 
-type ReportQueuePriority = 'low' | 'medium' | 'high';
-type ReportQueueTargetType =
-  | 'user'
-  | 'group'
-  | 'post'
-  | 'comment'
-  | 'message'
-  | 'story'
-  | 'unknown';
-
-function inferQueuePriority(reason: unknown): ReportQueuePriority {
-  if (reason === 'abuse' || reason === 'harassment') return 'high';
-  if (reason === 'spam' || reason === 'fake') return 'medium';
-  return 'low';
-}
-
-function inferReportTargetType(conversationId: unknown): ReportQueueTargetType {
-  if (typeof conversationId !== 'string' || conversationId.length === 0) {
-    return 'unknown';
-  }
-  if (conversationId.startsWith('msg|')) {
-    return 'message';
-  }
-  if (conversationId.startsWith('story_')) {
-    return 'story';
-  }
-  if (conversationId.startsWith('post_') && conversationId.includes('_comment_')) {
-    return 'comment';
-  }
-  if (conversationId.startsWith('post_')) {
-    return 'post';
-  }
-  if (conversationId.startsWith('grp_')) {
-    return 'group';
-  }
-  if (conversationId.startsWith('dm_')) {
-    return 'user';
-  }
-  return 'unknown';
-}
-
 export const onReportCreatedQueue = functions.firestore
   .document(`${COLLECTIONS.reports}/{reportId}`)
   .onCreate(async (snap, context) => {
@@ -1549,9 +1516,9 @@ export const onReportCreatedQueue = functions.firestore
     const details = typeof data.details === 'string' ? data.details : null;
     const conversationId = typeof data.conversationId === 'string' ? data.conversationId : null;
     const status = typeof data.status === 'string' ? data.status : 'open';
-    const targetType: ReportQueueTargetType =
-      data.source === 'profile' ? 'user' : inferReportTargetType(conversationId);
-    const priority = inferQueuePriority(reason);
+    const source = inferQueueSource(reporterUid);
+    const targetType = inferReportTargetType(conversationId, reportedUid, data.source);
+    const priority = inferQueuePriority(reason, data.autoAction);
 
     try {
       await db.doc(`${COLLECTIONS.moderationQueue}/${reportId}`).set(
@@ -1564,7 +1531,7 @@ export const onReportCreatedQueue = functions.firestore
           details,
           conversationId,
           status: status === 'open' ? 'pending' : status,
-          source: 'user_report',
+          source,
           targetType,
           priority,
           createdAt: FieldValue.serverTimestamp(),
@@ -1575,6 +1542,7 @@ export const onReportCreatedQueue = functions.firestore
 
       functions.logger.info('Report queued for moderation', {
         reportId,
+        source,
         targetType,
         priority,
       });
@@ -1773,6 +1741,14 @@ export const onFriendRequestWrite = functions.firestore
 
     try {
       if (isAccepted) {
+        const [firstBlockedSnap, secondBlockedSnap] = await Promise.all([
+          db.doc(`${COLLECTIONS.users}/${fromUid}/${SUBCOLLECTIONS.blockedUsers}/${toUid}`).get(),
+          db.doc(`${COLLECTIONS.users}/${toUid}/${SUBCOLLECTIONS.blockedUsers}/${fromUid}`).get(),
+        ]);
+        if (firstBlockedSnap.exists || secondBlockedSnap.exists) {
+          functions.logger.info('Skipping friend index sync due to block', { fromUid, toUid });
+          return;
+        }
         const payload = {
           uid: toUid,
           createdAt: FieldValue.serverTimestamp(),
@@ -1874,58 +1850,43 @@ export const onDirectConversationWrite = functions.firestore
       db.doc(`${COLLECTIONS.users}/${secondUid}/${SUBCOLLECTIONS.blockedUsers}/${firstUid}`).get(),
     ]);
 
-    const writes: Promise<unknown>[] = [];
-    if (!firstBlockedSnap.exists) {
-      writes.push(
-        db
-          .doc(
-            `${COLLECTIONS.users}/${firstUid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`,
-          )
-          .set(
-            {
-              conversationId,
-              otherUid: secondUid,
-              type: 'direct',
-              updatedAt,
-            },
-            { merge: true },
-          ),
-      );
-    } else {
-      functions.logger.info('Skipping direct conversation index for blocked user', {
+    if (firstBlockedSnap.exists || secondBlockedSnap.exists) {
+      functions.logger.info('Skipping direct conversation index due to block', {
         conversationId,
-        uid: firstUid,
-        blockedUid: secondUid,
+        firstUid,
+        secondUid,
       });
+      return;
     }
 
-    if (!secondBlockedSnap.exists) {
-      writes.push(
-        db
-          .doc(
-            `${COLLECTIONS.users}/${secondUid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`,
-          )
-          .set(
-            {
-              conversationId,
-              otherUid: firstUid,
-              type: 'direct',
-              updatedAt,
-            },
-            { merge: true },
-          ),
-      );
-    } else {
-      functions.logger.info('Skipping direct conversation index for blocked user', {
-        conversationId,
-        uid: secondUid,
-        blockedUid: firstUid,
-      });
-    }
-
-    if (writes.length > 0) {
-      await Promise.all(writes);
-    }
+    await Promise.all([
+      db
+        .doc(
+          `${COLLECTIONS.users}/${firstUid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`,
+        )
+        .set(
+          {
+            conversationId,
+            otherUid: secondUid,
+            type: 'direct',
+            updatedAt,
+          },
+          { merge: true },
+        ),
+      db
+        .doc(
+          `${COLLECTIONS.users}/${secondUid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`,
+        )
+        .set(
+          {
+            conversationId,
+            otherUid: firstUid,
+            type: 'direct',
+            updatedAt,
+          },
+          { merge: true },
+        ),
+    ]);
   });
 
 // ==========================================================

@@ -11,6 +11,7 @@ import type {
   PublicUserRead,
   UserProfileRead,
   UserProfileUpdate,
+  UserReportReason,
 } from '@/shared/lib/firestore';
 import { idSchema, limitSchema, urlSchema } from '@/shared/lib/validators';
 import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
@@ -26,6 +27,7 @@ export type {
   PublicUserRead,
   UserProfileRead,
   UserProfileUpdate,
+  UserReportReason,
 };
 
 export type FollowListType = 'followers' | 'following';

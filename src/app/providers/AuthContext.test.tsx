@@ -1,7 +1,17 @@
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { getRedirectResult, signInWithPopup, signInWithRedirect } from 'firebase/auth';
+import {
+  createUserWithEmailAndPassword,
+  getRedirectResult,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  signInWithPopup,
+  signInWithRedirect,
+  updateProfile,
+  type User,
+} from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { appleProvider, googleProvider } from '@/shared/lib/firebase';
 
 const REDIRECT_PENDING_KEY = 'vinctus_auth_redirect_pending';
@@ -184,5 +194,55 @@ describe('AuthContext social sign-in', () => {
     renderHook(() => useAuth(), { wrapper });
 
     await waitFor(() => expect(getRedirectResult).not.toHaveBeenCalled());
+  });
+
+  it('trims email and suppresses auth/user-not-found on resetPassword to prevent account enumeration', async () => {
+    vi.mocked(sendPasswordResetEmail).mockRejectedValueOnce(authError('auth/user-not-found'));
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await act(async () => {
+      await expect(result.current.resetPassword('  ghost@example.com  ')).resolves.toBeUndefined();
+    });
+
+    expect(sendPasswordResetEmail).toHaveBeenCalledWith(expect.anything(), 'ghost@example.com');
+    expect(result.current.error).toBeNull();
+  });
+
+  it('still bootstraps Firestore profile when sendEmailVerification fails during signUpWithEmail', async () => {
+    const newUser = {
+      uid: 'u_new',
+      email: 'new@example.com',
+      displayName: 'New User',
+      photoURL: null,
+      phoneNumber: null,
+      emailVerified: false,
+    } as unknown as User;
+    vi.mocked(doc).mockImplementation(((_db: unknown, ...segments: string[]) =>
+      segments.join('/')) as never);
+    vi.mocked(createUserWithEmailAndPassword).mockResolvedValueOnce({ user: newUser } as never);
+    vi.mocked(updateProfile).mockResolvedValueOnce(undefined);
+    vi.mocked(sendEmailVerification).mockRejectedValueOnce(authError('auth/too-many-requests'));
+    vi.mocked(getDoc).mockResolvedValueOnce({
+      exists: () => false,
+      data: () => undefined,
+    } as never);
+    vi.mocked(setDoc).mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await act(async () => {
+      await expect(
+        result.current.signUpWithEmail('  new@example.com ', 'password123', '  New User  '),
+      ).resolves.toBeUndefined();
+    });
+
+    expect(createUserWithEmailAndPassword).toHaveBeenCalledWith(
+      expect.anything(),
+      'new@example.com',
+      'password123',
+    );
+    expect(updateProfile).toHaveBeenCalledWith(newUser, { displayName: 'New User' });
+    expect(setDoc).toHaveBeenCalledWith('users/u_new', expect.objectContaining({ uid: 'u_new' }));
+    expect(result.current.user?.uid).toBe('u_new');
   });
 });

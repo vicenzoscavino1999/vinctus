@@ -118,9 +118,9 @@ export async function acceptFollowRequestInTransaction(
 }
 
 /**
- * Remove symmetric follow edges and any pending/stale follow requests between two
- * users when a block is created, ensuring server-side consistency even if a client
- * drops offline right after creating blockedUsers/{blockedUid}.
+ * Remove symmetric follow edges, pending/stale follow & friend requests, and DM inbox
+ * index entries between two users when a block is created, ensuring server-side consistency
+ * even if a client drops offline right after creating blockedUsers/{blockedUid}.
  */
 export async function cleanupFollowStateOnBlock(
   db: Firestore,
@@ -131,6 +131,27 @@ export async function cleanupFollowStateOnBlock(
     return;
   }
 
+  const dmConversationId = `dm_${[uid, blockedUid].sort().join('_')}`;
+
+  const [outgoingFriendReqs, incomingFriendReqs] = await Promise.all([
+    db
+      .collection(COLLECTIONS.friendRequests)
+      .where('fromUid', '==', uid)
+      .where('toUid', '==', blockedUid)
+      .limit(20)
+      .get(),
+    db
+      .collection(COLLECTIONS.friendRequests)
+      .where('fromUid', '==', blockedUid)
+      .where('toUid', '==', uid)
+      .limit(20)
+      .get(),
+  ]);
+
+  const friendRequestDeletes = [...outgoingFriendReqs.docs, ...incomingFriendReqs.docs].map(
+    (docSnap) => docSnap.ref.delete(),
+  );
+
   await Promise.all([
     db.doc(`${COLLECTIONS.users}/${uid}/${SUBCOLLECTIONS.followers}/${blockedUid}`).delete(),
     db.doc(`${COLLECTIONS.users}/${uid}/${SUBCOLLECTIONS.following}/${blockedUid}`).delete(),
@@ -140,5 +161,14 @@ export async function cleanupFollowStateOnBlock(
     db.doc(`${COLLECTIONS.users}/${blockedUid}/${SUBCOLLECTIONS.friends}/${uid}`).delete(),
     db.doc(`${COLLECTIONS.followRequests}/${uid}_${blockedUid}`).delete(),
     db.doc(`${COLLECTIONS.followRequests}/${blockedUid}_${uid}`).delete(),
+    db
+      .doc(`${COLLECTIONS.users}/${uid}/${SUBCOLLECTIONS.directConversations}/${dmConversationId}`)
+      .delete(),
+    db
+      .doc(
+        `${COLLECTIONS.users}/${blockedUid}/${SUBCOLLECTIONS.directConversations}/${dmConversationId}`,
+      )
+      .delete(),
+    ...friendRequestDeletes,
   ]);
 }

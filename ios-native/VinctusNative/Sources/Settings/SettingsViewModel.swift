@@ -1,3 +1,5 @@
+import FirebaseAuth
+import FirebaseFunctions
 import Foundation
 
 @MainActor
@@ -7,6 +9,16 @@ final class SettingsViewModel: ObservableObject {
   @Published private(set) var isSavingConsent = false
   @Published var errorMessage: String?
   @Published var infoMessage: String?
+
+  @Published private(set) var accountVisibility: ProfileAccountVisibility = .public
+  @Published private(set) var isLoadingPrivacy = false
+  @Published private(set) var isSavingPrivacy = false
+  @Published var privacyErrorMessage: String?
+
+  @Published private(set) var isRevokingSessions = false
+  @Published var securityErrorMessage: String?
+  @Published var securityInfoMessage: String?
+
   @Published private(set) var deletionStatus: AccountDeletionStatusState = .initial
   @Published private(set) var isLoadingDeletionStatus = false
   @Published private(set) var isSubmittingDeletionRequest = false
@@ -15,15 +27,20 @@ final class SettingsViewModel: ObservableObject {
 
   private let aiConsentRepo: AIConsentRepo
   private let deleteAccountRepo: DeleteAccountRepo
+  private let accountSecurityRepo: AccountSecurityRepo
   private let iso8601Formatter = ISO8601DateFormatter()
   private var consentGeneration = 0
+  private var privacyGeneration = 0
+  private var deletionGeneration = 0
 
   init(
     repo: AIConsentRepo,
-    deleteAccountRepo: DeleteAccountRepo = AppRepos.deleteAccount()
+    deleteAccountRepo: DeleteAccountRepo = AppRepos.deleteAccount(),
+    accountSecurityRepo: AccountSecurityRepo = AppRepos.accountSecurity()
   ) {
     self.aiConsentRepo = repo
     self.deleteAccountRepo = deleteAccountRepo
+    self.accountSecurityRepo = accountSecurityRepo
   }
 
   var canSubmitDeletionRequest: Bool {
@@ -33,6 +50,8 @@ final class SettingsViewModel: ObservableObject {
   var shouldOfferSignOutForDeletion: Bool {
     deletionStatus.status.shouldOfferSignOut
   }
+
+  // MARK: AI Consent
 
   func refreshConsent(userID: String?) async {
     consentGeneration += 1
@@ -107,9 +126,112 @@ final class SettingsViewModel: ObservableObject {
     isSavingConsent = false
   }
 
+  // MARK: Account Privacy & Security
+
+  func refreshPrivacy(userID: String?) async {
+    privacyGeneration += 1
+    let generation = privacyGeneration
+    privacyErrorMessage = nil
+    securityErrorMessage = nil
+    securityInfoMessage = nil
+
+    guard let userID, !userID.isEmpty else {
+      accountVisibility = .public
+      isLoadingPrivacy = false
+      return
+    }
+
+    isLoadingPrivacy = true
+    do {
+      let loaded = try await accountSecurityRepo.fetchAccountVisibility(uid: userID)
+      guard !Task.isCancelled, generation == privacyGeneration else { return }
+      accountVisibility = loaded
+    } catch {
+      guard !Task.isCancelled, generation == privacyGeneration else { return }
+      AppLog.settings.error(
+        "privacy.refresh.failed errorType=\(AppLog.errorType(error), privacy: .public)"
+      )
+      privacyErrorMessage = "No se pudo cargar la privacidad de tu cuenta."
+    }
+    if generation == privacyGeneration {
+      isLoadingPrivacy = false
+    }
+  }
+
+  func setAccountPrivate(_ isPrivate: Bool, userID: String?) async {
+    guard !isSavingPrivacy, !isLoadingPrivacy, privacyErrorMessage == nil else { return }
+    guard let userID, !userID.isEmpty else {
+      privacyErrorMessage = "Sesión no válida para actualizar privacidad."
+      return
+    }
+
+    let nextVisibility: ProfileAccountVisibility = isPrivate ? .private : .public
+    guard nextVisibility != accountVisibility else { return }
+
+    let generation = privacyGeneration
+    let previousVisibility = accountVisibility
+    accountVisibility = nextVisibility
+    isSavingPrivacy = true
+    securityErrorMessage = nil
+    securityInfoMessage = nil
+
+    do {
+      try await accountSecurityRepo.setAccountVisibility(uid: userID, visibility: nextVisibility)
+      guard generation == privacyGeneration else {
+        isSavingPrivacy = false
+        return
+      }
+      securityInfoMessage = isPrivate
+        ? "Tu cuenta ahora es privada."
+        : "Tu cuenta ahora es pública."
+    } catch {
+      guard generation == privacyGeneration else {
+        isSavingPrivacy = false
+        return
+      }
+      accountVisibility = previousVisibility
+      AppLog.settings.error(
+        "privacy.update.failed errorType=\(AppLog.errorType(error), privacy: .public)"
+      )
+      securityErrorMessage = "No se pudo guardar el cambio de privacidad."
+    }
+
+    isSavingPrivacy = false
+  }
+
+  func revokeOtherSessions(userID: String?) async {
+    guard !isRevokingSessions else { return }
+    guard let userID, !userID.isEmpty else {
+      securityErrorMessage = "Sesión no válida para revocar dispositivos."
+      return
+    }
+
+    isRevokingSessions = true
+    securityErrorMessage = nil
+    securityInfoMessage = nil
+    defer { isRevokingSessions = false }
+
+    do {
+      try await accountSecurityRepo.revokeOtherSessions()
+      securityInfoMessage = "Sesiones revocadas en otros dispositivos. Puede tardar unos minutos."
+    } catch {
+      AppLog.settings.error(
+        "security.revokeSessions.failed errorType=\(AppLog.errorType(error), privacy: .public)"
+      )
+      securityErrorMessage = Self.friendlyFunctionsError(
+        for: error,
+        fallback: "No se pudieron cerrar las sesiones en otros dispositivos."
+      )
+    }
+  }
+
+  // MARK: Account Deletion
+
   func refreshDeletionStatus(userID: String?, silent: Bool = false) async {
     guard let userID, !userID.isEmpty else {
+      deletionGeneration += 1
       deletionStatus = .initial
+      isLoadingDeletionStatus = false
       if !silent {
         deletionErrorMessage = nil
         deletionInfoMessage = nil
@@ -118,16 +240,39 @@ final class SettingsViewModel: ObservableObject {
     }
 
     if !silent {
+      deletionGeneration += 1
       isLoadingDeletionStatus = true
       deletionErrorMessage = nil
     }
+    let generation = deletionGeneration
 
     do {
-      deletionStatus = try await deleteAccountRepo.getAccountDeletionStatus()
+      let fetched = try await deleteAccountRepo.getAccountDeletionStatus()
+      guard !Task.isCancelled, generation == deletionGeneration else { return }
+      deletionStatus = fetched
       AppLog.settings.info(
         "deleteAccount.status.refresh.success status=\(self.deletionStatus.status.rawValue, privacy: .public)"
       )
     } catch {
+      guard !Task.isCancelled, generation == deletionGeneration else { return }
+      let wasActiveDeletion =
+        deletionStatus.status == .queued || deletionStatus.status == .processing
+      if wasActiveDeletion && Self.isUnauthenticatedError(error) {
+        let nowISO8601 = iso8601Formatter.string(from: Date())
+        deletionStatus = AccountDeletionStatusState(
+          status: .completed,
+          jobID: deletionStatus.jobID,
+          updatedAt: nowISO8601,
+          completedAt: nowISO8601,
+          lastError: nil
+        )
+        deletionErrorMessage = nil
+        deletionInfoMessage = "Tu cuenta fue eliminada. Cierra sesión para salir."
+        if !silent {
+          isLoadingDeletionStatus = false
+        }
+        return
+      }
       AppLog.settings.error(
         "deleteAccount.status.refresh.failed errorType=\(AppLog.errorType(error), privacy: .public)"
       )
@@ -136,7 +281,7 @@ final class SettingsViewModel: ObservableObject {
       }
     }
 
-    if !silent {
+    if !silent && generation == deletionGeneration {
       isLoadingDeletionStatus = false
     }
   }
@@ -145,6 +290,7 @@ final class SettingsViewModel: ObservableObject {
   /// Sign in with Apple, whose tokens are revoked before the deletion starts.
   @discardableResult
   func requestAccountDeletion(userID: String?, appleAuthorizationCode: String? = nil) async -> Bool {
+    guard !isSubmittingDeletionRequest else { return false }
     guard let userID, !userID.isEmpty else {
       deletionErrorMessage = "Sesión no válida para eliminar cuenta."
       return false
@@ -155,6 +301,8 @@ final class SettingsViewModel: ObservableObject {
       return false
     }
 
+    deletionGeneration += 1
+    let generation = deletionGeneration
     isSubmittingDeletionRequest = true
     deletionErrorMessage = nil
     deletionInfoMessage = nil
@@ -174,6 +322,7 @@ final class SettingsViewModel: ObservableObject {
 
     do {
       let result = try await deleteAccountRepo.startAccountDeletion()
+      guard generation == deletionGeneration else { return false }
       let nowISO8601 = iso8601Formatter.string(from: Date())
 
       deletionStatus = AccountDeletionStatusState(
@@ -201,11 +350,56 @@ final class SettingsViewModel: ObservableObject {
       )
       return false
     } catch {
+      guard generation == deletionGeneration else { return false }
       AppLog.settings.error(
         "deleteAccount.request.failed errorType=\(AppLog.errorType(error), privacy: .public)"
       )
-      deletionErrorMessage = error.localizedDescription
+      deletionErrorMessage = Self.friendlyFunctionsError(
+        for: error,
+        fallback: "No se pudo iniciar la eliminación de cuenta. Intenta de nuevo."
+      )
       return false
     }
+  }
+
+  nonisolated static func isUnauthenticatedError(_ error: Error) -> Bool {
+    let nsError = error as NSError
+    if nsError.domain == FunctionsErrorDomain,
+      let code = FunctionsErrorCode(rawValue: nsError.code)
+    {
+      return code == .unauthenticated
+    }
+    if nsError.domain == AuthErrorDomain,
+      let code = AuthErrorCode(rawValue: nsError.code)
+    {
+      return code == .userTokenExpired || code == .userNotFound || code == .userDisabled
+    }
+    let lower = nsError.localizedDescription.lowercased()
+    return lower.contains("unauthenticated") || lower.contains("user-not-found")
+  }
+
+  private nonisolated static func friendlyFunctionsError(for error: Error, fallback: String) -> String {
+    if let localized = error as? LocalizedError,
+      error is DeleteAccountRepoError || error is AccountSecurityRepoError,
+      let message = localized.errorDescription
+    {
+      return message
+    }
+    let nsError = error as NSError
+    if nsError.domain == FunctionsErrorDomain,
+      let code = FunctionsErrorCode(rawValue: nsError.code)
+    {
+      switch code {
+      case .unauthenticated:
+        return "Tu sesión expiró. Vuelve a iniciar sesión."
+      case .unavailable, .deadlineExceeded:
+        return "Sin conexión con el servidor. Intenta de nuevo."
+      case .resourceExhausted:
+        return "Demasiados intentos. Espera unos minutos e intenta de nuevo."
+      default:
+        return fallback
+      }
+    }
+    return fallback
   }
 }

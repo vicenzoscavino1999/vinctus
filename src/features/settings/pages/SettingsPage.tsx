@@ -414,6 +414,7 @@ const SettingsPage = () => {
                 await signOut();
               } catch (error) {
                 console.error(error);
+                showToast('No se pudo cerrar sesión.', 'error');
               }
             }}
             className="w-full flex items-center justify-between p-4 bg-red-500/5 border border-red-500/20 rounded-2xl hover:bg-red-500/10 transition-colors text-red-400 group"
@@ -426,7 +427,11 @@ const SettingsPage = () => {
         </div>
       </div>
       <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
-      <DeleteAccountModal isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} />
+      <DeleteAccountModal
+        key={user?.uid ?? 'anon'}
+        isOpen={isDeleteOpen}
+        onClose={() => setIsDeleteOpen(false)}
+      />
     </>
   );
 };

@@ -234,6 +234,7 @@ service cloud.firestore {
         && data.toUid is string
         && data.toUid.size() > 0
         && data.toUid != request.auth.uid
+        && !isConversationBlocked(request.auth.uid, data.toUid)
         && data.status == 'pending'
         && (data.fromUserName == null || (data.fromUserName is string && data.fromUserName.size() > 0 && data.fromUserName.size() <= 120))
         && (data.fromUserPhoto == null || (data.fromUserPhoto is string && data.fromUserPhoto.size() <= 600))
@@ -256,6 +257,7 @@ service cloud.firestore {
         && request.resource.data.toUserName == resource.data.toUserName
         && request.resource.data.toUserPhoto == resource.data.toUserPhoto
         && request.resource.data.updatedAt == request.time
+        && !isConversationBlocked(resource.data.fromUid, resource.data.toUid)
         && (
           (resource.data.toUid == request.auth.uid
             && prevStatus == 'pending'
@@ -413,6 +415,7 @@ service cloud.firestore {
         && data.toUid.size() > 0
         && data.fromUid == request.auth.uid
         && data.toUid != request.auth.uid
+        && !isConversationBlocked(request.auth.uid, data.toUid)
         && data.postId is string
         && data.postId.size() > 0
         && data.postSnippet == null
@@ -426,6 +429,7 @@ service cloud.firestore {
       return changed.hasOnly(['createdAt', 'fromUserName', 'fromUserPhoto', 'postSnippet'])
         && request.resource.data.fromUid == resource.data.fromUid
         && request.resource.data.toUid == resource.data.toUid
+        && !isConversationBlocked(resource.data.fromUid, resource.data.toUid)
         && request.resource.data.type == resource.data.type
         && request.resource.data.postId == resource.data.postId
         && request.resource.data.postSnippet == null
@@ -471,9 +475,11 @@ service cloud.firestore {
         && data.reporterUid == request.auth.uid
         && data.reportedUid is string
         && data.reportedUid.size() > 0
+        && data.reportedUid.size() <= 128
+        && data.reportedUid != request.auth.uid
         && data.reason in ['spam', 'harassment', 'abuse', 'fake', 'other']
         && (data.details == null || (data.details is string && data.details.size() <= 2000))
-        && (data.conversationId == null || (data.conversationId is string && data.conversationId.size() > 0))
+        && (data.conversationId == null || (data.conversationId is string && data.conversationId.size() > 0 && data.conversationId.size() <= 240))
         && data.status == 'open'
         && data.createdAt == request.time;
     }
@@ -1597,6 +1603,7 @@ service cloud.firestore {
         && data.toUid is string
         && data.toUid.size() > 0
         && data.toUid != request.auth.uid
+        && !isConversationBlocked(request.auth.uid, data.toUid)
         && data.status == 'pending'
         && (data.message == null || (data.message is string && data.message.size() > 0 && data.message.size() <= 1000))
         && (data.fromUserName == null || (data.fromUserName is string && data.fromUserName.size() > 0 && data.fromUserName.size() <= 80))
@@ -1614,6 +1621,7 @@ service cloud.firestore {
       return changed.hasOnly(['status', 'updatedAt'])
         && request.resource.data.status in ['accepted', 'rejected']
         && request.resource.data.updatedAt == request.time
+        && !isConversationBlocked(resource.data.fromUid, resource.data.toUid)
         && request.resource.data.fromUid == resource.data.fromUid
         && request.resource.data.toUid == resource.data.toUid
         && request.resource.data.collaborationId == resource.data.collaborationId
@@ -1762,6 +1770,7 @@ service cloud.firestore {
         && memberIds[0] is string
         && memberIds[1] is string
         && memberIds.hasAny([request.auth.uid])
+        && !isConversationBlocked(memberIds[0], memberIds[1])
         && (
           conversationId == 'dm_' + memberIds[0] + '_' + memberIds[1]
           || conversationId == 'dm_' + memberIds[1] + '_' + memberIds[0]
@@ -1792,13 +1801,19 @@ service cloud.firestore {
         || exists(/databases/$(database)/documents/users/$(uidB)/blockedUsers/$(uidA));
     }
 
-    // A block (in either direction) stops new messages in an existing direct conversation.
+    // A block (in either direction) stops new messages, preview updates and typing in a direct conversation.
+    function isDirectConversationDataBlocked(convData) {
+      return convData != null
+        && convData.get('type', '') == 'direct'
+        && convData.get('memberIds', []) is list
+        && convData.get('memberIds', []).size() == 2
+        && isConversationBlocked(convData.memberIds[0], convData.memberIds[1]);
+    }
+
     function isDirectConversationBlocked(conversationId) {
-      let conv = get(/databases/$(database)/documents/conversations/$(conversationId)).data;
-      return conv.get('type', '') == 'direct'
-        && conv.get('memberIds', []) is list
-        && conv.get('memberIds', []).size() == 2
-        && isConversationBlocked(conv.memberIds[0], conv.memberIds[1]);
+      return isDirectConversationDataBlocked(
+        get(/databases/$(database)/documents/conversations/$(conversationId)).data
+      );
     }
 
     function canStartDirectConversation(uidA, uidB) {
@@ -1897,6 +1912,7 @@ service cloud.firestore {
           || isValidGroupConversationCreate(conversationId));
       
       allow update: if (canAccessConversationData(resource.data)
+        && !isDirectConversationDataBlocked(resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'updatedAt']))
         || isValidDirectConversationRepair(conversationId);
       
@@ -1933,7 +1949,8 @@ service cloud.firestore {
         allow read: if isAuthenticated() && canAccessConversation(conversationId);
         allow write: if isAuthenticated() 
           && request.auth.uid == uid
-          && canAccessConversation(conversationId);
+          && canAccessConversation(conversationId)
+          && !isDirectConversationBlocked(conversationId);
       }
     }
     

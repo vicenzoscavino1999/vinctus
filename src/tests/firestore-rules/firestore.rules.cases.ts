@@ -1567,4 +1567,231 @@ describe('Firestore Rules - critical access controls', () => {
       ),
     );
   });
+
+  it('enforces reports, app_admins, moderation_queue, and support_tickets access rules', async () => {
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const adminDb = ctx.firestore();
+      await adminDb.doc('app_admins/admin_1').set({ role: 'moderator' });
+      await adminDb.doc('moderation_queue/item_1').set({
+        reportId: 'item_1',
+        reporterUid: 'user_a',
+        reportedUid: 'user_b',
+        reason: 'harassment',
+        details: 'Acoso repetido',
+        conversationId: null,
+        source: 'user_report',
+        targetType: 'user',
+        priority: 'high',
+        status: 'pending',
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+    });
+
+    const userADb = env.authenticatedContext('user_a').firestore();
+    const adminDb = env.authenticatedContext('admin_1').firestore();
+
+    // Reports: valid report succeeds; self-report, oversized fields, and reads/updates fail.
+    await assertSucceeds(
+      userADb.doc('reports/rep_valid').set({
+        reporterUid: 'user_a',
+        reportedUid: 'user_b',
+        reason: 'harassment',
+        details: 'Mensajes ofensivos',
+        conversationId: 'dm_user_a_user_b',
+        status: 'open',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      userADb.doc('reports/rep_self').set({
+        reporterUid: 'user_a',
+        reportedUid: 'user_a',
+        reason: 'spam',
+        details: null,
+        conversationId: null,
+        status: 'open',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      userADb.doc('reports/rep_long_conv').set({
+        reporterUid: 'user_a',
+        reportedUid: 'user_b',
+        reason: 'spam',
+        details: null,
+        conversationId: 'x'.repeat(241),
+        status: 'open',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(userADb.doc('reports/rep_valid').get());
+    await assertFails(userADb.doc('reports/rep_valid').update({ status: 'closed' }));
+
+    // app_admins: self-get allowed, cross-user get and all writes denied.
+    await assertSucceeds(adminDb.doc('app_admins/admin_1').get());
+    await assertFails(userADb.doc('app_admins/admin_1').get());
+    await assertFails(userADb.doc('app_admins/user_a').set({ role: 'admin' }));
+
+    // moderation_queue: only app_admins can read and update allowed review fields.
+    await assertFails(userADb.doc('moderation_queue/item_1').get());
+    await assertSucceeds(adminDb.doc('moderation_queue/item_1').get());
+    await assertSucceeds(
+      adminDb.doc('moderation_queue/item_1').update({
+        status: 'in_review',
+        reviewAction: 'triage_started',
+        reviewNote: 'Revisando contexto',
+        reviewedBy: 'admin_1',
+        reviewedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      adminDb.doc('moderation_queue/item_1').update({
+        status: 'resolved',
+        reviewAction: 'resolved',
+        reviewNote: null,
+        reviewedBy: 'other_admin',
+        reviewedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(adminDb.doc('moderation_queue/item_1').delete());
+
+    // support_tickets: valid create allowed, read/delete denied.
+    await assertSucceeds(
+      userADb.doc('support_tickets/ticket_1').set({
+        uid: 'user_a',
+        email: 'alice@example.com',
+        type: 'issue',
+        title: 'Problema de acceso',
+        message: 'No pude abrir la configuracion de privacidad en Safari.',
+        context: { path: '/settings' },
+        status: 'open',
+        createdAt: serverTimestamp(),
+        appVersion: 'v0.0.2-alpha',
+      }),
+    );
+    await assertFails(userADb.doc('support_tickets/ticket_1').get());
+  });
+
+  it('enforces block rules on friend requests, collaboration requests, notifications, DM updates, and typing', async () => {
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('conversations/dm_user_a_user_b').set({
+        type: 'direct',
+        memberIds: ['user_a', 'user_b'],
+        lastMessage: null,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('conversations/dm_user_a_user_b/members/user_a').set({
+        uid: 'user_a',
+        role: 'member',
+        joinedAt: new Date('2026-01-01T00:00:00Z'),
+        lastReadClientAt: Date.now(),
+        lastReadAt: new Date('2026-01-01T00:00:00Z'),
+        muted: false,
+      });
+      await db.doc('conversations/dm_user_a_user_b/members/user_b').set({
+        uid: 'user_b',
+        role: 'member',
+        joinedAt: new Date('2026-01-01T00:00:00Z'),
+        lastReadClientAt: Date.now(),
+        lastReadAt: new Date('2026-01-01T00:00:00Z'),
+        muted: false,
+      });
+      await db.doc('collaborations/collab_1').set({
+        title: 'Proyecto IA',
+        context: 'Investigacion',
+        seekingRole: 'Dev',
+        mode: 'virtual',
+        location: null,
+        level: 'intermedio',
+        topic: null,
+        tags: ['ia'],
+        authorId: 'user_b',
+        authorSnapshot: { displayName: 'User B', photoURL: null },
+        status: 'open',
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('notifications/notif_existing_blocked').set({
+        type: 'post_like',
+        toUid: 'user_b',
+        fromUid: 'user_a',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        postId: 'post_1',
+        postSnippet: null,
+        commentText: null,
+        read: true,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+      });
+    });
+    await seedBlockedUser('user_b', 'user_a');
+
+    const blockedDb = env.authenticatedContext('user_a').firestore();
+
+    await assertFails(
+      blockedDb.doc('friend_requests/fr_blocked').set({
+        fromUid: 'user_a',
+        toUid: 'user_b',
+        status: 'pending',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        toUserName: 'Bob',
+        toUserPhoto: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      blockedDb.doc('collaboration_requests/cr_blocked').set({
+        collaborationId: 'collab_1',
+        collaborationTitle: 'Proyecto IA',
+        fromUid: 'user_a',
+        toUid: 'user_b',
+        status: 'pending',
+        message: 'Me interesa',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      blockedDb.doc('notifications/notif_blocked').set({
+        type: 'post_like',
+        toUid: 'user_b',
+        fromUid: 'user_a',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        postId: 'post_1',
+        postSnippet: null,
+        commentText: null,
+        read: false,
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      blockedDb.doc('notifications/notif_existing_blocked').update({
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      blockedDb.doc('conversations/dm_user_a_user_b').update({
+        lastMessage: { text: 'Spam bloqueado', senderId: 'user_a' },
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      blockedDb.doc('conversations/dm_user_a_user_b/typing/user_a').set({
+        typing: true,
+        updatedAt: serverTimestamp(),
+      }),
+    );
+  });
 });

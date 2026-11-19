@@ -16,6 +16,13 @@ vi.mock('firebase/auth', () => ({
   signInWithPopup: vi.fn(),
   signInWithRedirect: vi.fn(),
   getRedirectResult: vi.fn(() => Promise.resolve(null)),
+  signInWithEmailAndPassword: vi.fn(),
+  createUserWithEmailAndPassword: vi.fn(),
+  updateProfile: vi.fn(),
+  sendEmailVerification: vi.fn(),
+  sendPasswordResetEmail: vi.fn(),
+  verifyPasswordResetCode: vi.fn(),
+  confirmPasswordReset: vi.fn(),
   signOut: vi.fn(),
   onAuthStateChanged: vi.fn((_auth, callback) => {
     // Immediately call with null user for tests

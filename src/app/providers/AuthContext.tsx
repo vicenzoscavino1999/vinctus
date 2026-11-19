@@ -300,6 +300,8 @@ const translateError = (code: string): string => {
     'auth/unauthorized-domain': 'Este dominio no esta autorizado para iniciar sesion',
     'auth/popup-blocked': 'El navegador bloqueo la ventana de inicio de sesion',
     'auth/network-request-failed': 'Error de conexion. Revisa tu internet e intenta de nuevo',
+    'auth/user-token-expired': 'Tu sesion expiro. Vuelve a iniciar sesion',
+    'auth/requires-recent-login': 'Por seguridad, vuelve a iniciar sesion para continuar',
     'auth/operation-not-supported-in-this-environment':
       'Este metodo de inicio de sesion no esta disponible en este entorno',
     'auth/web-storage-unsupported':
@@ -472,9 +474,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Sign in with email/password
   const signInWithEmail = useCallback(async (email: string, password: string) => {
     setError(null);
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      const invalidErr = Object.assign(new Error('auth/invalid-email'), {
+        code: 'auth/invalid-email',
+      });
+      setError(translateError('auth/invalid-email'));
+      throw invalidErr;
+    }
     try {
       trackAppCall('auth.signInWithEmail');
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, trimmedEmail, password);
     } catch (err) {
       const code = (err as { code?: string }).code || '';
       setError(translateError(code));
@@ -486,18 +496,29 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const signUpWithEmail = useCallback(
     async (email: string, password: string, displayName?: string) => {
       setError(null);
+      const trimmedEmail = email.trim();
+      const trimmedName = displayName?.trim().slice(0, 120) || '';
+      if (!trimmedEmail) {
+        const invalidErr = Object.assign(new Error('auth/invalid-email'), {
+          code: 'auth/invalid-email',
+        });
+        setError(translateError('auth/invalid-email'));
+        throw invalidErr;
+      }
       try {
         trackAppCall('auth.signUpWithEmail');
-        const result = await createUserWithEmailAndPassword(auth, email, password);
+        const result = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
         // Update display name if provided
-        if (displayName && result.user) {
-          await updateProfile(result.user, { displayName });
+        if (trimmedName && result.user) {
+          await updateProfile(result.user, { displayName: trimmedName });
         }
-        // Send email verification
+        // Send email verification (best-effort so profile bootstrap still completes)
         if (result.user) {
-          await sendEmailVerification(result.user);
-        }
-        if (result.user) {
+          try {
+            await sendEmailVerification(result.user);
+          } catch (verifyErr) {
+            console.warn('Could not send verification email after signup:', verifyErr);
+          }
           await ensureUserProfile(result.user);
           setUser(mapUser(result.user));
         }
@@ -510,14 +531,25 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     [],
   );
 
-  // Reset password
+  // Reset password (suppresses user-not-found to prevent email enumeration)
   const resetPassword = useCallback(async (email: string) => {
     setError(null);
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      const invalidErr = Object.assign(new Error('auth/invalid-email'), {
+        code: 'auth/invalid-email',
+      });
+      setError(translateError('auth/invalid-email'));
+      throw invalidErr;
+    }
     try {
       trackAppCall('auth.resetPassword');
-      await sendPasswordResetEmail(auth, email);
+      await sendPasswordResetEmail(auth, trimmedEmail);
     } catch (err) {
       const code = (err as { code?: string }).code || '';
+      if (code === 'auth/user-not-found') {
+        return;
+      }
       setError(translateError(code));
       throw err;
     }

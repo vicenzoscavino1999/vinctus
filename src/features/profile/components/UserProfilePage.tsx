@@ -1,5 +1,7 @@
 import {
+  Ban,
   ChevronLeft,
+  Flag,
   MapPin,
   UserPlus,
   UserCheck,
@@ -24,12 +26,16 @@ import {
   cancelFollowRequest,
   followPublicUser,
   unfollowUser,
+  blockUser,
   unblockUser,
+  reportUserProfile,
   getOrCreateDirectConversation,
   isUserBlocked,
   type FollowStatus,
   type UserProfileRead,
+  type UserReportReason,
 } from '@/features/profile/api';
+import ContentReportModal from '@/features/posts/components/ContentReportModal';
 import ProfilePostsGrid from '@/features/posts/components/ProfilePostsGrid';
 import ContributionsSection from '@/features/profile/components/ContributionsSection';
 import { CATEGORIES } from '@/shared/constants/mockData';
@@ -53,11 +59,22 @@ const UserProfilePage = () => {
   const [isMutual, setIsMutual] = useState(false);
   const [blockedByMe, setBlockedByMe] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState<UserReportReason>('spam');
+  const [reportDetails, setReportDetails] = useState('');
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const refreshTimerRef = useRef<number | null>(null);
   const activeUserIdRef = useRef<string | undefined>(userId);
 
   useEffect(() => {
     activeUserIdRef.current = userId;
+    setShowBlockModal(false);
+    setShowReportModal(false);
+    setReportReason('spam');
+    setReportDetails('');
+    setReportError(null);
     return () => {
       if (refreshTimerRef.current !== null) {
         window.clearTimeout(refreshTimerRef.current);
@@ -303,8 +320,27 @@ const UserProfilePage = () => {
     }
   };
 
+  const handleBlock = async () => {
+    if (!currentUser || !userId || currentUser.uid === userId || actionLoading) return;
+
+    setActionLoading(true);
+    try {
+      await blockUser(currentUser.uid, userId);
+      setBlockedByMe(true);
+      setFollowStatus('none');
+      setHasIncomingRequest(false);
+      setIsMutual(false);
+      setShowBlockModal(false);
+      showToast('Usuario bloqueado', 'success');
+    } catch {
+      showToast('No se pudo bloquear al usuario', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleUnblock = async () => {
-    if (!currentUser || !userId || !profile) return;
+    if (!currentUser || !userId || !profile || actionLoading) return;
 
     setActionLoading(true);
     try {
@@ -319,6 +355,34 @@ const UserProfilePage = () => {
       showToast('No se pudo desbloquear al usuario', 'error');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const resetReportForm = () => {
+    setReportReason('spam');
+    setReportDetails('');
+    setReportError(null);
+  };
+
+  const handleSubmitReport = async () => {
+    if (!currentUser || !userId || currentUser.uid === userId || isSubmittingReport) return;
+
+    setIsSubmittingReport(true);
+    setReportError(null);
+    try {
+      await reportUserProfile({
+        reporterUid: currentUser.uid,
+        reportedUid: userId,
+        reason: reportReason,
+        details: reportDetails.trim() || null,
+      });
+      setShowReportModal(false);
+      resetReportForm();
+      showToast('Reporte enviado', 'success');
+    } catch {
+      setReportError('No se pudo enviar el reporte. Intenta de nuevo.');
+    } finally {
+      setIsSubmittingReport(false);
     }
   };
 
@@ -347,13 +411,26 @@ const UserProfilePage = () => {
 
     if (blockedByMe) {
       return (
-        <button
-          onClick={handleUnblock}
-          disabled={actionLoading}
-          className="flex items-center gap-2 px-5 py-2.5 border border-red-500/40 text-red-300 hover:bg-red-500/10 transition-colors text-sm disabled:opacity-50 rounded-lg"
-        >
-          {actionLoading ? <Loader2 size={16} className="animate-spin" /> : 'Desbloquear usuario'}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleUnblock}
+            disabled={actionLoading}
+            className="flex items-center gap-2 px-5 py-2.5 border border-red-500/40 text-red-300 hover:bg-red-500/10 transition-colors text-sm disabled:opacity-50 rounded-lg"
+          >
+            {actionLoading ? <Loader2 size={16} className="animate-spin" /> : 'Desbloquear usuario'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowReportModal(true)}
+            disabled={actionLoading}
+            aria-label="Reportar usuario"
+            className="flex items-center gap-2 px-3.5 py-2.5 border border-neutral-800 text-neutral-400 hover:text-red-300 hover:border-red-500/40 transition-colors text-sm disabled:opacity-50 rounded-lg"
+          >
+            <Flag size={16} />
+            Reportar
+          </button>
+        </div>
       );
     }
 
@@ -462,6 +539,26 @@ const UserProfilePage = () => {
         )}
         {messageButton}
         {outgoingButton}
+        <button
+          type="button"
+          onClick={() => setShowBlockModal(true)}
+          disabled={actionLoading}
+          aria-label="Bloquear usuario"
+          className="flex items-center gap-1.5 px-3.5 py-2.5 border border-neutral-800 text-neutral-400 hover:text-red-300 hover:border-red-500/40 transition-colors text-sm disabled:opacity-50 rounded-lg"
+        >
+          <Ban size={15} />
+          Bloquear
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowReportModal(true)}
+          disabled={actionLoading}
+          aria-label="Reportar usuario"
+          className="flex items-center gap-1.5 px-3.5 py-2.5 border border-neutral-800 text-neutral-400 hover:text-red-300 hover:border-red-500/40 transition-colors text-sm disabled:opacity-50 rounded-lg"
+        >
+          <Flag size={15} />
+          Reportar
+        </button>
       </div>
     );
   };
@@ -659,6 +756,13 @@ const UserProfilePage = () => {
 
               <ContributionsSection userId={profile.uid} canEdit={false} />
             </div>
+          ) : blockedByMe ? (
+            <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
+              <p className="text-white text-lg font-light mb-2">Has bloqueado a este usuario</p>
+              <p className="text-neutral-500 text-sm">
+                Desbloquéalo para volver a ver sus publicaciones y enviarle mensajes.
+              </p>
+            </div>
           ) : (
             <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
               <p className="text-white text-lg font-light mb-2">Cuenta privada</p>
@@ -669,6 +773,77 @@ const UserProfilePage = () => {
           )}
         </div>
       </div>
+
+      {showBlockModal && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center safe-area-inset"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="profile-block-modal-title"
+        >
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={() => !actionLoading && setShowBlockModal(false)}
+          />
+          <div className="relative w-full max-w-md mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+              <h3 id="profile-block-modal-title" className="text-lg font-medium text-white">
+                Bloquear usuario
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowBlockModal(false)}
+                disabled={actionLoading}
+                className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
+                aria-label="Cerrar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-neutral-400">
+                No podrán enviarse mensajes ni ver sus publicaciones, y se eliminará el seguimiento
+                entre ambos. Puedes desbloquearlo desde Ajustes &gt; Privacidad y seguridad.
+              </p>
+              <div className="flex items-center justify-end gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowBlockModal(false)}
+                  disabled={actionLoading}
+                  className="px-4 py-2 rounded-lg text-neutral-300 hover:text-white transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleBlock()}
+                  disabled={actionLoading}
+                  className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium transition-colors disabled:opacity-50"
+                >
+                  {actionLoading ? 'Bloqueando...' : 'Confirmar bloqueo'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ContentReportModal
+        open={showReportModal}
+        targetLabel="usuario"
+        reason={reportReason}
+        details={reportDetails}
+        error={reportError}
+        isSubmitting={isSubmittingReport}
+        onClose={() => {
+          if (isSubmittingReport) return;
+          setShowReportModal(false);
+          resetReportForm();
+        }}
+        onReasonChange={setReportReason}
+        onDetailsChange={setReportDetails}
+        onSubmit={() => void handleSubmitReport()}
+      />
     </div>
   );
 };

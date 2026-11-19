@@ -79,7 +79,7 @@ struct MainTabView: View {
       isBottomNavigationHidden = hidden
     }
     .task(id: authVM.currentUserID) {
-      await blockedUsers.refresh()
+      await blockedUsers.refresh(for: authVM.currentUserID)
     }
   }
 }

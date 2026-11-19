@@ -76,9 +76,30 @@ function createFakeStore(initialDocs: Record<string, StoredDoc> = {}) {
     };
   };
 
+  const makeQuery = (prefix: string, filters: Array<{ field: string; value: unknown }> = []) => ({
+    where: (field: string, _op: string, value: unknown) =>
+      makeQuery(prefix, [...filters, { field, value }]),
+    limit: () => makeQuery(prefix, filters),
+    get: async () => {
+      const matched = [...docs.entries()]
+        .filter(([path, data]) => {
+          if (!path.startsWith(prefix) || path.slice(prefix.length).includes('/')) return false;
+          return filters.every((filter) => data[filter.field] === filter.value);
+        })
+        .map(([path, data]) => ({
+          id: path.split('/').pop() ?? '',
+          ref: makeDocRef(path),
+          exists: true,
+          data: () => ({ ...data }),
+        }));
+      return { docs: matched, empty: matched.length === 0, size: matched.length };
+    },
+  });
+
   const db = {
     collection: (name: string) => ({
       doc: (docId: string) => makeDocRef(`${name}/${docId}`),
+      ...makeQuery(`${name}/`),
     }),
     doc: (path: string) => makeDocRef(path),
     runTransaction: async <T>(fn: (tx: FakeTransaction) => Promise<T>): Promise<T> => {
@@ -158,7 +179,7 @@ describe('followCounts', () => {
     expect(docs.has('users/ghost/followers/alice')).toBe(false);
   });
 
-  it('cleans up symmetric follow edges, friend indexes, and requests on block', async () => {
+  it('cleans up symmetric follow edges, friend indexes, friend requests, DM indexes, and follow requests on block', async () => {
     const { db, docs } = createFakeStore({
       'users/alice/followers/bob': { uid: 'bob' },
       'users/alice/following/bob': { uid: 'bob' },
@@ -168,10 +189,21 @@ describe('followCounts', () => {
       'users/bob/friends/alice': { uid: 'alice' },
       'follow_requests/alice_bob': { fromUid: 'alice', toUid: 'bob', status: 'pending' },
       'follow_requests/bob_alice': { fromUid: 'bob', toUid: 'alice', status: 'accepted' },
+      'friend_requests/fr_1': { fromUid: 'alice', toUid: 'bob', status: 'pending' },
+      'friend_requests/fr_2': { fromUid: 'bob', toUid: 'alice', status: 'accepted' },
+      'friend_requests/fr_other': { fromUid: 'alice', toUid: 'carol', status: 'pending' },
+      'users/alice/directConversations/dm_alice_bob': {
+        conversationId: 'dm_alice_bob',
+        otherUid: 'bob',
+      },
+      'users/bob/directConversations/dm_alice_bob': {
+        conversationId: 'dm_alice_bob',
+        otherUid: 'alice',
+      },
     });
 
     await cleanupFollowStateOnBlock(db, 'alice', 'bob');
 
-    expect(docs.size).toBe(0);
+    expect([...docs.keys()]).toEqual(['friend_requests/fr_other']);
   });
 });
