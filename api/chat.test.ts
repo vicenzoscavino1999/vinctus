@@ -755,4 +755,92 @@ describe('api/chat', () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('sets Allow: POST header on unsupported methods', async () => {
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(createReq({ method: 'GET' }), createRes(result));
+    expect(result.statusCode).toBe(405);
+    expect(result.headers.Allow).toBe('POST');
+  });
+
+  it('returns trimmed history that passes validation on the next turn even after long replies and 20 messages', async () => {
+    const longReply = 'R'.repeat(3200);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(createSuccessfulUpstreamResponse(longReply))
+      .mockResolvedValueOnce(createSuccessfulUpstreamResponse('siguiente ok'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const existingHistory = Array.from({ length: 20 }, (_, idx) => ({
+      role: idx % 2 === 0 ? ('user' as const) : ('model' as const),
+      parts: [{ text: `turno ${idx}` }],
+    }));
+
+    const turn1: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({
+        authorization: 'Bearer token_1',
+        body: { message: 'mensaje 21', history: existingHistory },
+      }),
+      createRes(turn1),
+    );
+    expect(turn1.statusCode).toBe(200);
+    const turn1Payload = turn1.payload as {
+      history: Array<{ role: string; parts: Array<{ text: string }> }>;
+      response: string;
+    };
+    expect(turn1Payload.response).toBe(longReply);
+    expect(turn1Payload.history.length).toBeLessThanOrEqual(20);
+    expect(turn1Payload.history[0]?.role).toBe('user');
+    expect(turn1Payload.history.at(-1)?.parts[0]?.text.length).toBe(2000);
+
+    const turn2: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({
+        authorization: 'Bearer token_1',
+        body: { message: 'mensaje 22', history: turn1Payload.history },
+      }),
+      createRes(turn2),
+    );
+    expect(turn2.statusCode).toBe(200);
+  });
+
+  it('refunds reserved image generation quota when OpenAI fails', async () => {
+    process.env.OPENAI_API_KEY = 'openai-test-key';
+    const setMock = vi.fn();
+    mockRunTransaction
+      .mockImplementationOnce(async (fn) =>
+        fn({
+          get: vi
+            .fn()
+            .mockResolvedValueOnce({ data: () => ({ count: 2 }) })
+            .mockResolvedValueOnce({ data: () => ({ count: 1 }) }),
+          set: setMock,
+        }),
+      )
+      .mockImplementationOnce(async (fn) =>
+        fn({
+          get: vi
+            .fn()
+            .mockResolvedValueOnce({ data: () => ({ count: 3 }) })
+            .mockResolvedValueOnce({ data: () => ({ count: 2 }) }),
+          set: setMock,
+        }),
+      );
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(upstreamError(503, 'unavailable')));
+
+    const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
+    await handler(
+      createReq({
+        authorization: 'Bearer token_1',
+        body: { message: 'Un gato', useOpenAI: true, generateImage: true },
+      }),
+      createRes(result),
+    );
+
+    expect(result.statusCode).toBe(502);
+    expect(mockRunTransaction).toHaveBeenCalledTimes(2);
+    expect(setMock).toHaveBeenCalledWith(expect.anything(), { count: 2 }, { merge: true });
+    expect(setMock).toHaveBeenCalledWith(expect.anything(), { count: 1 }, { merge: true });
+  });
 });

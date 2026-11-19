@@ -8,11 +8,15 @@ const PROHIBITED_PATTERNS = [
   /\b(matar|asesinar|torturar|mutilar)\b/i,
   /\b(kill|murder|torture|mutilate)\b/i,
   /\b(ninos?|menores?|infantes?).*(sexual|explicito|pornografia)/i,
+  /\b(sexual|explicito|pornografia).*(ninos?|menores?|infantes?)\b/i,
   /\b(children|minors?|kids?).*(sexual|explicit|porn)/i,
+  /\b(sexual|explicit|porn).*(children|minors?|kids?)\b/i,
   /\b(exterminar|genocidio|supremacia)\b/i,
   /\b(exterminate|genocide|supremacy)\b/i,
   /\b(bomba|explosivo|terrorista|atacar)\b.*\b(hacer|construir|crear)\b/i,
+  /\b(hacer|construir|crear)\b.*\b(bomba|explosivo|terrorista|atacar)\b/i,
   /\b(bomb|explosive|terrorist|attack)\b.*\b(make|build|create)\b/i,
+  /\b(make|build|create)\b.*\b(bomb|explosive|terrorist|attack)\b/i,
 ];
 
 const BLOCKED_PHRASES = [
@@ -27,8 +31,15 @@ export interface GuardrailResult {
   reason?: string;
 }
 
+const stripDiacritics = (value: string): string =>
+  value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+export function normalizeTopicWhitespace(topic: string): string {
+  return topic.trim().replace(/\s+/g, ' ');
+}
+
 export function checkTopic(topic: string): GuardrailResult {
-  const normalizedTopic = topic.toLowerCase().trim();
+  const normalizedTopic = stripDiacritics(normalizeTopicWhitespace(topic)).toLowerCase();
 
   for (const phrase of BLOCKED_PHRASES) {
     if (normalizedTopic.includes(phrase.toLowerCase())) {
@@ -40,7 +51,7 @@ export function checkTopic(topic: string): GuardrailResult {
   }
 
   for (const pattern of PROHIBITED_PATTERNS) {
-    if (pattern.test(topic)) {
+    if (pattern.test(normalizedTopic)) {
       return {
         allowed: false,
         reason: 'El tema contiene contenido potencialmente danino.',
@@ -59,5 +70,5 @@ export function checkTopic(topic: string): GuardrailResult {
 }
 
 export function sanitizeTopic(topic: string): string {
-  return topic.trim().replace(/\s+/g, ' ').slice(0, LIMITS.arena.topicMaxLength);
+  return normalizeTopicWhitespace(topic).slice(0, LIMITS.arena.topicMaxLength);
 }

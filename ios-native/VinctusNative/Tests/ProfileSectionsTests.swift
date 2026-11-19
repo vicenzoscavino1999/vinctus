@@ -74,7 +74,7 @@ final class SavedDebatesViewModelTests: XCTestCase {
     XCTAssertEqual(vm.errorMessage, "No se pudo quitar el debate.")
   }
 
-  func testLoadError() async {
+  func testLoadErrorAndRetryRecoveryAndReset() async {
     let repo = FakeProfileContentRepo()
     repo.failsToLoad = true
     let vm = SavedDebatesViewModel(repo: repo)
@@ -82,6 +82,18 @@ final class SavedDebatesViewModelTests: XCTestCase {
     await vm.load()
 
     XCTAssertEqual(vm.errorMessage, "No se pudieron cargar tus debates guardados.")
+    XCTAssertFalse(vm.isLoading)
+
+    repo.failsToLoad = false
+    repo.savedDebates = [FakeProfileContentRepo.debate("d1")]
+    await vm.load()
+
+    XCTAssertNil(vm.errorMessage)
+    XCTAssertEqual(vm.debates.map(\.id), ["d1"])
+
+    vm.reset()
+    XCTAssertTrue(vm.debates.isEmpty)
+    XCTAssertNil(vm.errorMessage)
     XCTAssertFalse(vm.isLoading)
   }
 }

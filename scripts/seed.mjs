@@ -285,6 +285,71 @@ async function seedConversation() {
   await db.doc(`users/${uid2}/directConversations/${conversationId}`).set(indexPayload(uid2, uid1), { merge: true });
 }
 
+async function seedArenaDebates() {
+  const publicDebateId = 'debate_seed_1';
+  await db.doc(`arenaDebates/${publicDebateId}`).set(
+    {
+      createdAt: now,
+      createdBy: users[0].uid,
+      topic: '¿La energía nuclear es clave para la transición energética?',
+      mode: 'debate',
+      personaA: 'scientist',
+      personaB: 'skeptic',
+      status: 'done',
+      visibility: 'public',
+      language: 'es',
+      summary: 'Ambas posturas analizaron costos, seguridad y densidad energética.',
+      verdict: {
+        winner: 'draw',
+        reason: 'Argumentos equilibrados sobre confiabilidad y costos iniciales.',
+      },
+      sourceLinks: ['https://www.iaea.org/topics/nuclear-power-reactors'],
+      sourceMentions: ['Según la IAEA'],
+      sourceCount: 2,
+      linkCount: 2,
+      likesCount: 0,
+    },
+    { merge: false },
+  );
+
+  await db.doc(`arenaDebates/${publicDebateId}/turns/t0`).set(
+    {
+      idx: 0,
+      speaker: 'A',
+      text: 'La energía nuclear ofrece carga base libre de carbono con altísima densidad.',
+      createdAt: now,
+    },
+    { merge: false },
+  );
+  await db.doc(`arenaDebates/${publicDebateId}/turns/t1`).set(
+    {
+      idx: 1,
+      speaker: 'B',
+      text: 'Sus plazos de construcción y costos iniciales siguen siendo un reto frente a renovables.',
+      createdAt: now,
+    },
+    { merge: false },
+  );
+
+  await db.doc('arenaDebates/debate_seed_private_bob').set(
+    {
+      createdAt: now,
+      createdBy: users[1].uid,
+      topic: 'Debate privado de Bob',
+      mode: 'debate',
+      personaA: 'philosopher',
+      personaB: 'pragmatist',
+      status: 'done',
+      visibility: 'private',
+      language: 'es',
+      summary: 'Resumen privado.',
+      verdict: { winner: 'A', reason: 'Solidez ética.' },
+      likesCount: 0,
+    },
+    { merge: false },
+  );
+}
+
 async function seedStorage() {
   const file = bucket.file('seed/sample.txt');
   await file.save(Buffer.from('Seed file for local emulator.'), {
@@ -297,6 +362,7 @@ async function main() {
   await seedUsers();
   await seedGroupsAndPosts();
   await seedConversation();
+  await seedArenaDebates();
   await seedStorage();
   console.log('Seed complete.');
 }

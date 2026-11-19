@@ -189,22 +189,23 @@ export const isCategoryFollowed = async (categoryId: string, uid: string): Promi
 };
 
 /**
- * Save an Arena debate
+ * Save an Arena debate idempotently (preserves immutable createdAt when already saved).
  */
 export const saveArenaDebateWithSync = async (
   debate: Omit<SavedArenaDebateWrite, 'createdAt'>,
   uid: string,
 ): Promise<void> => {
-  const batch = writeBatch(db);
-  batch.set(
-    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedArenaDebates, debate.debateId),
-    {
+  const ref = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedArenaDebates, debate.debateId);
+  await runTransaction(db, async (tx) => {
+    const existing = await tx.get(ref);
+    if (existing.exists()) {
+      return;
+    }
+    tx.set(ref, {
       ...debate,
       createdAt: serverTimestamp(),
-    } as SavedArenaDebateWrite,
-    { merge: false },
-  );
-  await batch.commit();
+    } as SavedArenaDebateWrite);
+  });
 };
 
 /**
@@ -221,7 +222,7 @@ export const unsaveArenaDebateWithSync = async (debateId: string, uid: string): 
  */
 export const isArenaDebateSaved = async (debateId: string, uid: string): Promise<boolean> => {
   trackFirestoreRead('firestore.getDoc');
-  const docSnap = await getDoc(
+  const docSnap = await getDocFromServer(
     doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedArenaDebates, debateId),
   );
   return docSnap.exists();

@@ -57,6 +57,7 @@ struct ProfileCategoriesSection: View {
 // MARK: - Saved Arena debates
 
 struct ProfileSavedDebatesSection: View {
+  @EnvironmentObject private var authVM: AuthViewModel
   @StateObject private var vm: SavedDebatesViewModel
 
   init(repo: ProfileContentRepo) {
@@ -67,11 +68,20 @@ struct ProfileSavedDebatesSection: View {
     ProfileSectionCard(title: "Debates guardados", icon: "bookmark") {
       if vm.isLoading {
         ProgressView()
-      } else if let errorMessage = vm.errorMessage {
-        ProfileSectionMessage(text: errorMessage, isError: true)
+      } else if let errorMessage = vm.errorMessage, vm.debates.isEmpty {
+        VStack(alignment: .leading, spacing: 8) {
+          ProfileSectionMessage(text: errorMessage, isError: true)
+          Button("Reintentar") {
+            Task { await vm.load() }
+          }
+          .font(.caption.weight(.semibold))
+        }
       } else if vm.debates.isEmpty {
         ProfileSectionMessage(text: "Aún no tienes debates guardados. Desde Arena IA puedes guardarlos.")
       } else {
+        if let errorMessage = vm.errorMessage {
+          ProfileSectionMessage(text: errorMessage, isError: true)
+        }
         ForEach(vm.debates) { debate in
           VStack(alignment: .leading, spacing: 6) {
             Text(debate.topic)
@@ -93,6 +103,7 @@ struct ProfileSavedDebatesSection: View {
               Button("Quitar", role: .destructive) {
                 Task { await vm.remove(debate) }
               }
+              .disabled(vm.removingIDs.contains(debate.id))
             }
             .font(.caption.weight(.semibold))
           }
@@ -103,7 +114,12 @@ struct ProfileSavedDebatesSection: View {
         }
       }
     }
-    .task { await vm.load() }
+    .task(id: authVM.currentUserID) {
+      vm.reset()
+      if authVM.currentUserID != nil {
+        await vm.load()
+      }
+    }
   }
 
   private func subtitle(_ debate: SavedDebate) -> String {
@@ -136,8 +152,18 @@ private struct SavedDebateView: View {
         if vm.isLoading {
           ProgressView()
         } else if let errorMessage = vm.errorMessage {
-          Text(errorMessage)
-            .foregroundStyle(.red)
+          VStack(alignment: .leading, spacing: 8) {
+            Text(errorMessage)
+              .foregroundStyle(.red)
+            Button("Reintentar") {
+              Task { await vm.load() }
+            }
+            .font(.footnote.weight(.semibold))
+          }
+        } else if vm.turns.isEmpty {
+          Text("No hay turnos disponibles para este debate.")
+            .font(.footnote)
+            .foregroundStyle(VinctusTokens.Color.textMuted)
         } else {
           ForEach(vm.turns) { turn in
             VStack(alignment: .leading, spacing: 4) {

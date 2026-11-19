@@ -11,7 +11,7 @@ interface TopicInputProps {
 const SUGGESTIONS = [
   'La IA va a reemplazar el trabajo creativo humano.',
   'El trabajo remoto es mejor que el presencial.',
-  'Las criptomonedas seran adopcion masiva en 5 anos.',
+  'Las criptomonedas serán adopción masiva en 5 años.',
 ];
 
 export function TopicInput({
@@ -31,6 +31,7 @@ export function TopicInput({
     <div className="space-y-3">
       <div className="relative">
         <textarea
+          aria-label="Tema del debate"
           value={value}
           onChange={(event) => onChange(event.target.value)}
           disabled={disabled}

@@ -167,6 +167,9 @@ jobs:
           npm run functions:build
 
       - name: Integration tests (Firebase emulators)
+        env:
+          # Give Functions emulator workers enough cold-start headroom on loaded macOS runners.
+          FUNCTIONS_DISCOVERY_TIMEOUT: 60000
         run: |
           DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c '
           import json, sys

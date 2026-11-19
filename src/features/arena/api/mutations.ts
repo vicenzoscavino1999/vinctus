@@ -53,6 +53,8 @@ const getDebateErrorMessage = (error: unknown): string => {
       return typeof e.message === 'string' && e.message.trim().length > 0
         ? e.message
         : 'El servicio de IA esta temporalmente no disponible.';
+    case 'functions/deadline-exceeded':
+      return 'La generación del debate tardó demasiado. Intenta de nuevo en unos momentos.';
     case 'functions/internal':
       return 'Error interno al generar el debate. Intenta de nuevo.';
     case 'functions/already-exists':
@@ -71,6 +73,7 @@ export async function createDebate(params: CreateDebateParams): Promise<CreateDe
   const createDebateFn = httpsCallable<CreateDebateParams, CreateDebateResult>(
     functions,
     'createDebate',
+    { timeout: 300_000 },
   );
 
   try {

@@ -57,9 +57,16 @@ struct AIConsentGate<Content: View>: View {
             .foregroundStyle(VinctusTokens.Color.accent)
 
           if let errorMessage = vm.errorMessage {
-            Text(errorMessage)
-              .font(.footnote)
-              .foregroundStyle(.red)
+            VStack(alignment: .leading, spacing: VinctusTokens.Spacing.xs) {
+              Text(errorMessage)
+                .font(.footnote)
+                .foregroundStyle(.red)
+              Button("Reintentar") {
+                Task { await vm.load(uid: authVM.currentUserID) }
+              }
+              .font(.footnote.weight(.semibold))
+              .disabled(vm.isSaving || authVM.currentUserID == nil)
+            }
           }
 
           VButton("Acepto enviar mis mensajes a la IA") {

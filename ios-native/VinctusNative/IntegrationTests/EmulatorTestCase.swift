@@ -29,6 +29,7 @@ enum Emulator {
 
     Auth.auth().useEmulator(withHost: "127.0.0.1", port: 9099)
     Functions.functions().useEmulator(withHost: "127.0.0.1", port: 5001)
+    Functions.functions(region: "us-central1").useEmulator(withHost: "127.0.0.1", port: 5001)
 
     let settings = FirestoreSettings()
     settings.host = "127.0.0.1:8080"
