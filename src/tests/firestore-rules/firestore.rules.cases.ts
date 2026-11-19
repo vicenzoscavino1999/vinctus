@@ -1470,4 +1470,101 @@ describe('Firestore Rules - critical access controls', () => {
     await assertFails(otherDb.doc('users/user_a/collections/col_1/items/good_link').get());
     await assertSucceeds(ownerDb.doc('users/user_a/collections/col_1/items/good_link').delete());
   });
+
+  it('enforces Arena debate privacy, server-only writes, usage ownership, and AI consent ownership', async () => {
+    await seedArenaDebate('debate_private_a', {
+      createdBy: 'user_a',
+      visibility: 'private',
+      status: 'done',
+    });
+    await seedArenaDebate('debate_running_pub', {
+      createdBy: 'user_a',
+      visibility: 'public',
+      status: 'running',
+    });
+
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const adminDb = ctx.firestore();
+      await adminDb.doc('arenaDebates/debate_private_a/turns/t0').set({
+        idx: 0,
+        speaker: 'A',
+        text: 'Turno privado',
+        createdAt: serverTimestamp(),
+      });
+      await adminDb.doc('arenaUsage/user_a/days/2026-11-19').set({
+        count: 3,
+      });
+    });
+
+    const ownerDb = env.authenticatedContext('user_a').firestore();
+    const otherDb = env.authenticatedContext('user_b').firestore();
+
+    // Private debate + turns: owner can read, outsider cannot read or like.
+    await assertSucceeds(ownerDb.doc('arenaDebates/debate_private_a').get());
+    await assertSucceeds(ownerDb.doc('arenaDebates/debate_private_a/turns/t0').get());
+    await assertFails(otherDb.doc('arenaDebates/debate_private_a').get());
+    await assertFails(otherDb.doc('arenaDebates/debate_private_a/turns/t0').get());
+    await assertFails(
+      otherDb.doc('arenaDebates/debate_private_a/likes/user_b').set({
+        uid: 'user_b',
+        debateId: 'debate_private_a',
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Running debates cannot be liked until status == 'done'.
+    await assertFails(
+      ownerDb.doc('arenaDebates/debate_running_pub/likes/user_a').set({
+        uid: 'user_a',
+        debateId: 'debate_running_pub',
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Client cannot create, update, or delete arenaDebates or arenaUsage directly.
+    await assertFails(ownerDb.doc('arenaDebates/debate_private_a').update({ likesCount: 999 }));
+    await assertSucceeds(ownerDb.doc('arenaUsage/user_a/days/2026-11-19').get());
+    await assertFails(otherDb.doc('arenaUsage/user_a/days/2026-11-19').get());
+    await assertFails(ownerDb.doc('arenaUsage/user_a/days/2026-11-19').set({ count: 0 }));
+
+    // AI consent on users/{uid} can only be updated by the owner.
+    await assertSucceeds(
+      ownerDb.doc('users/user_a').set(
+        {
+          settings: {
+            ai: {
+              consentGranted: true,
+              consentSource: 'ai_chat',
+              consentUpdatedAt: serverTimestamp(),
+            },
+          },
+          updatedAt: serverTimestamp(),
+        },
+        {
+          mergeFields: [
+            'settings.ai.consentGranted',
+            'settings.ai.consentSource',
+            'settings.ai.consentUpdatedAt',
+            'updatedAt',
+          ],
+        },
+      ),
+    );
+    await assertFails(
+      otherDb.doc('users/user_a').set(
+        {
+          settings: {
+            ai: {
+              consentGranted: false,
+              consentSource: 'settings',
+              consentUpdatedAt: serverTimestamp(),
+            },
+          },
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      ),
+    );
+  });
 });

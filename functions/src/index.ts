@@ -41,6 +41,7 @@ import {
   cleanupDeletedCollectionItemMedia,
   reconcileCollectionItemCount,
 } from './collectionCleanup';
+import { reconcileArenaDebateLikeCount } from './arenaCounts';
 export {
   readPosts,
   readPostMedia,
@@ -488,43 +489,6 @@ async function deduplicatedDecrement(
 // 🧮 KARMA UPDATES (Posts Likes)
 // ==========================================================
 
-async function handleArenaDebateLikeChange(
-  eventId: string,
-  debateId: string,
-  delta: number,
-): Promise<void> {
-  const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(eventId);
-  const debateRef = db.doc(`${COLLECTIONS.arenaDebates}/${debateId}`);
-
-  await db.runTransaction(async (tx) => {
-    const dedupDoc = await tx.get(dedupRef);
-    if (dedupDoc.exists) {
-      functions.logger.info('Event already processed, skipping', { eventId });
-      return;
-    }
-
-    const debateSnap = await tx.get(debateRef);
-    if (!debateSnap.exists) {
-      functions.logger.warn('Arena debate not found, skipping like update', { debateId });
-      return;
-    }
-
-    const debateData = debateSnap.data() || {};
-    const currentLikes = typeof debateData.likesCount === 'number' ? debateData.likesCount : 0;
-    const nextLikes = Math.max(0, currentLikes + delta);
-
-    tx.create(dedupRef, {
-      createdAt: FieldValue.serverTimestamp(),
-      processedAt: new Date().toISOString(),
-    });
-
-    tx.update(debateRef, {
-      likesCount: nextLikes,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-  });
-}
-
 // ==========================================================
 // FOLLOW COUNTERS (Reconciled from subcollection counts)
 // ==========================================================
@@ -969,7 +933,7 @@ export const onPostCommentDeleted = functions
   });
 
 /**
- * Increment likesCount when a user likes an Arena debate
+ * Reconcile likesCount when a user likes an Arena debate
  * Trigger: onCreate arenaDebates/{debateId}/likes/{uid}
  */
 export const onArenaDebateLikeCreated = functions.firestore
@@ -981,9 +945,9 @@ export const onArenaDebateLikeCreated = functions.firestore
     try {
       functions.logger.info('Arena debate liked', { debateId, uid, eventId });
 
-      await handleArenaDebateLikeChange(eventId, debateId, 1);
+      await reconcileArenaDebateLikeCount(db, debateId);
 
-      functions.logger.info('Arena debate like processed', { debateId, eventId });
+      functions.logger.info('Arena debate like reconciled', { debateId, eventId });
     } catch (error) {
       functions.logger.error('Failed to process arena debate like', {
         debateId,
@@ -995,7 +959,7 @@ export const onArenaDebateLikeCreated = functions.firestore
   });
 
 /**
- * Decrement likesCount when a user removes like from an Arena debate
+ * Reconcile likesCount when a user removes like from an Arena debate
  * Trigger: onDelete arenaDebates/{debateId}/likes/{uid}
  */
 export const onArenaDebateLikeDeleted = functions.firestore
@@ -1007,9 +971,9 @@ export const onArenaDebateLikeDeleted = functions.firestore
     try {
       functions.logger.info('Arena debate unliked', { debateId, uid, eventId });
 
-      await handleArenaDebateLikeChange(eventId, debateId, -1);
+      await reconcileArenaDebateLikeCount(db, debateId);
 
-      functions.logger.info('Arena debate unlike processed', { debateId, eventId });
+      functions.logger.info('Arena debate unlike reconciled', { debateId, eventId });
     } catch (error) {
       functions.logger.error('Failed to process arena debate unlike', {
         debateId,

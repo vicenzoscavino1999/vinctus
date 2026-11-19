@@ -79,6 +79,7 @@ final class FakeProfileContentRepo: ProfileContentRepo {
   }
 
   func saveDebate(_ debate: SavedDebate) async throws {
+    if failsToWrite { throw FakeError() }
     savedDebates.append(debate)
   }
 

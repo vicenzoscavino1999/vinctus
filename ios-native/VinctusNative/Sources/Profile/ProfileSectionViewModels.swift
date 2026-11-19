@@ -98,6 +98,8 @@ final class DebateTurnsViewModel: ObservableObject {
   }
 
   func load() async {
+    isLoading = true
+    errorMessage = nil
     do {
       turns = try await repo.fetchDebateTurns(debateID: debateID)
     } catch {

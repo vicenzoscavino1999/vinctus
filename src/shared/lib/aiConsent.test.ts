@@ -34,4 +34,12 @@ describe('aiConsent', () => {
       updatedAt: null,
     });
   });
+
+  it('isolates cached consent per user id so one account never leaks into another', () => {
+    setAIConsent(true, 'user_a');
+    expect(getAIConsent('user_a').granted).toBe(true);
+    expect(hasAIConsent('user_a')).toBe(true);
+    expect(getAIConsent('user_b').granted).toBe(false);
+    expect(hasAIConsent('user_b')).toBe(false);
+  });
 });

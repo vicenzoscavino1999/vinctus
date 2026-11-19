@@ -16,6 +16,7 @@ final class SettingsViewModel: ObservableObject {
   private let aiConsentRepo: AIConsentRepo
   private let deleteAccountRepo: DeleteAccountRepo
   private let iso8601Formatter = ISO8601DateFormatter()
+  private var consentGeneration = 0
 
   init(
     repo: AIConsentRepo,
@@ -34,36 +35,45 @@ final class SettingsViewModel: ObservableObject {
   }
 
   func refreshConsent(userID: String?) async {
+    consentGeneration += 1
+    let generation = consentGeneration
+    aiConsent = .default
+    errorMessage = nil
+    infoMessage = nil
+
     guard let userID, !userID.isEmpty else {
-      aiConsent = .default
-      errorMessage = nil
-      infoMessage = nil
+      isLoadingConsent = false
       return
     }
 
     isLoadingConsent = true
-    errorMessage = nil
-    infoMessage = nil
     do {
-      aiConsent = try await aiConsentRepo.getConsent(uid: userID)
+      let loaded = try await aiConsentRepo.getConsent(uid: userID)
+      guard !Task.isCancelled, generation == consentGeneration else { return }
+      aiConsent = loaded
       AppLog.settings.info(
         "aiConsent.refresh.success recorded=\(self.aiConsent.recorded, privacy: .public)"
       )
     } catch {
+      guard !Task.isCancelled, generation == consentGeneration else { return }
       AppLog.settings.error(
         "aiConsent.refresh.failed errorType=\(AppLog.errorType(error), privacy: .public)"
       )
       errorMessage = "No se pudo sincronizar el consentimiento de IA."
     }
-    isLoadingConsent = false
+    if generation == consentGeneration {
+      isLoadingConsent = false
+    }
   }
 
   func toggleAIConsent(userID: String?) async {
+    guard !isSavingConsent, !isLoadingConsent else { return }
     guard let userID, !userID.isEmpty else {
       errorMessage = "Sesión no válida para actualizar consentimiento."
       return
     }
 
+    let generation = consentGeneration
     let nextValue = !aiConsent.granted
     isSavingConsent = true
     errorMessage = nil
@@ -71,6 +81,10 @@ final class SettingsViewModel: ObservableObject {
 
     do {
       try await aiConsentRepo.setConsent(uid: userID, granted: nextValue, source: .settings)
+      guard generation == consentGeneration else {
+        isSavingConsent = false
+        return
+      }
       aiConsent = AIConsentState(
         granted: nextValue,
         recorded: true,
@@ -80,6 +94,10 @@ final class SettingsViewModel: ObservableObject {
       infoMessage = nextValue ? "Permiso de IA concedido." : "Permiso de IA retirado."
       AppLog.settings.info("aiConsent.update.success granted=\(nextValue, privacy: .public)")
     } catch {
+      guard generation == consentGeneration else {
+        isSavingConsent = false
+        return
+      }
       AppLog.settings.error(
         "aiConsent.update.failed errorType=\(AppLog.errorType(error), privacy: .public)"
       )

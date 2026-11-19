@@ -136,8 +136,14 @@ private struct SavedDebateView: View {
         if vm.isLoading {
           ProgressView()
         } else if let errorMessage = vm.errorMessage {
-          Text(errorMessage)
-            .foregroundStyle(.red)
+          VStack(alignment: .leading, spacing: 8) {
+            Text(errorMessage)
+              .foregroundStyle(.red)
+            Button("Reintentar") {
+              Task { await vm.load() }
+            }
+            .font(.footnote.weight(.semibold))
+          }
         } else {
           ForEach(vm.turns) { turn in
             VStack(alignment: .leading, spacing: 4) {

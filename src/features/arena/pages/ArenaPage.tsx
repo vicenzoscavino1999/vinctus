@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import { collection, doc, getDoc } from 'firebase/firestore';
@@ -19,7 +19,7 @@ import {
 import { DebateViewer } from '@/features/arena/components/DebateViewer';
 import { PersonaPicker } from '@/features/arena/components/PersonaPicker';
 import { TopicInput } from '@/features/arena/components/TopicInput';
-import type { Debate, Persona, Turn, UsageStats } from '@/features/arena/types';
+import type { Debate, DebateVisibility, Persona, Turn, UsageStats } from '@/features/arena/types';
 import { getPersonaById } from '@/features/arena/types';
 import { AIModeTabs } from '@/features/ai/components/AIModeTabs';
 import { useAuth } from '@/context/auth';
@@ -28,46 +28,100 @@ import { LEGAL_COPY } from '@/shared/constants';
 import { getAIConsent, setAIConsent } from '@/shared/lib/aiConsent';
 import { db } from '@/shared/lib/firebase';
 import { useToast } from '@/shared/ui/Toast';
-import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
+import { COLLECTIONS, LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
-export default function ArenaPage() {
+function ArenaSession({ userId }: { userId: string | null }) {
   const navigate = useNavigate();
   const { debateId } = useParams<{ debateId?: string }>();
-  const { user } = useAuth();
-  const userId = user?.uid ?? null;
   const { showToast } = useToast();
 
   const [topic, setTopic] = useState('');
   const [personaA, setPersonaA] = useState<Persona | null>(null);
   const [personaB, setPersonaB] = useState<Persona | null>(null);
+  const [visibility, setVisibility] = useState<DebateVisibility>('public');
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasAiConsent, setHasAiConsent] = useState(() => getAIConsent().granted);
-  const [isConsentSyncing, setIsConsentSyncing] = useState(false);
+  const [hasAiConsent, setHasAiConsent] = useState(() =>
+    userId ? getAIConsent(userId).granted : false,
+  );
+  const [isConsentSyncing, setIsConsentSyncing] = useState(Boolean(userId));
+  const [consentSyncError, setConsentSyncError] = useState<string | null>(null);
 
-  const [debate, setDebate] = useState<Debate | null>(null);
-  const [turns, setTurns] = useState<Turn[]>([]);
+  const [debateSnapshot, setDebateSnapshot] = useState<{
+    id: string;
+    debate: Debate | null;
+  } | null>(null);
+  const [turnsSnapshot, setTurnsSnapshot] = useState<{
+    id: string;
+    turns: Turn[];
+  } | null>(null);
   const [usage, setUsage] = useState<UsageStats | null>(null);
-  const [isDebateLiked, setIsDebateLiked] = useState(false);
+  const [usageError, setUsageError] = useState<string | null>(null);
+  const [likedSnapshot, setLikedSnapshot] = useState<{ key: string; value: boolean } | null>(null);
   const [isLikingDebate, setIsLikingDebate] = useState(false);
-  const [isDebateSaved, setIsDebateSaved] = useState(false);
+  const [savedSnapshot, setSavedSnapshot] = useState<{ key: string; value: boolean } | null>(null);
   const [isSavingDebate, setIsSavingDebate] = useState(false);
+  const isMountedRef = useRef(true);
 
   const isViewing = Boolean(debateId);
+  const reactionKey = debateId && userId ? `${userId}:${debateId}` : null;
+  const debate = debateId && debateSnapshot?.id === debateId ? debateSnapshot.debate : null;
+  const loadedDebateId = debateId && debateSnapshot?.id === debateId ? debateId : null;
+  const turns = debateId && turnsSnapshot?.id === debateId ? turnsSnapshot.turns : [];
+  const isDebateLiked =
+    reactionKey && likedSnapshot?.key === reactionKey ? likedSnapshot.value : false;
+  const isDebateSaved =
+    reactionKey && savedSnapshot?.key === reactionKey ? savedSnapshot.value : false;
 
   useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const loadUsage = useCallback(async () => {
     if (!userId) return;
+    setUsageError(null);
+    try {
+      const nextUsage = await getArenaUsage();
+      if (!isMountedRef.current) return;
+      setUsage(nextUsage);
+    } catch (err) {
+      console.error('getArenaUsage failed:', err);
+      if (!isMountedRef.current) return;
+      setUsageError('No se pudo cargar tu límite diario.');
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    let active = true;
+    if (!userId) return undefined;
     getArenaUsage()
-      .then(setUsage)
-      .catch((usageError) => {
-        console.error('getArenaUsage failed:', usageError);
+      .then((nextUsage) => {
+        if (!active) return;
+        setUsage(nextUsage);
+        setUsageError(null);
+      })
+      .catch((err) => {
+        console.error('getArenaUsage failed:', err);
+        if (!active) return;
+        setUsageError('No se pudo cargar tu límite diario.');
       });
+    return () => {
+      active = false;
+    };
   }, [userId]);
 
   useEffect(() => {
     if (!debateId) return undefined;
-    const unsubscribeDebate = subscribeToDebate(debateId, setDebate);
-    const unsubscribeTurns = subscribeToTurns(debateId, setTurns);
+
+    const unsubscribeDebate = subscribeToDebate(debateId, (nextDebate) => {
+      setDebateSnapshot({ id: debateId, debate: nextDebate });
+    });
+    const unsubscribeTurns = subscribeToTurns(debateId, (nextTurns) => {
+      setTurnsSnapshot({ id: debateId, turns: nextTurns });
+    });
 
     return () => {
       unsubscribeDebate();
@@ -76,17 +130,13 @@ export default function ArenaPage() {
   }, [debateId]);
 
   useEffect(() => {
-    if (!debateId || !userId) {
-      setIsDebateLiked(false);
-      return undefined;
-    }
+    if (!debateId || !userId || !reactionKey) return undefined;
 
     let isActive = true;
-    setIsDebateLiked(false);
     isArenaDebateLiked(debateId, userId)
       .then((liked) => {
         if (!isActive) return;
-        setIsDebateLiked(liked);
+        setLikedSnapshot({ key: reactionKey, value: liked });
       })
       .catch((likeStateError) => {
         console.error('isArenaDebateLiked failed:', likeStateError);
@@ -95,20 +145,16 @@ export default function ArenaPage() {
     return () => {
       isActive = false;
     };
-  }, [debateId, userId]);
+  }, [debateId, userId, reactionKey]);
 
   useEffect(() => {
-    if (!debateId || !userId) {
-      setIsDebateSaved(false);
-      return undefined;
-    }
+    if (!debateId || !userId || !reactionKey) return undefined;
 
     let isActive = true;
-    setIsDebateSaved(false);
     isArenaDebateSaved(debateId, userId)
       .then((saved) => {
         if (!isActive) return;
-        setIsDebateSaved(saved);
+        setSavedSnapshot({ key: reactionKey, value: saved });
       })
       .catch((saveStateError) => {
         console.error('isArenaDebateSaved failed:', saveStateError);
@@ -117,48 +163,55 @@ export default function ArenaPage() {
     return () => {
       isActive = false;
     };
-  }, [debateId, userId]);
+  }, [debateId, userId, reactionKey]);
 
-  useEffect(() => {
-    let active = true;
-    const localConsent = getAIConsent();
-    setHasAiConsent(localConsent.granted);
+  const syncConsent = useCallback(async () => {
+    if (!userId) {
+      setHasAiConsent(false);
+      setIsConsentSyncing(false);
+      setConsentSyncError(null);
+      return;
+    }
 
-    const syncConsent = async () => {
-      if (!userId) return;
+    const localConsent = getAIConsent(userId);
+    setConsentSyncError(null);
+    setIsConsentSyncing(true);
+    try {
+      const serverConsent = await getServerAIConsent(userId);
+      if (!isMountedRef.current) return;
 
-      setIsConsentSyncing(true);
-      try {
-        const serverConsent = await getServerAIConsent(userId);
-        if (!active) return;
-
-        if (serverConsent.recorded) {
-          setAIConsent(serverConsent.granted);
-          setHasAiConsent(serverConsent.granted);
-          return;
-        }
-
-        if (localConsent.granted) {
-          await updateServerAIConsent(userId, true, 'migration');
-        }
-      } catch (syncError) {
-        console.error('Error syncing AI consent on Arena:', syncError);
-      } finally {
-        if (active) {
-          setIsConsentSyncing(false);
-        }
+      if (serverConsent.recorded) {
+        setAIConsent(serverConsent.granted, userId);
+        setHasAiConsent(serverConsent.granted);
+        return;
       }
-    };
 
-    void syncConsent();
-
-    return () => {
-      active = false;
-    };
+      if (localConsent.granted) {
+        await updateServerAIConsent(userId, true, 'migration');
+        if (!isMountedRef.current) return;
+        setHasAiConsent(true);
+      } else {
+        setHasAiConsent(false);
+      }
+    } catch (syncError) {
+      console.error('Error syncing AI consent on Arena:', syncError);
+      if (!isMountedRef.current) return;
+      setConsentSyncError('No se pudo verificar tu consentimiento de IA. Intenta de nuevo.');
+    } finally {
+      if (isMountedRef.current) {
+        setIsConsentSyncing(false);
+      }
+    }
   }, [userId]);
 
+  useEffect(() => {
+    void syncConsent();
+  }, [syncConsent]);
+
+  const trimmedTopicLength = topic.trim().length;
   const formValid =
-    topic.trim().length >= 5 &&
+    trimmedTopicLength >= 5 &&
+    trimmedTopicLength <= LIMITS.arena.topicMaxLength &&
     personaA !== null &&
     personaB !== null &&
     personaA.id !== personaB.id;
@@ -167,18 +220,19 @@ export default function ArenaPage() {
     !formValid || isCreating || usage?.remaining === 0 || !hasAiConsent || isConsentSyncing;
 
   const usageLabel = useMemo(() => {
-    if (!usage) return '...';
+    if (!usage) return usageError ? '—' : '...';
     return `${usage.used}/${usage.limit}`;
-  }, [usage]);
+  }, [usage, usageError]);
 
   const handleCreate = async () => {
+    if (isCreating) return;
     if (!hasAiConsent) {
       setError('Debes aceptar el consentimiento de IA antes de crear debates.');
       return;
     }
 
     if (!userId) {
-      setError('Debes iniciar sesion para usar Arena.');
+      setError('Debes iniciar sesión para usar Arena.');
       return;
     }
     if (!personaA || !personaB) {
@@ -202,13 +256,14 @@ export default function ArenaPage() {
         topic: topic.trim(),
         personaA: personaA.id,
         personaB: personaB.id,
-        visibility: 'public',
+        visibility,
         clientDebateId,
       });
+      if (!isMountedRef.current) return;
       if (usage) {
         setUsage({
           ...usage,
-          used: usage.used + 1,
+          used: Math.max(0, usage.limit - result.remaining),
           remaining: result.remaining,
         });
       }
@@ -216,6 +271,7 @@ export default function ArenaPage() {
         navigate(`/arena/${result.debateId}`);
       }
     } catch (createError) {
+      if (!isMountedRef.current) return;
       setError(createError instanceof Error ? createError.message : 'No se pudo crear el debate.');
       if (!clientDebateId) {
         navigate('/arena');
@@ -223,12 +279,15 @@ export default function ArenaPage() {
         const createdDebate = await getDoc(doc(db, COLLECTIONS.arenaDebates, clientDebateId)).catch(
           () => null,
         );
+        if (!isMountedRef.current) return;
         if (!createdDebate?.exists()) {
           navigate('/arena');
         }
       }
     } finally {
-      setIsCreating(false);
+      if (isMountedRef.current) {
+        setIsCreating(false);
+      }
     }
   };
 
@@ -253,14 +312,17 @@ export default function ArenaPage() {
   };
 
   const handleToggleSaveDebate = async () => {
+    if (isSavingDebate) return;
     if (!userId) {
-      showToast('Inicia sesion para guardar debates', 'info');
+      showToast('Inicia sesión para guardar debates', 'info');
       return;
     }
     if (!debate || debate.status !== 'done') return;
 
     const nextSaved = !isDebateSaved;
-    setIsDebateSaved(nextSaved);
+    if (reactionKey) {
+      setSavedSnapshot({ key: reactionKey, value: nextSaved });
+    }
     setIsSavingDebate(true);
 
     try {
@@ -283,16 +345,21 @@ export default function ArenaPage() {
       }
     } catch (saveError) {
       console.error('save debate failed:', saveError);
-      setIsDebateSaved(!nextSaved);
+      if (isMountedRef.current && reactionKey) {
+        setSavedSnapshot({ key: reactionKey, value: !nextSaved });
+      }
       showToast('No se pudo actualizar el guardado', 'error');
     } finally {
-      setIsSavingDebate(false);
+      if (isMountedRef.current) {
+        setIsSavingDebate(false);
+      }
     }
   };
 
   const handleToggleLikeDebate = async () => {
+    if (isLikingDebate) return;
     if (!userId) {
-      showToast('Inicia sesion para reaccionar a debates', 'info');
+      showToast('Inicia sesión para reaccionar a debates', 'info');
       return;
     }
     if (!debate || debate.status !== 'done') return;
@@ -300,48 +367,74 @@ export default function ArenaPage() {
     const nextLiked = !isDebateLiked;
     const previousLikes = typeof debate.likesCount === 'number' ? debate.likesCount : 0;
     const nextLikes = Math.max(0, previousLikes + (nextLiked ? 1 : -1));
+    const targetDebateId = debate.id;
 
-    setIsDebateLiked(nextLiked);
+    if (reactionKey) {
+      setLikedSnapshot({ key: reactionKey, value: nextLiked });
+    }
     setIsLikingDebate(true);
-    setDebate((prev) => (prev ? { ...prev, likesCount: nextLikes } : prev));
+    setDebateSnapshot((prev) =>
+      prev && prev.id === targetDebateId && prev.debate
+        ? { ...prev, debate: { ...prev.debate, likesCount: nextLikes } }
+        : prev,
+    );
 
     try {
       if (nextLiked) {
-        await likeArenaDebateWithSync(debate.id, userId);
+        await likeArenaDebateWithSync(targetDebateId, userId);
         showToast('Te gustó este debate', 'success');
       } else {
-        await unlikeArenaDebateWithSync(debate.id, userId);
+        await unlikeArenaDebateWithSync(targetDebateId, userId);
       }
     } catch (likeError) {
       console.error('like debate failed:', likeError);
-      setIsDebateLiked(!nextLiked);
-      setDebate((prev) => (prev ? { ...prev, likesCount: previousLikes } : prev));
+      if (isMountedRef.current) {
+        if (reactionKey) {
+          setLikedSnapshot({ key: reactionKey, value: !nextLiked });
+        }
+        setDebateSnapshot((prev) =>
+          prev && prev.id === targetDebateId && prev.debate
+            ? { ...prev, debate: { ...prev.debate, likesCount: previousLikes } }
+            : prev,
+        );
+      }
       showToast('No se pudo actualizar el like', 'error');
     } finally {
-      setIsLikingDebate(false);
+      if (isMountedRef.current) {
+        setIsLikingDebate(false);
+      }
     }
   };
 
   const handleAcceptAiConsent = async () => {
+    if (isConsentSyncing) return;
     setIsConsentSyncing(true);
-    setAIConsent(true);
-    setHasAiConsent(true);
+    setConsentSyncError(null);
     setError(null);
 
     try {
       if (!userId) {
-        throw new Error('Debes iniciar sesion para guardar el consentimiento.');
+        throw new Error('Debes iniciar sesión para guardar el consentimiento.');
       }
       await updateServerAIConsent(userId, true, 'arena');
+      if (!isMountedRef.current) return;
+      setAIConsent(true, userId);
+      setHasAiConsent(true);
     } catch (consentError) {
       console.error('Error accepting AI consent on Arena:', consentError);
-      setAIConsent(false);
+      if (!isMountedRef.current) return;
       setHasAiConsent(false);
-      setError('No se pudo guardar tu consentimiento de IA. Intenta nuevamente.');
+      setConsentSyncError('No se pudo guardar tu consentimiento de IA. Intenta nuevamente.');
     } finally {
-      setIsConsentSyncing(false);
+      if (isMountedRef.current) {
+        setIsConsentSyncing(false);
+      }
     }
   };
+
+  const debateNotFound = Boolean(
+    isViewing && !isCreating && loadedDebateId === debateId && !debate,
+  );
 
   return (
     <div className="page-transition pb-24">
@@ -358,11 +451,20 @@ export default function ArenaPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-neutral-500">
+        <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wider text-neutral-500">
           <span>Debates hoy:</span>
           <span className={usage?.remaining === 0 ? 'text-red-400' : 'text-brand-gold'}>
             {usageLabel}
           </span>
+          {usageError && (
+            <button
+              type="button"
+              onClick={() => void loadUsage()}
+              className="rounded-full border border-neutral-700 px-2.5 py-0.5 text-[10px] text-neutral-300 hover:border-neutral-500 hover:text-white"
+            >
+              Reintentar
+            </button>
+          )}
         </div>
 
         <AIModeTabs active="arena" />
@@ -372,13 +474,28 @@ export default function ArenaPage() {
             to="/legal/privacy"
             className="mt-2 inline-block text-amber-300 hover:text-amber-200 transition-colors"
           >
-            Ver politica de privacidad
+            Ver política de privacidad
           </Link>
         </div>
+
+        {consentSyncError && hasAiConsent && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-100 flex flex-wrap items-center justify-between gap-2">
+            <span>{consentSyncError}</span>
+            <button
+              type="button"
+              onClick={() => void syncConsent()}
+              disabled={isConsentSyncing}
+              className="rounded-full border border-amber-400/50 px-3 py-1 text-xs text-amber-100 hover:border-amber-300 disabled:opacity-50"
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
 
         {!hasAiConsent && (
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-200">
             <p>{LEGAL_COPY.aiConsent}</p>
+            {consentSyncError && <p className="mt-2 text-red-100">{consentSyncError}</p>}
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
@@ -388,6 +505,16 @@ export default function ArenaPage() {
               >
                 {isConsentSyncing ? 'Guardando...' : 'Aceptar y continuar'}
               </button>
+              {consentSyncError && (
+                <button
+                  type="button"
+                  onClick={() => void syncConsent()}
+                  disabled={isConsentSyncing}
+                  className="rounded-full border border-red-400/60 px-4 py-1.5 text-xs text-red-100 hover:border-red-300 disabled:opacity-60"
+                >
+                  Reintentar
+                </button>
+              )}
               <Link
                 to="/settings"
                 className="rounded-full border border-red-400/60 px-4 py-1.5 text-xs text-red-100 hover:border-red-300"
@@ -403,7 +530,8 @@ export default function ArenaPage() {
         <DebateViewer
           debate={debate}
           turns={turns}
-          isLoading={!debate}
+          isLoading={!debate && !debateNotFound}
+          notFound={debateNotFound}
           onRetry={handleRetry}
           onBack={handleBackToCreator}
           onCreateAnother={handleCreateAnother}
@@ -439,6 +567,45 @@ export default function ArenaPage() {
               />
             </div>
 
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-800/80 pt-4">
+              <div>
+                <p className="text-xs uppercase tracking-wider text-neutral-500">Visibilidad</p>
+                <p className="mt-1 text-xs text-neutral-400">
+                  {visibility === 'public'
+                    ? 'Visible en Descubrir y compartible por enlace.'
+                    : 'Solo tú podrás ver este debate.'}
+                </p>
+              </div>
+              <div className="inline-flex rounded-lg border border-neutral-800 bg-neutral-900/60 p-1">
+                <button
+                  type="button"
+                  onClick={() => setVisibility('public')}
+                  disabled={isCreating}
+                  aria-pressed={visibility === 'public'}
+                  className={`rounded-md px-3 py-1.5 text-xs transition ${
+                    visibility === 'public'
+                      ? 'bg-brand-gold font-medium text-black'
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  Público
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVisibility('private')}
+                  disabled={isCreating}
+                  aria-pressed={visibility === 'private'}
+                  className={`rounded-md px-3 py-1.5 text-xs transition ${
+                    visibility === 'private'
+                      ? 'bg-brand-gold font-medium text-black'
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  Privado
+                </button>
+              </div>
+            </div>
+
             {error && (
               <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
                 {error}
@@ -454,7 +621,7 @@ export default function ArenaPage() {
               {isCreating
                 ? 'Generando debate...'
                 : usage?.remaining === 0
-                  ? 'Limite diario alcanzado'
+                  ? 'Límite diario alcanzado'
                   : 'Iniciar debate'}
             </button>
           </div>
@@ -477,4 +644,9 @@ export default function ArenaPage() {
       )}
     </div>
   );
+}
+
+export default function ArenaPage() {
+  const { user } = useAuth();
+  return <ArenaSession key={user?.uid ?? 'anon'} userId={user?.uid ?? null} />;
 }

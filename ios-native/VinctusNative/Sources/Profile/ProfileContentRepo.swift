@@ -174,6 +174,7 @@ enum ProfileContentRepoError: LocalizedError {
   case firebaseNotConfigured
   case userNotAuthenticated
   case invalidContribution
+  case invalidDebate
 
   var errorDescription: String? {
     switch self {
@@ -183,6 +184,8 @@ enum ProfileContentRepoError: LocalizedError {
       return "Debes iniciar sesión."
     case .invalidContribution:
       return "Revisa el título (máximo 140 caracteres) y el enlace."
+    case .invalidDebate:
+      return "No se pudo guardar el debate por datos incompletos."
     }
   }
 }
@@ -373,22 +376,36 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
     }
   }
 
-  /// Mirrors `saveArenaDebateWithSync`.
+  /// Mirrors `saveArenaDebateWithSync`. Idempotent so retries do not violate immutable `createdAt`.
   func saveDebate(_ debate: SavedDebate) async throws {
     let (db, uid) = try context()
+    let safeID = debate.id.trimmingCharacters(in: .whitespacesAndNewlines)
+    let safeTopic = debate.topic.trimmingCharacters(in: .whitespacesAndNewlines)
+    let safePersonaA = debate.personaA.trimmingCharacters(in: .whitespacesAndNewlines)
+    let safePersonaB = debate.personaB.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !safeID.isEmpty, !safeTopic.isEmpty, !safePersonaA.isEmpty, !safePersonaB.isEmpty else {
+      throw ProfileContentRepoError.invalidDebate
+    }
+
+    let ref = db.collection(FirestoreCollections.users).document(uid)
+      .collection(FirestoreSubcollections.savedArenaDebates).document(safeID)
+    let existing = try? await ref.getDocument()
+    if existing?.exists == true { return }
+
     let winner = debate.winner.flatMap { ["A", "B", "draw"].contains($0) ? $0 : nil }
-    try await db.collection(FirestoreCollections.users).document(uid)
-      .collection(FirestoreSubcollections.savedArenaDebates).document(debate.id)
-      .setData([
-        "debateId": debate.id,
-        "topic": String(debate.topic.prefix(Limits.SavedArenaDebates.topicMaxLength)),
-        "personaA": debate.personaA,
-        "personaB": debate.personaB,
-        "summary": debate.summary.map { String($0.prefix(Limits.SavedArenaDebates.summaryMaxLength)) }
-          ?? NSNull(),
-        "verdictWinner": winner ?? NSNull(),
-        "createdAt": FieldValue.serverTimestamp(),
-      ])
+    let trimmedSummary = debate.summary?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let safeSummary = trimmedSummary.flatMap {
+      $0.isEmpty ? nil : String($0.prefix(Limits.SavedArenaDebates.summaryMaxLength))
+    }
+    try await ref.setData([
+      "debateId": safeID,
+      "topic": String(safeTopic.prefix(Limits.SavedArenaDebates.topicMaxLength)),
+      "personaA": String(safePersonaA.prefix(Limits.SavedArenaDebates.personaMaxLength)),
+      "personaB": String(safePersonaB.prefix(Limits.SavedArenaDebates.personaMaxLength)),
+      "summary": safeSummary ?? NSNull(),
+      "verdictWinner": winner ?? NSNull(),
+      "createdAt": FieldValue.serverTimestamp(),
+    ])
   }
 
   func removeSavedDebate(id: String) async throws {
