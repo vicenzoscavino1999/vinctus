@@ -38,7 +38,7 @@ enum PostReadClient {
     if let ids { request["ids"] = ids }
     if let cursor { request["cursor"] = cursor }
     let callable = Functions.functions().httpsCallable("readPosts")
-    callable.timeoutInterval = 20
+    callable.timeoutInterval = 45
     let result = try await callable.call(request)
     guard Auth.auth().currentUser?.uid == uid else { throw PostReadError.sessionChanged }
     return try decode(result.data)
