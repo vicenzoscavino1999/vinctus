@@ -84,12 +84,15 @@ test.describe('IA Chat y Arena', () => {
 
     const likeButton = page.getByRole('button', { name: 'Dar me gusta' });
     await likeButton.click();
-    await expect(page.getByRole('button', { name: 'Quitar me gusta' })).toContainText('1', {
-      timeout: 15000,
-    });
+    const unlikeButton = page.getByRole('button', { name: 'Quitar me gusta' });
+    await expect(unlikeButton).toContainText('1', { timeout: 15000 });
+    await expect(unlikeButton).toBeEnabled({ timeout: 15000 });
 
     await page.getByRole('button', { name: 'Guardar' }).click();
-    await expect(page.getByRole('button', { name: 'Guardado' })).toBeVisible({ timeout: 15000 });
+    const savedButton = page.getByRole('button', { name: 'Guardado' });
+    await expect(savedButton).toBeVisible({ timeout: 15000 });
+    await expect(savedButton).toBeEnabled({ timeout: 15000 });
+    await expect(page.getByText('Debate guardado en tu perfil')).toBeVisible({ timeout: 15000 });
 
     // Reload and verify persisted like + saved state.
     await page.reload();

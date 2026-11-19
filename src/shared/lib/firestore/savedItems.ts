@@ -222,7 +222,7 @@ export const unsaveArenaDebateWithSync = async (debateId: string, uid: string): 
  */
 export const isArenaDebateSaved = async (debateId: string, uid: string): Promise<boolean> => {
   trackFirestoreRead('firestore.getDoc');
-  const docSnap = await getDoc(
+  const docSnap = await getDocFromServer(
     doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedArenaDebates, debateId),
   );
   return docSnap.exists();

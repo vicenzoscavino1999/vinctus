@@ -1,6 +1,6 @@
 import {
   doc,
-  getDoc,
+  getDocFromServer,
   runTransaction,
   serverTimestamp,
   writeBatch,
@@ -68,7 +68,7 @@ export const unlikeArenaDebateWithSync = async (debateId: string, uid: string): 
  */
 export const isArenaDebateLiked = async (debateId: string, uid: string): Promise<boolean> => {
   trackFirestoreRead('firestore.getDoc');
-  const docSnap = await getDoc(
+  const docSnap = await getDocFromServer(
     doc(db, COLLECTIONS.arenaDebates, debateId, SUBCOLLECTIONS.likes, uid),
   );
   return docSnap.exists();
