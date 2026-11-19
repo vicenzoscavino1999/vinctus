@@ -931,12 +931,12 @@ async function callOpenAIResponses(
   }
 }
 
-async function reserveImageGeneration(uid: string): Promise<boolean> {
+async function reserveImageGeneration(uid: string): Promise<{ reserved: boolean; day: string }> {
   const db = getDb();
   const day = new Date().toISOString().slice(0, 10);
   const dailyRef = db.collection('aiImageUsage').doc(day);
   const userRef = dailyRef.collection('users').doc(uid);
-  return db.runTransaction(async (transaction) => {
+  const reserved = await db.runTransaction(async (transaction) => {
     const [daily, user] = await Promise.all([transaction.get(dailyRef), transaction.get(userRef)]);
     const total = Number(daily.data()?.count ?? 0);
     const userCount = Number(user.data()?.count ?? 0);
@@ -953,6 +953,7 @@ async function reserveImageGeneration(uid: string): Promise<boolean> {
     transaction.set(userRef, { count: userCount + 1 }, { merge: true });
     return true;
   });
+  return { reserved, day };
 }
 
 function trimChatHistory(entries: GeminiMessage[]): GeminiMessage[] {
@@ -986,10 +987,9 @@ function trimChatHistory(entries: GeminiMessage[]): GeminiMessage[] {
   return trimmed;
 }
 
-async function releaseImageGeneration(uid: string): Promise<void> {
+async function releaseImageGeneration(uid: string, day: string): Promise<void> {
   try {
     const db = getDb();
-    const day = new Date().toISOString().slice(0, 10);
     const dailyRef = db.collection('aiImageUsage').doc(day);
     const userRef = dailyRef.collection('users').doc(uid);
     await db.runTransaction(async (transaction) => {
@@ -1111,15 +1111,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!sanitizedRequest.useOpenAI && !geminiApiKey && !nvidiaApiKey) {
     return res.status(503).json({ error: 'Selecciona OpenAI para usar el chat.' });
   }
-  let imageSlotReserved = false;
+  let reservedImageDay: string | null = null;
   if (sanitizedRequest.generateImage) {
     try {
-      if (!(await reserveImageGeneration(authUid))) {
+      const reservation = await reserveImageGeneration(authUid);
+      if (!reservation.reserved) {
         return res
           .status(429)
           .json({ error: 'Límite diario de imágenes alcanzado. Intenta mañana.' });
       }
-      imageSlotReserved = true;
+      reservedImageDay = reservation.day;
     } catch {
       return res.status(503).json({ error: 'No se pudo verificar el límite de imágenes.' });
     }
@@ -1198,8 +1199,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (!successData) {
-    if (imageSlotReserved) {
-      await releaseImageGeneration(authUid);
+    if (reservedImageDay) {
+      await releaseImageGeneration(authUid, reservedImageDay);
     }
     const errorCode = latestFailure?.code ?? 'upstream';
     if (errorCode === 'rate_limit') {

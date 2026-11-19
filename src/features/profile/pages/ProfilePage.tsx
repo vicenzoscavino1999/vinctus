@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Settings, MapPin, Mail, Edit3, Loader2, BookOpen, Bookmark, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/shared/ui/Toast';
@@ -30,6 +30,7 @@ const ProfilePage = () => {
   const [loadingSavedDebates, setLoadingSavedDebates] = useState(false);
   const [savedDebatesError, setSavedDebatesError] = useState<string | null>(null);
   const [removingDebateId, setRemovingDebateId] = useState<string | null>(null);
+  const savedDebatesSeqRef = useRef(0);
 
   // Subscribe to user profile
   useEffect(() => {
@@ -83,26 +84,35 @@ const ProfilePage = () => {
 
   const loadSavedDebates = useCallback(async () => {
     if (!userId) return;
+    const seq = ++savedDebatesSeqRef.current;
     try {
       setSavedDebatesError(null);
       setLoadingSavedDebates(true);
       const data = await getSavedArenaDebates(userId, 20);
+      if (savedDebatesSeqRef.current !== seq) return;
       setSavedDebates(data);
     } catch (savedError) {
+      if (savedDebatesSeqRef.current !== seq) return;
       console.error('Error loading saved debates:', savedError);
       setSavedDebatesError('No se pudieron cargar tus debates guardados.');
     } finally {
-      setLoadingSavedDebates(false);
+      if (savedDebatesSeqRef.current === seq) {
+        setLoadingSavedDebates(false);
+      }
     }
   }, [userId]);
 
   useEffect(() => {
     if (!userId) {
+      savedDebatesSeqRef.current += 1;
       setSavedDebates([]);
       setSavedDebatesError(null);
       return;
     }
     void loadSavedDebates();
+    return () => {
+      savedDebatesSeqRef.current += 1;
+    };
   }, [userId, loadSavedDebates]);
 
   const interestEntries = karmaByInterest
@@ -385,10 +395,19 @@ const ProfilePage = () => {
                   Cargando debates guardados...
                 </div>
               ) : savedDebatesError ? (
-                <p className="text-sm text-red-400">{savedDebatesError}</p>
+                <div className="flex flex-wrap items-center gap-3 text-sm text-red-400">
+                  <p>{savedDebatesError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadSavedDebates()}
+                    className="rounded-lg border border-red-500/40 px-3 py-1 text-xs uppercase tracking-wider text-red-200 transition hover:border-red-400 hover:text-white"
+                  >
+                    Reintentar
+                  </button>
+                </div>
               ) : savedDebates.length === 0 ? (
                 <p className="text-sm text-neutral-500">
-                  Aun no tienes debates guardados. Desde Arena IA puedes guardarlos con un clic.
+                  Aún no tienes debates guardados. Desde Arena IA puedes guardarlos con un clic.
                 </p>
               ) : (
                 <div className="space-y-3">

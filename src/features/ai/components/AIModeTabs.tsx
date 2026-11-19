@@ -34,7 +34,7 @@ export function AIModeTabs({
             : 'text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'
         }`}
       >
-        Conversacion IA
+        Conversación IA
       </Link>
     </div>
   );

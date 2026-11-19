@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { checkTopic, normalizeTopicWhitespace, sanitizeTopic } from './guardrails';
 import {
+  classifyDebateGenerationError,
   extractDebateSources,
   isModelLevelFallbackError,
   isProviderFallbackError,
@@ -54,13 +55,32 @@ describe('arena guardrails and helpers', () => {
     );
   });
 
-  it('classifies model-level overload vs provider-level auth/quota errors', () => {
+  it('classifies model-level overload/timeouts vs provider-level auth/quota errors and sanitizes public error messages', () => {
     expect(isModelLevelFallbackError('[503] Service Unavailable')).toBe(true);
+    expect(isModelLevelFallbackError('Request timed out after 25000ms')).toBe(true);
     expect(isModelLevelFallbackError('[404] Model not found')).toBe(true);
     expect(isModelLevelFallbackError('[410] Gone')).toBe(true);
     expect(isProviderFallbackError('[429] Quota exceeded')).toBe(true);
     expect(isProviderFallbackError('[403] API key not valid')).toBe(true);
     expect(isProviderFallbackError('[503] overloaded')).toBe(false);
+
+    const unavailable = classifyDebateGenerationError(
+      'Provider nvidia, model meta/llama failed: [503] NVIDIA request timeout',
+    );
+    expect(unavailable.code).toBe('unavailable');
+    expect(unavailable.publicMessage).not.toContain('meta/llama');
+
+    const quota = classifyDebateGenerationError('[429] RESOURCE_EXHAUSTED raw secret payload');
+    expect(quota.code).toBe('resource-exhausted');
+    expect(quota.publicMessage).not.toContain('secret');
+
+    const config = classifyDebateGenerationError('[403] API key not valid: AIzaSecret');
+    expect(config.code).toBe('failed-precondition');
+    expect(config.publicMessage).not.toContain('AIzaSecret');
+
+    const internal = classifyDebateGenerationError('Unexpected JSON token at line 4');
+    expect(internal.code).toBe('internal');
+    expect(internal.publicMessage).not.toContain('Unexpected JSON');
   });
 
   it('normalizes fenced or JSON-wrapped turn output and parses loose verdict JSON', () => {

@@ -9,9 +9,10 @@ import { GoogleGenerativeAI, ResponseSchema, SchemaType } from '@google/generati
 import { CreateDebateRequest, Debate, Turn } from './types';
 import { PERSONAS, getPersona } from './personas';
 import { buildSummaryVerdictPrompt, buildTurnPrompt, parseSummaryVerdictResponse } from './prompts';
-import { checkRateLimit, getUsage } from './rateLimit';
+import { checkRateLimit, getUsage, refundRateLimit } from './rateLimit';
 import { checkTopic, normalizeTopicWhitespace } from './guardrails';
 import {
+  classifyDebateGenerationError,
   extractDebateSources,
   isModelLevelFallbackError,
   isProviderFallbackError,
@@ -184,7 +185,9 @@ const generateWithGeminiModel = async (params: {
       : { model: params.modelName },
   );
 
-  const result = await model.generateContent(params.prompt);
+  const result = await model.generateContent(params.prompt, {
+    timeout: getUpstreamTimeoutMs(),
+  });
   return result.response.text();
 };
 
@@ -469,6 +472,7 @@ export const createDebate = functions
     try {
       await debateRef.create(debateData);
     } catch {
+      await refundRateLimit(uid, rateLimit.dayKey);
       throw new functions.https.HttpsError(
         'already-exists',
         'Ya existe un debate en proceso con ese identificador. Intenta de nuevo.',
@@ -570,60 +574,33 @@ export const createDebate = functions
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      await debateRef.update({
-        status: 'error',
+      const classified = classifyDebateGenerationError(errorMessage);
+      functions.logger.error('createDebate generation failed', {
+        debateId: debateRef.id,
+        uid,
+        code: classified.code,
         error: errorMessage,
       });
+
+      await refundRateLimit(uid, rateLimit.dayKey);
+      await debateRef
+        .update({
+          status: 'error',
+          error:
+            error instanceof functions.https.HttpsError ? error.message : classified.publicMessage,
+        })
+        .catch(() => undefined);
 
       if (error instanceof functions.https.HttpsError) {
         throw error;
       }
 
-      const normalizedError = errorMessage.toLowerCase();
       const isEmulator =
         process.env.FUNCTIONS_EMULATOR === 'true' || !!process.env.FIREBASE_EMULATOR_HUB;
 
-      if (
-        normalizedError.includes('service unavailable') ||
-        normalizedError.includes('overloaded') ||
-        normalizedError.includes('[503')
-      ) {
-        throw new functions.https.HttpsError(
-          'unavailable',
-          'El modelo de IA esta saturado temporalmente. Intenta nuevamente en unos segundos.',
-          isEmulator ? { reason: errorMessage } : undefined,
-        );
-      }
-
-      if (
-        normalizedError.includes('quota exceeded') ||
-        normalizedError.includes('too many requests') ||
-        normalizedError.includes('[429')
-      ) {
-        throw new functions.https.HttpsError(
-          'resource-exhausted',
-          'Se alcanzo el limite de uso de la API de IA. Intenta nuevamente mas tarde.',
-          isEmulator ? { reason: errorMessage } : undefined,
-        );
-      }
-
-      if (
-        normalizedError.includes('api key not valid') ||
-        normalizedError.includes('permission denied') ||
-        normalizedError.includes('[403') ||
-        normalizedError.includes('invalid api key') ||
-        normalizedError.includes('authentication')
-      ) {
-        throw new functions.https.HttpsError(
-          'failed-precondition',
-          'La configuracion de API key (Gemini/NVIDIA) no es valida o no tiene permisos.',
-          isEmulator ? { reason: errorMessage } : undefined,
-        );
-      }
-
       throw new functions.https.HttpsError(
-        'internal',
-        'Error al generar el debate. Intenta de nuevo.',
+        classified.code,
+        classified.publicMessage,
         isEmulator ? { reason: errorMessage } : undefined,
       );
     }

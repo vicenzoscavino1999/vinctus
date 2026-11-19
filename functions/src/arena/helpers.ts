@@ -27,10 +27,66 @@ export const isModelLevelFallbackError = (rawMessage: string): boolean => {
     message.includes('service unavailable') ||
     message.includes('overloaded') ||
     message.includes('temporarily unavailable') ||
+    message.includes('timeout') ||
+    message.includes('timed out') ||
+    message.includes('aborted') ||
+    message.includes('deadline') ||
     message.includes('not found') ||
     message.includes('is not supported') ||
     message.includes('model not found')
   );
+};
+
+export interface ClassifiedDebateError {
+  code: 'unavailable' | 'resource-exhausted' | 'failed-precondition' | 'internal';
+  publicMessage: string;
+}
+
+export const classifyDebateGenerationError = (rawMessage: string): ClassifiedDebateError => {
+  const normalized = rawMessage.toLowerCase();
+  if (
+    normalized.includes('service unavailable') ||
+    normalized.includes('overloaded') ||
+    normalized.includes('[503') ||
+    normalized.includes('timeout') ||
+    normalized.includes('timed out') ||
+    normalized.includes('aborted') ||
+    normalized.includes('deadline')
+  ) {
+    return {
+      code: 'unavailable',
+      publicMessage:
+        'El modelo de IA está saturado o tardó demasiado. Intenta nuevamente en unos segundos.',
+    };
+  }
+  if (
+    normalized.includes('quota exceeded') ||
+    normalized.includes('too many requests') ||
+    normalized.includes('[429') ||
+    normalized.includes('resource_exhausted')
+  ) {
+    return {
+      code: 'resource-exhausted',
+      publicMessage:
+        'Se alcanzó el límite de uso del proveedor de IA. Intenta nuevamente más tarde.',
+    };
+  }
+  if (
+    normalized.includes('api key not valid') ||
+    normalized.includes('permission denied') ||
+    normalized.includes('[403') ||
+    normalized.includes('invalid api key') ||
+    normalized.includes('authentication')
+  ) {
+    return {
+      code: 'failed-precondition',
+      publicMessage: 'El servicio de IA no está disponible temporalmente por configuración.',
+    };
+  }
+  return {
+    code: 'internal',
+    publicMessage: 'Error al generar el debate. Intenta de nuevo.',
+  };
 };
 
 export const isProviderFallbackError = (rawMessage: string): boolean => {

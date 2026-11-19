@@ -62,6 +62,7 @@ function AIChatSession({ userId }: { userId: string | null }) {
   const isHoldingRef = useRef(false);
   const isMountedRef = useRef(true);
   const conversationSeqRef = useRef(0);
+  const imageReadSeqRef = useRef(0);
 
   const {
     isListening,
@@ -194,6 +195,7 @@ function AIChatSession({ userId }: { userId: string | null }) {
   const handleResetConversation = () => {
     if (isLoading) return;
     conversationSeqRef.current += 1;
+    imageReadSeqRef.current += 1;
     stopSpeaking();
     stopListening();
     setSpeakingMessageId(null);
@@ -280,14 +282,20 @@ function AIChatSession({ userId }: { userId: string | null }) {
       return;
     }
     setImageError(null);
+    imageReadSeqRef.current += 1;
+    const readSeq = imageReadSeqRef.current;
     const reader = new FileReader();
     reader.onload = () => {
-      if (isMountedRef.current && typeof reader.result === 'string') {
+      if (
+        isMountedRef.current &&
+        imageReadSeqRef.current === readSeq &&
+        typeof reader.result === 'string'
+      ) {
         setImage(reader.result);
       }
     };
     reader.onerror = () => {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && imageReadSeqRef.current === readSeq) {
         setImageError('No se pudo leer la imagen.');
       }
     };
@@ -342,12 +350,13 @@ function AIChatSession({ userId }: { userId: string | null }) {
             onChange={(e) => {
               setUseOpenAI(e.target.checked);
               if (!e.target.checked) {
+                imageReadSeqRef.current += 1;
                 setImage(undefined);
                 setGenerateImage(false);
                 setImageError(null);
               }
             }}
-            disabled={isLoading}
+            disabled={isLoading || !hasAiConsent || isConsentSyncing}
           />
           <span>
             Usar OpenAI para este chat. Al seleccionarlo, tus mensajes y el historial se envían a
@@ -544,6 +553,7 @@ function AIChatSession({ userId }: { userId: string | null }) {
               <button
                 type="button"
                 onClick={() => {
+                  imageReadSeqRef.current += 1;
                   setImage(undefined);
                   setImageError(null);
                 }}
@@ -565,7 +575,7 @@ function AIChatSession({ userId }: { userId: string | null }) {
               <button
                 type="button"
                 onClick={() => imageInputRef.current?.click()}
-                disabled={isLoading}
+                disabled={isLoading || !hasAiConsent || isConsentSyncing}
                 className="inline-flex items-center gap-1 disabled:opacity-50"
               >
                 <ImagePlus size={16} /> Adjuntar imagen
@@ -575,7 +585,7 @@ function AIChatSession({ userId }: { userId: string | null }) {
                   type="checkbox"
                   checked={generateImage}
                   onChange={(e) => setGenerateImage(e.target.checked)}
-                  disabled={isLoading}
+                  disabled={isLoading || !hasAiConsent || isConsentSyncing}
                 />{' '}
                 Crear imagen
               </label>
@@ -590,7 +600,7 @@ function AIChatSession({ userId }: { userId: string | null }) {
                 onMouseLeave={handleMicUp}
                 onTouchStart={handleMicDown}
                 onTouchEnd={handleMicUp}
-                disabled={isLoading || !hasAiConsent}
+                disabled={isLoading || !hasAiConsent || isConsentSyncing}
                 className={`select-none rounded-full p-3 transition-all ${
                   isListening
                     ? 'animate-pulse bg-red-500 text-white'

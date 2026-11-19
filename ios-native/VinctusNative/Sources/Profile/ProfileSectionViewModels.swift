@@ -52,32 +52,62 @@ final class FollowedCategoriesViewModel: ObservableObject {
 final class SavedDebatesViewModel: ObservableObject {
   @Published private(set) var debates: [SavedDebate] = []
   @Published private(set) var isLoading = true
+  @Published private(set) var removingIDs: Set<String> = []
   @Published private(set) var errorMessage: String?
 
   private let repo: ProfileContentRepo
+  private var loadGeneration = 0
 
   init(repo: ProfileContentRepo) {
     self.repo = repo
   }
 
-  func load() async {
-    do {
-      debates = try await repo.fetchSavedDebates()
-    } catch {
-      errorMessage = "No se pudieron cargar tus debates guardados."
-    }
+  func reset() {
+    loadGeneration += 1
+    debates = []
+    removingIDs = []
+    errorMessage = nil
     isLoading = false
   }
 
-  /// Removes right away and puts the debate back if the delete fails.
+  func load() async {
+    loadGeneration += 1
+    let generation = loadGeneration
+    isLoading = true
+    errorMessage = nil
+    do {
+      let loaded = try await repo.fetchSavedDebates()
+      guard !Task.isCancelled, generation == loadGeneration else { return }
+      debates = loaded
+    } catch {
+      guard !Task.isCancelled, generation == loadGeneration else { return }
+      errorMessage = "No se pudieron cargar tus debates guardados."
+    }
+    if generation == loadGeneration {
+      isLoading = false
+    }
+  }
+
+  /// Removes right away and puts only the failed debate back if the delete fails.
   func remove(_ debate: SavedDebate) async {
-    let previous = debates
-    debates.removeAll { $0.id == debate.id }
+    guard !removingIDs.contains(debate.id) else { return }
+    let generation = loadGeneration
+    guard let index = debates.firstIndex(where: { $0.id == debate.id }) else { return }
+    removingIDs.insert(debate.id)
+    errorMessage = nil
+    debates.remove(at: index)
     do {
       try await repo.removeSavedDebate(id: debate.id)
+      guard generation == loadGeneration else { return }
     } catch {
-      debates = previous
+      guard generation == loadGeneration else { return }
+      if !debates.contains(where: { $0.id == debate.id }) {
+        debates.insert(debate, at: min(index, debates.count))
+      }
       errorMessage = "No se pudo quitar el debate."
+    }
+    if generation == loadGeneration {
+      removingIDs.remove(debate.id)
     }
   }
 }
