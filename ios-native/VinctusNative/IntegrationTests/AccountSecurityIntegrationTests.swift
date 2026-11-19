@@ -53,6 +53,21 @@ final class AccountSecurityIntegrationTests: EmulatorTestCase {
     try await moderation.blockUser(bruno.uid)
 
     try await signIn(bruno)
+    _ = try await Auth.auth().currentUser?.getIDToken(forcingRefresh: true)
+
+    // Blocked DM must also reject typing updates in Firestore rules.
+    do {
+      try await Firestore.firestore()
+        .collection(FirestoreCollections.conversations)
+        .document(conversationID)
+        .collection("typing")
+        .document(bruno.uid)
+        .setData(["isTyping": true, "updatedAt": FieldValue.serverTimestamp()])
+      XCTFail("Blocked user should not be able to write typing status in a blocked DM")
+    } catch {
+      // Expected: firestore.rules denies typing writes in blocked DMs.
+    }
+
     let ref = Storage.storage().reference(
       withPath: "conversations/\(conversationID)/attachments/\(bruno.uid)/msg_blocked_ios/photo.jpg"
     )

@@ -54,7 +54,8 @@ Módulo revisado y corregido de extremo a extremo siguiendo el plan por módulos
 - **Bloqueos y denuncias (`Sources/Moderation/ModerationRepo.swift`, `ModerationViewModels.swift`, `ModerationViews.swift`, `Sources/App/MainTabView.swift`)**:
   - Guardia `cannotReportSelf`, presupuesto exacto de caracteres `ReportFields.maxUserDetailsLength(for:)` alineado a `fitsRules`, `BlockedUsersStore.refresh(for:)` con limpieza al cerrar sesión + `lastLoadError` + guarda de generación, e indicador de carga / error / `Reintentar` en `BlockedUsersView`.
 - **Pruebas iOS**:
-  - Creados `Tests/Fakes/FakeAuthRepo.swift`, `Tests/Fakes/FakeAccountSecurityRepos.swift`, `Tests/AccountSecurityTests.swift` (`AccountSecurityAuthTests`, `AccountSecurityModerationTests`, `AccountSecuritySettingsTests`) y `IntegrationTests/AccountSecurityIntegrationTests.swift` (visibilidad sincronizada + `revokeUserSessions`, rechazo de auto-denuncia y de subida en Storage para DM bloqueado, y ciclo completo de solicitud + polling de eliminación de cuenta contra los emuladores reales).
+  - Creados `Tests/Fakes/FakeAuthRepo.swift`, `Tests/Fakes/FakeAccountSecurityRepos.swift`, `Tests/AccountSecurityTests.swift` (`AccountSecurityAuthTests`, `AccountSecurityModerationTests`, `AccountSecuritySettingsTests`) y `IntegrationTests/AccountSecurityIntegrationTests.swift` (visibilidad sincronizada + `revokeUserSessions`, rechazo de auto-denuncia, de escritura `typing` en DM bloqueado y de subida en Storage para DM bloqueado, y ciclo completo de solicitud + polling de eliminación de cuenta contra los emuladores reales).
+  - En `IntegrationTests/EmulatorTestCase.swift` se acotaron `maxUploadRetryTime`, `maxDownloadRetryTime` y `maxOperationRetryTime` a `20 s` para evitar reintentos largos de Storage (10 min por defecto del SDK) en pruebas de emulador.
 
 ## Validación ejecutada
 
@@ -62,17 +63,17 @@ Módulo revisado y corregido de extremo a extremo siguiendo el plan por módulos
   - `npm run functions:build`, `npm run typecheck`, `npx eslint src functions e2e scripts api` (0 errores, 0 advertencias), `npm run check:cycles`, `npm run check:stubs`, `npm run check:raw-onsnapshot`, `npm run contract:check` y `npm run build`: todo aprobado.
   - `npm run test:run`: `83` archivos / `569` pruebas web aprobadas.
   - `npm run test:api`: `16` archivos / `112` pruebas API/Functions aprobadas (incluidas `deleteAccountHelpers.test.ts`, `followCounts.test.ts` y `moderation.test.ts`).
-- **GitHub Actions `CI` (`44604170417` en commit `6716a88`) — `success`**:
+- **GitHub Actions `CI` (`44604170417` en `6716a88` y `44609296881` en `6f5ace2`) — `success`**:
   - `lint`, `typecheck`, `cost-gates`, `test` (`83` archivos / `569` web + `16` archivos / `112` API/Functions), `build`, `lhci`: todos en verde.
   - `rules`: `3` archivos / `94` pruebas de reglas Firestore/Storage aprobadas.
   - `post-counts`: `21/21` aprobadas en `test:post-counts` (incluida `scripts/account-security.integration.test.mjs`) y `13/13` en `test:post-reads`.
-  - `e2e`: `20 passed (5.6m)` en Chromium contra emuladores Firebase (incluidos los 3 flujos `@smoke` de `e2e/account-security.spec.ts`).
-  - También se revalida `CI` sobre el commit documental final en la rama `fix/account-security`.
-- **GitHub Actions `iOS native` (`44604170326` PR en commit `6716a88`) — `success`**:
+  - `e2e`: `20 passed` en Chromium contra emuladores Firebase (incluidos los 3 flujos `@smoke` de `e2e/account-security.spec.ts`).
+- **GitHub Actions `iOS native` (`44604170326` PR y `44604064198` push en `6716a88`) — `success`**:
   - `ios-native`: compilación `ReleaseProd` + suite unitaria (`xcodebuild test`, incluida `AccountSecurityTests`) aprobadas.
   - `ios-native-integration`: `passed: 45 failed: 0` contra emuladores Firebase (incluida `AccountSecurityIntegrationTests`).
-- **GitHub Actions `iOS screenshots` (`44604064275`, rama `fix/account-security` en commit `6716a88`) — `success`**.
+- **GitHub Actions `iOS screenshots` (`44604064275`, rama `fix/account-security` en `6716a88`) — `success`**.
 - **Vercel Preview**: despliegue completado en verde.
+- Todos los checks (`CI`, `iOS native`, `iOS screenshots` y `Vercel`) se revalidan en el `HEAD` final del [PR #127](https://github.com/vicenzoscavino1999/vinctus/pull/127) tras acotar los tiempos de reintento de Storage en `EmulatorTestCase.swift`.
 
 ## Pendiente para cierre definitivo del módulo
 

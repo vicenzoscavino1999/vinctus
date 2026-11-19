@@ -37,7 +37,12 @@ enum Emulator {
     settings.cacheSettings = MemoryCacheSettings()
     Firestore.firestore().settings = settings
 
-    Storage.storage().useEmulator(withHost: "127.0.0.1", port: 9199)
+    let storage = Storage.storage()
+    storage.useEmulator(withHost: "127.0.0.1", port: 9199)
+    // Fail fast in emulator tests instead of waiting on the SDK's 10-minute default retry window.
+    storage.maxUploadRetryTime = 20
+    storage.maxDownloadRetryTime = 20
+    storage.maxOperationRetryTime = 20
   }
 
   private static var isFirestoreReady = false
