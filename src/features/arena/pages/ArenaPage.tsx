@@ -113,27 +113,37 @@ function ArenaSession({ userId }: { userId: string | null }) {
     };
   }, [userId]);
 
+  const accessibleDebateId = debate?.id && debate.id === debateId ? debate.id : null;
+
   useEffect(() => {
     if (!debateId) return undefined;
 
     const unsubscribeDebate = subscribeToDebate(debateId, (nextDebate) => {
       setDebateSnapshot({ id: debateId, debate: nextDebate });
     });
-    const unsubscribeTurns = subscribeToTurns(debateId, (nextTurns) => {
-      setTurnsSnapshot({ id: debateId, turns: nextTurns });
-    });
 
     return () => {
       unsubscribeDebate();
-      unsubscribeTurns();
     };
   }, [debateId]);
 
   useEffect(() => {
-    if (!debateId || !userId || !reactionKey) return undefined;
+    if (!accessibleDebateId) return undefined;
+
+    const unsubscribeTurns = subscribeToTurns(accessibleDebateId, (nextTurns) => {
+      setTurnsSnapshot({ id: accessibleDebateId, turns: nextTurns });
+    });
+
+    return () => {
+      unsubscribeTurns();
+    };
+  }, [accessibleDebateId]);
+
+  useEffect(() => {
+    if (!accessibleDebateId || !userId || !reactionKey) return undefined;
 
     let isActive = true;
-    isArenaDebateLiked(debateId, userId)
+    isArenaDebateLiked(accessibleDebateId, userId)
       .then((liked) => {
         if (!isActive) return;
         setLikedSnapshot({ key: reactionKey, value: liked });
@@ -145,13 +155,13 @@ function ArenaSession({ userId }: { userId: string | null }) {
     return () => {
       isActive = false;
     };
-  }, [debateId, userId, reactionKey]);
+  }, [accessibleDebateId, userId, reactionKey]);
 
   useEffect(() => {
-    if (!debateId || !userId || !reactionKey) return undefined;
+    if (!accessibleDebateId || !userId || !reactionKey) return undefined;
 
     let isActive = true;
-    isArenaDebateSaved(debateId, userId)
+    isArenaDebateSaved(accessibleDebateId, userId)
       .then((saved) => {
         if (!isActive) return;
         setSavedSnapshot({ key: reactionKey, value: saved });
@@ -163,7 +173,7 @@ function ArenaSession({ userId }: { userId: string | null }) {
     return () => {
       isActive = false;
     };
-  }, [debateId, userId, reactionKey]);
+  }, [accessibleDebateId, userId, reactionKey]);
 
   const syncConsent = useCallback(async () => {
     if (!userId) {

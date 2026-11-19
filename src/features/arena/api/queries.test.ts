@@ -17,6 +17,7 @@ vi.mock('firebase/functions', () => ({
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
   doc: vi.fn(),
+  getDoc: vi.fn(),
   getDocs: vi.fn(),
   limit: vi.fn(),
   onSnapshot: vi.fn(),
@@ -45,9 +46,14 @@ describe('arena api queries', () => {
     vi.clearAllMocks();
   });
 
-  it('subscribes to a debate and maps existing snapshots', () => {
+  it('subscribes to a debate after preflight getDoc and maps existing snapshots', async () => {
     const unsubscribe = vi.fn();
     vi.mocked(firebaseFirestore.doc).mockReturnValueOnce({ ref: 'debate-ref' } as never);
+    vi.mocked(firebaseFirestore.getDoc).mockResolvedValueOnce({
+      exists: () => true,
+      id: 'debate_1',
+      data: () => ({ topic: 'Tema inicial' }),
+    } as never);
     vi.mocked(firebaseFirestore.onSnapshot).mockImplementationOnce((...args: unknown[]) => {
       const onNext = args[1] as (snapshot: unknown) => void;
       onNext({
@@ -60,13 +66,38 @@ describe('arena api queries', () => {
 
     const callback = vi.fn();
     const returnedUnsubscribe = subscribeToDebate('debate_1', callback);
+    await Promise.resolve();
 
-    expect(callback).toHaveBeenCalledWith({ id: 'debate_1', topic: 'Tema' });
-    expect(returnedUnsubscribe).toBe(unsubscribe);
+    expect(callback).toHaveBeenNthCalledWith(1, { id: 'debate_1', topic: 'Tema inicial' });
+    expect(callback).toHaveBeenNthCalledWith(2, { id: 'debate_1', topic: 'Tema' });
+    returnedUnsubscribe();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
-  it('subscribes to a debate and returns null for missing or error snapshots', () => {
+  it('returns null without opening onSnapshot when preflight getDoc is permission-denied', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.mocked(firebaseFirestore.doc).mockReturnValueOnce({ ref: 'debate-ref' } as never);
+    vi.mocked(firebaseFirestore.getDoc).mockRejectedValueOnce(new Error('permission-denied'));
+
+    const callback = vi.fn();
+    subscribeToDebate('debate_private', callback);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(callback).toHaveBeenCalledWith(null);
+    expect(firebaseFirestore.onSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('subscribes to a debate and returns null for missing or error snapshots', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
     vi.mocked(firebaseFirestore.doc).mockReturnValue({ ref: 'debate-ref' } as never);
+    vi.mocked(firebaseFirestore.getDoc)
+      .mockResolvedValueOnce({ exists: () => false } as never)
+      .mockResolvedValueOnce({
+        exists: () => true,
+        id: 'debate_1',
+        data: () => ({ topic: 'Tema' }),
+      } as never);
     vi.mocked(firebaseFirestore.onSnapshot)
       .mockImplementationOnce((...args: unknown[]) => {
         const onNext = args[1] as (snapshot: unknown) => void;
@@ -84,9 +115,10 @@ describe('arena api queries', () => {
     const callback = vi.fn();
     subscribeToDebate('debate_1', callback);
     subscribeToDebate('debate_1', callback);
+    await Promise.resolve();
+    await Promise.resolve();
 
-    expect(callback).toHaveBeenNthCalledWith(1, null);
-    expect(callback).toHaveBeenNthCalledWith(2, null);
+    expect(callback).toHaveBeenCalledWith(null);
   });
 
   it('subscribes to turns and maps docs or returns [] on error', () => {

@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   limit,
   onSnapshot,
@@ -27,20 +28,49 @@ export function subscribeToDebate(
   callback: (debate: Debate | null) => void,
 ): Unsubscribe {
   const debateRef = doc(db, ARENA_DEBATES_COLLECTION, debateId);
-  return onSnapshot(
-    debateRef,
-    (snap) => {
-      if (!snap.exists()) {
+  let active = true;
+  let unsubscribeSnapshot: Unsubscribe | null = null;
+
+  // Preflight access with getDoc before attaching a watch stream. Firebase JS SDK 12.x can hit
+  // an internal TargetState assertion (ca9/b815) if an onSnapshot target is denied by rules and
+  // rapidly unsubscribed/remounted (e.g. React StrictMode or navigating away from a private link).
+  void getDoc(debateRef)
+    .then((initialSnap) => {
+      if (!active) return;
+      if (!initialSnap.exists()) {
         callback(null);
-        return;
+      } else {
+        callback({ id: initialSnap.id, ...initialSnap.data() } as Debate);
       }
-      callback({ id: snap.id, ...snap.data() } as Debate);
-    },
-    (error) => {
-      console.error('subscribeToDebate error:', error);
+
+      unsubscribeSnapshot = onSnapshot(
+        debateRef,
+        (snap) => {
+          if (!active) return;
+          if (!snap.exists()) {
+            callback(null);
+            return;
+          }
+          callback({ id: snap.id, ...snap.data() } as Debate);
+        },
+        (error) => {
+          if (!active) return;
+          console.error('subscribeToDebate error:', error);
+          callback(null);
+        },
+      );
+    })
+    .catch((error) => {
+      if (!active) return;
+      console.error('subscribeToDebate preflight error:', error);
       callback(null);
-    },
-  );
+    });
+
+  return () => {
+    active = false;
+    unsubscribeSnapshot?.();
+    unsubscribeSnapshot = null;
+  };
 }
 
 export function subscribeToTurns(debateId: string, callback: (turns: Turn[]) => void): Unsubscribe {
