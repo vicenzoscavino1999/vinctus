@@ -98,13 +98,13 @@ describe('api/youtube-search', () => {
             id: { videoId: 'dQw4w9WgXcQ' },
             snippet: {
               channelId: 'channel_1',
-              channelTitle: 'Rick Astley',
-              description: 'Test description',
+              channelTitle: 'Rick &amp; Friends',
+              description: 'Test &quot;description&quot; &#39;ok&#39;',
               publishedAt: '2009-10-25T06:57:33Z',
               thumbnails: {
                 high: { url: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg' },
               },
-              title: 'Never Gonna Give You Up',
+              title: 'Never Gonna Give You Up &amp; More',
             },
           },
         ],
@@ -134,6 +134,13 @@ describe('api/youtube-search', () => {
       }),
     );
     expect((firstResult.payload as { items?: unknown[] }).items?.length).toBe(1);
+    expect((firstResult.payload as { items?: Array<Record<string, unknown>> }).items?.[0]).toEqual(
+      expect.objectContaining({
+        channelTitle: 'Rick & Friends',
+        description: 'Test "description" \'ok\'',
+        title: 'Never Gonna Give You Up & More',
+      }),
+    );
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     const secondResult: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };

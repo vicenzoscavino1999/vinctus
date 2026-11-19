@@ -1,5 +1,5 @@
 // Custom hooks for API data fetching
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   fetchArxivPapers,
   fetchWikipediaArticles,
@@ -23,6 +23,7 @@ interface UseApiContentReturn {
   data: ApiContentItem[];
   loading: boolean;
   error: string | null;
+  retry: () => void;
 }
 
 // Generic hook for API content
@@ -34,8 +35,13 @@ export function useApiContent(
   showToast: ShowToastFn | null = null,
 ): UseApiContentReturn {
   const [data, setData] = useState<ApiContentItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(apiSource));
   const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  const retry = useCallback(() => {
+    setReloadToken((prev) => prev + 1);
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -89,14 +95,16 @@ export function useApiContent(
     }
 
     if (apiSource) {
-      fetchData();
+      void fetchData();
     } else {
+      setData([]);
+      setError(null);
       setLoading(false);
     }
     return () => {
       isActive = false;
     };
-  }, [apiSource, query, limit, showToast]);
+  }, [apiSource, query, limit, showToast, reloadToken]);
 
-  return { data, loading, error };
+  return { data, loading, error, retry };
 }

@@ -12,7 +12,10 @@ const CategoryCard = ({ category, onClick }: CategoryCardProps) => (
     tabIndex={0}
     onClick={onClick}
     onKeyDown={(e) => {
-      if (e.key === 'Enter' || e.key === ' ') onClick();
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onClick();
+      }
     }}
     className={`group relative overflow-hidden bg-neutral-950/0 border border-neutral-800/60 p-10 cursor-pointer transition-all duration-700 hover:border-neutral-600 hover:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] focus:outline-none focus:ring-2 focus:ring-white/30 ${category.bgHover}`}
   >

@@ -15,7 +15,7 @@ struct ConnectionsSearchView: View {
     self.profileRepo = profileRepo
     self.groupsRepo = groupsRepo
     _vm = StateObject(wrappedValue: DiscoverViewModel(repo: repo))
-    _suggestedGroups = StateObject(wrappedValue: GroupSuggestionsViewModel(repo: groupsRepo, limit: 20))
+    _suggestedGroups = StateObject(wrappedValue: GroupSuggestionsViewModel(repo: groupsRepo, limit: 50))
   }
 
   var body: some View {
@@ -26,6 +26,11 @@ struct ConnectionsSearchView: View {
           placeholder: "Buscar amigos o grupos...",
           icon: "magnifyingglass"
         )
+        if trimmedSearchLength == 1 {
+          Text("Escribe al menos 2 letras para buscar personas.")
+            .font(.caption)
+            .foregroundStyle(VinctusTokens.Color.textMuted)
+        }
       }
       .listRowSeparator(.hidden)
       .listRowBackground(SwiftUI.Color.clear)
@@ -82,7 +87,7 @@ struct ConnectionsSearchView: View {
         .listRowBackground(SwiftUI.Color.clear)
       }
 
-      if vm.isInitialLoading, vm.displayedUsers.isEmpty {
+      if vm.isInitialLoading, visibleDisplayedUsers.isEmpty {
         peopleSkeletonRows
       } else if let error = vm.errorMessage {
         VCard {
@@ -98,7 +103,7 @@ struct ConnectionsSearchView: View {
         }
         .listRowSeparator(.hidden)
         .listRowBackground(SwiftUI.Color.clear)
-      } else if vm.displayedUsers.isEmpty {
+      } else if visibleDisplayedUsers.isEmpty {
         VCard {
           VStack(alignment: .leading, spacing: 6) {
             Text(vm.isSearchActive ? "Sin resultados" : "Aún no hay personas recientes")
@@ -117,7 +122,7 @@ struct ConnectionsSearchView: View {
         .listRowBackground(SwiftUI.Color.clear)
       } else {
         Section(vm.isSearchActive ? "Resultados de personas" : "Personas recientes") {
-          ForEach(vm.displayedUsers.filter { !blockedUsers.isBlocked($0.uid) }) { user in
+          ForEach(visibleDisplayedUsers) { user in
             NavigationLink(destination: ProfileView(repo: profileRepo, userID: user.uid)) {
               DiscoverUserRow(user: user)
             }
@@ -151,14 +156,26 @@ struct ConnectionsSearchView: View {
       vm.handleSearchTextChange(newValue)
     }
     .task(id: authVM.currentUserID) {
+      if authVM.currentUserID == nil && !AppRepos.isDemo {
+        vm.reset()
+        return
+      }
       await refreshData()
     }
     .refreshable {
       await refreshData()
       if vm.isSearchActive {
-        vm.handleSearchTextChange(vm.searchText)
+        await vm.refreshSearchNow()
       }
     }
+  }
+
+  private var trimmedSearchLength: Int {
+    vm.searchText.trimmingCharacters(in: .whitespacesAndNewlines).count
+  }
+
+  private var visibleDisplayedUsers: [DiscoverUser] {
+    vm.displayedUsers.filter { !blockedUsers.isBlocked($0.uid) }
   }
 
   /// Short queries (under two letters) show every group, like the people search.
@@ -272,6 +289,7 @@ private struct DiscoverPeopleSearchField: View {
           Image(systemName: "xmark.circle.fill")
             .foregroundStyle(VinctusTokens.Color.textMuted)
         }
+        .accessibilityLabel("Borrar búsqueda")
       }
     }
     .padding(.horizontal, 14)

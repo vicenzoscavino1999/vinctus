@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DiscoverTrend: Identifiable {
   let id: String
+  let category: DiscoverCategory
   let icon: String
   let title: String
   let subtitle: String
@@ -12,42 +13,6 @@ struct DiscoverTrend: Identifiable {
   let tags: [String]
 }
 
-private let discoverTrendSeed: [DiscoverTrend] = [
-  DiscoverTrend(
-    id: "science",
-    icon: "atom",
-    title: "Ciencia y Materia",
-    subtitle: "La búsqueda de la verdad fundamental.",
-    rankLabel: "TOP 1",
-    scoreLabel: "87 SCORE",
-    signalLabel: "6 papers hoy",
-    groupsLabel: "2 grupos activos",
-    tags: ["mecánica cuántica", "cosmología", "astronomía"]
-  ),
-  DiscoverTrend(
-    id: "music",
-    icon: "music.note",
-    title: "Ritmos y Cultura",
-    subtitle: "Frecuencias, historia y expresión colectiva.",
-    rankLabel: "TOP 2",
-    scoreLabel: "81 SCORE",
-    signalLabel: "6 novedades hoy",
-    groupsLabel: "3 grupos activos",
-    tags: ["jazz", "salsa", "clasica"]
-  ),
-  DiscoverTrend(
-    id: "technology",
-    icon: "cpu",
-    title: "Tecnologia Aplicada",
-    subtitle: "Innovación útil para problemas reales.",
-    rankLabel: "TOP 3",
-    scoreLabel: "79 SCORE",
-    signalLabel: "4 papers hoy",
-    groupsLabel: "4 grupos activos",
-    tags: ["ai", "software", "startups"]
-  ),
-]
-
 struct DiscoverView: View {
   @EnvironmentObject private var authVM: AuthViewModel
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
@@ -57,21 +22,26 @@ struct DiscoverView: View {
   @State private var discoverQuery = ""
   @State private var openedGroupID: String?
 
+  private let discoverRepo: DiscoverRepo
   private let profileRepo: ProfileRepo
   private let groupsRepo: any GroupsRepo
   private let aiRepo: AIRepo
+  private let profileContentRepo: ProfileContentRepo
 
   init(
     repo: DiscoverRepo,
     profileRepo: ProfileRepo,
     groupsRepo: any GroupsRepo,
-    aiRepo: AIRepo
+    aiRepo: AIRepo,
+    profileContentRepo: ProfileContentRepo = AppRepos.profileContent()
   ) {
+    self.discoverRepo = repo
     self.profileRepo = profileRepo
     self.groupsRepo = groupsRepo
     self.aiRepo = aiRepo
+    self.profileContentRepo = profileContentRepo
     _vm = StateObject(wrappedValue: DiscoverViewModel(repo: repo))
-    _suggestedGroups = StateObject(wrappedValue: GroupSuggestionsViewModel(repo: groupsRepo, limit: 12))
+    _suggestedGroups = StateObject(wrappedValue: GroupSuggestionsViewModel(repo: groupsRepo, limit: 50))
   }
 
   var body: some View {
@@ -93,7 +63,23 @@ struct DiscoverView: View {
       .listRowSeparator(.hidden)
       .listRowBackground(SwiftUI.Color.clear)
 
-      if !visibleSuggestedUsers.isEmpty {
+      if let peopleError = vm.errorMessage, visibleSuggestedUsers.isEmpty {
+        Section {
+          DiscoverSectionHeader(title: "Personas para conocer")
+          VCard {
+            VStack(alignment: .leading, spacing: 10) {
+              Text(peopleError)
+                .font(.footnote)
+                .foregroundStyle(.red)
+              VButton("Reintentar", variant: .secondary) {
+                Task { await vm.refreshSuggestedUsers() }
+              }
+            }
+          }
+        }
+        .listRowSeparator(.hidden)
+        .listRowBackground(SwiftUI.Color.clear)
+      } else if !visibleSuggestedUsers.isEmpty {
         Section {
           DiscoverSectionHeader(title: "Personas para conocer")
           ScrollView(.horizontal, showsIndicators: false) {
@@ -126,7 +112,17 @@ struct DiscoverView: View {
             ScrollView(.horizontal, showsIndicators: false) {
               HStack(spacing: VinctusTokens.Spacing.md) {
                 ForEach(filteredTrends) { trend in
-                  DiscoverTrendCard(trend: trend)
+                  NavigationLink(
+                    destination: DiscoverCategoryView(
+                      category: trend.category,
+                      discoverRepo: discoverRepo,
+                      groupsRepo: groupsRepo,
+                      profileContentRepo: profileContentRepo
+                    )
+                  ) {
+                    DiscoverTrendCard(trend: trend)
+                  }
+                  .buttonStyle(.plain)
                 }
               }
               .padding(.vertical, 4)
@@ -185,7 +181,7 @@ struct DiscoverView: View {
             }
           }
           .padding(.top, 2)
-        } else if let groupsError = suggestedGroups.errorMessage {
+        } else if let groupsError = suggestedGroups.errorMessage, filteredGroups.isEmpty {
           VCard {
             VStack(alignment: .leading, spacing: 10) {
               Text(groupsError)
@@ -234,6 +230,10 @@ struct DiscoverView: View {
       }
     }
     .task(id: authVM.currentUserID) {
+      if authVM.currentUserID == nil && !AppRepos.isDemo {
+        vm.reset()
+        return
+      }
       await refreshDiscoverData()
     }
     .refreshable {
@@ -242,16 +242,47 @@ struct DiscoverView: View {
   }
 
   private var normalizedDiscoverQuery: String {
-    discoverQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    DiscoverCategory.normalizedSearch(discoverQuery)
+  }
+
+  private var rankedTrends: [DiscoverTrend] {
+    let countsByCategory = Dictionary(grouping: suggestedGroups.groups) { $0.categoryID ?? "" }
+      .mapValues(\.count)
+    let membersByCategory = Dictionary(grouping: suggestedGroups.groups) { $0.categoryID ?? "" }
+      .mapValues { $0.reduce(0) { $0 + max(0, $1.memberCount) } }
+
+    let sorted = DiscoverCategory.all.sorted { lhs, rhs in
+      let lhsMembers = membersByCategory[lhs.id] ?? 0
+      let rhsMembers = membersByCategory[rhs.id] ?? 0
+      if lhsMembers != rhsMembers { return lhsMembers > rhsMembers }
+      let lhsGroups = countsByCategory[lhs.id] ?? 0
+      let rhsGroups = countsByCategory[rhs.id] ?? 0
+      if lhsGroups != rhsGroups { return lhsGroups > rhsGroups }
+      return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+    }
+
+    return sorted.enumerated().map { index, category in
+      let count = countsByCategory[category.id] ?? 0
+      let groupsLabel = count == 1 ? "1 grupo activo" : "\(count) grupos activos"
+      let signalLabel = category.apiSource == "arxiv" ? "Papers en vivo" : "Novedades en vivo"
+      return DiscoverTrend(
+        id: category.id,
+        category: category,
+        icon: category.icon,
+        title: category.title,
+        subtitle: category.subtitle,
+        rankLabel: "TOP \(index + 1)",
+        scoreLabel: "",
+        signalLabel: signalLabel,
+        groupsLabel: groupsLabel,
+        tags: category.subgroups.map(\.name)
+      )
+    }
   }
 
   private var filteredTrends: [DiscoverTrend] {
-    guard !normalizedDiscoverQuery.isEmpty else { return discoverTrendSeed }
-    return discoverTrendSeed.filter { trend in
-      trend.title.lowercased().contains(normalizedDiscoverQuery)
-        || trend.subtitle.lowercased().contains(normalizedDiscoverQuery)
-        || trend.tags.joined(separator: " ").lowercased().contains(normalizedDiscoverQuery)
-    }
+    guard !normalizedDiscoverQuery.isEmpty else { return rankedTrends }
+    return rankedTrends.filter { $0.category.matches(query: discoverQuery) }
   }
 
   private var filteredGroups: [GroupSummary] {
@@ -259,7 +290,11 @@ struct DiscoverView: View {
   }
 
   private var visibleSuggestedUsers: [DiscoverUser] {
-    vm.suggestedUsers.filter { !blockedUsers.isBlocked($0.uid) }
+    let unblocked = vm.suggestedUsers.filter { !blockedUsers.isBlocked($0.uid) }
+    guard !normalizedDiscoverQuery.isEmpty else { return unblocked }
+    return unblocked.filter {
+      DiscoverCategory.normalizedSearch($0.displayName).contains(normalizedDiscoverQuery)
+    }
   }
 
   @MainActor

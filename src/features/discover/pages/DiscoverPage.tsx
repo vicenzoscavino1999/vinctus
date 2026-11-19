@@ -100,6 +100,16 @@ const EDITORIAL_BODY_PATTERNS = [
   'Punto de partida para seguir novedades de {subgroup} esta semana.',
 ];
 
+const isSafeHttpUrl = (value: string | null | undefined): value is string => {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
 const extractHostname = (url: string): string | null => {
   try {
     const parsed = new URL(url);
@@ -441,7 +451,6 @@ const DiscoverSession = () => {
     sortBy: 'relevance',
   });
   const [allGroups, setAllGroups] = useState<FirestoreGroup[]>([]);
-  const [groups, setGroups] = useState<FirestoreGroup[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
   const [groupJoinStatusMap, setGroupJoinStatusMap] = useState<Record<string, GroupJoinStatus>>({});
@@ -452,6 +461,9 @@ const DiscoverSession = () => {
   const [activeTrendCategoryId, setActiveTrendCategoryId] = useState<string | null>(null);
   const [trendPreviewState, setTrendPreviewState] = useState<Record<string, TrendPreviewState>>({});
   const previewRequestedRef = useRef<Set<string>>(new Set());
+  const isMountedRef = useRef(true);
+  const communityRequestSeqRef = useRef(0);
+  const youtubeRequestSeqRef = useRef(0);
   const publicationLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const publicationObserverLockedRef = useRef(false);
   const [visiblePublicationCount, setVisiblePublicationCount] = useState(PUBLICATION_BATCH_SIZE);
@@ -499,31 +511,76 @@ const DiscoverSession = () => {
       result = result.filter((cat) => cat.id === filters.category);
     }
 
-    // Apply search query
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    // Apply search query (accent-insensitive across category labels, descriptions, IDs, and subgroups)
+    const normalizedQuery = normalizeKeyword(searchQuery.trim());
+    if (normalizedQuery) {
       result = result.filter(
         (cat) =>
-          cat.label.toLowerCase().includes(query) ||
-          cat.description.toLowerCase().includes(query) ||
-          cat.subgroups.some((sub) => sub.name.toLowerCase().includes(query)),
+          normalizeKeyword(cat.id).includes(normalizedQuery) ||
+          normalizeKeyword(cat.label).includes(normalizedQuery) ||
+          normalizeKeyword(cat.description).includes(normalizedQuery) ||
+          cat.subgroups.some((sub) => normalizeKeyword(sub.name).includes(normalizedQuery)),
       );
     }
 
     // Apply sorting
     if (filters.sortBy === 'alphabetical') {
-      result = [...result].sort((a, b) => a.label.localeCompare(b.label));
+      result = [...result].sort((a, b) => a.label.localeCompare(b.label, 'es'));
     } else if (filters.sortBy === 'popular') {
-      // Sort by number of subgroups as proxy for popularity
+      // Sort by active group/member activity first, falling back to subgroup count
       result = [...result].sort((a, b) => b.subgroups.length - a.subgroups.length);
     } else if (filters.sortBy === 'recent') {
       // For now, reverse the default order to simulate "recent"
-      // In production, this would sort by a real timestamp
       result = [...result].reverse();
     }
 
     return result;
   }, [searchQuery, filters, userInterests]);
+
+  const groups = useMemo(() => {
+    let result = [...allGroups];
+    const normalizedQuery = normalizeKeyword(searchQuery.trim());
+
+    if (filters.category) {
+      result = result.filter((group) => group.categoryId === filters.category);
+    }
+
+    if (normalizedQuery) {
+      result = result.filter((group) => {
+        const categoryLabel = group.categoryId
+          ? (CATEGORIES.find((cat) => cat.id === group.categoryId)?.label ?? '')
+          : '';
+        return (
+          normalizeKeyword(group.name || '').includes(normalizedQuery) ||
+          normalizeKeyword(group.description || '').includes(normalizedQuery) ||
+          normalizeKeyword(group.categoryId || '').includes(normalizedQuery) ||
+          normalizeKeyword(categoryLabel).includes(normalizedQuery)
+        );
+      });
+    }
+
+    if (filters.sortBy === 'alphabetical') {
+      result.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
+    } else if (filters.sortBy === 'recent') {
+      result.sort((a, b) => {
+        const aTime = a.createdAt?.getTime() ?? 0;
+        const bTime = b.createdAt?.getTime() ?? 0;
+        return bTime - aTime;
+      });
+    } else {
+      result.sort((a, b) => {
+        const aMembers = a.memberCount ?? 0;
+        const bMembers = b.memberCount ?? 0;
+        if (aMembers !== bMembers) return bMembers - aMembers;
+        const aTime = a.createdAt?.getTime() ?? 0;
+        const bTime = b.createdAt?.getTime() ?? 0;
+        return bTime - aTime;
+      });
+    }
+
+    const maxVisible = normalizedQuery || filters.category ? 8 : 4;
+    return result.slice(0, maxVisible);
+  }, [allGroups, filters.category, filters.sortBy, searchQuery]);
 
   const curatedArenaDebates = useMemo(() => {
     return [...arenaDebates]
@@ -635,7 +692,15 @@ const DiscoverSession = () => {
   const hasMorePublications = communityHasMore || youtubeHasMore || hasMoreEditorial;
 
   useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     let active = true;
+    const seq = ++communityRequestSeqRef.current;
 
     const loadInitialCommunityPublications = async () => {
       setCommunityReader(undefined);
@@ -645,7 +710,7 @@ const DiscoverSession = () => {
       setCommunityHasMore(false);
       try {
         const result = await getGlobalFeed(PUBLICATION_BATCH_SIZE);
-        if (!active) return;
+        if (!active || communityRequestSeqRef.current !== seq) return;
         const mapped = result.items.map((post, index) => buildCommunityPublication(post, index));
         setCommunityPublications(mapped);
         setCommunityReader(user?.uid ?? null);
@@ -653,13 +718,13 @@ const DiscoverSession = () => {
         setCommunityHasMore(result.hasMore);
       } catch (error) {
         console.error('Error loading community publications for Discover:', error);
-        if (!active) return;
+        if (!active || communityRequestSeqRef.current !== seq) return;
         setCommunityPublications([]);
         setCommunityReader(user?.uid ?? null);
         setCommunityCursor(null);
         setCommunityHasMore(false);
       } finally {
-        if (active) {
+        if (active && communityRequestSeqRef.current === seq) {
           setCommunityLoading(false);
           setCommunityReady(true);
         }
@@ -683,6 +748,7 @@ const DiscoverSession = () => {
 
   useEffect(() => {
     let active = true;
+    const seq = ++youtubeRequestSeqRef.current;
 
     const loadInitialYouTubePublications = async () => {
       setYoutubeLoading(true);
@@ -692,7 +758,7 @@ const DiscoverSession = () => {
           query: youtubeQuery,
           limit: YOUTUBE_BATCH_SIZE,
         });
-        if (!active) return;
+        if (!active || youtubeRequestSeqRef.current !== seq) return;
 
         const mapped = result.items.map((item, index) =>
           buildYouTubePublication(item, index, youtubeQuery),
@@ -703,12 +769,12 @@ const DiscoverSession = () => {
         setYoutubeHasMore(Boolean(result.nextPageToken));
       } catch (error) {
         console.error('Error loading YouTube publications for Discover:', error);
-        if (!active) return;
+        if (!active || youtubeRequestSeqRef.current !== seq) return;
         setYoutubePublications([]);
         setYoutubeNextPageToken(null);
         setYoutubeHasMore(false);
       } finally {
-        if (active) {
+        if (active && youtubeRequestSeqRef.current === seq) {
           setYoutubeLoading(false);
           setYoutubeReady(true);
           setYoutubeResultsQuery(youtubeQuery);
@@ -904,6 +970,30 @@ const DiscoverSession = () => {
   ]);
 
   const rankedTrendCategories = useMemo(() => {
+    if (filters.sortBy === 'alphabetical') {
+      return [...filteredCategories].sort((a, b) => a.label.localeCompare(b.label, 'es'));
+    }
+    if (filters.sortBy === 'popular') {
+      return [...filteredCategories].sort((a, b) => {
+        const memberDiff =
+          (groupSocialByCategory[b.id]?.members ?? 0) - (groupSocialByCategory[a.id]?.members ?? 0);
+        if (memberDiff !== 0) return memberDiff;
+        const groupDiff = (groupCountByCategory[b.id] ?? 0) - (groupCountByCategory[a.id] ?? 0);
+        if (groupDiff !== 0) return groupDiff;
+        return b.subgroups.length - a.subgroups.length;
+      });
+    }
+    if (filters.sortBy === 'recent') {
+      return [...filteredCategories].sort((a, b) => {
+        const weeklyDiff = (weeklyDeltaByCategory[b.id] ?? 0) - (weeklyDeltaByCategory[a.id] ?? 0);
+        if (weeklyDiff !== 0) return weeklyDiff;
+        const liveDiff =
+          (trendPreviewState[b.id]?.liveCount ?? 0) - (trendPreviewState[a.id]?.liveCount ?? 0);
+        if (liveDiff !== 0) return liveDiff;
+        return a.label.localeCompare(b.label, 'es');
+      });
+    }
+
     return [...filteredCategories].sort((a, b) => {
       const scoreDiff =
         (trendScoresByCategory[b.id]?.score ?? 0) - (trendScoresByCategory[a.id]?.score ?? 0);
@@ -918,7 +1008,15 @@ const DiscoverSession = () => {
 
       return a.label.localeCompare(b.label, 'es');
     });
-  }, [filteredCategories, trendScoresByCategory, weeklyDeltaByCategory, trendPreviewState]);
+  }, [
+    filteredCategories,
+    filters.sortBy,
+    groupCountByCategory,
+    groupSocialByCategory,
+    trendScoresByCategory,
+    weeklyDeltaByCategory,
+    trendPreviewState,
+  ]);
 
   const trendRankPositionByCategory = useMemo(() => {
     return rankedTrendCategories.reduce<Record<string, number>>((acc, category, index) => {
@@ -962,9 +1060,11 @@ const DiscoverSession = () => {
 
   const loadMoreCommunityPublications = useCallback(async () => {
     if (communityLoading || !communityHasMore) return;
+    const seq = communityRequestSeqRef.current;
     setCommunityLoading(true);
     try {
       const result = await getGlobalFeed(PUBLICATION_BATCH_SIZE, communityCursor ?? undefined);
+      if (!isMountedRef.current || communityRequestSeqRef.current !== seq) return;
       setCommunityPublications((prev) => {
         const offset = prev.length;
         const mapped = result.items.map((post, index) =>
@@ -976,26 +1076,32 @@ const DiscoverSession = () => {
       setCommunityHasMore(result.hasMore);
     } catch (error) {
       console.error('Error loading more community publications for Discover:', error);
+      if (!isMountedRef.current || communityRequestSeqRef.current !== seq) return;
       setCommunityHasMore(false);
       showToast('No se pudieron cargar más publicaciones de la comunidad.', 'error');
     } finally {
-      setCommunityLoading(false);
+      if (isMountedRef.current && communityRequestSeqRef.current === seq) {
+        setCommunityLoading(false);
+      }
     }
   }, [communityLoading, communityHasMore, communityCursor, showToast]);
 
   const loadMoreYouTubePublications = useCallback(async () => {
     if (youtubeLoading || !youtubeHasMore || !youtubeNextPageToken) return;
+    const seq = youtubeRequestSeqRef.current;
+    const querySnapshot = youtubeQuery;
     setYoutubeLoading(true);
     try {
       const result = await fetchYouTubeSearchVideos({
-        query: youtubeQuery,
+        query: querySnapshot,
         limit: YOUTUBE_BATCH_SIZE,
         pageToken: youtubeNextPageToken,
       });
+      if (!isMountedRef.current || youtubeRequestSeqRef.current !== seq) return;
       setYoutubePublications((prev) => {
         const offset = prev.length;
         const mapped = result.items.map((item, index) =>
-          buildYouTubePublication(item, offset + index, youtubeQuery),
+          buildYouTubePublication(item, offset + index, querySnapshot),
         );
         return Array.from(new Map([...prev, ...mapped].map((item) => [item.id, item])).values());
       });
@@ -1003,16 +1109,19 @@ const DiscoverSession = () => {
       setYoutubeHasMore(Boolean(result.nextPageToken));
     } catch (error) {
       console.error('Error loading more YouTube publications for Discover:', error);
+      if (!isMountedRef.current || youtubeRequestSeqRef.current !== seq) return;
       setYoutubeHasMore(false);
       showToast('No se pudieron cargar mas videos de YouTube.', 'error');
     } finally {
-      setYoutubeLoading(false);
+      if (isMountedRef.current && youtubeRequestSeqRef.current === seq) {
+        setYoutubeLoading(false);
+      }
     }
   }, [youtubeHasMore, youtubeLoading, youtubeNextPageToken, youtubeQuery, showToast]);
 
-  const loadTrendPreview = useCallback(async (category: Category) => {
+  const loadTrendPreview = useCallback(async (category: Category, force = false) => {
     const categoryId = category.id;
-    if (previewRequestedRef.current.has(categoryId)) return;
+    if (!force && previewRequestedRef.current.has(categoryId)) return;
 
     previewRequestedRef.current.add(categoryId);
     setTrendPreviewState((prev) => ({
@@ -1027,6 +1136,7 @@ const DiscoverSession = () => {
 
     try {
       const preview = await getTrendPreviewForCategory(category);
+      if (!isMountedRef.current) return;
       setTrendPreviewState((prev) => ({
         ...prev,
         [categoryId]: {
@@ -1039,6 +1149,7 @@ const DiscoverSession = () => {
     } catch (previewError) {
       console.error('Error loading trend preview:', previewError);
       previewRequestedRef.current.delete(categoryId);
+      if (!isMountedRef.current) return;
       setTrendPreviewState((prev) => ({
         ...prev,
         [categoryId]: {
@@ -1135,7 +1246,6 @@ const DiscoverSession = () => {
         });
         if (isActive) {
           setAllGroups(sorted);
-          setGroups(sorted.slice(0, 4));
         }
       } catch (loadError) {
         console.error('Error loading groups:', loadError);
@@ -1185,10 +1295,6 @@ const DiscoverSession = () => {
       isActive = false;
     };
   }, []);
-
-  useEffect(() => {
-    setGroupJoinStatusMap({});
-  }, [user?.uid]);
 
   useEffect(() => {
     if (!user || groups.length === 0) {
@@ -1665,7 +1771,16 @@ const DiscoverSession = () => {
           {activeTrendPreview.loading ? (
             <div className="text-sm text-neutral-500">Cargando vista previa...</div>
           ) : activeTrendPreview.error ? (
-            <div className="text-sm text-red-400">{activeTrendPreview.error}</div>
+            <div className="flex flex-wrap items-center gap-3 text-sm text-red-400">
+              <span>{activeTrendPreview.error}</span>
+              <button
+                type="button"
+                onClick={() => void loadTrendPreview(activeTrendCategory, true)}
+                className="rounded-full border border-neutral-700 px-3 py-1 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+              >
+                Reintentar
+              </button>
+            </div>
           ) : activeTrendPreview.items.length === 0 ? (
             <div className="text-sm text-neutral-500">
               No hay resultados disponibles para esta categoria ahora.
@@ -1673,7 +1788,7 @@ const DiscoverSession = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {activeTrendPreview.items.map((item, index) => {
-                if (item.href) {
+                if (isSafeHttpUrl(item.href)) {
                   return (
                     <a
                       key={`${activeTrendCategory.id}-${item.id}`}
@@ -1744,6 +1859,16 @@ const DiscoverSession = () => {
               onChange={handleSearch}
               className="flex-1 bg-transparent text-white text-center focus:outline-none placeholder:text-neutral-600 font-light text-sm"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchParams({}, { replace: true })}
+                aria-label="Limpiar búsqueda"
+                className="p-1 text-neutral-500 hover:text-white transition-colors"
+              >
+                <X size={16} />
+              </button>
+            )}
             <Search className="text-neutral-600" size={18} />
           </div>
         </div>
@@ -1816,7 +1941,7 @@ const DiscoverSession = () => {
               const sourceCount = getDebateSourceCount(debate);
               const likesCount = getDebateLikesCount(debate);
               const sourceLinks = Array.isArray(debate.sourceLinks)
-                ? debate.sourceLinks.slice(0, 2)
+                ? debate.sourceLinks.filter((url) => isSafeHttpUrl(url)).slice(0, 2)
                 : [];
               const sourceMentions = Array.isArray(debate.sourceMentions)
                 ? debate.sourceMentions.slice(0, 2)
@@ -1911,7 +2036,11 @@ const DiscoverSession = () => {
         ) : groupsError ? (
           <div className="text-center text-red-400 py-6">{groupsError}</div>
         ) : groups.length === 0 ? (
-          <div className="text-center text-neutral-500 py-6">Aun no hay grupos disponibles.</div>
+          <div className="text-center text-neutral-500 py-6">
+            {searchQuery.trim() || filters.category
+              ? 'No hay grupos que coincidan con tu búsqueda o filtros.'
+              : 'Aun no hay grupos disponibles.'}
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {groups.map((group) => {

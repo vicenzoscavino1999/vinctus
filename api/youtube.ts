@@ -218,10 +218,33 @@ function toNullableInt(value: string | undefined): number | null {
   return parsed;
 }
 
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, code) => {
+      const parsed = Number.parseInt(code, 10);
+      return Number.isFinite(parsed) && parsed > 0 ? String.fromCodePoint(parsed) : '';
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
+      const parsed = Number.parseInt(hex, 16);
+      return Number.isFinite(parsed) && parsed > 0 ? String.fromCodePoint(parsed) : '';
+    })
+    .replace(/&amp;/g, '&');
+}
+
 function normalizeString(value: string | undefined): string | null {
   if (!value) return null;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeDecodedString(value: string | undefined): string | null {
+  const normalized = normalizeString(value);
+  return normalized ? decodeHtmlEntities(normalized) : null;
 }
 
 function getThumbnailUrl(item: YouTubeApiItem): string | null {
@@ -275,7 +298,7 @@ async function fetchVideoData(
 
     return {
       channelId: normalizeString(item.snippet?.channelId),
-      channelTitle: normalizeString(item.snippet?.channelTitle),
+      channelTitle: normalizeDecodedString(item.snippet?.channelTitle),
       commentCount: toNullableInt(item.statistics?.commentCount),
       durationIso: normalizeString(item.contentDetails?.duration),
       embeddable: item.status?.embeddable !== false,
@@ -287,7 +310,7 @@ async function fetchVideoData(
       privacyStatus: normalizeString(item.status?.privacyStatus),
       publishedAt: normalizeString(item.snippet?.publishedAt),
       thumbnailUrl: getThumbnailUrl(item),
-      title: normalizeString(item.snippet?.title),
+      title: normalizeDecodedString(item.snippet?.title),
       videoId,
       viewCount: toNullableInt(item.statistics?.viewCount),
     };

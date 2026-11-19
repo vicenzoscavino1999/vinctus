@@ -767,14 +767,16 @@ service cloud.firestore {
     match /users/{uid}/savedCategories/{categoryId} {
       // Only the user can read their own saved categories
       allow read: if isOwner(uid);
-      
-      // Only the user can write to their own saved categories
-      allow create: if isOwner(uid);
+
+      // Only the user can write to their own saved categories with strict index shape
+      allow create: if isOwner(uid) && isValidFollowedCategoryCreate(categoryId);
       allow delete: if isOwner(uid);
-      
-      // Update only if categoryId doesn't change
+
+      // Update only if categoryId and createdAt remain unchanged
       allow update: if isOwner(uid)
-        && request.resource.data.categoryId == categoryId;
+        && request.resource.data.keys().hasOnly(['categoryId', 'createdAt'])
+        && request.resource.data.categoryId == categoryId
+        && request.resource.data.createdAt == resource.data.createdAt;
     }
 
     // users/{uid}/followedCategories/{categoryId}

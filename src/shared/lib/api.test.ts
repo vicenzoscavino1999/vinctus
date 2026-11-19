@@ -176,4 +176,50 @@ describe('API Services', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(String(mockFetch.mock.calls[1]?.[0])).toContain('itunes.apple.com/search');
   });
+
+  it('fallback directo de Hacker News tolera items null o fallidos y URLs inseguras', async () => {
+    mockFetch
+      .mockRejectedValueOnce(new Error('proxy down'))
+      .mockResolvedValueOnce(createJsonResponse([10, 11, 12]))
+      .mockResolvedValueOnce(createJsonResponse(null))
+      .mockRejectedValueOnce(new Error('item failed'))
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          by: 'alice',
+          descendants: 4,
+          id: 12,
+          score: 30,
+          time: 1700000000,
+          title: 'Safe &amp; Clean',
+          type: 'story',
+          url: 'javascript:alert(1)',
+        }),
+      );
+
+    const result = await fetchHackerNews('top', 3);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        id: 12,
+        title: 'Safe & Clean',
+        url: 'https://news.ycombinator.com/item?id=12',
+      }),
+    );
+  });
+
+  it('fallback directo de Open Library ignora cover_id 0 y usa encodeURIComponent', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('proxy down')).mockResolvedValueOnce(
+      createJsonResponse({
+        works: [
+          { authors: [{ name: 'Borges' }], cover_id: 0, key: '/works/OL1W', title: 'Ficciones' },
+        ],
+      }),
+    );
+
+    const result = await fetchBooks('science fiction', 1);
+
+    expect(result[0]?.cover).toBeNull();
+    expect(String(mockFetch.mock.calls[1]?.[0])).toContain('science%20fiction.json');
+  });
 });

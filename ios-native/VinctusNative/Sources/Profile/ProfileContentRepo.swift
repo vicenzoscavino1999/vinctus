@@ -341,6 +341,8 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
     let ref = db.collection(FirestoreCollections.users).document(uid)
       .collection(FirestoreSubcollections.followedCategories).document(categoryID)
     if followed {
+      let existing = try? await ref.getDocument()
+      if existing?.exists == true { return }
       try await ref.setData(["categoryId": categoryID, "createdAt": FieldValue.serverTimestamp()])
     } else {
       try await ref.delete()

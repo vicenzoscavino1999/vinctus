@@ -183,10 +183,43 @@ const fetchTextWithProxyFallback = async (url: string, label: string): Promise<s
 
 const stripHtmlTags = (value: string): string => value.replace(/<[^>]+>/g, '');
 
+const decodeHtmlEntities = (value: string): string =>
+  value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, code) => {
+      const parsed = Number.parseInt(code, 10);
+      return Number.isFinite(parsed) && parsed > 0 ? String.fromCodePoint(parsed) : '';
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
+      const parsed = Number.parseInt(hex, 16);
+      return Number.isFinite(parsed) && parsed > 0 ? String.fromCodePoint(parsed) : '';
+    })
+    .replace(/&amp;/g, '&');
+
+const withEllipsis = (value: string, maxChars: number): string => {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars).trim()}...`;
+};
+
+const isSafeHttpUrl = (value: unknown): value is string =>
+  typeof value === 'string' && /^https?:\/\//i.test(value.trim());
+
+const MUSIC_QUERY_MAP: Record<string, string> = {
+  salsa: 'latin salsa',
+  jazz: 'jazz',
+  classical: 'classical music',
+  music: 'top hits',
+};
+
 const normalizeWikipediaThumbnail = (url: string | undefined): string | null => {
   if (!url) return null;
   if (url.startsWith('//')) return `https:${url}`;
-  return url;
+  return isSafeHttpUrl(url) ? url.trim() : null;
 };
 
 const fetchDiscoverProxy = async <T>(
@@ -243,7 +276,7 @@ async function fetchArxivPapersDirect(
   };
 
   const query = categoryMap[category] || category;
-  const arxivUrl = `https://export.arxiv.org/api/query?search_query=cat:${query}&start=0&max_results=${maxResults}&sortBy=submittedDate&sortOrder=descending`;
+  const arxivUrl = `https://export.arxiv.org/api/query?search_query=cat:${encodeURIComponent(query)}&start=0&max_results=${maxResults}&sortBy=submittedDate&sortOrder=descending`;
   const text = await fetchTextWithProxyFallback(arxivUrl, 'arXiv');
 
   const parser = new DOMParser();
@@ -267,14 +300,15 @@ async function fetchArxivPapersDirect(
     const idText = getText(entry, 'id');
     const titleText = getText(entry, 'title');
     const publishedText = getText(entry, 'published');
+    const arxivId = idText.split('/abs/')[1] || '';
 
     return {
-      id: idText.split('/abs/')[1] || '',
+      id: arxivId,
       title: titleText ? titleText.replace(/\s+/g, ' ') : 'Sin titulo',
-      summary: summary ? summary.substring(0, 200) + '...' : 'Sin resumen disponible',
+      summary: summary ? withEllipsis(summary, 220) : 'Sin resumen disponible',
       authors: getAuthors(entry),
       published: publishedText.split('T')[0] || '',
-      link: idText || '',
+      link: isSafeHttpUrl(idText) ? idText : arxivId ? `https://arxiv.org/abs/${arxivId}` : '',
       type: 'Paper',
     };
   });
@@ -286,15 +320,15 @@ async function fetchWikipediaArticlesDirect(
 ): Promise<WikipediaArticle[]> {
   const mapFromRestSearch = (pages: WikipediaPage[]): WikipediaArticle[] =>
     pages.slice(0, limit).map((page, index) => {
-      const title = page.title?.trim() || 'Sin titulo';
+      const title = decodeHtmlEntities(page.title?.trim() || 'Sin titulo');
       const summaryRaw = page.excerpt || page.description || 'Sin resumen disponible';
-      const summary = stripHtmlTags(summaryRaw);
+      const summary = decodeHtmlEntities(stripHtmlTags(summaryRaw));
       const key = page.key?.trim() || title.replace(/\s+/g, '_');
 
       return {
         id: Number.isFinite(Number(page.id)) ? Number(page.id) : index,
         title,
-        summary: summary ? summary.substring(0, 200) + '...' : 'Sin resumen disponible',
+        summary: summary ? withEllipsis(summary, 220) : 'Sin resumen disponible',
         thumbnail: normalizeWikipediaThumbnail(page.thumbnail?.url),
         link: `https://en.wikipedia.org/wiki/${encodeURIComponent(key)}`,
         type: 'Articulo',
@@ -305,13 +339,13 @@ async function fetchWikipediaArticlesDirect(
     Object.values(pagesMap)
       .slice(0, limit)
       .map((page, index) => {
-        const title = page.title?.trim() || 'Sin titulo';
-        const summary = stripHtmlTags(page.extract || 'Sin resumen disponible');
+        const title = decodeHtmlEntities(page.title?.trim() || 'Sin titulo');
+        const summary = decodeHtmlEntities(stripHtmlTags(page.extract || 'Sin resumen disponible'));
         const key = title.replace(/\s+/g, '_');
         return {
           id: Number.isFinite(Number(page.pageid)) ? Number(page.pageid) : index,
           title,
-          summary: summary ? summary.substring(0, 200) + '...' : 'Sin resumen disponible',
+          summary: summary ? withEllipsis(summary, 220) : 'Sin resumen disponible',
           thumbnail: normalizeWikipediaThumbnail(page.thumbnail?.source),
           link: `https://en.wikipedia.org/wiki/${encodeURIComponent(key)}`,
           type: 'Articulo',
@@ -352,23 +386,34 @@ async function fetchHackerNewsDirect(
     'Hacker News list',
   );
 
-  const stories = await Promise.all(
-    ids
+  const settled = await Promise.allSettled(
+    (Array.isArray(ids) ? ids : [])
       .slice(0, limit)
       .map((id) =>
-        fetchJsonOrThrow<HackerNewsItem>(
+        fetchJsonOrThrow<HackerNewsItem | null>(
           `https://hacker-news.firebaseio.com/v0/item/${id}.json`,
           `Hacker News item ${id}`,
         ),
       ),
   );
 
-  return stories
-    .filter((story): story is HackerNewsItem => Boolean(story?.title))
+  return settled
+    .filter(
+      (result): result is PromiseFulfilledResult<HackerNewsItem | null> =>
+        result.status === 'fulfilled',
+    )
+    .map((result) => result.value)
+    .filter((story): story is HackerNewsItem =>
+      Boolean(
+        story && typeof story === 'object' && typeof story.title === 'string' && story.title.trim(),
+      ),
+    )
     .map((story) => ({
       id: story.id,
-      title: story.title || 'Sin titulo',
-      url: story.url || `https://news.ycombinator.com/item?id=${story.id}`,
+      title: decodeHtmlEntities(story.title?.trim() || 'Sin titulo'),
+      url: isSafeHttpUrl(story.url)
+        ? story.url.trim()
+        : `https://news.ycombinator.com/item?id=${story.id}`,
       author: story.by || 'Anonimo',
       score: story.score || 0,
       comments: story.descendants || 0,
@@ -378,22 +423,30 @@ async function fetchHackerNewsDirect(
 }
 
 async function fetchBooksDirect(subject: string = 'fiction', limit: number = 10): Promise<Book[]> {
-  const url = `https://openlibrary.org/subjects/${subject}.json?limit=${limit}`;
+  const url = `https://openlibrary.org/subjects/${encodeURIComponent(subject)}.json?limit=${limit}`;
   const data = await fetchJsonOrThrow<{ works?: OpenLibraryWork[] }>(url, 'Open Library');
 
-  return (data.works || []).map((work) => ({
-    id: work.key,
-    title: work.title || 'Sin titulo',
-    authors:
-      work.authors
-        ?.map((author) => author.name)
-        .filter(Boolean)
-        .join(', ') || 'Anonimo',
-    cover: work.cover_id ? `https://covers.openlibrary.org/b/id/${work.cover_id}-M.jpg` : null,
-    firstPublished: work.first_publish_year || 'Desconocido',
-    link: `https://openlibrary.org${work.key}`,
-    type: 'Libro',
-  }));
+  return (data.works || []).map((work) => {
+    const coverId = typeof work.cover_id === 'number' ? work.cover_id : Number.NaN;
+    const rawKey = typeof work.key === 'string' ? work.key.trim() : '';
+    const safeKey = rawKey.startsWith('/') ? rawKey : '';
+    return {
+      id: rawKey,
+      title: work.title || 'Sin titulo',
+      authors:
+        work.authors
+          ?.map((author) => author.name)
+          .filter(Boolean)
+          .join(', ') || 'Anonimo',
+      cover:
+        Number.isFinite(coverId) && coverId > 0
+          ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`
+          : null,
+      firstPublished: work.first_publish_year || 'Desconocido',
+      link: `https://openlibrary.org${safeKey}`,
+      type: 'Libro',
+    };
+  });
 }
 
 async function fetchNatureObservationsDirect(
@@ -409,7 +462,7 @@ async function fetchNatureObservationsDirect(
   };
 
   const taxonId = taxonMap[taxon] || taxon;
-  const url = `https://api.inaturalist.org/v1/observations?taxon_id=${taxonId}&quality_grade=research&per_page=${limit}&order=desc&order_by=created_at`;
+  const url = `https://api.inaturalist.org/v1/observations?taxon_id=${encodeURIComponent(taxonId)}&quality_grade=research&per_page=${limit}&order=desc&order_by=created_at`;
   const data = await fetchJsonOrThrow<{ results?: INaturalistObservation[] }>(url, 'iNaturalist');
 
   return (data.results || []).map((obs) => ({
@@ -429,7 +482,8 @@ async function fetchMusicInfoDirect(
   artist: string = '',
   limit: number = 10,
 ): Promise<MusicTrack[]> {
-  const query = artist.trim() || 'top hits';
+  const trimmed = artist.trim();
+  const query = MUSIC_QUERY_MAP[trimmed.toLowerCase()] || trimmed || 'top hits';
   const country = (import.meta.env.VITE_MUSIC_COUNTRY || DEFAULT_MUSIC_COUNTRY).trim();
   const url = `https://itunes.apple.com/search?media=music&entity=song&term=${encodeURIComponent(query)}&limit=${limit}&country=${encodeURIComponent(country || DEFAULT_MUSIC_COUNTRY)}`;
   const data = await fetchJsonOrThrow<{ results?: ITunesTrack[] }>(url, 'iTunes Search');

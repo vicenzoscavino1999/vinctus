@@ -51,8 +51,8 @@ const ApiContentCard = ({ item, type }: ApiContentCardProps) => {
   };
 
   const handleClick = () => {
-    const link = getLink();
-    if (link && link !== '#') {
+    const link = getLink()?.trim();
+    if (link && /^https?:\/\//i.test(link)) {
       window.open(link, '_blank', 'noopener,noreferrer');
     }
   };
@@ -234,7 +234,10 @@ const ApiContentCard = ({ item, type }: ApiContentCardProps) => {
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') handleClick();
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleClick();
+        }
       }}
       className="bg-neutral-900/20 border border-neutral-800 p-5 hover:bg-neutral-900/40 transition-all cursor-pointer group hover-lift hover:border-neutral-600"
     >
