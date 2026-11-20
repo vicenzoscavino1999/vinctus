@@ -59,6 +59,7 @@ export interface CreateDebateParams {
   personaB: string;
   visibility?: DebateVisibility;
   clientDebateId?: string;
+  useOpenAI?: boolean;
 }
 
 export interface CreateDebateResult {

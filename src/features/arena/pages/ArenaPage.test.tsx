@@ -102,7 +102,7 @@ describe('ArenaPage', () => {
     expect(screen.getByRole('button', { name: 'Volver a Arena' })).toBeInTheDocument();
   });
 
-  it('creates a private debate when visibility is switched to Privado', async () => {
+  it('requests OpenAI for a private debate only after the user selects it', async () => {
     mockCreateDebate.mockResolvedValueOnce({
       success: true,
       debateId: 'generated_debate_id',
@@ -121,6 +121,9 @@ describe('ArenaPage', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /El Cientifico/i })[0]!);
     fireEvent.click(screen.getAllByRole('button', { name: /El Esceptico/i })[1]!);
     fireEvent.click(screen.getByRole('button', { name: 'Privado' }));
+    const openAI = screen.getByRole('checkbox', { name: /Usar OpenAI para este debate/ });
+    expect(openAI).not.toBeChecked();
+    fireEvent.click(openAI);
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar debate' }));
 
     await waitFor(() => {
@@ -130,6 +133,7 @@ describe('ArenaPage', () => {
         personaB: 'skeptic',
         visibility: 'private',
         clientDebateId: 'generated_debate_id',
+        useOpenAI: true,
       });
     });
   });

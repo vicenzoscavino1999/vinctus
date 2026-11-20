@@ -9,6 +9,7 @@ import { GoogleGenerativeAI, ResponseSchema, SchemaType } from '@google/generati
 import { CreateDebateRequest, Debate, Turn } from './types';
 import { PERSONAS, getPersona } from './personas';
 import { buildSummaryVerdictPrompt, buildTurnPrompt, parseSummaryVerdictResponse } from './prompts';
+import { generateWithOpenAI } from './openai';
 import { checkRateLimit, getUsage, refundRateLimit } from './rateLimit';
 import { checkTopic, normalizeTopicWhitespace } from './guardrails';
 import {
@@ -41,6 +42,7 @@ const DEFAULT_GEMINI_MODEL_CANDIDATES = [
 // moonshotai/kimi-k2-instruct was retired on NVIDIA (410 Gone).
 const DEFAULT_NVIDIA_MODEL_CANDIDATES = ['meta/llama-3.3-70b-instruct'] as const;
 const DEFAULT_NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
+const DEFAULT_OPENAI_MODEL = 'gpt-6.1-terra';
 const DEFAULT_PROVIDER_ORDER = ['gemini', 'nvidia'] as const;
 type AIProvider = (typeof DEFAULT_PROVIDER_ORDER)[number];
 
@@ -342,7 +344,7 @@ const hasServerAIConsent = async (uid: string): Promise<boolean> => {
 
 export const createDebate = functions
   .region(REGION)
-  .runWith({ timeoutSeconds: 300, memory: '512MB', secrets: ['GEMINI_API_KEY'] })
+  .runWith({ timeoutSeconds: 300, memory: '512MB', secrets: ['GEMINI_API_KEY', 'OPENAI_API_KEY'] })
   .https.onCall(async (data, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError(
@@ -358,6 +360,10 @@ export const createDebate = functions
     const visibility = payload.visibility === 'private' ? 'private' : 'public';
     const clientDebateIdRaw = payload.clientDebateId;
     const clientDebateId = typeof clientDebateIdRaw === 'string' ? clientDebateIdRaw.trim() : '';
+
+    if (payload.useOpenAI !== undefined && typeof payload.useOpenAI !== 'boolean') {
+      throw new functions.https.HttpsError('invalid-argument', 'Proveedor de IA no válido.');
+    }
 
     if (!rawTopic || typeof rawTopic !== 'string') {
       throw new functions.https.HttpsError('invalid-argument', 'El tema es requerido.');
@@ -411,7 +417,14 @@ export const createDebate = functions
       throw new functions.https.HttpsError('invalid-argument', 'Personas invalidas.');
     }
 
-    if (!getGeminiApiKey() && !getNvidiaApiKey()) {
+    const openAIApiKey = payload.useOpenAI ? normalizeSecret(process.env.OPENAI_API_KEY) : null;
+    if (openAIApiKey === '') {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'OpenAI no está configurado para Arena.',
+      );
+    }
+    if (openAIApiKey === null && !getGeminiApiKey() && !getNvidiaApiKey()) {
       throw new functions.https.HttpsError(
         'failed-precondition',
         'Falta configurar GEMINI_API_KEY o NVIDIA_API_KEY para Arena.',
@@ -426,6 +439,20 @@ export const createDebate = functions
         'Debes aceptar el consentimiento de IA antes de crear debates.',
       );
     }
+
+    const openAIModel = process.env.ARENA_OPENAI_MODEL?.trim() || DEFAULT_OPENAI_MODEL;
+    const generate: typeof generateWithFallback = openAIApiKey
+      ? async ({ prompt, responseSchema }) => ({
+          text: await generateWithOpenAI({
+            apiKey: openAIApiKey,
+            modelName: openAIModel,
+            prompt,
+            structuredVerdict: Boolean(responseSchema),
+            timeoutMs: getUpstreamTimeoutMs(),
+          }),
+          modelUsed: `openai:${openAIModel}`,
+        })
+      : generateWithFallback;
 
     const db = admin.firestore();
     const debateRef = clientDebateId
@@ -499,7 +526,7 @@ export const createDebate = functions
         );
         promptCharsTotal += turnPrompt.length;
 
-        const turnGeneration = await generateWithFallback({ prompt: turnPrompt });
+        const turnGeneration = await generate({ prompt: turnPrompt });
         modelUsedForCompletion = turnGeneration.modelUsed;
 
         const normalizedTurnText = normalizeTurnText(turnGeneration.text);
@@ -530,7 +557,7 @@ export const createDebate = functions
         'es',
       );
       promptCharsTotal += verdictPrompt.length;
-      const verdictGeneration = await generateWithFallback({
+      const verdictGeneration = await generate({
         prompt: verdictPrompt,
         responseSchema: summaryVerdictResponseSchema,
       });

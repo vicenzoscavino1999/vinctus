@@ -60,4 +60,5 @@ export interface CreateDebateRequest {
   personaB: string;
   visibility?: DebateVisibility;
   clientDebateId?: string;
+  useOpenAI?: boolean;
 }

@@ -39,6 +39,7 @@ function ArenaSession({ userId }: { userId: string | null }) {
   const [personaA, setPersonaA] = useState<Persona | null>(null);
   const [personaB, setPersonaB] = useState<Persona | null>(null);
   const [visibility, setVisibility] = useState<DebateVisibility>('public');
+  const [useOpenAI, setUseOpenAI] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasAiConsent, setHasAiConsent] = useState(() =>
@@ -268,6 +269,7 @@ function ArenaSession({ userId }: { userId: string | null }) {
         personaB: personaB.id,
         visibility,
         clientDebateId,
+        ...(useOpenAI ? { useOpenAI: true } : {}),
       });
       if (!isMountedRef.current) return;
       if (usage) {
@@ -614,6 +616,23 @@ function ArenaSession({ userId }: { userId: string | null }) {
                   Privado
                 </button>
               </div>
+            </div>
+
+            <div>
+              <label className="flex items-center gap-2 text-sm text-neutral-300">
+                <input
+                  type="checkbox"
+                  checked={useOpenAI}
+                  onChange={(event) => setUseOpenAI(event.target.checked)}
+                  disabled={isCreating || !hasAiConsent || isConsentSyncing}
+                  aria-describedby="arena-openai-disclosure"
+                  className="accent-brand-gold"
+                />
+                Usar OpenAI para este debate
+              </label>
+              <p id="arena-openai-disclosure" className="mt-1 pl-5 text-xs text-neutral-400">
+                El tema y los turnos se envían a OpenAI para generar el debate.
+              </p>
             </div>
 
             {error && (
