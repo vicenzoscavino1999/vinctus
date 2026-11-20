@@ -59,11 +59,11 @@
   "rewrites": [
     {
       "source": "/__/auth/(.*)",
-      "destination": "https://vinctus-daf32.firebaseapp.com/__/auth/$1"
+      "destination": "https://vinctus-staging.firebaseapp.com/__/auth/$1"
     },
     {
       "source": "/__/firebase/(.*)",
-      "destination": "https://vinctus-daf32.firebaseapp.com/__/firebase/$1"
+      "destination": "https://vinctus-staging.firebaseapp.com/__/firebase/$1"
     },
     {
       "source": "/api/(.*)",
