@@ -342,7 +342,7 @@ const hasServerAIConsent = async (uid: string): Promise<boolean> => {
 
 export const createDebate = functions
   .region(REGION)
-  .runWith({ timeoutSeconds: 300, memory: '512MB' })
+  .runWith({ timeoutSeconds: 300, memory: '512MB', secrets: ['GEMINI_API_KEY', 'NVIDIA_API_KEY'] })
   .https.onCall(async (data, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError(
