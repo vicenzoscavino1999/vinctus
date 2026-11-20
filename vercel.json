@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "testflight/vinctus-staging": false
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",

@@ -9,7 +9,8 @@ enum FirebaseBootstrap {
     // Prefer env-scoped plist.
     let env = AppEnvironment.current
     AppLog.firebase.info("configureIfPossible.start env=\(env.rawValue, privacy: .public)")
-    if let options = optionsFromPlist(named: env.firebasePlistBaseName) {
+    if let options = optionsFromPlist(named: env.firebasePlistBaseName),
+       env != .staging || options.projectID == "vinctus-staging" {
       FirebaseApp.configure(options: options)
       AppLog.firebase.info(
         "configureIfPossible.success source=\(env.firebasePlistBaseName, privacy: .public)"
@@ -18,7 +19,7 @@ enum FirebaseBootstrap {
     }
 
     // Fallback: allow dropping a default GoogleService-Info.plist into Resources.
-    if let options = optionsFromPlist(named: "GoogleService-Info") {
+    if env != .staging, let options = optionsFromPlist(named: "GoogleService-Info") {
       FirebaseApp.configure(options: options)
       AppLog.firebase.info("configureIfPossible.success source=GoogleService-Info")
       return

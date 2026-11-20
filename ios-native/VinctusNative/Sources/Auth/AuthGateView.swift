@@ -34,9 +34,10 @@ struct AuthGateView: View {
 
         messages
 
-        socialButtons
-
-        orDivider
+        if AppEnvironment.current != .staging {
+          socialButtons
+          orDivider
+        }
 
         emailForm
 

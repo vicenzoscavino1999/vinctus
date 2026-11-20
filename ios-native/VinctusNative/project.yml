@@ -9,6 +9,7 @@ configs:
   DebugDev: debug
   DebugStaging: debug
   DebugProd: debug
+  ReleaseStaging: release
   ReleaseProd: release
 
 settings:
@@ -58,6 +59,8 @@ targets:
           VINCTUS_ENV: staging
         DebugProd:
           VINCTUS_ENV: prod
+        ReleaseStaging:
+          VINCTUS_ENV: staging
         ReleaseProd:
           VINCTUS_ENV: prod
     # GOOGLE_REVERSED_CLIENT_ID lives here (and in the uncommitted *.local.xcconfig overrides),
@@ -66,6 +69,7 @@ targets:
       DebugDev: Config/Dev.xcconfig
       DebugStaging: Config/Staging.xcconfig
       DebugProd: Config/Prod.xcconfig
+      ReleaseStaging: Config/Staging.xcconfig
       ReleaseProd: Config/Prod.xcconfig
     dependencies:
       - package: Firebase
@@ -144,6 +148,8 @@ schemes:
         VinctusNative: all
     run:
       config: DebugStaging
+    archive:
+      config: ReleaseStaging
     test:
       config: DebugStaging
       targets:
