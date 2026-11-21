@@ -16,7 +16,7 @@ Activar App Check de forma gradual sin bloquear usuarios legitimos ni romper flu
 
 ## Estado de implementacion actual
 
-1. Hook de App Check web integrado en `src/shared/lib/firebase.ts` (inicializacion opcional por env) y envio best-effort del encabezado `X-Firebase-AppCheck` en `src/shared/lib/protected-post-media.ts`.
+1. Hook de App Check web integrado en `src/shared/lib/firebase.ts` (inicializacion opcional por env, omitida automaticamente en emuladores sin debug token) y envio best-effort del encabezado `X-Firebase-AppCheck` una sola vez por descarga con timeout de 3 s en `src/shared/lib/protected-post-media.ts`.
 2. Variables web disponibles en `.env.example`:
    - `VITE_ENABLE_FIREBASE_APP_CHECK`
    - `VITE_FIREBASE_APP_CHECK_SITE_KEY`
@@ -28,7 +28,8 @@ Activar App Check de forma gradual sin bloquear usuarios legitimos ni romper flu
    - `Sources/App/AppCheckBootstrap.swift` registra `VinctusAppCheckProviderFactory` antes de `FirebaseApp.configure(options:)` en `FirebaseBootstrap.swift` (solo cuando existe un `GoogleService-Info*.plist` valido, sin afectar emuladores locales).
    - Claves en `Resources/Info.plist`: `VINCTUS_ENABLE_APP_CHECK=true` y `VINCTUS_APP_CHECK_PROVIDER=auto`.
    - En modo `auto`: `DEBUG`/Simulator usan `AppCheckDebugProvider`; dispositivos reales en `Release` usan `DeviceCheckProvider` (no requiere entitlements nuevos ni regenerar el provisioning profile `Vinctus AppStore CI`). Para migrar a `AppAttestProvider` (con fallback a `DeviceCheckProvider`), habilitar App Attest en Apple Developer Portal, regenerar el perfil, agregar `com.apple.developer.devicecheck.appattest-environment` a `VinctusNative.entitlements` y fijar `VINCTUS_APP_CHECK_PROVIDER=appAttest`.
-   - `Sources/Feed/ProtectedPostMedia.swift` adjunta `X-Firebase-AppCheck` en modo best-effort a las llamadas HTTPS de `readPostMedia`.
+   - `Sources/Feed/ProtectedPostMedia.swift` adjunta `X-Firebase-AppCheck` en modo best-effort una sola vez por descarga (con timeout acotado de 3 s en `AppCheckBootstrap.optionalTokenHeader`) a las llamadas HTTPS de `readPostMedia`.
+   - `scripts/app-check-preflight.mjs` (`npm run preflight:appcheck`) valida tanto el entorno web como `project.yml`, `FirebaseBootstrap.swift`, `Info.plist` y el entitlement de `appAttest` en `VinctusNative.entitlements`.
 5. **Enforcement permanece DESACTIVADO** en Firebase Console hasta verificar metricas de clientes web e iOS en modo monitoreo (24-48h). No activar Enforcement antes de confirmar trafico verificado de ambas plataformas.
 
 ## Checklist tecnico previo (web/staging)

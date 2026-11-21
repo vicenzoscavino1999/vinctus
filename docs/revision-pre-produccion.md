@@ -2,7 +2,7 @@
 
 Estado: **implementación y CI en verde** (pendiente despliegue coordinado y validación en dispositivo real).  
 Rama / PR: `fix/pre-prod-hardening` -> `fix/account-security` ([PR #128](https://github.com/vicenzoscavino1999/vinctus/pull/128)).  
-Commits de código verificados: `d8706f0` (pasada 1) y `c1f8377` (pasada 2 — endurecimiento profundo del punto 1, especialmente notificaciones).
+Commits de código verificados: `d8706f0` (pasada 1), `c1f8377` (pasada 2 — punto 1 / notificaciones) y `aa8e5f1` (pasada 2 — puntos 2, 3 y 4).
 
 Esta revisión cubre los **4 frentes transversales** fuera de los 10 módulos principales antes de pasar a producción (`vinctus-daf32` / `vinctus.vercel.app`).
 
@@ -61,7 +61,9 @@ Esta revisión cubre los **4 frentes transversales** fuera de los 10 módulos pr
   - `DEBUG` o Simulator -> `AppCheckDebugProvider`.
   - Dispositivo real en `Release` -> `DeviceCheckProvider` (no requiere entitlements extra ni regenerar el provisioning profile `Vinctus AppStore CI`).
   - Ruta lista para escalar a `AppAttestProvider` (con fallback automático a `DeviceCheckProvider`) al definir `VINCTUS_APP_CHECK_PROVIDER = appAttest` una vez habilitado App Attest en Apple Developer Portal y en `VinctusNative.entitlements`.
-- Adjunto **best-effort** del encabezado `X-Firebase-AppCheck` en `readPostMedia` tanto en iOS (`ProtectedPostMedia.swift`) como en web (`src/shared/lib/protected-post-media.ts`), sin bloquear descargas si el token no está disponible en modo monitoreo.
+- Adjunto **best-effort** del encabezado `X-Firebase-AppCheck` en `readPostMedia` tanto en iOS (`ProtectedPostMedia.swift`) como en web (`src/shared/lib/protected-post-media.ts`), obteniendo el token **una sola vez por descarga** con **timeout acotado de 3 s** (`AppCheckBootstrap.withTimeout` con continuación bloqueada por `NSLock` en iOS y `Promise.race` con limpieza de temporizador en web), para que una atestación lenta o caída nunca bloquee descargas multimedia en modo monitoreo.
+- En web (`src/shared/lib/firebase.ts`), `setupAppCheck()` omite la inicialización contra reCAPTCHA v3 vivo cuando `VITE_USE_FIREBASE_EMULATOR=true` sin `VITE_FIREBASE_APP_CHECK_DEBUG_TOKEN`.
+- `scripts/app-check-preflight.mjs` ampliado para validar **Web + iOS**: comprueba `FirebaseAppCheck` en `project.yml`, orden de inicialización en `FirebaseBootstrap.swift`, claves de `Info.plist` y bloquea con `FAIL` si `VINCTUS_APP_CHECK_PROVIDER=appAttest` se configura sin el entitlement `com.apple.developer.devicecheck.appattest-environment`.
 - **Recordatorio obligatorio**: **no activar Enforcement** en Firebase Console (`vinctus-staging` ni `vinctus-daf32`) hasta verificar tráfico verificado de web + iOS en el panel de métricas de App Check (ver [ios-app-check-rollout-plan.md](ios-app-check-rollout-plan.md)).
 
 ---
@@ -74,7 +76,10 @@ Esta revisión cubre los **4 frentes transversales** fuera de los 10 módulos pr
 - `public/icon-512.png`: reemplazado el archivo anterior (que era un JPEG de 1024×1024 renombrado a `.png`) por un PNG real de 512×512 válido para PWA y `apple-touch-icon`.
 - `functions/src/arena/createDebate.ts`: vincula `secrets: ['GEMINI_API_KEY']` para usar Google Cloud Secret Manager en lugar de `.env` en texto plano.
   - **Acción previa obligatoria antes de desplegar Functions en `vinctus-daf32`**: ejecutar `firebase functions:secrets:set GEMINI_API_KEY --project vinctus-daf32`.
-- Infraestructura multi-entorno de TestFlight (aislada por `AppEnvironment.current == .staging` y `release_target=staging`): `.github/workflows/ios-native.yml`, `scripts/release-ios-testflight.sh`, `project.yml` (`ReleaseStaging`), `FirebaseBootstrap.swift`, `AuthGateView.swift`, `LegalConfig.swift` y `docs/testflight-sin-mac.md`.
+- Infraestructura multi-entorno de TestFlight (aislada por `AppEnvironment.current == .staging` y `release_target=staging`): `.github/workflows/ios-native.yml`, `scripts/release-ios-testflight.sh`, `project.yml` (`ReleaseStaging` y `archive.config: ReleaseProd` explícito en `VinctusNative-Prod`), `FirebaseBootstrap.swift`, `AuthGateView.swift`, `LegalConfig.swift` y `docs/testflight-sin-mac.md`.
+- **Guardas simétricas staging vs. producción (pasada 2)**:
+  - `FirebaseBootstrap.isProjectAllowed(_:for:)` impide que `.prod` se configure contra `vinctus-staging` (incluso por el fallback `GoogleService-Info.plist`) y que `.staging` apunte fuera de `vinctus-staging`.
+  - `scripts/release-ios-testflight.sh` ahora ejecuta verificación post-archive tanto para `staging` como para `production` (comprueba `VINCTUS_ENV`, `VINCTUS_API_BASE_URL`, `CFBundleDisplayName`, `VINCTUS_ENABLE_APP_CHECK`, `VINCTUS_APP_CHECK_PROVIDER`, presencia exclusiva del plist correspondiente y `PROJECT_ID` exacto `vinctus-daf32` / `vinctus-staging`).
 - `vercel.json`: rescatado `"git": { "deploymentEnabled": { "testflight/vinctus-staging": false } }` **manteniendo intactos** los rewrites de producción hacia `https://vinctus-daf32.firebaseapp.com`.
 
 ### Corrección del fallo en `iOS screenshots` (`44835633335`)
@@ -86,12 +91,19 @@ Esta revisión cubre los **4 frentes transversales** fuera de los 10 módulos pr
 
 ---
 
-## 4. Seguridad Web/PWA (`vercel.json`, `index.html`, `vite.config.ts`, `api.ts`)
+## 4. Seguridad Web/PWA (`vercel.json`, `api/chat.ts`, `heic2any-loader.ts`, `index.html`, `vite.config.ts`, `registerSW.ts`, `api.ts`)
 
-- Se agregó una cabecera `Content-Security-Policy` en `vercel.json` compatible con Firebase Auth/Firestore/Storage/Functions, Google/Apple Sign-In, reCAPTCHA/App Check, `heic2any` (jsDelivr + Web Workers `blob:`), Google Fonts, embeds de YouTube y Google Maps (`EventDetailModal`) y APIs de Descubrir, sin `'unsafe-inline'` ni `'unsafe-eval'` en `script-src`.
-- Se eliminó el manejador inline `onload="this.media='all'"` de `index.html` para compatibilidad estricta con `script-src`.
-- Se eliminó la regla obsoleta de Workbox para `api.allorigins.win` en `vite.config.ts` y el proxy CORS de terceros por defecto en `src/shared/lib/api.ts` (quedando solo opt-in mediante `VITE_CORS_PROXY` para desarrollo local).
-- Se amplió `navigateFallbackDenylist` en `vite.config.ts` para excluir `/api/*` y las páginas legales estáticas (`/privacy`, `/terms`, `/community-guidelines`, `/support`) del fallback SPA del Service Worker.
+- **CSP sin romper Firebase Auth proxy (`vercel.json`)**:
+  - Se movió la cabecera estricta `Content-Security-Policy` de `"/(.*)"` a `"/((?!__/auth/|__/firebase/|api/).*)"` para no sobrescribir ni bloquear los scripts inline del proxy de OAuth de Firebase (`/__/auth/handler` y `/__/auth/iframe`, usados por Google y Apple Sign-In en PWA standalone).
+  - En `script-src` se sustituyó el origen amplio `https://cdn.jsdelivr.net` por la URL exacta `https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js` (sin `'unsafe-inline'` ni `'unsafe-eval'`), y se añadieron `https://*.run.app`, `https://accounts.google.com` y `https://appleid.apple.com` en `connect-src` y `form-action`.
+  - Se agregó `Permissions-Policy: camera=(), geolocation=(), payment=(), usb=(), browsing-topics=(), microphone=(self)` (respetando la grabación de notas de voz de `VoiceRecorder.tsx`).
+  - Se endurecieron `/api/(.*)` (`default-src 'none'; frame-ancestors 'none'`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`) y `/api/chat` (`Cache-Control: private, no-store, max-age=0`, replicado también en `api/chat.ts`).
+- **SRI en script externo (`src/shared/lib/heic2any-loader.ts`)**: se añadió `integrity="sha384-OTofQ0MEeiSgh62havBcemCIK0gqj809wX6UA0uPISNMRnR6NZyCdGzX3SbLrgwL"`, `referrerPolicy="no-referrer"` y limpieza del `<script>` fallido para reintentos limpios.
+- **Limpieza HTML y PWA (`index.html`, `vite.config.ts`, `registerSW.ts`, `api.ts`)**:
+  - Se eliminó el manejador inline `onload="this.media='all'"` de `index.html` y se añadió `<meta name="mobile-web-app-capable" content="yes" />`.
+  - Se eliminó la regla obsoleta de Workbox para `api.allorigins.win` en `vite.config.ts` y el proxy CORS de terceros por defecto en `src/shared/lib/api.ts` (quedando solo opt-in mediante `VITE_CORS_PROXY` para desarrollo local).
+  - Se amplió `navigateFallbackDenylist` y se añadió `globIgnores` en `vite.config.ts` para no precachear páginas legales estáticas ni las 7 imágenes pesadas de categorías (cacheándolas bajo demanda vía `StaleWhileRevalidate`), reduciendo el precache inicial de **7,657.74 KiB (86 entradas)** a **2,539.84 KiB (75 entradas)**, y separando iconos `any` y `maskable` en el manifiesto.
+  - En `src/registerSW.ts` se corrigió la carrera entre `updateSW(true)` y `window.location.reload()`, se añadió guarda en memoria para modo privado con `sessionStorage` bloqueado y se protegió `registration.update()` cuando el dispositivo está sin conexión.
 
 ---
 
@@ -120,3 +132,17 @@ Esta revisión cubre los **4 frentes transversales** fuera de los 10 módulos pr
   - `CI` (`44931084104`): **PASS** (`lint`, `typecheck`, `cost-gates`, `test`, `rules` **3 archivos / 96 pruebas**, `post-counts`, `build`, `e2e` **20 passed**, `lhci`).
   - `iOS native` PR (`44931084198`): **PASS** (`ios-native`, `ios-native-integration`).
   - `Vercel` Preview: **PASS**.
+
+### Pasada 2 — App Check, guardas iOS staging/prod y seguridad Web/PWA (commit `aa8e5f1`)
+
+- **Local**:
+  - `bash -n scripts/release-ios-testflight.sh`, `functions:build`, `typecheck`, `npx.cmd eslint src functions e2e scripts api` (**0 errores, 0 warnings**), `check:cycles`, `check:stubs`, `check:raw-onsnapshot`, `contract:check`: **PASS**.
+  - `npm.cmd run preflight:appcheck` (**PASS: 6 | WARN: 1 | FAIL: 0**, validando Web + iOS) y `node scripts/app-store-preflight.mjs --skip-url-checks` (**PASS: 34 | WARN: 1 | FAIL: 0**).
+  - `npm.cmd run test:api`: **17 archivos / 116 pruebas** en verde (añade `api/security-headers.test.ts` y verificación `Cache-Control: private, no-store, max-age=0` en `api/chat.test.ts`).
+  - `npm.cmd run test:run`: **89 archivos / 595 pruebas** en verde (añade `src/shared/lib/heic2any-loader.test.ts` y cobertura de timeout + reuso de token App Check en `protected-post-media.test.ts`).
+  - `npm.cmd run build`: **PASS** (precache PWA reducido a **75 entradas / 2,539.84 KiB**).
+- **GitHub Actions y Vercel en PR #128 (`aa8e5f1`)**:
+  - `CI` (`44940612140`): **PASS** (`lint`, `typecheck`, `cost-gates`, `test`, `rules` **3 archivos / 96 pruebas**, `post-counts`, `build`, `e2e` **20 passed**, `lhci`).
+  - `iOS native` (`44940607052`): **PASS** (`ReleaseProd`, unit tests con timeout de App Check y guardia `FirebaseBootstrap.isProjectAllowed`, e `ios-native-integration` **passed: 45, failed: 0**).
+  - `iOS screenshots` (`44940607044`): **PASS** (`ChatUITests` **3 passed / 0 failed** en `iPhone 17 Pro` iOS 26.4.1 + 13 capturas).
+  - `Vercel` Preview: **PASS** (validando en despliegue el nuevo `vercel.json`).
