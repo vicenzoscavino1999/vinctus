@@ -296,7 +296,10 @@ struct ConversationView: View {
     HStack(alignment: .bottom, spacing: VinctusTokens.Spacing.sm) {
       PhotosPicker(selection: $selectedPhotos, maxSelectionCount: max(1, 10 - vm.attachments.count),
                    matching: .any(of: [.images, .videos]), preferredItemEncoding: .compatible) {
-        Image(systemName: "plus.circle").font(.system(size: 26))
+        Image(systemName: "plus.circle")
+          .font(.system(size: 26))
+          .frame(minWidth: 36, minHeight: 36)
+          .contentShape(Rectangle())
       }
       .accessibilityLabel("Adjuntar fotos o videos")
       .disabled(vm.isSending || vm.isPreparingMedia || voice.isRequestingPermission || vm.attachments.count >= 10)
@@ -308,7 +311,10 @@ struct ConversationView: View {
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
       Button { Task { await voice.start() } } label: {
-        Image(systemName: "mic").font(.system(size: 23))
+        Image(systemName: "mic")
+          .font(.system(size: 23))
+          .frame(minWidth: 36, minHeight: 36)
+          .contentShape(Rectangle())
       }
       .accessibilityLabel("Grabar nota de voz")
       .disabled(vm.isSending || vm.isPreparingMedia || voice.isRequestingPermission || vm.attachments.count >= 10)

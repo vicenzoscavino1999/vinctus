@@ -214,33 +214,52 @@ xcodebuild archive \
   -archivePath "$release_dir/VinctusNative.xcarchive" \
   -clonedSourcePackagesDirPath "$release_dir/spm" \
   -quiet
-if [[ "$release_target" == staging ]]; then
-  python3 - <<'PY'
+python3 - <<'PY'
 import os
 import pathlib
 import plistlib
 
+target = os.environ['RELEASE_TARGET']
 archive = pathlib.Path(os.environ['RELEASE_DIR']) / 'VinctusNative.xcarchive'
 apps = list((archive / 'Products/Applications').glob('*.app'))
 if len(apps) != 1:
-    raise SystemExit('Expected exactly one iOS app in the staging archive.')
+    raise SystemExit(f'Expected exactly one iOS app in the {target} archive.')
 app = apps[0]
 with (app / 'Info.plist').open('rb') as file:
     info = plistlib.load(file)
-if (info.get('VINCTUS_ENV') != 'staging' or
-    info.get('VINCTUS_API_BASE_URL') != 'https://vinctus-staging.vercel.app' or
-    info.get('CFBundleDisplayName') != 'Vinctus QA'):
-    raise SystemExit('The archived app does not match Vinctus QA.')
+
+if info.get('VINCTUS_ENABLE_APP_CHECK') is not True:
+    raise SystemExit(f'The {target} archive must keep VINCTUS_ENABLE_APP_CHECK enabled.')
+provider = str(info.get('VINCTUS_APP_CHECK_PROVIDER', '')).strip().lower()
+if provider not in {'auto', 'devicecheck', 'device_check', 'device-check', 'appattest', 'app_attest', 'app-attest'}:
+    raise SystemExit(f'Invalid VINCTUS_APP_CHECK_PROVIDER in {target} archive: {provider!r}')
 
 staging_plists = list(app.rglob('GoogleService-Info-Staging.plist'))
-if len(staging_plists) != 1 or list(app.rglob('GoogleService-Info-Prod.plist')):
-    raise SystemExit('The staging archive must contain only the staging Firebase plist.')
-with staging_plists[0].open('rb') as file:
-    firebase = plistlib.load(file)
-if firebase.get('PROJECT_ID') != 'vinctus-staging':
-    raise SystemExit('The archived app does not point to Firebase staging.')
+prod_plists = list(app.rglob('GoogleService-Info-Prod.plist'))
+
+if target == 'staging':
+    if (info.get('VINCTUS_ENV') != 'staging' or
+        info.get('VINCTUS_API_BASE_URL') != 'https://vinctus-staging.vercel.app' or
+        info.get('CFBundleDisplayName') != 'Vinctus QA'):
+        raise SystemExit('The archived app does not match Vinctus QA.')
+    if len(staging_plists) != 1 or prod_plists:
+        raise SystemExit('The staging archive must contain only the staging Firebase plist.')
+    with staging_plists[0].open('rb') as file:
+        firebase = plistlib.load(file)
+    if firebase.get('PROJECT_ID') != 'vinctus-staging':
+        raise SystemExit('The archived app does not point to Firebase staging.')
+else:
+    if (info.get('VINCTUS_ENV') != 'prod' or
+        info.get('VINCTUS_API_BASE_URL') != 'https://vinctus.vercel.app' or
+        info.get('CFBundleDisplayName') != 'Vinctus'):
+        raise SystemExit('The archived app does not match Vinctus production settings.')
+    if len(prod_plists) != 1 or staging_plists:
+        raise SystemExit('The production archive must contain only the production Firebase plist.')
+    with prod_plists[0].open('rb') as file:
+        firebase = plistlib.load(file)
+    if firebase.get('PROJECT_ID') != 'vinctus-daf32':
+        raise SystemExit('The archived app does not point to Firebase production.')
 PY
-fi
 xcodebuild -exportArchive \
   -archivePath "$release_dir/VinctusNative.xcarchive" \
   -exportOptionsPlist "$release_dir/ExportOptions.plist" \

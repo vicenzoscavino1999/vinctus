@@ -44,18 +44,43 @@ final class ChatUITests: XCTestCase {
 
   func testVoiceRecordingProducesAnAttachmentForPreview() {
     openFromList()
-    app.buttons["Grabar nota de voz"].tap()
-    // The permission request is asynchronous. An immediate app.tap() can run before
-    // SpringBoard presents the alert, leaving the permission unanswered.
-    let permissionAlert = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.firstMatch
-    if permissionAlert.waitForExistence(timeout: 10) {
-      let allow = permissionAlert.buttons.matching(NSPredicate(format: "label == 'Allow' OR label == 'Permitir' OR label == 'OK' OR label == 'Aceptar'")).firstMatch
-      XCTAssertTrue(allow.exists)
+    let mic = app.buttons["Grabar nota de voz"]
+    XCTAssertTrue(mic.waitForExistence(timeout: 15))
+    let micReady = NSPredicate(format: "exists == true AND hittable == true AND enabled == true")
+    expectation(for: micReady, evaluatedWith: mic)
+    waitForExpectations(timeout: 10)
+    mic.tap()
+
+    let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+    let permissionAlert = springboard.alerts.firstMatch
+    let finishButton = app.buttons["Terminar"]
+
+    let handlePermissionIfShown: (TimeInterval) -> Bool = { timeout in
+      guard permissionAlert.waitForExistence(timeout: timeout) else { return false }
+      let allow = permissionAlert.buttons.matching(
+        NSPredicate(
+          format:
+            "label == 'Allow' OR label == 'Permitir' OR label == 'OK' OR label == 'Aceptar' OR label == 'Allow While Using App' OR label == 'Permitir al usar la app'"
+        )
+      ).firstMatch
+      XCTAssertTrue(allow.waitForExistence(timeout: 5))
       allow.tap()
+      return true
     }
-    XCTAssertTrue(app.buttons["Terminar"].waitForExistence(timeout: 20))
+
+    // The permission request is asynchronous; if the first tap fired before the push
+    // transition finished settling and neither the alert nor the recorder bar appeared,
+    // retry the tap once.
+    if !handlePermissionIfShown(8) && !finishButton.waitForExistence(timeout: 3) {
+      if mic.exists && mic.isEnabled && mic.isHittable {
+        mic.tap()
+        _ = handlePermissionIfShown(8)
+      }
+    }
+
+    XCTAssertTrue(finishButton.waitForExistence(timeout: 20))
     sleep(2)
-    app.buttons["Terminar"].tap()
+    finishButton.tap()
     XCTAssertTrue(app.buttons["Quitar Nota de voz.m4a"].waitForExistence(timeout: 10))
     XCTAssertTrue(app.buttons["Enviar"].isEnabled)
     app.buttons.containing(.staticText, identifier: "Nota de voz.m4a").firstMatch.tap()
@@ -69,5 +94,9 @@ final class ChatUITests: XCTestCase {
     XCTAssertTrue(person.waitForExistence(timeout: 45))
     person.tap()
     XCTAssertTrue(app.buttons["Enviar"].waitForExistence(timeout: 45))
+    // Wait for the bottom tab bar to finish hiding after navigation push.
+    let tabHidden = NSPredicate(format: "exists == false")
+    expectation(for: tabHidden, evaluatedWith: app.buttons["Perfil"])
+    waitForExpectations(timeout: 10)
   }
 }

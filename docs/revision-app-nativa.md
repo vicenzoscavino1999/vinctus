@@ -14,6 +14,7 @@ Este archivo conserva el avance por módulos. A partir de conversaciones, revisa
 - [ ] Colecciones — implementación y CI completadas en ambas versiones ([PR #125](https://github.com/vicenzoscavino1999/vinctus/pull/125), [detalle](revision-colecciones.md)); pendiente despliegue coordinado y prueba en iPhone real.
 - [ ] Inteligencia artificial: chat y Arena — implementación y CI completadas en ambas versiones ([PR #126](https://github.com/vicenzoscavino1999/vinctus/pull/126), [detalle](revision-ia-arena.md)); pendiente despliegue coordinado y prueba en iPhone real.
 - [ ] Cuenta y seguridad: acceso, recuperación, bloqueos, denuncias y eliminación de cuenta — implementación y CI completadas en ambas versiones ([PR #127](https://github.com/vicenzoscavino1999/vinctus/pull/127), [detalle](revision-cuenta-seguridad.md)); pendiente despliegue coordinado y prueba en iPhone real.
+- [ ] Hardening transversal pre-producción (features web extra, App Check iOS en modo monitoreo, rescate de `staging` + `ChatUITests`, CSP/PWA) — implementación y CI completadas ([PR #128](https://github.com/vicenzoscavino1999/vinctus/pull/128), [detalle](revision-pre-produccion.md)); pendiente despliegue coordinado y prueba en iPhone real.
 
 ## Forma de trabajo acordada por módulo
 

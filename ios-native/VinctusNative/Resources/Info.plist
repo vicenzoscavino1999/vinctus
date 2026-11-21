@@ -57,6 +57,10 @@
 	</array>
 	<key>VINCTUS_API_BASE_URL</key>
 	<string>https://vinctus.vercel.app</string>
+	<key>VINCTUS_APP_CHECK_PROVIDER</key>
+	<string>auto</string>
+	<key>VINCTUS_ENABLE_APP_CHECK</key>
+	<true/>
 	<key>VINCTUS_ENV</key>
 	<string>$(VINCTUS_ENV)</string>
 	<key>VINCTUS_PRIVACY_URL</key>

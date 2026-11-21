@@ -7,6 +7,7 @@ import {
   sendCollaborationRequest,
   type CollaborationRead,
 } from '@/features/collaborations/api';
+import { AppError } from '@/shared/lib/errors';
 import { useToast } from '@/shared/ui/Toast';
 
 interface CollaborationDetailModalProps {
@@ -53,8 +54,18 @@ const CollaborationDetailModal = ({
       setIsSubmitting(false);
       setIsDeleting(false);
       setConfirmDelete(false);
+      return;
     }
-  }, [isOpen]);
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isSubmitting && !isDeleting) {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [isOpen, isSubmitting, isDeleting, onClose]);
 
   if (!isOpen || !collaboration) return null;
 
@@ -66,7 +77,7 @@ const CollaborationDetailModal = ({
     setError(null);
 
     if (!user) {
-      setError('Debes iniciar sesion para enviar solicitudes.');
+      setError('Debes iniciar sesión para enviar solicitudes.');
       return;
     }
 
@@ -89,16 +100,22 @@ const CollaborationDetailModal = ({
         fromUid: user.uid,
         toUid: collaboration.authorId,
         message: message.trim() ? message.trim() : null,
-        fromUserName: user.displayName || 'Usuario',
+        fromUserName: (user.displayName || 'Usuario').trim().slice(0, 80) || 'Usuario',
         fromUserPhoto: user.photoURL || null,
       });
       showToast('Solicitud enviada', 'success');
       onRequestSent(collaboration.id);
     } catch (submitError) {
       console.error('Error sending collaboration request:', submitError);
-      setError(
-        submitError instanceof Error ? submitError.message : 'No se pudo enviar la solicitud.',
-      );
+      if (submitError instanceof AppError && submitError.code === 'PERMISSION_DENIED') {
+        setError(
+          'No se pudo enviar la solicitud. Es posible que el proyecto ya no esté disponible o exista un bloqueo.',
+        );
+      } else {
+        setError(
+          submitError instanceof Error ? submitError.message : 'No se pudo enviar la solicitud.',
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -128,21 +145,33 @@ const CollaborationDetailModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
-          <h2 className="text-xl font-serif text-white">Detalle de colaboracion</h2>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset py-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Detalle de colaboración"
+    >
+      <div
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        onClick={() => {
+          if (!isSubmitting && !isDeleting) onClose();
+        }}
+      />
+      <div className="relative w-full max-w-2xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 flex-shrink-0">
+          <h2 className="text-xl font-serif text-white">Detalle de colaboración</h2>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
+            disabled={isSubmitting || isDeleting}
+            className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800 disabled:opacity-50"
             aria-label="Cerrar"
           >
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-6 space-y-5">
+        <div className="p-6 space-y-5 overflow-y-auto flex-1">
           <div className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-4">
             <p className="text-xs uppercase tracking-widest text-neutral-500">
               {collaboration.context}

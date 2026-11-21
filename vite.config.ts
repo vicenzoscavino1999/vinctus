@@ -64,13 +64,25 @@ export default defineConfig({
             src: '/icon-192.png',
             sizes: '192x192',
             type: 'image/png',
-            purpose: 'any maskable',
+            purpose: 'any',
+          },
+          {
+            src: '/icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'maskable',
           },
           {
             src: '/icon-512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable',
+            purpose: 'any',
+          },
+          {
+            src: '/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
           },
         ],
       },
@@ -79,18 +91,40 @@ export default defineConfig({
         skipWaiting: true,
         cleanupOutdatedCaches: true,
         navigateFallback: '/index.html',
-        // /__/auth/* is Firebase's sign-in handler (proxied in vercel.json), never the SPA shell
-        navigateFallbackDenylist: [/^\/__\//],
+        // Keep Firebase Auth proxy, Vercel API routes, and static legal HTML pages outside the SPA shell.
+        navigateFallbackDenylist: [
+          /^\/__\//,
+          /^\/api\//,
+          /^\/(privacy|terms|community-guidelines|support)(\/|\.html)?$/,
+        ],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+        // Keep static legal pages fresh from network and avoid precaching multi-megabyte category hero photos.
+        globIgnores: [
+          'privacy.html',
+          'terms.html',
+          'community-guidelines.html',
+          'support.html',
+          'blackhole.png',
+          'history.png',
+          'jazz.png',
+          'nature.png',
+          'philosophy.png',
+          'quantum.png',
+          'technology.png',
+        ],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/api\.allorigins\.win\/.*/i,
-            handler: 'NetworkFirst',
+            urlPattern: ({ url, sameOrigin }) =>
+              sameOrigin &&
+              /^\/(blackhole|history|jazz|nature|philosophy|quantum|technology)\.png$/i.test(
+                url.pathname,
+              ),
+            handler: 'StaleWhileRevalidate',
             options: {
-              cacheName: 'cors-proxy-cache',
+              cacheName: 'category-covers-cache',
               expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60, // 1 hour
+                maxEntries: 16,
+                maxAgeSeconds: 60 * 60 * 24 * 14, // 14 days
               },
             },
           },

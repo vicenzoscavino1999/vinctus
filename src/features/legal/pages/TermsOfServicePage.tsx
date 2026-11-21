@@ -16,25 +16,28 @@ const TermsOfServicePage = () => {
           <ArrowLeft size={24} />
         </button>
         <div>
-          <h1 className="text-2xl font-semibold">Terminos de servicio</h1>
+          <h1 className="text-2xl font-semibold">Términos de servicio</h1>
           <p className="text-xs text-neutral-500">Actualizado: {LEGAL_COPY.lastUpdated}</p>
         </div>
       </header>
 
       <article className="space-y-6 text-sm text-neutral-300 leading-7">
         <section className="card space-y-3">
-          <h2 className="text-base font-semibold text-white">1. Uso aceptable</h2>
+          <h2 className="text-base font-semibold text-white">1. Edad mínima y uso aceptable</h2>
           <p>
-            No esta permitido contenido ilegal, acoso, spam, fraude, suplantacion de identidad o
-            material sexual con menores. Vinctus puede suspender cuentas por incumplimiento.
+            Debes tener al menos 13 años (o la edad mínima legal de tu país) para usar Vinctus.
+            Aplicamos tolerancia cero con contenido ilegal, acoso, discursos de odio, contenido
+            sexual explícito, fraude, spam, suplantación de identidad o cualquier contenido que
+            ponga en riesgo a menores.
           </p>
         </section>
 
         <section className="card space-y-3">
           <h2 className="text-base font-semibold text-white">2. Contenido generado por usuarios</h2>
           <p>
-            Puedes reportar y bloquear usuarios. Conservamos mecanismos de moderacion y podemos
-            retirar contenido objetable para proteger la comunidad.
+            Puedes reportar y bloquear usuarios desde la app. Revisamos denuncias y podemos retirar
+            contenido objetable o suspender cuentas que incumplan las normas para proteger la
+            comunidad.
           </p>
           <p>{LEGAL_COPY.moderationSla}</p>
         </section>
@@ -43,7 +46,8 @@ const TermsOfServicePage = () => {
           <h2 className="text-base font-semibold text-white">3. Cuenta y seguridad</h2>
           <p>
             Eres responsable de la actividad de tu cuenta y de mantener seguras tus credenciales.
-            Debes informar accesos no autorizados al soporte oficial.
+            Puedes eliminar tu cuenta desde Configuración &gt; Privacidad y seguridad o desde la app
+            iOS (Perfil &gt; Ajustes &gt; Zona de riesgo).
           </p>
         </section>
 
@@ -81,7 +85,7 @@ const TermsOfServicePage = () => {
           rel="noreferrer"
           className="inline-flex items-center gap-2 text-xs uppercase tracking-wider text-neutral-400 hover:text-white transition-colors"
         >
-          Ver version publica
+          Ver versión pública
           <ExternalLink size={14} />
         </a>
       </div>

@@ -30,7 +30,7 @@ export const createSupportTicketInputSchema = z.object({
   title: z.string().trim().min(4).max(120),
   message: z.string().trim().min(10).max(2000),
   context: supportTicketContextSchema.nullable(),
-  appVersion: z.string().trim().min(1).max(60),
+  appVersion: z.string().trim().min(1).max(40),
 });
 
 export type CreateSupportTicketInput = z.infer<typeof createSupportTicketInputSchema>;

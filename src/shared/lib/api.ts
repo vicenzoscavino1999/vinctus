@@ -2,8 +2,7 @@
 // First tries server-side proxy (/api/discover) with cache.
 // Falls back to direct public APIs when proxy is unavailable in local/dev.
 
-const DEFAULT_CORS_PROXY = 'https://api.allorigins.win/raw?url=';
-const CORS_PROXY = import.meta.env.VITE_CORS_PROXY ?? DEFAULT_CORS_PROXY;
+const CORS_PROXY = (import.meta.env.VITE_CORS_PROXY ?? '').trim();
 const HAS_CORS_PROXY = Boolean(CORS_PROXY);
 const DISCOVER_PROXY_ENDPOINT = '/api/discover';
 const DEFAULT_MUSIC_COUNTRY = 'US';

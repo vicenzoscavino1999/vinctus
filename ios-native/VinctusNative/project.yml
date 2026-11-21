@@ -73,6 +73,8 @@ targets:
       ReleaseProd: Config/Prod.xcconfig
     dependencies:
       - package: Firebase
+        product: FirebaseAppCheck
+      - package: Firebase
         product: FirebaseAuth
       - package: Firebase
         product: FirebaseFirestore
@@ -161,6 +163,8 @@ schemes:
         VinctusNative: all
     run:
       config: DebugProd
+    archive:
+      config: ReleaseProd
     test:
       config: DebugProd
       targets:

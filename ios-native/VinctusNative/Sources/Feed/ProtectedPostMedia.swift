@@ -15,13 +15,21 @@ enum PostMediaDownload {
   private static let chunkBytes = 8 * 1024 * 1024
   private static let maxBytes = 100 * 1024 * 1024
 
-  private static func request(_ endpoint: URL, method: String, uid: String?) async throws -> URLRequest {
+  private static func request(
+    _ endpoint: URL,
+    method: String,
+    uid: String?,
+    appCheckToken: String?
+  ) async throws -> URLRequest {
     guard Auth.auth().currentUser?.isAnonymous == false, Auth.auth().currentUser?.uid == uid else { throw PostReadError.sessionChanged }
     var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
     request.httpMethod = method
     request.httpShouldHandleCookies = false
     if let user = Auth.auth().currentUser {
       request.setValue("Bearer \(try await user.getIDToken())", forHTTPHeaderField: "Authorization")
+    }
+    if let appCheckToken {
+      request.setValue(appCheckToken, forHTTPHeaderField: "X-Firebase-AppCheck")
     }
     guard Auth.auth().currentUser?.uid == uid else { throw PostReadError.sessionChanged }
     return request
@@ -31,13 +39,14 @@ enum PostMediaDownload {
     guard source.hasPrefix(prefix) else { throw PostReadError.invalidResponse }
     let path = String(source.dropFirst(prefix.count))
     let endpoint = try PostReadClient.mediaEndpoint(path: path)
+    let appCheckToken = await AppCheckBootstrap.optionalTokenHeader()
     let config = URLSessionConfiguration.ephemeral
     config.urlCache = nil
     config.httpCookieStorage = nil
     config.timeoutIntervalForRequest = 60
     let session = URLSession(configuration: config)
     defer { session.invalidateAndCancel() }
-    let headRequest = try await request(endpoint, method: "HEAD", uid: uid)
+    let headRequest = try await request(endpoint, method: "HEAD", uid: uid, appCheckToken: appCheckToken)
     let (_, rawMetadata) = try await session.data(for: headRequest)
     guard let metadata = rawMetadata as? HTTPURLResponse, metadata.statusCode == 200,
       let length = metadata.value(forHTTPHeaderField: "Content-Length"), let size = Int(length),
@@ -60,7 +69,7 @@ enum PostMediaDownload {
       for start in stride(from: 0, to: size, by: chunkBytes) {
         try Task.checkCancellation()
         let end = min(size - 1, start + chunkBytes - 1)
-        var partRequest = try await request(endpoint, method: "GET", uid: uid)
+        var partRequest = try await request(endpoint, method: "GET", uid: uid, appCheckToken: appCheckToken)
         partRequest.setValue("bytes=\(start)-\(end)", forHTTPHeaderField: "Range")
         partRequest.setValue(etag, forHTTPHeaderField: "If-Match")
         let (bytes, rawResponse) = try await session.data(for: partRequest)

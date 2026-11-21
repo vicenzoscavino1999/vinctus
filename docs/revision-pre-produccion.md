@@ -1,0 +1,148 @@
+# Revisión transversal pre-producción (PR #128)
+
+Estado: **implementación y CI en verde** (pendiente despliegue coordinado y validación en dispositivo real).  
+Rama / PR: `fix/pre-prod-hardening` -> `fix/account-security` ([PR #128](https://github.com/vicenzoscavino1999/vinctus/pull/128)).  
+Commits de código verificados: `d8706f0` (pasada 1), `c1f8377` (pasada 2 — punto 1 / notificaciones) y `aa8e5f1` (pasada 2 — puntos 2, 3 y 4).
+
+Esta revisión cubre los **4 frentes transversales** fuera de los 10 módulos principales antes de pasar a producción (`vinctus-daf32` / `vinctus.vercel.app`).
+
+---
+
+## 1. Features web extra (`notifications`, `projects`, `collaborations`, `events`, `help`, `legal` y `public/*.html`)
+
+### Hallazgos y correcciones aplicadas
+
+- **Bandeja de notificaciones, badge global y reglas de actividad (`firestore.rules`, `src/features/notifications/`, `src/app/routes/Header.tsx`, `src/app/routes/AppLayout.tsx`, `src/features/settings/pages/SettingsNotificationsPage.tsx`)**:
+  - Se filtran usuarios bloqueados (`getBlockedUsers`) en **todas** las vistas: solicitudes de colaboración, solicitudes de seguimiento, solicitudes de grupo y feed de actividad (antes solo se filtraban solicitudes de grupo).
+  - **Seguridad en `firestore.rules` (`notifications`)**:
+    - Nuevo helper `isValidNotificationPostTarget(postId, toUid)`: valida que la publicación exista, pertenezca realmente al destinatario (`post.data.authorId == toUid`) y sea visible para el remitente (`canViewPublishedPost(post.data)`), bloqueando spam/forja de notificaciones hacia publicaciones inexistentes, ajenas o privadas.
+    - Límites de longitud en `fromUserName` (`<= 120`) y `fromUserPhoto` (`<= 600`) tanto en creación como en actualización del remitente.
+    - Corrección del fallo `PERMISSION_DENIED` al volver a dar "Me gusta" (`re-like`) después de que el autor marcó la notificación como leída: `isValidNotificationSenderUpdate()` queda restringido a `post_like` y permite que el remitente no bloqueado reactive `read: false` junto con `createdAt` en su `set(..., { merge: true })`.
+  - **Capa de mutaciones y badge vivo sin listeners persistentes**:
+    - Nuevo módulo `src/features/notifications/api/mutations.ts`: `markNotificationRead`, `markAllNotificationsRead` (lotes `writeBatch` de `<= 450` con deduplicación), `deleteNotification` y señal de sincronización `NOTIFICATIONS_UPDATED_EVENT` / `notifyNotificationsUpdated()`.
+    - Nueva consulta puntual acotada `getUnreadNotificationBadgeCount(uid)` en `src/features/notifications/api/queries.ts` (`Promise.allSettled` sobre últimas 20 notificaciones + últimas 10 solicitudes pendientes por tipo, filtrando bloqueados y reutilizando exclusivamente índices compuestos ya existentes).
+    - Conexión real del badge del encabezado (`Header.tsx` + `AppLayout.tsx`), mostrando contador `1..9` / `9+`, `aria-label` dinámico (`Notificaciones (N pendientes)`), sincronización al mutar o salir de `/notifications` y reinicio inmediato al cambiar de cuenta.
+  - **Experiencia completa en `NotificationsPage.tsx`**:
+    - Gestión de estado leído/no leído en Actividad: indicador visual, marcado automático al abrir (`Ver` / `Ver perfil`), botones individuales de **Marcar como leída** y **Eliminar notificación** y acción global **Marcar todo como leído**, todos con rollback seguro por secuencia (`activitySeqRef`) ante fallos o cambio de cuenta.
+    - Filtros por tipo en Actividad (`Todas`, `No leídas`, `Me gusta`, `Comentarios`, `Seguidores`), botón manual **Actualizar** en ambas pestañas y mensajes diferenciados para lista vacía vs. filtro/búsqueda sin resultados.
+    - Paginación segura: candado de concurrencia (`activityLoadingMoreRef`), deduplicación por ID (`mergeActivityPages`) y salto automático de hasta 2 páginas consecutivas cuando una página trae solo usuarios bloqueados.
+    - Solicitudes: guardas anti doble clic en los 6 manejadores (`collabActionLoading`, `groupActionLoading`, `followActionLoading`), manejo explícito de `PERMISSION_DENIED` con recarga, avatares con `NotificationAvatar` (validación `http(s)` y fallback seguro en error), enlaces al perfil del solicitante (`/user/:fromUid`), marcas temporales relativas (`formatRelativeTime`), manejo separado de `getOrCreateDirectConversation`, guardas de secuencia monotónica, limpieza completa en cambios directos `userA -> userB` y botones de **Reintentar**.
+  - **Preferencias (`SettingsNotificationsPage.tsx`)**: corrección ortográfica en español y nota aclaratoria sobre persistencia en cuenta vs. disponibilidad continua en la bandeja interna.
+- **Proyectos, colaboraciones y encuentros (`src/features/projects/pages/ProjectsPage.tsx`, `src/features/collaborations/`, `src/features/events/`, `src/shared/lib/firestore/collaborations.ts`, `src/shared/lib/firestore/events.ts`)**:
+  - Filtrado de colaboraciones y encuentros de usuarios bloqueados, reinicio de `requestedIds` al cambiar de cuenta, precarga de solicitudes ya enviadas (`getSentCollaborationRequestIds`) para que el estado **"Solicitud enviada"** persista tras recargar la página, guardas de secuencia y botones de **Reintentar**.
+  - `sendCollaborationRequest`: corrige el falso negativo por `limit(1)` consultando hasta 20 solicitudes previas del mismo par `(fromUid, collaborationId)` para evitar solicitudes duplicadas cuando existe un rechazo anterior.
+  - `getPendingCollaborationRequests`: añade `orderBy('createdAt', 'desc')` aprovechando el índice compuesto existente en `firestore.indexes.json`.
+  - `ProjectsPage` deja de llamar a `getEventAttendeeCount` cuando no hay sesión autenticada (las reglas de `events/{eventId}/attendees` requieren `isAuthenticated()`) y evita reintentos en bucle usando `Promise.allSettled` + seguimiento de IDs consultados.
+  - `joinEvent` (`src/shared/lib/firestore/events.ts`): alineado con `firestore.rules` para permitir al creador de un evento privado volver a unirse.
+  - `EventDetailModal`: reinicio limpio de `isAttending` al cambiar entre eventos, reemplazo de `window.confirm` bloqueante por confirmación inline, control de **Aforo completo** según `capacity`, scroll interno en viewports pequeños y cierre seguro con `Escape`.
+  - `CreateEventModal`: limpieza de mensajes de error técnicos (ya no expone avisos internos sobre reglas de Firestore).
+  - `CollaborationDetailModal`, `CreateCollaborationModal`, `CollaborationRequestModal`: scroll `max-h-[90vh]`, cierre con `Escape`, `role="dialog" aria-modal="true"`, recorte de `fromUserName` a 80 caracteres y mensajes amigables ante `PERMISSION_DENIED`.
+  - Alineación de esquemas Zod con `firestore.rules`: `events` (`city <= 80`, `venue <= 120`), `collaborations` (`fromUserName <= 80`), `help` (`appVersion <= 40`).
+- **Reglas de Firestore (`firestore.rules`)**:
+  - `isValidCollaborationRequestUpdate()` ahora exige `resource.data.status == 'pending'` (impide revertir solicitudes ya decididas) y exige `!isConversationBlocked(...)` solo al aceptar (`status == 'accepted'`), permitiendo rechazar solicitudes pendientes de usuarios bloqueados y eliminar colaboraciones sin fallo de lote.
+  - Se acotó la longitud de `coverUrl` en `events` y `fromUserPhoto` en `collaboration_requests` (`<= 600`).
+- **Ayuda, legal y páginas estáticas (`src/features/help/`, `src/features/legal/`, `src/shared/constants/legal.ts`, `public/privacy.html`)**:
+  - **Corrección crítica para App Store Review en `public/privacy.html`**: se corrigió la contradicción que afirmaba que la app de iPhone no accedía al micrófono (cuando `Info.plist` declara `NSMicrophoneUsageDescription` para notas de voz en el chat), detallando además el acceso bajo demanda a fototeca y el uso opcional de OpenAI en el chat web.
+  - Sincronización de las páginas React internas (`/legal/privacy`, `/legal/terms`, `/legal/community-guidelines`) con `public/*.html` (edad mínima 13+, retención `<= 30 días`, permisos de iOS, SLA de moderación y ortografía en español).
+  - `LEGAL_LINKS` usa rutas relativas del mismo origen (`/privacy.html`, `/terms.html`, `/community-guidelines.html`, `/support.html`) como fallback cuando no se definen variables `VITE_*_URL`, evitando enlaces rotos entre staging, previews y producción.
+  - `HelpPage` navega internamente a `/legal/privacy`, `/legal/terms` y `/legal/community-guidelines`, corrige la ruta del FAQ de eliminación de cuenta y agrega `aria-expanded`.
+  - `SupportModal`: reemplaza `window.open('mailto:...', '_blank')` por enlaces `<a href="mailto:...">`, actualiza `APP_VERSION` de `v0.0.2-alpha` a `web-1.0.0` y bloquea cierre accidental durante el envío.
+
+---
+
+## 2. Firebase App Check en iOS nativo (modo monitoreo)
+
+- Se agregó el producto `FirebaseAppCheck` a `ios-native/VinctusNative/project.yml` (sin nuevas descargas SPM: `app-check` 11.2.0 ya estaba fijado en `Package.resolved`).
+- Se creó `ios-native/VinctusNative/Sources/App/AppCheckBootstrap.swift`, invocado en `FirebaseBootstrap.configureIfPossible()` **antes** de `FirebaseApp.configure(options:)` únicamente cuando existe un `GoogleService-Info*.plist` válido (dejando los emuladores de `VinctusNativeIntegrationTests` y las corridas demo sin plist 100% intactos).
+- Claves añadidas en `ios-native/VinctusNative/Resources/Info.plist`:
+  - `VINCTUS_ENABLE_APP_CHECK = true`
+  - `VINCTUS_APP_CHECK_PROVIDER = auto`
+- Resolución en modo `auto`:
+  - `DEBUG` o Simulator -> `AppCheckDebugProvider`.
+  - Dispositivo real en `Release` -> `DeviceCheckProvider` (no requiere entitlements extra ni regenerar el provisioning profile `Vinctus AppStore CI`).
+  - Ruta lista para escalar a `AppAttestProvider` (con fallback automático a `DeviceCheckProvider`) al definir `VINCTUS_APP_CHECK_PROVIDER = appAttest` una vez habilitado App Attest en Apple Developer Portal y en `VinctusNative.entitlements`.
+- Adjunto **best-effort** del encabezado `X-Firebase-AppCheck` en `readPostMedia` tanto en iOS (`ProtectedPostMedia.swift`) como en web (`src/shared/lib/protected-post-media.ts`), obteniendo el token **una sola vez por descarga** con **timeout acotado de 3 s** (`AppCheckBootstrap.withTimeout` con continuación bloqueada por `NSLock` en iOS y `Promise.race` con limpieza de temporizador en web), para que una atestación lenta o caída nunca bloquee descargas multimedia en modo monitoreo.
+- En web (`src/shared/lib/firebase.ts`), `setupAppCheck()` omite la inicialización contra reCAPTCHA v3 vivo cuando `VITE_USE_FIREBASE_EMULATOR=true` sin `VITE_FIREBASE_APP_CHECK_DEBUG_TOKEN`.
+- `scripts/app-check-preflight.mjs` ampliado para validar **Web + iOS**: comprueba `FirebaseAppCheck` en `project.yml`, orden de inicialización en `FirebaseBootstrap.swift`, claves de `Info.plist` y bloquea con `FAIL` si `VINCTUS_APP_CHECK_PROVIDER=appAttest` se configura sin el entitlement `com.apple.developer.devicecheck.appattest-environment`.
+- **Recordatorio obligatorio**: **no activar Enforcement** en Firebase Console (`vinctus-staging` ni `vinctus-daf32`) hasta verificar tráfico verificado de web + iOS en el panel de métricas de App Check (ver [ios-app-check-rollout-plan.md](ios-app-check-rollout-plan.md)).
+
+---
+
+## 3. Rescate selectivo de `origin/testflight/vinctus-staging` y estabilidad de `ChatUITests`
+
+### Cambios rescatados (seguros para producción)
+
+- `.vercelignore`: excluye `.env*`, `**/.env*`, `**/*-debug.log`, `.firebase` y `.claude`.
+- `public/icon-512.png`: reemplazado el archivo anterior (que era un JPEG de 1024×1024 renombrado a `.png`) por un PNG real de 512×512 válido para PWA y `apple-touch-icon`.
+- `functions/src/arena/createDebate.ts`: vincula `secrets: ['GEMINI_API_KEY']` para usar Google Cloud Secret Manager en lugar de `.env` en texto plano.
+  - **Acción previa obligatoria antes de desplegar Functions en `vinctus-daf32`**: ejecutar `firebase functions:secrets:set GEMINI_API_KEY --project vinctus-daf32`.
+- Infraestructura multi-entorno de TestFlight (aislada por `AppEnvironment.current == .staging` y `release_target=staging`): `.github/workflows/ios-native.yml`, `scripts/release-ios-testflight.sh`, `project.yml` (`ReleaseStaging` y `archive.config: ReleaseProd` explícito en `VinctusNative-Prod`), `FirebaseBootstrap.swift`, `AuthGateView.swift`, `LegalConfig.swift` y `docs/testflight-sin-mac.md`.
+- **Guardas simétricas staging vs. producción (pasada 2)**:
+  - `FirebaseBootstrap.isProjectAllowed(_:for:)` impide que `.prod` se configure contra `vinctus-staging` (incluso por el fallback `GoogleService-Info.plist`) y que `.staging` apunte fuera de `vinctus-staging`.
+  - `scripts/release-ios-testflight.sh` ahora ejecuta verificación post-archive tanto para `staging` como para `production` (comprueba `VINCTUS_ENV`, `VINCTUS_API_BASE_URL`, `CFBundleDisplayName`, `VINCTUS_ENABLE_APP_CHECK`, `VINCTUS_APP_CHECK_PROVIDER`, presencia exclusiva del plist correspondiente y `PROJECT_ID` exacto `vinctus-daf32` / `vinctus-staging`).
+- `vercel.json`: rescatado `"git": { "deploymentEnabled": { "testflight/vinctus-staging": false } }` **manteniendo intactos** los rewrites de producción hacia `https://vinctus-daf32.firebaseapp.com`.
+
+### Corrección del fallo en `iOS screenshots` (`44835633335`)
+
+- Diagnóstico forense de la evidencia exportada (`chat-ui-evidence`): en `ChatUITests/testVoiceRecordingProducesAnAttachmentForPreview()`, el toque inicial sobre `"Grabar nota de voz"` (área de 23×27.7 pt) se perdió durante la animación de cierre de la barra inferior tras navegar desde la lista; ni SpringBoard ni `Terminar` llegaron a mostrarse.
+- Corrección:
+  - En `ConversationView.swift` se amplió el área táctil mínima de los botones de micrófono y adjuntos a `36×36` con `.contentShape(Rectangle())`.
+  - En `ChatUITests.swift` se espera a que la barra de pestañas desaparezca (`Perfil` inexistente) y a que el botón de micrófono sea `hittable` y `enabled`, con reintento único seguro si el toque coincide con el final de la transición y soporte ampliado de etiquetas de alerta de permisos.
+
+---
+
+## 4. Seguridad Web/PWA (`vercel.json`, `api/chat.ts`, `heic2any-loader.ts`, `index.html`, `vite.config.ts`, `registerSW.ts`, `api.ts`)
+
+- **CSP sin romper Firebase Auth proxy (`vercel.json`)**:
+  - Se movió la cabecera estricta `Content-Security-Policy` de `"/(.*)"` a `"/((?!__/auth/|__/firebase/|api/).*)"` para no sobrescribir ni bloquear los scripts inline del proxy de OAuth de Firebase (`/__/auth/handler` y `/__/auth/iframe`, usados por Google y Apple Sign-In en PWA standalone).
+  - En `script-src` se sustituyó el origen amplio `https://cdn.jsdelivr.net` por la URL exacta `https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js` (sin `'unsafe-inline'` ni `'unsafe-eval'`), y se añadieron `https://*.run.app`, `https://accounts.google.com` y `https://appleid.apple.com` en `connect-src` y `form-action`.
+  - Se agregó `Permissions-Policy: camera=(), geolocation=(), payment=(), usb=(), browsing-topics=(), microphone=(self)` (respetando la grabación de notas de voz de `VoiceRecorder.tsx`).
+  - Se endurecieron `/api/(.*)` (`default-src 'none'; frame-ancestors 'none'`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`) y `/api/chat` (`Cache-Control: private, no-store, max-age=0`, replicado también en `api/chat.ts`).
+- **SRI en script externo (`src/shared/lib/heic2any-loader.ts`)**: se añadió `integrity="sha384-OTofQ0MEeiSgh62havBcemCIK0gqj809wX6UA0uPISNMRnR6NZyCdGzX3SbLrgwL"`, `referrerPolicy="no-referrer"` y limpieza del `<script>` fallido para reintentos limpios.
+- **Limpieza HTML y PWA (`index.html`, `vite.config.ts`, `registerSW.ts`, `api.ts`)**:
+  - Se eliminó el manejador inline `onload="this.media='all'"` de `index.html` y se añadió `<meta name="mobile-web-app-capable" content="yes" />`.
+  - Se eliminó la regla obsoleta de Workbox para `api.allorigins.win` en `vite.config.ts` y el proxy CORS de terceros por defecto en `src/shared/lib/api.ts` (quedando solo opt-in mediante `VITE_CORS_PROXY` para desarrollo local).
+  - Se amplió `navigateFallbackDenylist` y se añadió `globIgnores` en `vite.config.ts` para no precachear páginas legales estáticas ni las 7 imágenes pesadas de categorías (cacheándolas bajo demanda vía `StaleWhileRevalidate`), reduciendo el precache inicial de **7,657.74 KiB (86 entradas)** a **2,539.84 KiB (75 entradas)**, y separando iconos `any` y `maskable` en el manifiesto.
+  - En `src/registerSW.ts` se corrigió la carrera entre `updateSW(true)` y `window.location.reload()`, se añadió guarda en memoria para modo privado con `sessionStorage` bloqueado y se protegió `registration.update()` cuando el dispositivo está sin conexión.
+
+---
+
+## 5. Verificación automatizada
+
+### Pasada 1 (commit `d8706f0`)
+
+- **Local**:
+  - `npm.cmd run functions:build`, `npm.cmd run typecheck`, `npx.cmd eslint src functions e2e scripts api`, `check:cycles`, `check:stubs`, `check:raw-onsnapshot`, `contract:check`: **PASS**.
+  - `npm.cmd run test:api`: **16 archivos / 113 pruebas** en verde.
+  - `npm.cmd run test:run`: **86 archivos / 579 pruebas** en verde (incluye nuevas suites `NotificationsPage.test.tsx`, `ProjectsPage.test.tsx`, `SupportModal.test.tsx` y cobertura de `X-Firebase-AppCheck` en `protected-post-media.test.ts`).
+  - `npm.cmd run build`, `node scripts/app-store-preflight.mjs --skip-url-checks` (`PASS: 34 | WARN: 1 | FAIL: 0`), `npm.cmd run preflight:appcheck` (`PASS: 2 | WARN: 1 | FAIL: 0`): **PASS**.
+- **GitHub Actions y Vercel en PR #128 (`d8706f0`)**:
+  - `CI` (`44916643247`): **PASS** (`lint`, `typecheck`, `cost-gates`, `test`, `rules` **3 archivos / 95 pruebas**, `post-counts`, `build`, `e2e` **20 passed**, `lhci`).
+  - `iOS native` PR (`44916643270`) y push (`44916639307`): **PASS** (`ReleaseProd` con `FirebaseAppCheck`, unit tests con `AppCheckBootstrapTests`, e `ios-native-integration` **passed: 45, failed: 0**).
+  - `iOS screenshots` (`44916639285`): **PASS** (`ChatUITests` **3 passed / 0 failed** en `iPhone 17 Pro` iOS 26.4.1 + 13 capturas).
+  - `Vercel` Preview: **PASS**.
+
+### Pasada 2 — Endurecimiento profundo de notificaciones y features web extra (commit `c1f8377`)
+
+- **Local**:
+  - `npm.cmd run functions:build`, `npm.cmd run typecheck`, `npx.cmd eslint src functions e2e scripts api` (**0 errores, 0 warnings**), `check:cycles`, `check:stubs`, `check:raw-onsnapshot`, `contract:check`, `npm.cmd run build`: **PASS**.
+  - `npm.cmd run test:api`: **16 archivos / 113 pruebas** en verde.
+  - `npm.cmd run test:run`: **88 archivos / 593 pruebas** en verde (añade `src/features/notifications/api/mutations.test.ts`, `src/app/routes/Header.test.tsx`, cobertura de `getUnreadNotificationBadgeCount`, `getSentCollaborationRequestIds`, precarga de solicitudes en `ProjectsPage.test.tsx` y flujos completos de lectura/eliminación/filtros/paginación/cambio de cuenta en `NotificationsPage.test.tsx`).
+- **GitHub Actions y Vercel en PR #128 (`c1f8377`)**:
+  - `CI` (`44931084104`): **PASS** (`lint`, `typecheck`, `cost-gates`, `test`, `rules` **3 archivos / 96 pruebas**, `post-counts`, `build`, `e2e` **20 passed**, `lhci`).
+  - `iOS native` PR (`44931084198`): **PASS** (`ios-native`, `ios-native-integration`).
+  - `Vercel` Preview: **PASS**.
+
+### Pasada 2 — App Check, guardas iOS staging/prod y seguridad Web/PWA (commit `aa8e5f1`)
+
+- **Local**:
+  - `bash -n scripts/release-ios-testflight.sh`, `functions:build`, `typecheck`, `npx.cmd eslint src functions e2e scripts api` (**0 errores, 0 warnings**), `check:cycles`, `check:stubs`, `check:raw-onsnapshot`, `contract:check`: **PASS**.
+  - `npm.cmd run preflight:appcheck` (**PASS: 6 | WARN: 1 | FAIL: 0**, validando Web + iOS) y `node scripts/app-store-preflight.mjs --skip-url-checks` (**PASS: 34 | WARN: 1 | FAIL: 0**).
+  - `npm.cmd run test:api`: **17 archivos / 116 pruebas** en verde (añade `api/security-headers.test.ts` y verificación `Cache-Control: private, no-store, max-age=0` en `api/chat.test.ts`).
+  - `npm.cmd run test:run`: **89 archivos / 595 pruebas** en verde (añade `src/shared/lib/heic2any-loader.test.ts` y cobertura de timeout + reuso de token App Check en `protected-post-media.test.ts`).
+  - `npm.cmd run build`: **PASS** (precache PWA reducido a **75 entradas / 2,539.84 KiB**).
+- **GitHub Actions y Vercel en PR #128 (`aa8e5f1`)**:
+  - `CI` (`44940612140`): **PASS** (`lint`, `typecheck`, `cost-gates`, `test`, `rules` **3 archivos / 96 pruebas**, `post-counts`, `build`, `e2e` **20 passed**, `lhci`).
+  - `iOS native` (`44940607052`): **PASS** (`ReleaseProd`, unit tests con timeout de App Check y guardia `FirebaseBootstrap.isProjectAllowed`, e `ios-native-integration` **passed: 45, failed: 0**).
+  - `iOS screenshots` (`44940607044`): **PASS** (`ChatUITests` **3 passed / 0 failed** en `iPhone 17 Pro` iOS 26.4.1 + 13 capturas).
+  - `Vercel` Preview: **PASS** (validando en despliegue el nuevo `vercel.json`).

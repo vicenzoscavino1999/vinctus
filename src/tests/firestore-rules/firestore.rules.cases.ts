@@ -1794,4 +1794,233 @@ describe('Firestore Rules - critical access controls', () => {
       }),
     );
   });
+
+  it('enforces pending-only transitions and block-aware reject on collaboration_requests', async () => {
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('collaboration_requests/cr_pending_blocked').set({
+        collaborationId: 'collab_1',
+        collaborationTitle: 'Proyecto IA',
+        fromUid: 'user_a',
+        toUid: 'user_b',
+        status: 'pending',
+        message: 'Me interesa',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('collaboration_requests/cr_already_accepted').set({
+        collaborationId: 'collab_1',
+        collaborationTitle: 'Proyecto IA',
+        fromUid: 'user_c',
+        toUid: 'user_b',
+        status: 'accepted',
+        message: null,
+        fromUserName: 'Carlos',
+        fromUserPhoto: null,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+    });
+    await seedBlockedUser('user_b', 'user_a');
+
+    const ownerDb = env.authenticatedContext('user_b').firestore();
+
+    // Accepting a request from a blocked user must fail
+    await assertFails(
+      ownerDb.doc('collaboration_requests/cr_pending_blocked').update({
+        status: 'accepted',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    // Rejecting a pending request from a blocked user (or during collaboration deletion) must succeed
+    await assertSucceeds(
+      ownerDb.doc('collaboration_requests/cr_pending_blocked').update({
+        status: 'rejected',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    // Flipping an already-decided collaboration request must fail
+    await assertFails(
+      ownerDb.doc('collaboration_requests/cr_already_accepted').update({
+        status: 'rejected',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('validates notification post ownership, field bounds, recipient read/delete, and re-like updates', async () => {
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('users_public/user_a').set({
+        displayName: 'Alice',
+        username: 'alice',
+        photoURL: null,
+        accountVisibility: 'public',
+      });
+      await db.doc('users_public/user_b').set({
+        displayName: 'Bob',
+        username: 'bob',
+        photoURL: null,
+        accountVisibility: 'public',
+      });
+      await db.doc('users_public/user_c').set({
+        displayName: 'Carol',
+        username: 'carol',
+        photoURL: null,
+        accountVisibility: 'private',
+      });
+      await db.doc('posts/post_bob_public').set({
+        authorId: 'user_b',
+        authorName: 'Bob',
+        authorUsername: 'bob',
+        authorPhoto: null,
+        content: 'Public post by Bob',
+        media: [],
+        groupId: null,
+        categoryId: null,
+        likeCount: 0,
+        commentCount: 0,
+        status: 'ready',
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: null,
+      });
+      await db.doc('posts/post_carol_private').set({
+        authorId: 'user_c',
+        authorName: 'Carol',
+        authorUsername: 'carol',
+        authorPhoto: null,
+        content: 'Private post by Carol',
+        media: [],
+        groupId: null,
+        categoryId: null,
+        likeCount: 0,
+        commentCount: 0,
+        status: 'ready',
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: null,
+      });
+    });
+
+    const aliceDb = env.authenticatedContext('user_a').firestore();
+    const bobDb = env.authenticatedContext('user_b').firestore();
+
+    // Forged notification for a nonexistent post fails
+    await assertFails(
+      aliceDb.doc('notifications/like_fake_user_a').set({
+        type: 'post_like',
+        toUid: 'user_b',
+        fromUid: 'user_a',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        postId: 'post_does_not_exist',
+        postSnippet: null,
+        commentText: null,
+        read: false,
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Forged notification where toUid does not match post authorId fails
+    await assertFails(
+      aliceDb.doc('notifications/like_wrong_recipient_user_a').set({
+        type: 'post_like',
+        toUid: 'user_c',
+        fromUid: 'user_a',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        postId: 'post_bob_public',
+        postSnippet: null,
+        commentText: null,
+        read: false,
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Forged notification for a private account's post when sender is not a follower fails
+    await assertFails(
+      aliceDb.doc('notifications/like_private_nonfollower_user_a').set({
+        type: 'post_like',
+        toUid: 'user_c',
+        fromUid: 'user_a',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        postId: 'post_carol_private',
+        postSnippet: null,
+        commentText: null,
+        read: false,
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Oversized fromUserName fails
+    await assertFails(
+      aliceDb.doc('notifications/like_oversized_user_a').set({
+        type: 'post_like',
+        toUid: 'user_b',
+        fromUid: 'user_a',
+        fromUserName: 'A'.repeat(121),
+        fromUserPhoto: null,
+        postId: 'post_bob_public',
+        postSnippet: null,
+        commentText: null,
+        read: false,
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Valid post_like notification succeeds
+    await assertSucceeds(
+      aliceDb.doc('notifications/like_post_bob_public_user_a').set({
+        type: 'post_like',
+        toUid: 'user_b',
+        fromUid: 'user_a',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        postId: 'post_bob_public',
+        postSnippet: null,
+        commentText: null,
+        read: false,
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Sender cannot mark notification read or delete it
+    await assertFails(
+      aliceDb.doc('notifications/like_post_bob_public_user_a').update({ read: true }),
+    );
+    await assertFails(aliceDb.doc('notifications/like_post_bob_public_user_a').delete());
+
+    // Recipient can mark notification read
+    await assertSucceeds(
+      bobDb.doc('notifications/like_post_bob_public_user_a').update({ read: true }),
+    );
+
+    // Unblocked sender re-liking after recipient marked read succeeds via merge set
+    await assertSucceeds(
+      aliceDb.doc('notifications/like_post_bob_public_user_a').set(
+        {
+          type: 'post_like',
+          toUid: 'user_b',
+          fromUid: 'user_a',
+          fromUserName: 'Alice',
+          fromUserPhoto: null,
+          postId: 'post_bob_public',
+          postSnippet: null,
+          commentText: null,
+          read: false,
+          createdAt: serverTimestamp(),
+        },
+        { merge: true },
+      ),
+    );
+
+    // Recipient can delete their own notification
+    await assertSucceeds(bobDb.doc('notifications/like_post_bob_public_user_a').delete());
+  });
 });
