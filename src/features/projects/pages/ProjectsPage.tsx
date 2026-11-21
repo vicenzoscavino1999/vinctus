@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatRelativeTime } from '@/shared/lib/formatUtils';
 import { MapPin, User, ArrowRight, Plus } from 'lucide-react';
 import { getCollaborations, type CollaborationRead } from '@/features/collaborations/api';
@@ -7,6 +7,7 @@ import {
   getUpcomingEvents,
   type FirestoreEvent,
 } from '@/features/events/api';
+import { getBlockedUsers } from '@/features/groups/api';
 import { useToast } from '@/shared/ui/Toast';
 import { useAuth } from '@/context/auth';
 import CreateCollaborationModal from '@/features/collaborations/components/CreateCollaborationModal';
@@ -43,12 +44,13 @@ const formatEventDate = (value: Date | null): { day: string; month: string } => 
 
 const formatEventLocation = (event: FirestoreEvent): string => {
   const parts = [event.city, event.venue].filter(Boolean) as string[];
-  return parts.length > 0 ? parts.join(', ') : 'Ubicacion por confirmar';
+  return parts.length > 0 ? parts.join(', ') : 'Ubicación por confirmar';
 };
 
 const ProjectsPage = () => {
   const { showToast } = useToast();
   const { user } = useAuth();
+  const userUid = user?.uid ?? null;
   const [collaborations, setCollaborations] = useState<CollaborationRead[]>([]);
   const [collaborationsLoading, setCollaborationsLoading] = useState(true);
   const [collaborationsError, setCollaborationsError] = useState<string | null>(null);
@@ -67,23 +69,36 @@ const ProjectsPage = () => {
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [eventAttendeeCounts, setEventAttendeeCounts] = useState<Record<string, number>>({});
 
-  const loadCollaborations = async () => {
+  const collabSeqRef = useRef(0);
+  const eventsSeqRef = useRef(0);
+  const fetchedEventCountIdsRef = useRef<Set<string>>(new Set());
+
+  const loadCollaborations = useCallback(async () => {
+    const seq = ++collabSeqRef.current;
     try {
       setCollaborationsError(null);
       setCollaborationsLoading(true);
-      const data = await getCollaborations();
-      setCollaborations(data);
+      const [data, blockedUids] = await Promise.all([
+        getCollaborations(),
+        userUid ? getBlockedUsers(userUid).catch(() => []) : Promise.resolve<string[]>([]),
+      ]);
+      if (seq !== collabSeqRef.current) return;
+      const blockedSet = new Set(blockedUids);
+      setCollaborations(data.filter((item) => !blockedSet.has(item.authorId)));
     } catch (error) {
+      if (seq !== collabSeqRef.current) return;
       console.error('Error loading collaborations:', error);
-      setCollaborationsError('No se pudieron cargar colaboraciones.');
+      setCollaborationsError('No se pudieron cargar las colaboraciones.');
     } finally {
-      setCollaborationsLoading(false);
+      if (seq === collabSeqRef.current) {
+        setCollaborationsLoading(false);
+      }
     }
-  };
+  }, [userUid]);
 
   const handlePublishProject = () => {
     if (!user) {
-      showToast('Inicia sesion para publicar proyectos', 'info');
+      showToast('Inicia sesión para publicar proyectos', 'info');
       return;
     }
     setEditingCollaboration(null);
@@ -96,64 +111,76 @@ const ProjectsPage = () => {
 
   const handlePublishEvent = () => {
     if (!user) {
-      showToast('Inicia sesion para publicar encuentros', 'info');
+      showToast('Inicia sesión para publicar encuentros', 'info');
       return;
     }
     setEditingEvent(null);
     setIsCreateEventOpen(true);
   };
 
-  const loadEvents = async () => {
+  const loadEvents = useCallback(async () => {
+    const seq = ++eventsSeqRef.current;
     try {
       setEventsError(null);
       setEventsLoading(true);
+      fetchedEventCountIdsRef.current = new Set();
       setEventAttendeeCounts({});
-      const data = await getUpcomingEvents(12);
-      setEvents(data);
+      const [data, blockedUids] = await Promise.all([
+        getUpcomingEvents(12),
+        userUid ? getBlockedUsers(userUid).catch(() => []) : Promise.resolve<string[]>([]),
+      ]);
+      if (seq !== eventsSeqRef.current) return;
+      const blockedSet = new Set(blockedUids);
+      setEvents(data.filter((event) => !blockedSet.has(event.createdBy)));
     } catch (error) {
+      if (seq !== eventsSeqRef.current) return;
       console.error('Error loading events:', error);
-      setEventsError('No se pudieron cargar encuentros.');
+      setEventsError('No se pudieron cargar los encuentros.');
     } finally {
-      setEventsLoading(false);
+      if (seq === eventsSeqRef.current) {
+        setEventsLoading(false);
+      }
     }
-  };
+  }, [userUid]);
 
   useEffect(() => {
-    loadCollaborations();
-  }, []);
+    setRequestedIds([]);
+  }, [userUid]);
 
   useEffect(() => {
-    loadEvents();
-  }, []);
+    void loadCollaborations();
+  }, [loadCollaborations]);
 
   useEffect(() => {
-    if (events.length === 0) return;
-    const pending = events.filter((event) => eventAttendeeCounts[event.id] === undefined);
+    void loadEvents();
+  }, [loadEvents]);
+
+  useEffect(() => {
+    // Firestore rules require authentication to read events/{eventId}/attendees.
+    if (!userUid || events.length === 0) return;
+    const pending = events.filter((event) => !fetchedEventCountIdsRef.current.has(event.id));
     if (pending.length === 0) return;
+    pending.forEach((event) => fetchedEventCountIdsRef.current.add(event.id));
 
     let isActive = true;
     const loadCounts = async () => {
-      try {
-        const updates: Record<string, number> = {};
-        await Promise.all(
-          pending.map(async (event) => {
-            updates[event.id] = await getEventAttendeeCount(event.id);
-          }),
-        );
-        if (isActive) {
-          setEventAttendeeCounts((prev) => ({ ...prev, ...updates }));
-        }
-      } catch (error) {
-        console.error('Error loading event counts:', error);
+      const updates: Record<string, number> = {};
+      await Promise.allSettled(
+        pending.map(async (event) => {
+          updates[event.id] = await getEventAttendeeCount(event.id);
+        }),
+      );
+      if (isActive && Object.keys(updates).length > 0) {
+        setEventAttendeeCounts((prev) => ({ ...prev, ...updates }));
       }
     };
 
-    loadCounts();
+    void loadCounts();
 
     return () => {
       isActive = false;
     };
-  }, [events, eventAttendeeCounts]);
+  }, [events, userUid]);
 
   return (
     <div className="page-projects pb-32">
@@ -183,10 +210,19 @@ const ProjectsPage = () => {
             Cargando colaboraciones...
           </div>
         ) : collaborationsError ? (
-          <div className="text-sm text-red-400 text-center py-8">{collaborationsError}</div>
+          <div className="text-sm text-red-400 text-center py-8 space-y-3">
+            <p>{collaborationsError}</p>
+            <button
+              type="button"
+              onClick={() => void loadCollaborations()}
+              className="px-4 py-1.5 rounded-full text-xs uppercase tracking-widest border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 transition-colors"
+            >
+              Reintentar
+            </button>
+          </div>
         ) : collaborations.length === 0 ? (
           <div className="text-sm text-neutral-500 text-center py-8">
-            No hay colaboraciones todavia.
+            No hay colaboraciones todavía.
           </div>
         ) : (
           collaborations.map((item) => {
@@ -271,17 +307,26 @@ const ProjectsPage = () => {
         {eventsLoading ? (
           <div className="text-sm text-neutral-500 text-center py-8">Cargando encuentros...</div>
         ) : eventsError ? (
-          <div className="text-sm text-red-400 text-center py-8">{eventsError}</div>
+          <div className="text-sm text-red-400 text-center py-8 space-y-3">
+            <p>{eventsError}</p>
+            <button
+              type="button"
+              onClick={() => void loadEvents()}
+              className="px-4 py-1.5 rounded-full text-xs uppercase tracking-widest border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 transition-colors"
+            >
+              Reintentar
+            </button>
+          </div>
         ) : events.length === 0 ? (
           <div className="text-sm text-neutral-500 text-center py-8">
-            No hay encuentros todavia.
+            No hay encuentros todavía.
           </div>
         ) : (
           <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 scrollbar-hide">
             {events.map((event) => {
               const dateParts = formatEventDate(event.startAt);
               const locationLabel = formatEventLocation(event);
-              const attendees = eventAttendeeCounts[event.id] ?? 0;
+              const attendees = eventAttendeeCounts[event.id] ?? event.attendeesCount ?? 0;
               return (
                 <div
                   key={event.id}
@@ -384,7 +429,11 @@ const ProjectsPage = () => {
       <EventDetailModal
         isOpen={!!selectedEvent}
         event={selectedEvent}
-        attendeeCount={selectedEvent ? (eventAttendeeCounts[selectedEvent.id] ?? 0) : 0}
+        attendeeCount={
+          selectedEvent
+            ? (eventAttendeeCounts[selectedEvent.id] ?? selectedEvent.attendeesCount ?? 0)
+            : 0
+        }
         onClose={() => setSelectedEvent(null)}
         onAttendanceChange={(eventId, count) => {
           setEventAttendeeCounts((prev) => ({ ...prev, [eventId]: count }));

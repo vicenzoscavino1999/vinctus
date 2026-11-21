@@ -67,6 +67,21 @@ el archivo; no la pegues en una conversación ni la agregues al repositorio.
 
 ## Ejecución
 
+Para pruebas internas con Firebase aislado, usa la rama `testflight/vinctus-staging` y
+selecciona `release_target=staging`. El archivo de configuración proviene de
+`IOS_FIREBASE_STAGING_PLIST_BASE64`, en el mismo entorno protegido `ios-release`.
+El build muestra el nombre **Vinctus QA**, usa `vinctus-staging` y llama a las APIs
+de `https://vinctus-staging.vercel.app`. En este entorno el acceso es por correo; Google y
+Apple requieren su propia configuración de staging.
+
+La subida de staging queda restringida a pruebas internas y conserva la revisión
+manual en GitHub. Una vez disponible en TestFlight, asígnala a **Vinctus QA** si el
+grupo no la recibe automáticamente. Registra el inicio de la observación de **48 horas**
+cuando tanto la web de staging como este build estén disponibles. Usa cuentas de
+prueba de staging y registra por separado el resultado en iPhone real.
+
+### Subida con Firebase de producción
+
 Ejemplo desde Windows, una vez subido el workflow y configurado el entorno:
 
 ```powershell

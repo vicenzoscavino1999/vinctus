@@ -23,6 +23,9 @@ enum PostMediaDownload {
     if let user = Auth.auth().currentUser {
       request.setValue("Bearer \(try await user.getIDToken())", forHTTPHeaderField: "Authorization")
     }
+    if let appCheckToken = await AppCheckBootstrap.optionalTokenHeader() {
+      request.setValue(appCheckToken, forHTTPHeaderField: "X-Firebase-AppCheck")
+    }
     guard Auth.auth().currentUser?.uid == uid else { throw PostReadError.sessionChanged }
     return request
   }

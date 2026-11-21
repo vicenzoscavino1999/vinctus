@@ -13,51 +13,52 @@ type FaqItem = {
 const FAQ_ITEMS: FaqItem[] = [
   {
     id: 'profile',
-    question: 'Como cambio mi foto o datos de perfil?',
+    question: '¿Cómo cambio mi foto o datos de perfil?',
     answer: 'Perfil > Editar > Guardar.',
   },
   {
     id: 'password',
-    question: 'Como recupero mi contrasena?',
-    answer: "En el login toca 'Olvide mi contrasena' y sigue el correo.",
+    question: '¿Cómo recupero mi contraseña?',
+    answer:
+      "En el inicio de sesión toca 'Olvidé mi contraseña' y sigue las instrucciones del correo.",
   },
   {
     id: 'publish',
-    question: 'Por que no puedo publicar o comentar?',
+    question: '¿Por qué no puedo publicar o comentar?',
     answer:
-      'Revisa tu conexion. Si persiste, cierra sesion y vuelve a entrar. Si aun falla, envia un reporte desde Ayuda y comentarios.',
+      'Revisa tu conexión. Si persiste, cierra sesión y vuelve a entrar. Si aún falla, envía un reporte desde Ayuda y comentarios.',
   },
   {
     id: 'uploads',
-    question: 'No puedo subir fotos o archivos, que hago?',
-    answer: 'Verifica permisos de galeria/camara, el tamano del archivo y tu conexion.',
+    question: 'No puedo subir fotos o archivos, ¿qué hago?',
+    answer: 'Verifica permisos de galería/cámara, el tamaño del archivo y tu conexión.',
   },
   {
     id: 'report',
-    question: 'Como reporto un usuario o contenido?',
+    question: '¿Cómo reporto un usuario o contenido?',
     answer:
-      "Si ves el boton '...', usa Reportar. Evaluamos reportes segun Community Guidelines y podemos retirar contenido o limitar cuentas.",
+      "Si ves el botón '...', usa Reportar. Evaluamos los reportes según las Normas de la comunidad y podemos retirar contenido o limitar cuentas.",
   },
   {
     id: 'report-followup',
-    question: 'Que pasa despues de enviar un reporte?',
+    question: '¿Qué pasa después de enviar un reporte?',
     answer:
-      'Aplicamos revision por prioridad. Casos de seguridad: <= 24h. Casos generales: <= 72h. Si falta contexto, soporte te contacta.',
+      'Aplicamos revisión por prioridad. Casos de seguridad: <= 24h. Casos generales: <= 72h. Si falta contexto, soporte te contacta.',
   },
   {
     id: 'delete',
-    question: 'Como borro una publicacion?',
-    answer: "Abre tu publicacion > '...' > Eliminar.",
+    question: '¿Cómo borro una publicación?',
+    answer: "Abre tu publicación > '...' > Eliminar.",
   },
   {
     id: 'notifications',
-    question: 'Como funcionan las notificaciones?',
+    question: '¿Cómo funcionan las notificaciones?',
     answer: 'Ajustes > Notificaciones. Activa o desactiva por tipo.',
   },
   {
     id: 'delete-account',
-    question: 'Como elimino mi cuenta?',
-    answer: 'Configuracion > Cuenta > Eliminar cuenta.',
+    question: '¿Cómo elimino mi cuenta?',
+    answer: 'Configuración > Privacidad y seguridad > Eliminar cuenta.',
   },
 ];
 
@@ -93,7 +94,7 @@ const HelpPage = () => {
           </button>
           <div>
             <h1 className="text-2xl font-semibold">Centro de ayuda</h1>
-            <p className="text-xs text-neutral-500">Respuestas rapidas para dudas comunes</p>
+            <p className="text-xs text-neutral-500">Respuestas rápidas para dudas comunes</p>
           </div>
         </header>
 
@@ -122,7 +123,9 @@ const HelpPage = () => {
                     className="bg-[#1A1A1A] border border-neutral-800 rounded-2xl overflow-hidden"
                   >
                     <button
+                      type="button"
                       onClick={() => toggleItem(item.id)}
+                      aria-expanded={isOpen}
                       className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors text-left"
                     >
                       <span className="font-medium">{item.question}</span>
@@ -142,10 +145,11 @@ const HelpPage = () => {
 
           <section className="bg-[#141414] border border-neutral-800 rounded-2xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold">No encontraste tu respuesta?</h2>
-              <p className="text-xs text-neutral-500">Contacta soporte y revisamos tu caso.</p>
+              <h2 className="text-lg font-semibold">¿No encontraste tu respuesta?</h2>
+              <p className="text-xs text-neutral-500">Contacta a soporte y revisamos tu caso.</p>
             </div>
             <button
+              type="button"
               onClick={() => setIsSupportOpen(true)}
               className="px-5 py-2 rounded-full bg-amber-500 text-black font-semibold hover:bg-amber-400 transition-colors"
             >
@@ -156,26 +160,24 @@ const HelpPage = () => {
           <section className="bg-[#141414] border border-neutral-800 rounded-2xl p-6 space-y-3">
             <h2 className="text-lg font-semibold">Legal y seguridad</h2>
             <p className="text-xs text-neutral-500">
-              Para privacidad, terminos, normas de comunidad y seguridad usa estos enlaces
+              Para privacidad, términos, normas de comunidad y seguridad usa estos enlaces
               oficiales.
             </p>
             <div className="flex flex-wrap gap-3 text-xs">
-              <a
-                href={LEGAL_LINKS.privacyPolicyPublicUrl}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={() => navigate('/legal/privacy')}
                 className="px-3 py-2 rounded-full border border-neutral-700 hover:border-neutral-500 transition-colors"
               >
-                Politica de privacidad
-              </a>
-              <a
-                href={LEGAL_LINKS.termsOfServicePublicUrl}
-                target="_blank"
-                rel="noreferrer"
+                Política de privacidad
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/legal/terms')}
                 className="px-3 py-2 rounded-full border border-neutral-700 hover:border-neutral-500 transition-colors"
               >
-                Terminos de servicio
-              </a>
+                Términos de servicio
+              </button>
               <button
                 type="button"
                 onClick={() => navigate('/legal/community-guidelines')}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatRelativeTime } from '@/shared/lib/formatUtils';
 import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
@@ -37,6 +37,7 @@ type FollowRequestWithUser = FollowRequestRead & { fromUser: FollowUserRead | nu
 const NotificationsPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const userUid = user?.uid ?? null;
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<'requests' | 'activity'>('requests');
   const [requestTab, setRequestTab] = useState<'collaboration' | 'followers' | 'groups'>(
@@ -47,6 +48,7 @@ const NotificationsPage = () => {
   const [requests, setRequests] = useState<CollaborationRequestRead[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [collabActionLoading, setCollabActionLoading] = useState<string | null>(null);
   const [groupRequests, setGroupRequests] = useState<GroupJoinRequestRead[]>([]);
   const [groupLoading, setGroupLoading] = useState(false);
   const [groupError, setGroupError] = useState<string | null>(null);
@@ -65,59 +67,88 @@ const NotificationsPage = () => {
   const [activitySearchQuery, setActivitySearchQuery] = useState('');
   const [activityInitialized, setActivityInitialized] = useState(false);
 
+  const requestsSeqRef = useRef(0);
+  const groupSeqRef = useRef(0);
+  const followSeqRef = useRef(0);
+  const activitySeqRef = useRef(0);
+
   const loadRequests = useCallback(async () => {
-    if (!user) return;
+    if (!userUid) return;
+    const seq = ++requestsSeqRef.current;
     try {
       setError(null);
       setLoading(true);
-      const data = await getPendingCollaborationRequests(user.uid);
-      setRequests(data);
+      const [data, blockedUids] = await Promise.all([
+        getPendingCollaborationRequests(userUid),
+        getBlockedUsers(userUid).catch(() => []),
+      ]);
+      if (seq !== requestsSeqRef.current) return;
+      const blockedSet = new Set(blockedUids);
+      setRequests(data.filter((req) => !blockedSet.has(req.fromUid)));
     } catch (loadError) {
+      if (seq !== requestsSeqRef.current) return;
       console.error('Error loading collaboration requests:', loadError);
       setError('No se pudieron cargar las solicitudes.');
     } finally {
-      setLoading(false);
+      if (seq === requestsSeqRef.current) {
+        setLoading(false);
+      }
     }
-  }, [user]);
+  }, [userUid]);
 
   const loadGroupRequests = useCallback(async () => {
-    if (!user) return;
+    if (!userUid) return;
+    const seq = ++groupSeqRef.current;
     try {
       setGroupError(null);
       setGroupLoading(true);
       const [data, blockedUids] = await Promise.all([
-        getPendingGroupJoinRequests(user.uid),
-        getBlockedUsers(user.uid).catch(() => []),
+        getPendingGroupJoinRequests(userUid),
+        getBlockedUsers(userUid).catch(() => []),
       ]);
+      if (seq !== groupSeqRef.current) return;
       const blockedSet = new Set(blockedUids);
       setGroupRequests(data.filter((req) => !blockedSet.has(req.fromUid)));
     } catch (loadError) {
+      if (seq !== groupSeqRef.current) return;
       console.error('Error loading group requests:', loadError);
       setGroupError('No se pudieron cargar las solicitudes de grupos.');
     } finally {
-      setGroupLoading(false);
+      if (seq === groupSeqRef.current) {
+        setGroupLoading(false);
+      }
     }
-  }, [user]);
+  }, [userUid]);
 
   const loadFollowRequests = useCallback(async () => {
-    if (!user) return;
+    if (!userUid) return;
+    const seq = ++followSeqRef.current;
     try {
       setFollowError(null);
       setFollowLoading(true);
-      const result = await getIncomingFollowRequests(user.uid, 50);
-      setFollowRequests(result.items);
+      const [result, blockedUids] = await Promise.all([
+        getIncomingFollowRequests(userUid, 50),
+        getBlockedUsers(userUid).catch(() => []),
+      ]);
+      if (seq !== followSeqRef.current) return;
+      const blockedSet = new Set(blockedUids);
+      setFollowRequests(result.items.filter((req) => !blockedSet.has(req.fromUid)));
     } catch (loadError) {
+      if (seq !== followSeqRef.current) return;
       console.error('Error loading follow requests:', loadError);
       setFollowError('No se pudieron cargar las solicitudes de seguimiento.');
     } finally {
-      setFollowLoading(false);
+      if (seq === followSeqRef.current) {
+        setFollowLoading(false);
+      }
     }
-  }, [user]);
+  }, [userUid]);
 
   const loadActivity = useCallback(
     async (loadMore = false, cursor?: PaginatedResult<ActivityRead>['lastDoc']) => {
-      if (!user) return;
+      if (!userUid) return;
       if (loadMore && !cursor) return;
+      const seq = ++activitySeqRef.current;
 
       try {
         setActivityError(null);
@@ -126,33 +157,54 @@ const NotificationsPage = () => {
         } else {
           setActivityLoading(true);
         }
-        const result = await getUserActivity(
-          user.uid,
-          20,
-          loadMore ? (cursor ?? undefined) : undefined,
-        );
-        setActivityItems((prev) => (loadMore ? [...prev, ...result.items] : result.items));
+        const [result, blockedUids] = await Promise.all([
+          getUserActivity(userUid, 20, loadMore ? (cursor ?? undefined) : undefined),
+          getBlockedUsers(userUid).catch(() => []),
+        ]);
+        if (seq !== activitySeqRef.current) return;
+        const blockedSet = new Set(blockedUids);
+        const visibleItems = result.items.filter((item) => !blockedSet.has(item.fromUid));
+        setActivityItems((prev) => (loadMore ? [...prev, ...visibleItems] : visibleItems));
         setActivityCursor(result.lastDoc);
         setActivityHasMore(result.hasMore);
       } catch (loadError) {
+        if (seq !== activitySeqRef.current) return;
         console.error('Error loading activity:', loadError);
         setActivityError('No se pudieron cargar las notificaciones.');
       } finally {
-        setActivityLoading(false);
-        setActivityLoadingMore(false);
+        if (seq === activitySeqRef.current) {
+          setActivityLoading(false);
+          setActivityLoadingMore(false);
+        }
       }
     },
-    [user],
+    [userUid],
   );
 
   useEffect(() => {
+    if (!userUid) {
+      requestsSeqRef.current += 1;
+      groupSeqRef.current += 1;
+      followSeqRef.current += 1;
+      setRequests([]);
+      setGroupRequests([]);
+      setFollowRequests([]);
+      setError(null);
+      setGroupError(null);
+      setFollowError(null);
+      setLoading(false);
+      setGroupLoading(false);
+      setFollowLoading(false);
+      return;
+    }
     void loadRequests();
     void loadGroupRequests();
     void loadFollowRequests();
-  }, [loadRequests, loadGroupRequests, loadFollowRequests]);
+  }, [userUid, loadRequests, loadGroupRequests, loadFollowRequests]);
 
   useEffect(() => {
-    if (!user) {
+    if (!userUid) {
+      activitySeqRef.current += 1;
       setActivityItems([]);
       setActivityCursor(null);
       setActivityHasMore(false);
@@ -166,22 +218,42 @@ const NotificationsPage = () => {
       setActivityInitialized(true);
       void loadActivity(false);
     }
-  }, [user, activeTab, activityInitialized, loadActivity]);
+  }, [userUid, activeTab, activityInitialized, loadActivity]);
 
   const handleAccept = async (request: CollaborationRequestRead) => {
-    if (!user) return;
+    if (!userUid || collabActionLoading === request.id) return;
+    setCollabActionLoading(request.id);
     try {
       await acceptCollaborationRequest(request.id);
-      await getOrCreateDirectConversation(user.uid, request.fromUid);
       setRequests((prev) => prev.filter((item) => item.id !== request.id));
-      showToast('Solicitud aceptada. Conversacion habilitada.', 'success');
+      try {
+        await getOrCreateDirectConversation(userUid, request.fromUid);
+        showToast('Solicitud aceptada. Conversación habilitada.', 'success');
+      } catch (convError) {
+        console.warn('Accepted collaboration request without direct conversation:', convError);
+        showToast(
+          'Solicitud aceptada. Abre su perfil o síguelo para iniciar la conversación.',
+          'success',
+        );
+      }
     } catch (acceptError) {
       console.error('Error accepting request:', acceptError);
-      showToast('No se pudo aceptar la solicitud.', 'error');
+      if (acceptError instanceof AppError && acceptError.code === 'PERMISSION_DENIED') {
+        showToast(
+          'No se pudo aceptar: la solicitud ya no está vigente o existe un bloqueo.',
+          'error',
+        );
+      } else {
+        showToast('No se pudo aceptar la solicitud.', 'error');
+      }
+    } finally {
+      setCollabActionLoading(null);
     }
   };
 
   const handleReject = async (requestId: string) => {
+    if (!userUid || collabActionLoading === requestId) return;
+    setCollabActionLoading(requestId);
     try {
       await rejectCollaborationRequest(requestId);
       setRequests((prev) => prev.filter((item) => item.id !== requestId));
@@ -189,6 +261,8 @@ const NotificationsPage = () => {
     } catch (rejectError) {
       console.error('Error rejecting request:', rejectError);
       showToast('No se pudo rechazar la solicitud.', 'error');
+    } finally {
+      setCollabActionLoading(null);
     }
   };
 
@@ -323,15 +397,24 @@ const NotificationsPage = () => {
 
   const activeError =
     requestTab === 'collaboration' ? error : requestTab === 'followers' ? followError : groupError;
+  const retryActiveRequestTab = () => {
+    if (requestTab === 'collaboration') {
+      void loadRequests();
+    } else if (requestTab === 'followers') {
+      void loadFollowRequests();
+    } else {
+      void loadGroupRequests();
+    }
+  };
   const requestTabTitle =
     requestTab === 'collaboration'
-      ? 'Colaboracion'
+      ? 'Colaboración'
       : requestTab === 'followers'
         ? 'Seguidores'
         : 'Grupos';
   const emptyText =
     requestTab === 'collaboration'
-      ? 'No tienes solicitudes de colaboracion.'
+      ? 'No tienes solicitudes de colaboración.'
       : requestTab === 'followers'
         ? 'No tienes solicitudes de seguimiento.'
         : 'No tienes solicitudes de grupos.';
@@ -370,7 +453,7 @@ const NotificationsPage = () => {
 
       {!user ? (
         <div className="text-neutral-500 text-sm text-center py-10">
-          Inicia sesion para ver tus notificaciones.
+          Inicia sesión para ver tus notificaciones.
         </div>
       ) : (
         <div className="space-y-10">
@@ -388,7 +471,7 @@ const NotificationsPage = () => {
                     }`}
                   >
                     <div className="flex items-center justify-between mb-4">
-                      <span className="text-neutral-300 font-medium">Colaboracion</span>
+                      <span className="text-neutral-300 font-medium">Colaboración</span>
                       <span className="text-brand-gold text-lg font-medium">{requests.length}</span>
                     </div>
                     <div className="inline-flex items-center gap-2 text-xs uppercase tracking-widest px-3 py-1.5 rounded-full border border-amber-500/40 text-amber-200">
@@ -444,7 +527,7 @@ const NotificationsPage = () => {
                         : 'border-neutral-800 text-neutral-500 hover:text-white'
                     }`}
                   >
-                    Colaboracion
+                    Colaboración
                   </button>
                   <button
                     onClick={() => setRequestTab('followers')}
@@ -505,52 +588,70 @@ const NotificationsPage = () => {
                       Cargando solicitudes...
                     </div>
                   ) : activeError ? (
-                    <div className="text-sm text-red-400 py-6 text-center">{activeError}</div>
+                    <div className="text-sm text-red-400 py-6 text-center space-y-3">
+                      <p>{activeError}</p>
+                      <button
+                        type="button"
+                        onClick={retryActiveRequestTab}
+                        className="px-4 py-1.5 rounded-full text-xs uppercase tracking-widest border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 transition-colors"
+                      >
+                        Reintentar
+                      </button>
+                    </div>
                   ) : activeRequestList.length === 0 ? (
                     <div className="text-sm text-neutral-500 py-6 text-center">{emptyText}</div>
                   ) : (
                     <div className="space-y-3">
                       {requestTab === 'collaboration' &&
-                        filteredCollaborationRequests.map((request) => (
-                          <div
-                            key={request.id}
-                            className="p-4 border border-neutral-800/70 rounded-xl bg-neutral-900/30 flex flex-col md:flex-row md:items-center md:justify-between gap-4"
-                          >
-                            <div className="flex items-start gap-3 min-w-0">
-                              <div className="w-11 h-11 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-300">
-                                {(request.fromUserName || 'U').charAt(0).toUpperCase()}
+                        filteredCollaborationRequests.map((request) => {
+                          const isProcessing = collabActionLoading === request.id;
+                          return (
+                            <div
+                              key={request.id}
+                              className="p-4 border border-neutral-800/70 rounded-xl bg-neutral-900/30 flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+                            >
+                              <div className="flex items-start gap-3 min-w-0">
+                                <div className="w-11 h-11 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-300">
+                                  {(request.fromUserName || 'U').charAt(0).toUpperCase()}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-white font-medium">
+                                    {request.fromUserName || 'Usuario'}
+                                  </p>
+                                  <p className="text-neutral-500 text-sm">
+                                    Quiere colaborar en{' '}
+                                    <span className="text-amber-200/80">
+                                      {request.collaborationTitle}
+                                    </span>
+                                  </p>
+                                  {request.message && (
+                                    <p className="text-neutral-600 text-sm mt-2">
+                                      {request.message}
+                                    </p>
+                                  )}
+                                </div>
                               </div>
-                              <div className="min-w-0">
-                                <p className="text-white font-medium">
-                                  {request.fromUserName || 'Usuario'}
-                                </p>
-                                <p className="text-neutral-500 text-sm">
-                                  Quiere colaborar en{' '}
-                                  <span className="text-amber-200/80">
-                                    {request.collaborationTitle}
-                                  </span>
-                                </p>
-                                {request.message && (
-                                  <p className="text-neutral-600 text-sm mt-2">{request.message}</p>
-                                )}
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => void handleAccept(request)}
+                                  disabled={isProcessing}
+                                  className="px-3 py-1.5 text-xs uppercase tracking-widest rounded-full border border-emerald-500/60 text-emerald-300 hover:text-white hover:border-emerald-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                  Aceptar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleReject(request.id)}
+                                  disabled={isProcessing}
+                                  className="px-3 py-1.5 text-xs uppercase tracking-widest rounded-full border border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                  Rechazar
+                                </button>
                               </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <button
-                                onClick={() => handleAccept(request)}
-                                className="px-3 py-1.5 text-xs uppercase tracking-widest rounded-full border border-emerald-500/60 text-emerald-300 hover:text-white hover:border-emerald-300 transition-colors"
-                              >
-                                Aceptar
-                              </button>
-                              <button
-                                onClick={() => handleReject(request.id)}
-                                className="px-3 py-1.5 text-xs uppercase tracking-widest rounded-full border border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-500 transition-colors"
-                              >
-                                Rechazar
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
 
                       {requestTab === 'followers' &&
                         filteredFollowRequests.map((request) => {
@@ -668,10 +769,19 @@ const NotificationsPage = () => {
                   Cargando actividad...
                 </div>
               ) : activityError ? (
-                <div className="text-sm text-red-400 py-6 text-center">{activityError}</div>
+                <div className="text-sm text-red-400 py-6 text-center space-y-3">
+                  <p>{activityError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadActivity(false)}
+                    className="px-4 py-1.5 rounded-full text-xs uppercase tracking-widest border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 transition-colors"
+                  >
+                    Reintentar
+                  </button>
+                </div>
               ) : filteredActivityItems.length === 0 ? (
                 <div className="text-sm text-neutral-500 py-6 text-center">
-                  No hay actividad todavia.
+                  No hay actividad todavía.
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -680,10 +790,10 @@ const NotificationsPage = () => {
                     const isFollow = item.type === 'follow';
                     const title =
                       item.type === 'post_like'
-                        ? `${name} le dio "Me gusta" a tu publicacion`
+                        ? `${name} le dio "Me gusta" a tu publicación`
                         : item.type === 'post_comment'
-                          ? `${name} comento en tu publicacion`
-                          : `${name} empezo a seguirte`;
+                          ? `${name} comentó en tu publicación`
+                          : `${name} empezó a seguirte`;
                     const detail =
                       item.type === 'post_comment'
                         ? item.commentText
@@ -732,7 +842,7 @@ const NotificationsPage = () => {
                     disabled={activityLoadingMore}
                     className="px-5 py-2 rounded-full text-xs uppercase tracking-widest border border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    {activityLoadingMore ? 'Cargando...' : 'Cargar mas'}
+                    {activityLoadingMore ? 'Cargando...' : 'Cargar más'}
                   </button>
                 </div>
               )}

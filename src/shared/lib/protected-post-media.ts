@@ -1,4 +1,5 @@
-import { auth } from '@/shared/lib/firebase';
+import { getToken } from 'firebase/app-check';
+import { appCheck, auth } from '@/shared/lib/firebase';
 
 const PREFIX = 'post-media:';
 export const POST_MEDIA_CHUNK_BYTES = 8 * 1024 * 1024;
@@ -51,7 +52,21 @@ export async function downloadPostMedia(
     if ((auth.currentUser?.uid ?? null) !== uid) throw new Error('La sesión cambió.');
     const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
     if ((auth.currentUser?.uid ?? null) !== uid) throw new Error('La sesión cambió.');
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    const result: Record<string, string> = {};
+    if (token) {
+      result.Authorization = `Bearer ${token}`;
+    }
+    if (appCheck) {
+      try {
+        const appCheckToken = await getToken(appCheck, false);
+        if (appCheckToken?.token) {
+          result['X-Firebase-AppCheck'] = appCheckToken.token;
+        }
+      } catch {
+        // Best-effort in monitoring mode: never block media download if App Check token fails.
+      }
+    }
+    return result;
   };
   const metadata = await fetch(endpoint, {
     method: 'HEAD',

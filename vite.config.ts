@@ -79,21 +79,14 @@ export default defineConfig({
         skipWaiting: true,
         cleanupOutdatedCaches: true,
         navigateFallback: '/index.html',
-        // /__/auth/* is Firebase's sign-in handler (proxied in vercel.json), never the SPA shell
-        navigateFallbackDenylist: [/^\/__\//],
+        // Keep Firebase Auth proxy, Vercel API routes, and static legal HTML pages outside the SPA shell.
+        navigateFallbackDenylist: [
+          /^\/__\//,
+          /^\/api\//,
+          /^\/(privacy|terms|community-guidelines|support)(\/|\.html)?$/,
+        ],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
         runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/api\.allorigins\.win\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'cors-proxy-cache',
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60, // 1 hour
-              },
-            },
-          },
           {
             urlPattern: /^https:\/\/hacker-news\.firebaseio\.com\/.*/i,
             handler: 'NetworkFirst',

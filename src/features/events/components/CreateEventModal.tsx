@@ -80,6 +80,19 @@ const CreateEventModal = ({
     }
   }, [isOpen, editingEvent]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (keyboardEvent: KeyboardEvent) => {
+      if (keyboardEvent.key === 'Escape' && !isSubmitting) {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [isOpen, isSubmitting, onClose]);
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -155,18 +168,19 @@ const CreateEventModal = ({
       }
     } catch (submitError) {
       console.error('Error saving event:', submitError);
-      const fallbackMessage = 'No se pudo publicar el encuentro.';
-      const errorMessage = submitError instanceof Error ? submitError.message : '';
       const errorCode =
         typeof submitError === 'object' && submitError && 'code' in submitError
-          ? String((submitError as { code?: unknown }).code)
+          ? String((submitError as { code?: unknown }).code).toLowerCase()
           : '';
-      const permissionHint =
-        errorCode.includes('permission') || errorMessage.toLowerCase().includes('permission')
-          ? 'Permisos insuficientes. Revisa las reglas de Firestore.'
-          : fallbackMessage;
-      const detail = errorMessage ? ` (${errorMessage})` : '';
-      setError(`${permissionHint}${detail}`);
+      if (errorCode.includes('permission')) {
+        setError('No tienes permisos para guardar este encuentro.');
+      } else {
+        setError(
+          editingEvent
+            ? 'No se pudo actualizar el encuentro.'
+            : 'No se pudo publicar el encuentro.',
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -175,16 +189,28 @@ const CreateEventModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto safe-area-inset py-6">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto safe-area-inset py-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={editingEvent ? 'Editar encuentro' : 'Publicar encuentro'}
+    >
+      <div
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        onClick={() => {
+          if (!isSubmitting) onClose();
+        }}
+      />
       <div className="relative w-full max-w-2xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 flex-shrink-0">
           <h2 className="text-xl font-serif text-white">
             {editingEvent ? 'Editar encuentro' : 'Publicar encuentro'}
           </h2>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
+            disabled={isSubmitting}
+            className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800 disabled:opacity-50"
             aria-label="Cerrar"
           >
             <X size={20} />

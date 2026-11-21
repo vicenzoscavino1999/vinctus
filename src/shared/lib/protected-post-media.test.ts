@@ -8,7 +8,19 @@ import {
 const session = vi.hoisted(() => ({
   currentUser: null as null | { uid: string; getIdToken: () => Promise<string> },
 }));
-vi.mock('@/shared/lib/firebase', () => ({ auth: session }));
+const appCheckMock = vi.hoisted(() => ({
+  instance: null as object | null,
+  getToken: vi.fn(),
+}));
+vi.mock('@/shared/lib/firebase', () => ({
+  auth: session,
+  get appCheck() {
+    return appCheckMock.instance;
+  },
+}));
+vi.mock('firebase/app-check', () => ({
+  getToken: (...args: unknown[]) => appCheckMock.getToken(...args),
+}));
 const source = 'post-media:posts/author/post/files/report.pdf';
 const etag = '"generation:hash"';
 const metadata = (size: number) =>
@@ -22,6 +34,8 @@ const part = (bytes: Uint8Array, start: number, size: number, tag = etag) =>
   });
 beforeEach(() => {
   session.currentUser = { uid: 'viewer', getIdToken: vi.fn().mockResolvedValue('private-token') };
+  appCheckMock.instance = null;
+  appCheckMock.getToken.mockReset();
   vi.stubEnv('VITE_FIREBASE_PROJECT_ID', 'vinctus-dev');
   vi.stubEnv('VITE_USE_FIREBASE_EMULATOR', 'true');
 });
@@ -125,4 +139,36 @@ it('discards a response after cancellation', async () => {
       }),
   );
   await expect(downloadPostMedia(source, controller.signal)).rejects.toThrow();
+});
+
+it('attaches X-Firebase-AppCheck header when App Check is active and falls back gracefully on token error', async () => {
+  appCheckMock.instance = { app: 'mock' };
+  appCheckMock.getToken.mockResolvedValue({ token: 'app-check-tok-123' });
+
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(metadata(2))
+    .mockResolvedValueOnce(part(new Uint8Array([7, 8]), 0, 2));
+  vi.stubGlobal('fetch', fetcher);
+
+  const blob = await downloadPostMedia(source, new AbortController().signal);
+  expect(blob.size).toBe(2);
+  expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({
+    Authorization: 'Bearer private-token',
+    'X-Firebase-AppCheck': 'app-check-tok-123',
+  });
+
+  // Token failure in monitoring mode must not block protected media downloads
+  appCheckMock.getToken.mockRejectedValue(new Error('app-check-unavailable'));
+  const fetcherFallback = vi
+    .fn()
+    .mockResolvedValueOnce(metadata(1))
+    .mockResolvedValueOnce(part(new Uint8Array([9]), 0, 1));
+  vi.stubGlobal('fetch', fetcherFallback);
+
+  const fallbackBlob = await downloadPostMedia(source, new AbortController().signal);
+  expect(fallbackBlob.size).toBe(1);
+  expect(fetcherFallback.mock.calls[0]?.[1]?.headers).toEqual({
+    Authorization: 'Bearer private-token',
+  });
 });

@@ -1191,7 +1191,7 @@ service cloud.firestore {
         && (data.capacity == null || (data.capacity is int && data.capacity >= 0 && data.capacity <= 100000))
         && data.visibility in ['public', 'private']
         && data.createdBy == request.auth.uid
-        && (data.coverUrl == null || data.coverUrl is string)
+        && (data.coverUrl == null || (data.coverUrl is string && data.coverUrl.size() <= 600))
         && data.createdAt == request.time
         && data.updatedAt == request.time;
     }
@@ -1217,7 +1217,7 @@ service cloud.firestore {
         && (data.venue == null || (data.venue is string && data.venue.size() <= 120))
         && (data.capacity == null || (data.capacity is int && data.capacity >= 0 && data.capacity <= 100000))
         && data.visibility in ['public', 'private']
-        && (data.coverUrl == null || data.coverUrl is string)
+        && (data.coverUrl == null || (data.coverUrl is string && data.coverUrl.size() <= 600))
         && data.updatedAt == request.time;
     }
 
@@ -1607,7 +1607,7 @@ service cloud.firestore {
         && data.status == 'pending'
         && (data.message == null || (data.message is string && data.message.size() > 0 && data.message.size() <= 1000))
         && (data.fromUserName == null || (data.fromUserName is string && data.fromUserName.size() > 0 && data.fromUserName.size() <= 80))
-        && (data.fromUserPhoto == null || data.fromUserPhoto is string)
+        && (data.fromUserPhoto == null || (data.fromUserPhoto is string && data.fromUserPhoto.size() <= 600))
         && data.createdAt == request.time
         && data.updatedAt == request.time
         && collab != null
@@ -1618,10 +1618,14 @@ service cloud.firestore {
 
     function isValidCollaborationRequestUpdate() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['status', 'updatedAt'])
+      return resource.data.status == 'pending'
+        && changed.hasOnly(['status', 'updatedAt'])
         && request.resource.data.status in ['accepted', 'rejected']
         && request.resource.data.updatedAt == request.time
-        && !isConversationBlocked(resource.data.fromUid, resource.data.toUid)
+        && (
+          request.resource.data.status != 'accepted'
+          || !isConversationBlocked(resource.data.fromUid, resource.data.toUid)
+        )
         && request.resource.data.fromUid == resource.data.fromUid
         && request.resource.data.toUid == resource.data.toUid
         && request.resource.data.collaborationId == resource.data.collaborationId

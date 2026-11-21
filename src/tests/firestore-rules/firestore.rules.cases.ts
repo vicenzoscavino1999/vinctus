@@ -1794,4 +1794,62 @@ describe('Firestore Rules - critical access controls', () => {
       }),
     );
   });
+
+  it('enforces pending-only transitions and block-aware reject on collaboration_requests', async () => {
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('collaboration_requests/cr_pending_blocked').set({
+        collaborationId: 'collab_1',
+        collaborationTitle: 'Proyecto IA',
+        fromUid: 'user_a',
+        toUid: 'user_b',
+        status: 'pending',
+        message: 'Me interesa',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('collaboration_requests/cr_already_accepted').set({
+        collaborationId: 'collab_1',
+        collaborationTitle: 'Proyecto IA',
+        fromUid: 'user_c',
+        toUid: 'user_b',
+        status: 'accepted',
+        message: null,
+        fromUserName: 'Carlos',
+        fromUserPhoto: null,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+    });
+    await seedBlockedUser('user_b', 'user_a');
+
+    const ownerDb = env.authenticatedContext('user_b').firestore();
+
+    // Accepting a request from a blocked user must fail
+    await assertFails(
+      ownerDb.doc('collaboration_requests/cr_pending_blocked').update({
+        status: 'accepted',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    // Rejecting a pending request from a blocked user (or during collaboration deletion) must succeed
+    await assertSucceeds(
+      ownerDb.doc('collaboration_requests/cr_pending_blocked').update({
+        status: 'rejected',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    // Flipping an already-decided collaboration request must fail
+    await assertFails(
+      ownerDb.doc('collaboration_requests/cr_already_accepted').update({
+        status: 'rejected',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+  });
 });
