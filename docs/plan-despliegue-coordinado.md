@@ -5,34 +5,36 @@ Guía operativa única para integrar, desplegar con orden seguro y validar físi
 > [!IMPORTANT]
 > No fusionar los PRs a `main` antes de aprobar `staging`: la integración con `main` dispara despliegue automático en Vercel. Mantener la secuencia de despliegue indicada abajo para evitar cortar lecturas/escrituras a clientes activos.
 
-## 1. Estado de la pila de PRs apilados (`#119 → #127`)
+## 1. Estado de la pila de PRs apilados (`#119 → #128`)
 
-| Orden | PR                                                             | Rama (`head` -> `base`)                           | Módulo                     | Detalle                                                                    |
-| ----- | -------------------------------------------------------------- | ------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------- |
-| 1     | [#119](https://github.com/vicenzoscavino1999/vinctus/pull/119) | `fix/ios-conversations` -> `main`                 | Conversaciones (iOS y web) | [revision-app-nativa.md](revision-app-nativa.md)                           |
-| 2     | [#120](https://github.com/vicenzoscavino1999/vinctus/pull/120) | `fix/posts-community` -> `fix/ios-conversations`  | Publicaciones / Comunidad  | [revision-publicaciones-comunidad.md](revision-publicaciones-comunidad.md) |
-| 3     | [#121](https://github.com/vicenzoscavino1999/vinctus/pull/121) | `fix/profiles-followers` -> `fix/posts-community` | Perfiles y seguidores      | [revision-perfiles-seguidores.md](revision-perfiles-seguidores.md)         |
-| 4     | [#122](https://github.com/vicenzoscavino1999/vinctus/pull/122) | `fix/groups` -> `fix/profiles-followers`          | Grupos                     | [revision-grupos.md](revision-grupos.md)                                   |
-| 5     | [#123](https://github.com/vicenzoscavino1999/vinctus/pull/123) | `fix/stories` -> `fix/groups`                     | Historias                  | [revision-historias.md](revision-historias.md)                             |
-| 6     | [#124](https://github.com/vicenzoscavino1999/vinctus/pull/124) | `fix/discover-search` -> `fix/stories`            | Descubrir y búsqueda       | [revision-descubrir-busqueda.md](revision-descubrir-busqueda.md)           |
-| 7     | [#125](https://github.com/vicenzoscavino1999/vinctus/pull/125) | `fix/collections` -> `fix/discover-search`        | Colecciones                | [revision-colecciones.md](revision-colecciones.md)                         |
-| 8     | [#126](https://github.com/vicenzoscavino1999/vinctus/pull/126) | `fix/ai-arena` -> `fix/collections`               | IA: Chat y Arena           | [revision-ia-arena.md](revision-ia-arena.md)                               |
-| 9     | [#127](https://github.com/vicenzoscavino1999/vinctus/pull/127) | `fix/account-security` -> `fix/ai-arena`          | Cuenta y seguridad         | [revision-cuenta-seguridad.md](revision-cuenta-seguridad.md)               |
+| Orden | PR                                                             | Rama (`head` -> `base`)                            | Módulo                     | Detalle                                                                    |
+| ----- | -------------------------------------------------------------- | -------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------- |
+| 1     | [#119](https://github.com/vicenzoscavino1999/vinctus/pull/119) | `fix/ios-conversations` -> `main`                  | Conversaciones (iOS y web) | [revision-app-nativa.md](revision-app-nativa.md)                           |
+| 2     | [#120](https://github.com/vicenzoscavino1999/vinctus/pull/120) | `fix/posts-community` -> `fix/ios-conversations`   | Publicaciones / Comunidad  | [revision-publicaciones-comunidad.md](revision-publicaciones-comunidad.md) |
+| 3     | [#121](https://github.com/vicenzoscavino1999/vinctus/pull/121) | `fix/profiles-followers` -> `fix/posts-community`  | Perfiles y seguidores      | [revision-perfiles-seguidores.md](revision-perfiles-seguidores.md)         |
+| 4     | [#122](https://github.com/vicenzoscavino1999/vinctus/pull/122) | `fix/groups` -> `fix/profiles-followers`           | Grupos                     | [revision-grupos.md](revision-grupos.md)                                   |
+| 5     | [#123](https://github.com/vicenzoscavino1999/vinctus/pull/123) | `fix/stories` -> `fix/groups`                      | Historias                  | [revision-historias.md](revision-historias.md)                             |
+| 6     | [#124](https://github.com/vicenzoscavino1999/vinctus/pull/124) | `fix/discover-search` -> `fix/stories`             | Descubrir y búsqueda       | [revision-descubrir-busqueda.md](revision-descubrir-busqueda.md)           |
+| 7     | [#125](https://github.com/vicenzoscavino1999/vinctus/pull/125) | `fix/collections` -> `fix/discover-search`         | Colecciones                | [revision-colecciones.md](revision-colecciones.md)                         |
+| 8     | [#126](https://github.com/vicenzoscavino1999/vinctus/pull/126) | `fix/ai-arena` -> `fix/collections`                | IA: Chat y Arena           | [revision-ia-arena.md](revision-ia-arena.md)                               |
+| 9     | [#127](https://github.com/vicenzoscavino1999/vinctus/pull/127) | `fix/account-security` -> `fix/ai-arena`           | Cuenta y seguridad         | [revision-cuenta-seguridad.md](revision-cuenta-seguridad.md)               |
+| 10    | [#128](https://github.com/vicenzoscavino1999/vinctus/pull/128) | `fix/pre-prod-hardening` -> `fix/account-security` | Hardening pre-producción   | [revision-pre-produccion.md](revision-pre-produccion.md)                   |
 
 ### Cómo integrar sin conflictos cuando se apruebe el lanzamiento
 
-`fix/account-security` (`#127`) contiene el código acumulado de toda la pila `#119 → #127`. Al momento de pasar a `main` tras aprobar `staging`:
+`fix/pre-prod-hardening` (`#128`) contiene el código acumulado de toda la pila `#119 → #128`. Al momento de pasar a `main` tras aprobar `staging`:
 
-- **Opción recomendada (merge ordenado de abajo hacia arriba)**: marcar listos y hacer merge (merge commit o fast-forward, **no** squash para no reescribir SHAs base) en orden `#119 → #120 → #121 → #122 → #123 → #124 → #125 → #126 → #127` — GitHub re-apunta automáticamente la rama base del siguiente PR al fusionar el anterior.
-- **Opción alternativa (rama única a `main`)**: cambiar la base de `#127` a `main`, validar CI completa contra `main`, fusionar `#127` y cerrar `#119..#126` como absorbidos.
+- **Opción recomendada (merge ordenado de abajo hacia arriba)**: marcar listos y hacer merge (merge commit o fast-forward, **no** squash para no reescribir SHAs base) en orden `#119 → #120 → #121 → #122 → #123 → #124 → #125 → #126 → #127 → #128` — GitHub re-apunta automáticamente la rama base del siguiente PR al fusionar el anterior.
+- **Opción alternativa (rama única a `main`)**: cambiar la base de `#128` a `main`, validar CI completa contra `main`, fusionar `#128` y cerrar `#119..#127` como absorbidos.
 
 ## 2. Prerrequisitos antes de tocar `staging` o producción
 
 1. **Proyecto Firebase aislado de `staging`**: requerido por [DEPLOYMENT.md](../DEPLOYMENT.md) y [STAGING_MONITORING.md](../STAGING_MONITORING.md) antes de promover a producción (`vinctus-daf32`).
 2. **Secretos y variables de entorno**:
-   - **Cloud Functions**: claves de proveedores para Arena IA (`GEMINI_API_KEY`, `NVIDIA_API_KEY`, según `functions/src/arena/`), `storageBucket` y región `us-central1`.
+   - **Cloud Functions**: `createDebate` declara `secrets: ['GEMINI_API_KEY']` en Secret Manager; antes de desplegar Functions en producción (`vinctus-daf32`), ejecutar `firebase functions:secrets:set GEMINI_API_KEY --project vinctus-daf32` (además de `NVIDIA_API_KEY` si aplica), verificar `storageBucket` y región `us-central1`.
+   - **App Check (modo monitoreo)**: mantener Enforcement **desactivado** durante el lanzamiento inicial. Registrar la clave `.p8` de Apple DeviceCheck (y reCAPTCHA v3 en web) en Firebase Console > App Check para comenzar a recoger métricas verificadas de iOS + web antes de considerar Enforcement (ver [ios-app-check-rollout-plan.md](ios-app-check-rollout-plan.md)).
    - **Vercel (web + APIs)**: `GEMINI_API_KEY`, `OPENAI_API_KEY`, `NVIDIA_API_KEY`, `YOUTUBE_API_KEY` (si aplica), `FIREBASE_ADMIN_*` / credenciales de verificación y `VITE_ENABLE_APPLE_SIGN_IN`.
-   - **GitHub Environment `ios-release`**: revisar que la rama desde la que se lanzará TestFlight (`main` o `fix/account-security`) esté autorizada en **Settings > Environments > `ios-release`** (ver [testflight-sin-mac.md](testflight-sin-mac.md)).
+   - **GitHub Environment `ios-release`**: revisar que la rama desde la que se lanzará TestFlight (`main`, `fix/pre-prod-hardening` o `testflight/vinctus-staging`) esté autorizada en **Settings > Environments > `ios-release`** (ver [testflight-sin-mac.md](testflight-sin-mac.md)).
 3. **Respaldo de reglas activas**: exportar copia de `firestore.rules` y `storage.rules` actualmente desplegadas en Firebase Console antes de aplicar cambios.
 
 ## 3. Orden exacto de despliegue (primero en `staging`, luego en producción)
