@@ -16,6 +16,7 @@ const toastMock = vi.hoisted(() => ({
 }));
 const collabApiMock = vi.hoisted(() => ({
   getCollaborations: vi.fn(),
+  getSentCollaborationRequestIds: vi.fn(),
   createCollaboration: vi.fn(),
   updateCollaboration: vi.fn(),
   deleteCollaboration: vi.fn(),
@@ -90,6 +91,7 @@ describe('ProjectsPage', () => {
       makeCollab({ id: 'c-good', title: 'Telescopio DIY', authorId: 'author-good' }),
       makeCollab({ id: 'c-bad', title: 'Proyecto Oculto', authorId: 'author-blocked' }),
     ]);
+    collabApiMock.getSentCollaborationRequestIds.mockResolvedValue([]);
     eventsApiMock.getUpcomingEvents.mockResolvedValue([
       makeEvent({ id: 'e-good', title: 'Noche de estrellas', createdBy: 'author-good' }),
       makeEvent({ id: 'e-bad', title: 'Evento Oculto', createdBy: 'author-blocked' }),
@@ -161,5 +163,16 @@ describe('ProjectsPage', () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
     expect(await screen.findByText('Recuperado')).toBeInTheDocument();
+  });
+
+  it('preloads sent collaboration request IDs so requested state persists across reloads', async () => {
+    collabApiMock.getSentCollaborationRequestIds.mockResolvedValueOnce(['c-good']);
+
+    render(<ProjectsPage />);
+
+    expect(await screen.findByText('Telescopio DIY')).toBeInTheDocument();
+    const sentButton = await screen.findByRole('button', { name: 'Solicitud enviada' });
+    expect(sentButton).toBeDisabled();
+    expect(collabApiMock.getSentCollaborationRequestIds).toHaveBeenCalledWith('viewer-1');
   });
 });

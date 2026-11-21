@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatRelativeTime } from '@/shared/lib/formatUtils';
 import { MapPin, User, ArrowRight, Plus } from 'lucide-react';
-import { getCollaborations, type CollaborationRead } from '@/features/collaborations/api';
+import {
+  getCollaborations,
+  getSentCollaborationRequestIds,
+  type CollaborationRead,
+} from '@/features/collaborations/api';
 import {
   getEventAttendeeCount,
   getUpcomingEvents,
@@ -145,6 +149,22 @@ const ProjectsPage = () => {
 
   useEffect(() => {
     setRequestedIds([]);
+    if (!userUid) return;
+    let isActive = true;
+    const loadSentRequests = async () => {
+      try {
+        const sentIds = await getSentCollaborationRequestIds(userUid);
+        if (isActive) {
+          setRequestedIds(sentIds);
+        }
+      } catch {
+        // Keep page functional even if sent-request preload fails.
+      }
+    };
+    void loadSentRequests();
+    return () => {
+      isActive = false;
+    };
   }, [userUid]);
 
   useEffect(() => {

@@ -404,6 +404,14 @@ service cloud.firestore {
 
     // notifications/{notificationId}
     // Activity feed notifications
+    function isValidNotificationPostTarget(postId, toUid) {
+      let post = get(/databases/$(database)/documents/posts/$(postId));
+      return post != null
+        && post.data != null
+        && post.data.authorId == toUid
+        && canViewPublishedPost(post.data);
+    }
+
     function isValidNotificationCreate() {
       let data = request.resource.data;
       return data.keys().hasOnly([
@@ -416,8 +424,11 @@ service cloud.firestore {
         && data.fromUid == request.auth.uid
         && data.toUid != request.auth.uid
         && !isConversationBlocked(request.auth.uid, data.toUid)
+        && (data.fromUserName == null || (data.fromUserName is string && data.fromUserName.size() <= 120))
+        && (data.fromUserPhoto == null || (data.fromUserPhoto is string && data.fromUserPhoto.size() <= 600))
         && data.postId is string
         && data.postId.size() > 0
+        && isValidNotificationPostTarget(data.postId, data.toUid)
         && data.postSnippet == null
         && data.commentText == null
         && data.read == false
@@ -426,16 +437,21 @@ service cloud.firestore {
 
     function isValidNotificationSenderUpdate() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['createdAt', 'fromUserName', 'fromUserPhoto', 'postSnippet'])
-        && request.resource.data.fromUid == resource.data.fromUid
-        && request.resource.data.toUid == resource.data.toUid
+      let data = request.resource.data;
+      return resource.data.type == 'post_like'
+        && changed.hasOnly(['createdAt', 'fromUserName', 'fromUserPhoto', 'postSnippet', 'read'])
+        && data.fromUid == resource.data.fromUid
+        && data.toUid == resource.data.toUid
         && !isConversationBlocked(resource.data.fromUid, resource.data.toUid)
-        && request.resource.data.type == resource.data.type
-        && request.resource.data.postId == resource.data.postId
-        && request.resource.data.postSnippet == null
-        && request.resource.data.commentText == null
-        && request.resource.data.read == resource.data.read
-        && request.resource.data.createdAt == request.time;
+        && data.type == resource.data.type
+        && data.postId == resource.data.postId
+        && (data.fromUserName == null || (data.fromUserName is string && data.fromUserName.size() <= 120))
+        && (data.fromUserPhoto == null || (data.fromUserPhoto is string && data.fromUserPhoto.size() <= 600))
+        && isValidNotificationPostTarget(resource.data.postId, resource.data.toUid)
+        && data.postSnippet == null
+        && data.commentText == null
+        && (data.read == resource.data.read || data.read == false)
+        && data.createdAt == request.time;
     }
 
     function isValidNotificationRecipientUpdate() {

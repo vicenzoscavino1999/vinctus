@@ -80,8 +80,8 @@ const EventDetailModal = ({
 
   useEffect(() => {
     if (!isOpen || !event) return;
+    setIsAttending(false);
     if (!user) {
-      setIsAttending(false);
       return;
     }
 
@@ -97,7 +97,7 @@ const EventDetailModal = ({
       }
     };
 
-    loadStatus();
+    void loadStatus();
 
     return () => {
       isActive = false;

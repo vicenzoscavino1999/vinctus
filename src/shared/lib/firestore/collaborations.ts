@@ -186,18 +186,17 @@ export async function sendCollaborationRequest(input: {
     collection(db, COLLECTIONS.collaborationRequests),
     where('fromUid', '==', input.fromUid),
     where('collaborationId', '==', input.collaborationId),
-    limit(1),
+    limit(20),
   );
   const existing = await getDocs(existingQuery);
   trackFirestoreRead('firestore.getDocs', existing.size);
 
   if (!existing.empty) {
-    const existingDoc = existing.docs[0];
-    const data = existingDoc.data();
-    if (data.status === 'pending') {
+    const statuses = existing.docs.map((docSnap) => docSnap.data().status);
+    if (statuses.includes('pending')) {
       throw new Error('Ya enviaste una solicitud para este proyecto.');
     }
-    if (data.status === 'accepted') {
+    if (statuses.includes('accepted')) {
       throw new Error('Esta solicitud ya fue aceptada.');
     }
   }
@@ -245,6 +244,33 @@ export async function deleteCollaboration(
   await batch.commit();
 }
 
+export async function getSentCollaborationRequestIds(
+  uid: string,
+  limitCount: number = SMALL_LIST_LIMIT,
+): Promise<string[]> {
+  const q = query(
+    collection(db, COLLECTIONS.collaborationRequests),
+    where('fromUid', '==', uid),
+    limit(limitCount),
+  );
+  const snapshot = await getDocs(q);
+  trackFirestoreRead('firestore.getDocs', snapshot.size);
+
+  const ids = new Set<string>();
+  snapshot.docs.forEach((docSnap) => {
+    const data = docSnap.data() as { collaborationId?: unknown; status?: unknown };
+    if (
+      typeof data.collaborationId === 'string' &&
+      data.collaborationId.length > 0 &&
+      (data.status === 'pending' || data.status === 'accepted')
+    ) {
+      ids.add(data.collaborationId);
+    }
+  });
+
+  return Array.from(ids);
+}
+
 export async function getPendingCollaborationRequests(
   uid: string,
   limitCount: number = SMALL_LIST_LIMIT,
@@ -253,6 +279,7 @@ export async function getPendingCollaborationRequests(
     collection(db, COLLECTIONS.collaborationRequests),
     where('toUid', '==', uid),
     where('status', '==', 'pending'),
+    orderBy('createdAt', 'desc'),
     limit(limitCount),
   );
   const snapshot = await getDocs(q);

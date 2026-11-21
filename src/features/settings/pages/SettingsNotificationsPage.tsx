@@ -121,13 +121,13 @@ const SettingsNotificationsPage = () => {
         </button>
         <div>
           <h1 className="text-2xl font-semibold">Notificaciones</h1>
-          <p className="text-xs text-neutral-500">Configura como quieres recibir alertas</p>
+          <p className="text-xs text-neutral-500">Configura cómo quieres recibir alertas</p>
         </div>
       </header>
 
       {!user ? (
         <div className="text-sm text-neutral-500 text-center py-10">
-          Inicia sesion para configurar notificaciones.
+          Inicia sesión para configurar notificaciones.
         </div>
       ) : loading ? (
         <div className="text-sm text-neutral-500 text-center py-10">Cargando preferencias...</div>
@@ -183,7 +183,7 @@ const SettingsNotificationsPage = () => {
             <div className="bg-[#1A1A1A] border border-neutral-800 rounded-2xl overflow-hidden">
               <ToggleRow
                 label="Resumen semanal"
-                description="Un recordatorio con lo mas relevante"
+                description="Un recordatorio con lo más relevante"
                 icon={<Calendar size={18} className="text-purple-400" />}
                 checked={settings.weeklyDigest}
                 onChange={() => handleUpdate({ ...settings, weeklyDigest: !settings.weeklyDigest })}
@@ -201,6 +201,11 @@ const SettingsNotificationsPage = () => {
               />
             </div>
           </section>
+
+          <p className="text-xs text-neutral-500 px-2">
+            Tus preferencias se guardan en tu cuenta. Las alertas de actividad y solicitudes siempre
+            quedan disponibles dentro de la bandeja de Notificaciones.
+          </p>
         </div>
       )}
     </div>
