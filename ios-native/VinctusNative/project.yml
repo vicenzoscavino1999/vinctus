@@ -163,6 +163,8 @@ schemes:
         VinctusNative: all
     run:
       config: DebugProd
+    archive:
+      config: ReleaseProd
     test:
       config: DebugProd
       targets:

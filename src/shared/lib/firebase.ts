@@ -35,9 +35,17 @@ const APP_CHECK_SITE_KEY = (import.meta.env.VITE_FIREBASE_APP_CHECK_SITE_KEY ?? 
 const APP_CHECK_DEBUG_TOKEN = (import.meta.env.VITE_FIREBASE_APP_CHECK_DEBUG_TOKEN ?? '').trim();
 const APP_CHECK_AUTO_REFRESH =
   import.meta.env.VITE_FIREBASE_APP_CHECK_TOKEN_AUTO_REFRESH !== 'false';
+// Emulator wiring: enabled explicitly by env flag (also used by CI/LHCI workflows).
+const useEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true';
+const emulatorHost = import.meta.env.VITE_FIREBASE_EMULATOR_HOST || '127.0.0.1';
 
 const setupAppCheck = (): AppCheck | null => {
   if (typeof window === 'undefined' || !APP_CHECK_ENABLED) {
+    return null;
+  }
+
+  // Never hit live Google reCAPTCHA v3 during local emulator runs unless an explicit debug token is set.
+  if (useEmulators && !APP_CHECK_DEBUG_TOKEN) {
     return null;
   }
 
@@ -120,9 +128,6 @@ export const functions = getFunctions(app);
 // Storage instance
 export const storage = getStorage(app);
 
-// Emulator wiring: enabled explicitly by env flag (also used by CI/LHCI workflows).
-const useEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true';
-const emulatorHost = import.meta.env.VITE_FIREBASE_EMULATOR_HOST || '127.0.0.1';
 const emulatorPorts = {
   auth: 9099,
   firestore: 8080,

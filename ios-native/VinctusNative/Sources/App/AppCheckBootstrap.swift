@@ -43,6 +43,23 @@ final class VinctusAppCheckProviderFactory: NSObject, AppCheckProviderFactory {
   }
 }
 
+private final class TimeoutResumeBox<T: Sendable>: @unchecked Sendable {
+  private let lock = NSLock()
+  private var continuation: CheckedContinuation<T?, Never>?
+
+  init(_ continuation: CheckedContinuation<T?, Never>) {
+    self.continuation = continuation
+  }
+
+  func resumeOnce(with value: T?) {
+    lock.lock()
+    let cont = continuation
+    continuation = nil
+    lock.unlock()
+    cont?.resume(returning: value)
+  }
+}
+
 enum AppCheckBootstrap {
   private static let lock = NSLock()
   private static var activeFlag = false
@@ -160,17 +177,43 @@ enum AppCheckBootstrap {
     )
   }
 
+  static let defaultTokenTimeoutSeconds: TimeInterval = 3.0
+
+  /// Runs an async operation with a bounded timeout, returning `nil` immediately if the deadline
+  /// elapses first (even when an underlying Obj-C completion bridge ignores Task cancellation).
+  static func withTimeout<T: Sendable>(
+    seconds: TimeInterval,
+    operation: @escaping @Sendable () async -> T?
+  ) async -> T? {
+    let clampedSeconds = max(0.05, seconds)
+    return await withCheckedContinuation { continuation in
+      let box = TimeoutResumeBox(continuation)
+      let workTask = Task {
+        let value = await operation()
+        box.resumeOnce(with: value)
+      }
+      Task {
+        let nanos = UInt64(clampedSeconds * 1_000_000_000)
+        try? await Task.sleep(nanoseconds: nanos)
+        workTask.cancel()
+        box.resumeOnce(with: nil)
+      }
+    }
+  }
+
   /// Best-effort token fetch for custom HTTPS endpoints (e.g. `readPostMedia`).
-  /// Never throws so monitoring mode cannot break media loads if attestation is unavailable.
-  static func optionalTokenHeader() async -> String? {
+  /// Never throws and enforces a short timeout so monitoring mode cannot stall media loads.
+  static func optionalTokenHeader(timeoutSeconds: TimeInterval = defaultTokenTimeoutSeconds) async -> String? {
     guard isActive, FirebaseApp.app() != nil else { return nil }
-    do {
-      let token = try await AppCheck.appCheck().token(forcingRefresh: false)
-      let value = token.token.trimmingCharacters(in: .whitespacesAndNewlines)
-      return value.isEmpty ? nil : value
-    } catch {
-      AppLog.firebase.debug("appCheck.optionalToken.unavailable")
-      return nil
+    return await withTimeout(seconds: timeoutSeconds) {
+      do {
+        let token = try await AppCheck.appCheck().token(forcingRefresh: false)
+        let value = token.token.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+      } catch {
+        AppLog.firebase.debug("appCheck.optionalToken.unavailable")
+        return nil
+      }
     }
   }
 }

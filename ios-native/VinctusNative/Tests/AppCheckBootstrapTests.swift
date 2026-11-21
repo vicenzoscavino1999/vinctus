@@ -61,4 +61,31 @@ final class AppCheckBootstrapTests: XCTestCase {
     let token = await AppCheckBootstrap.optionalTokenHeader()
     XCTAssertNil(token)
   }
+
+  func testWithTimeoutReturnsValueBeforeDeadlineAndNilOnTimeout() async {
+    let fast = await AppCheckBootstrap.withTimeout(seconds: 0.5) {
+      "app-check-tok"
+    }
+    XCTAssertEqual(fast, "app-check-tok")
+
+    let slow: String? = await AppCheckBootstrap.withTimeout(seconds: 0.05) {
+      try? await Task.sleep(nanoseconds: 2_000_000_000)
+      return "too-late"
+    }
+    XCTAssertNil(slow)
+  }
+
+  func testFirebaseBootstrapProjectGuardPreventsCrossEnvironmentMistakes() {
+    XCTAssertTrue(FirebaseBootstrap.isProjectAllowed("vinctus-staging", for: .staging))
+    XCTAssertFalse(FirebaseBootstrap.isProjectAllowed("vinctus-daf32", for: .staging))
+    XCTAssertFalse(FirebaseBootstrap.isProjectAllowed(nil, for: .staging))
+
+    XCTAssertTrue(FirebaseBootstrap.isProjectAllowed("vinctus-daf32", for: .prod))
+    XCTAssertFalse(FirebaseBootstrap.isProjectAllowed("vinctus-staging", for: .prod))
+    XCTAssertFalse(FirebaseBootstrap.isProjectAllowed("", for: .prod))
+    XCTAssertFalse(FirebaseBootstrap.isProjectAllowed(nil, for: .prod))
+
+    XCTAssertTrue(FirebaseBootstrap.isProjectAllowed("vinctus-dev", for: .dev))
+    XCTAssertFalse(FirebaseBootstrap.isProjectAllowed("   ", for: .dev))
+  }
 }

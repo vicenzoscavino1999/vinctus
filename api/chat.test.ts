@@ -756,11 +756,12 @@ describe('api/chat', () => {
     });
   });
 
-  it('sets Allow: POST header on unsupported methods', async () => {
+  it('sets Allow: POST and private no-store Cache-Control headers', async () => {
     const result: MockResponseResult = { headers: {}, payload: null, statusCode: 200 };
     await handler(createReq({ method: 'GET' }), createRes(result));
     expect(result.statusCode).toBe(405);
     expect(result.headers.Allow).toBe('POST');
+    expect(result.headers['Cache-Control']).toBe('private, no-store, max-age=0');
   });
 
   it('returns trimmed history that passes validation on the next turn even after long replies and 20 messages', async () => {

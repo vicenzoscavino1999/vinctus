@@ -14,7 +14,9 @@ declare global {
   }
 }
 
-const HEIC2ANY_SRC = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+export const HEIC2ANY_SRC = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+export const HEIC2ANY_INTEGRITY =
+  'sha384-OTofQ0MEeiSgh62havBcemCIK0gqj809wX6UA0uPISNMRnR6NZyCdGzX3SbLrgwL';
 
 let heic2anyPromise: Promise<Heic2AnyFn> | null = null;
 
@@ -37,10 +39,13 @@ export const loadHeic2Any = async (): Promise<Heic2AnyFn> => {
       script.src = HEIC2ANY_SRC;
       script.async = true;
       script.crossOrigin = 'anonymous';
+      script.integrity = HEIC2ANY_INTEGRITY;
+      script.referrerPolicy = 'no-referrer';
 
       script.onload = () => {
         const loaded = getHeic2AnyFromWindow();
         if (!loaded) {
+          script.remove();
           reject(new Error('HEIC converter script loaded but API is unavailable.'));
           return;
         }
@@ -48,6 +53,7 @@ export const loadHeic2Any = async (): Promise<Heic2AnyFn> => {
       };
 
       script.onerror = () => {
+        script.remove();
         reject(new Error('Failed to load HEIC converter script.'));
       };
 

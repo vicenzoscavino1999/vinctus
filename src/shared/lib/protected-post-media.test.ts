@@ -141,24 +141,31 @@ it('discards a response after cancellation', async () => {
   await expect(downloadPostMedia(source, controller.signal)).rejects.toThrow();
 });
 
-it('attaches X-Firebase-AppCheck header when App Check is active and falls back gracefully on token error', async () => {
+it('attaches X-Firebase-AppCheck header once per download and falls back gracefully on token error or timeout', async () => {
   appCheckMock.instance = { app: 'mock' };
   appCheckMock.getToken.mockResolvedValue({ token: 'app-check-tok-123' });
 
+  const size = POST_MEDIA_CHUNK_BYTES + 2;
   const fetcher = vi
     .fn()
-    .mockResolvedValueOnce(metadata(2))
-    .mockResolvedValueOnce(part(new Uint8Array([7, 8]), 0, 2));
+    .mockResolvedValueOnce(metadata(size))
+    .mockResolvedValueOnce(part(new Uint8Array(POST_MEDIA_CHUNK_BYTES), 0, size))
+    .mockResolvedValueOnce(part(new Uint8Array([7, 8]), POST_MEDIA_CHUNK_BYTES, size));
   vi.stubGlobal('fetch', fetcher);
 
   const blob = await downloadPostMedia(source, new AbortController().signal);
-  expect(blob.size).toBe(2);
-  expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({
-    Authorization: 'Bearer private-token',
-    'X-Firebase-AppCheck': 'app-check-tok-123',
-  });
+  expect(blob.size).toBe(size);
+  // Token must be fetched once and reused across HEAD + all chunk GETs.
+  expect(appCheckMock.getToken).toHaveBeenCalledTimes(1);
+  for (const [, options] of fetcher.mock.calls) {
+    expect(options.headers).toMatchObject({
+      Authorization: 'Bearer private-token',
+      'X-Firebase-AppCheck': 'app-check-tok-123',
+    });
+  }
 
   // Token failure in monitoring mode must not block protected media downloads
+  appCheckMock.getToken.mockReset();
   appCheckMock.getToken.mockRejectedValue(new Error('app-check-unavailable'));
   const fetcherFallback = vi
     .fn()
@@ -171,4 +178,26 @@ it('attaches X-Firebase-AppCheck header when App Check is active and falls back 
   expect(fetcherFallback.mock.calls[0]?.[1]?.headers).toEqual({
     Authorization: 'Bearer private-token',
   });
+
+  // Stalled token lookup must time out cleanly and still allow media download
+  vi.useFakeTimers();
+  try {
+    appCheckMock.getToken.mockReset();
+    appCheckMock.getToken.mockImplementation(() => new Promise(() => undefined));
+    const fetcherTimeout = vi
+      .fn()
+      .mockResolvedValueOnce(metadata(1))
+      .mockResolvedValueOnce(part(new Uint8Array([5]), 0, 1));
+    vi.stubGlobal('fetch', fetcherTimeout);
+
+    const pending = downloadPostMedia(source, new AbortController().signal);
+    await vi.advanceTimersByTimeAsync(3100);
+    const timeoutBlob = await pending;
+    expect(timeoutBlob.size).toBe(1);
+    expect(fetcherTimeout.mock.calls[0]?.[1]?.headers).toEqual({
+      Authorization: 'Bearer private-token',
+    });
+  } finally {
+    vi.useRealTimers();
+  }
 });

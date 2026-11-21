@@ -4,6 +4,27 @@ import { appCheck, auth } from '@/shared/lib/firebase';
 const PREFIX = 'post-media:';
 export const POST_MEDIA_CHUNK_BYTES = 8 * 1024 * 1024;
 const MAX_BYTES = 100 * 1024 * 1024;
+export const APP_CHECK_TOKEN_TIMEOUT_MS = 3000;
+
+async function getOptionalAppCheckToken(
+  timeoutMs = APP_CHECK_TOKEN_TIMEOUT_MS,
+): Promise<string | null> {
+  if (!appCheck) return null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const tokenPromise = getToken(appCheck, false)
+      .then((result) => result?.token?.trim() || null)
+      .catch(() => null);
+    const timeoutPromise = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), timeoutMs);
+    });
+    return await Promise.race([tokenPromise, timeoutPromise]);
+  } finally {
+    if (timer !== null) {
+      clearTimeout(timer);
+    }
+  }
+}
 export const isProtectedPostMedia = (source: string | undefined): source is string =>
   !!source?.startsWith(PREFIX);
 
@@ -48,6 +69,7 @@ export async function downloadPostMedia(
     throw new Error('Inicia sesión para descargar el adjunto.');
   if (expectedUid !== undefined && uid !== expectedUid) throw new Error('La sesión cambió.');
   const endpoint = postMediaEndpoint(source);
+  const appCheckToken = await getOptionalAppCheckToken();
   const headers = async (): Promise<Record<string, string>> => {
     if ((auth.currentUser?.uid ?? null) !== uid) throw new Error('La sesión cambió.');
     const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
@@ -56,15 +78,8 @@ export async function downloadPostMedia(
     if (token) {
       result.Authorization = `Bearer ${token}`;
     }
-    if (appCheck) {
-      try {
-        const appCheckToken = await getToken(appCheck, false);
-        if (appCheckToken?.token) {
-          result['X-Firebase-AppCheck'] = appCheckToken.token;
-        }
-      } catch {
-        // Best-effort in monitoring mode: never block media download if App Check token fails.
-      }
+    if (appCheckToken) {
+      result['X-Firebase-AppCheck'] = appCheckToken;
     }
     return result;
   };
