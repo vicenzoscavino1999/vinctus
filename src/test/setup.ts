@@ -16,6 +16,13 @@ vi.mock('firebase/auth', () => ({
   signInWithPopup: vi.fn(),
   signInWithRedirect: vi.fn(),
   getRedirectResult: vi.fn(() => Promise.resolve(null)),
+  signInWithEmailAndPassword: vi.fn(),
+  createUserWithEmailAndPassword: vi.fn(),
+  updateProfile: vi.fn(),
+  sendEmailVerification: vi.fn(),
+  sendPasswordResetEmail: vi.fn(),
+  verifyPasswordResetCode: vi.fn(),
+  confirmPasswordReset: vi.fn(),
   signOut: vi.fn(),
   onAuthStateChanged: vi.fn((_auth, callback) => {
     // Immediately call with null user for tests
@@ -32,7 +39,9 @@ vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
   doc: vi.fn(),
   getDoc: vi.fn(() => Promise.resolve({ exists: () => false, data: () => ({}) })),
+  getDocFromServer: vi.fn(() => Promise.resolve({ exists: () => false, data: () => ({}) })),
   getDocs: vi.fn(() => Promise.resolve({ docs: [] })),
+  getDocsFromServer: vi.fn(() => Promise.resolve({ docs: [], size: 0 })),
   setDoc: vi.fn(() => Promise.resolve()),
   updateDoc: vi.fn(() => Promise.resolve()),
   deleteField: vi.fn(() => ({ _methodName: 'deleteField' })),

@@ -24,15 +24,26 @@ export const useTrendCategories = ({
   groups,
   followedCategories,
   userInterests,
+  sortBy,
 }: {
   categories: Category[];
   groups: FirestoreGroup[];
   followedCategories: string[];
   userInterests: string[];
+  /** The filter sheet's sort; "relevance" ranks by trend score. */
+  sortBy: string;
 }) => {
   const [activeTrendCategoryId, setActiveTrendCategoryId] = useState<string | null>(null);
   const [trendPreviewState, setTrendPreviewState] = useState<Record<string, TrendPreviewState>>({});
   const previewRequestedRef = useRef<Set<string>>(new Set());
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const groupCountByCategory = useMemo(() => countGroupsByCategory(groups), [groups]);
   const groupSocialByCategory = useMemo(() => summarizeGroupSocialByCategory(groups), [groups]);
@@ -76,8 +87,19 @@ export const useTrendCategories = ({
         trendScoresByCategory,
         weeklyDeltaByCategory,
         trendPreviewState,
+        sortBy,
+        groupCountByCategory,
+        groupSocialByCategory,
       }),
-    [categories, trendScoresByCategory, weeklyDeltaByCategory, trendPreviewState],
+    [
+      categories,
+      trendScoresByCategory,
+      weeklyDeltaByCategory,
+      trendPreviewState,
+      sortBy,
+      groupCountByCategory,
+      groupSocialByCategory,
+    ],
   );
 
   const trendRankPositionByCategory = useMemo(() => {
@@ -125,9 +147,10 @@ export const useTrendCategories = ({
     [groupCountByCategory, trendPreviewState, weeklyDeltaByCategory],
   );
 
-  const loadTrendPreview = useCallback(async (category: Category) => {
+  /** Loads a category's preview once; `force` reloads it (the panel's "Reintentar"). */
+  const loadTrendPreview = useCallback(async (category: Category, force = false) => {
     const categoryId = category.id;
-    if (previewRequestedRef.current.has(categoryId)) return;
+    if (!force && previewRequestedRef.current.has(categoryId)) return;
 
     previewRequestedRef.current.add(categoryId);
     setTrendPreviewState((prev) => ({
@@ -142,6 +165,7 @@ export const useTrendCategories = ({
 
     try {
       const preview = await getTrendPreviewForCategory(category);
+      if (!isMountedRef.current) return;
       setTrendPreviewState((prev) => ({
         ...prev,
         [categoryId]: {
@@ -154,6 +178,7 @@ export const useTrendCategories = ({
     } catch (previewError) {
       console.error('Error loading trend preview:', previewError);
       previewRequestedRef.current.delete(categoryId);
+      if (!isMountedRef.current) return;
       setTrendPreviewState((prev) => ({
         ...prev,
         [categoryId]: {
@@ -190,6 +215,7 @@ export const useTrendCategories = ({
     activeTrendCategory,
     activeTrendPreview,
     activateTrendCategory,
+    retryTrendPreview: (category: Category) => void loadTrendPreview(category, true),
     getTrendSignals,
     trendRankPositionByCategory,
     trendScoresByCategory,

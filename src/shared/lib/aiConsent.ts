@@ -1,4 +1,5 @@
-const AI_CONSENT_KEY = 'vinctus:ai-consent:v1';
+const LEGACY_AI_CONSENT_KEY = 'vinctus:ai-consent:v1';
+const USER_AI_CONSENT_PREFIX = 'vinctus:ai-consent:v2:';
 
 type AIConsentStorageShape = {
   granted: boolean;
@@ -12,11 +13,16 @@ const defaultConsent = (): AIConsentStorageShape => ({
 
 const canUseStorage = (): boolean => typeof window !== 'undefined' && !!window.localStorage;
 
-export const getAIConsent = (): AIConsentStorageShape => {
+const resolveKey = (uid?: string | null): string => {
+  const normalized = typeof uid === 'string' ? uid.trim() : '';
+  return normalized ? `${USER_AI_CONSENT_PREFIX}${normalized}` : LEGACY_AI_CONSENT_KEY;
+};
+
+export const getAIConsent = (uid?: string | null): AIConsentStorageShape => {
   if (!canUseStorage()) return defaultConsent();
 
   try {
-    const raw = window.localStorage.getItem(AI_CONSENT_KEY);
+    const raw = window.localStorage.getItem(resolveKey(uid));
     if (!raw) return defaultConsent();
     const parsed = JSON.parse(raw) as Partial<AIConsentStorageShape> | null;
     if (!parsed || typeof parsed.granted !== 'boolean') {
@@ -31,7 +37,7 @@ export const getAIConsent = (): AIConsentStorageShape => {
   }
 };
 
-export const setAIConsent = (granted: boolean): AIConsentStorageShape => {
+export const setAIConsent = (granted: boolean, uid?: string | null): AIConsentStorageShape => {
   const next: AIConsentStorageShape = {
     granted,
     updatedAt: new Date().toISOString(),
@@ -41,8 +47,8 @@ export const setAIConsent = (granted: boolean): AIConsentStorageShape => {
     return next;
   }
 
-  window.localStorage.setItem(AI_CONSENT_KEY, JSON.stringify(next));
+  window.localStorage.setItem(resolveKey(uid), JSON.stringify(next));
   return next;
 };
 
-export const hasAIConsent = (): boolean => getAIConsent().granted;
+export const hasAIConsent = (uid?: string | null): boolean => getAIConsent(uid).granted;

@@ -3,34 +3,80 @@ import {
   uploadBytesResumable,
   uploadBytes,
   getDownloadURL,
+  getMetadata,
   deleteObject,
 } from 'firebase/storage';
 import { storage } from './firebase';
-import { STORAGE_PATHS } from './firestore/firestoreContract';
+import { STORAGE_CONTENT_TYPES, STORAGE_PATHS } from './firestore/firestoreContract';
+import { validateChatFile } from './chat-media';
+import { validatePostFile } from './post-media';
 
 type UploadProgress = {
   bytesTransferred: number;
   totalBytes: number;
 };
 
+/** A stable object path permits retry after upload or acknowledgement failures. */
+export async function uploadChatAttachment(
+  file: File,
+  conversationId: string,
+  userId: string,
+  messageId: string,
+  fileId: string,
+  onProgress?: (fraction: number) => void,
+): Promise<{ url: string; path: string }> {
+  const contentType = validateChatFile(file);
+  const path = STORAGE_PATHS.conversationAttachment({
+    conversationId,
+    userId,
+    messageId,
+    filename: `${fileId}_${sanitizeFileName(file.name)}`,
+  });
+  const target = ref(storage, path);
+  try {
+    await getMetadata(target);
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'storage/object-not-found') throw error;
+    const task = uploadBytesResumable(target, file, {
+      contentType,
+      cacheControl: path.startsWith('posts/')
+        ? 'private,no-store,max-age=0'
+        : IMMUTABLE_CACHE_CONTROL,
+    });
+    await new Promise<void>((resolve, reject) => {
+      task.on(
+        'state_changed',
+        (snapshot) => onProgress?.(snapshot.bytesTransferred / Math.max(1, snapshot.totalBytes)),
+        reject,
+        () => resolve(),
+      );
+    });
+  }
+  return {
+    url: path.startsWith('posts/') ? `post-media:${path}` : await getDownloadURL(target),
+    path,
+  };
+}
+
 const IMMUTABLE_CACHE_CONTROL = 'public,max-age=31536000,immutable';
 
 const resolveContentType = (file: File, fallback: string): string =>
   file.type && file.type.trim().length > 0 ? file.type : fallback;
 
-const buildUploadMetadata = (file: File, fallback: string) => ({
+const buildUploadMetadata = (file: File, fallback: string, path = '') => ({
   contentType: resolveContentType(file, fallback),
-  cacheControl: IMMUTABLE_CACHE_CONTROL,
+  cacheControl: path.startsWith('posts/') ? 'private,no-store,max-age=0' : IMMUTABLE_CACHE_CONTROL,
 });
 
 const uploadBytesResumableWithCache = (
   storageRef: ReturnType<typeof ref>,
   file: File,
   fallback: string,
-) => uploadBytesResumable(storageRef, file, buildUploadMetadata(file, fallback));
+) =>
+  uploadBytesResumable(storageRef, file, buildUploadMetadata(file, fallback, storageRef.fullPath));
 
 const uploadBytesWithCache = (storageRef: ReturnType<typeof ref>, file: File, fallback: string) =>
-  uploadBytes(storageRef, file, buildUploadMetadata(file, fallback));
+  uploadBytes(storageRef, file, buildUploadMetadata(file, fallback, storageRef.fullPath));
 
 /**
  * Upload single image with progress tracking
@@ -64,7 +110,7 @@ export function uploadPostImage(
       },
       async () => {
         try {
-          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          const url = `post-media:${uploadTask.snapshot.ref.fullPath}`;
           resolve({
             url,
             path: uploadTask.snapshot.ref.fullPath,
@@ -135,12 +181,13 @@ export async function uploadPostImages(
   return successful.map((s) => ({ ...s.result, type: 'image' as const }));
 }
 
-type PostMediaUploadItem = {
+export type PostMediaUploadItem = {
+  id: string;
   kind: 'image' | 'video' | 'file';
   file: File;
 };
 
-type PostMediaUploadResult = {
+export type PostMediaUploadResult = {
   url: string;
   path: string;
   type: 'image' | 'video' | 'file';
@@ -154,9 +201,14 @@ const buildPostMediaPath = (
   userId: string,
   postId: string,
   fileName: string,
+  fileId: string,
 ): string => {
   const safeName = sanitizeFileName(fileName);
-  const params = { userId, postId, filename: `${Date.now()}_${safeName}` };
+  const params = {
+    userId,
+    postId,
+    filename: `${sanitizeFileName(fileId)}_${safeName.slice(-120)}`,
+  };
   if (kind === 'video') {
     return STORAGE_PATHS.postVideo(params);
   }
@@ -175,86 +227,49 @@ export async function uploadPostMedia(
   postId: string,
   onProgress?: (totalBytes: number, transferredBytes: number) => void,
 ): Promise<PostMediaUploadResult[]> {
-  const progressMap: { [key: number]: UploadProgress } = {};
-
-  const uploads = items.map(
-    (item, index) =>
-      new Promise<PostMediaUploadResult>((resolve, reject) => {
-        const storagePath = buildPostMediaPath(item.kind, userId, postId, item.file.name);
-        const storageRef = ref(storage, storagePath);
-        const uploadTask = uploadBytesResumableWithCache(
-          storageRef,
-          item.file,
-          'application/octet-stream',
-        );
-
-        uploadTask.on(
+  const total = items.reduce((sum, item) => sum + item.file.size, 0);
+  const results: PostMediaUploadResult[] = [];
+  let completed = 0;
+  for (const item of items) {
+    const contentType = validatePostFile(item.file, item.kind);
+    const path = buildPostMediaPath(item.kind, userId, postId, item.file.name, item.id);
+    if (path.length > 300) throw new Error('El nombre del archivo es demasiado largo.');
+    const target = ref(storage, path);
+    try {
+      const metadata = await getMetadata(target);
+      if (metadata.size !== item.file.size || metadata.contentType !== contentType) {
+        throw new Error('El archivo pendiente no coincide con esta selecci?n.');
+      }
+    } catch (error) {
+      if ((error as { code?: string }).code !== 'storage/object-not-found') throw error;
+      const task = uploadBytesResumable(target, item.file, {
+        contentType,
+        cacheControl: 'private,no-store,max-age=0',
+      });
+      await new Promise<void>((resolve, reject) =>
+        task.on(
           'state_changed',
-          (snapshot) => {
-            progressMap[index] = {
-              bytesTransferred: snapshot.bytesTransferred,
-              totalBytes: snapshot.totalBytes,
-            };
-            if (onProgress) {
-              const totalBytes = Object.values(progressMap).reduce(
-                (sum, p) => sum + p.totalBytes,
-                0,
-              );
-              const transferredBytes = Object.values(progressMap).reduce(
-                (sum, p) => sum + p.bytesTransferred,
-                0,
-              );
-              onProgress(totalBytes, transferredBytes);
-            }
-          },
-          (error) => {
-            console.error('Upload failed:', error);
-            reject(new Error('Error al subir el archivo'));
-          },
-          async () => {
-            try {
-              const url = await getDownloadURL(uploadTask.snapshot.ref);
-              const result: PostMediaUploadResult = {
-                url,
-                path: uploadTask.snapshot.ref.fullPath,
-                type: item.kind,
-                contentType: item.file.type || 'application/octet-stream',
-              };
-              if (item.kind === 'file') {
-                result.fileName = item.file.name;
-                result.size = item.file.size;
-              }
-              resolve(result);
-            } catch (error) {
-              reject(error);
-            }
-          },
-        );
-      }),
-  );
-
-  const results = await Promise.allSettled(uploads);
-  const failed = results.filter((r) => r.status === 'rejected');
-  const successful = results
-    .map((r, index) => (r.status === 'fulfilled' ? { result: r.value, index } : null))
-    .filter((x): x is { result: PostMediaUploadResult; index: number } => x !== null);
-
-  if (failed.length > 0) {
-    await Promise.all(
-      successful.map(async (s) => {
-        try {
-          await deleteObject(ref(storage, s.result.path));
-        } catch (cleanupError) {
-          console.error(`Cleanup failed for media ${s.index}:`, cleanupError);
-        }
-      }),
-    );
-    const firstError = failed[0];
-    throw firstError.status === 'rejected' ? firstError.reason : new Error('Upload failed');
+          (snapshot) => onProgress?.(total, completed + snapshot.bytesTransferred),
+          reject,
+          () => resolve(),
+        ),
+      );
+    }
+    results.push({
+      url: `post-media:${path}`,
+      path,
+      type: item.kind,
+      contentType,
+      ...(item.kind === 'file'
+        ? { fileName: item.file.name.slice(0, 120), size: item.file.size }
+        : {}),
+    });
+    completed += item.file.size;
+    onProgress?.(total, completed);
   }
-
-  const ordered = successful.sort((a, b) => a.index - b.index).map((s) => s.result);
-  return ordered;
+  // Keep completed objects on failure: the same stable paths recover them on
+  // retry. A failed acknowledgement may belong to an already-published post.
+  return results;
 }
 
 /**
@@ -395,6 +410,9 @@ export async function deleteCollectionFile(path: string): Promise<void> {
   try {
     await deleteObject(ref(storage, path));
   } catch (error) {
+    if ((error as { code?: string })?.code === 'storage/object-not-found') {
+      return;
+    }
     console.error('Delete failed:', error);
     throw new Error('No se pudo eliminar el archivo');
   }
@@ -538,7 +556,8 @@ export function uploadProfilePhoto(
       filename: `${Date.now()}_${safeName}`,
     });
     const storageRef = ref(storage, storagePath);
-    const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'image/jpeg');
+    const contentType = STORAGE_CONTENT_TYPES.image.includes(file.type) ? file.type : 'image/jpeg';
+    const uploadTask = uploadBytesResumableWithCache(storageRef, file, contentType);
 
     uploadTask.on(
       'state_changed',
@@ -616,6 +635,39 @@ export function uploadGroupIcon(
   });
 }
 
+const resolveStoryContentType = (
+  file: File,
+  allowed: readonly string[],
+  fallback: string,
+): string => (file.type && allowed.includes(file.type) ? file.type : fallback);
+
+export async function deleteStoryFiles(paths: Array<string | null | undefined>): Promise<void> {
+  const uniquePaths = Array.from(
+    new Set(
+      paths.filter(
+        (path): path is string =>
+          typeof path === 'string' &&
+          path.length > 0 &&
+          !path.startsWith('http://') &&
+          !path.startsWith('https://') &&
+          !path.startsWith('youtube:'),
+      ),
+    ),
+  );
+
+  await Promise.all(
+    uniquePaths.map(async (path) => {
+      try {
+        await deleteObject(ref(storage, path));
+      } catch (error) {
+        if ((error as { code?: string }).code !== 'storage/object-not-found') {
+          throw error;
+        }
+      }
+    }),
+  );
+}
+
 /**
  * Upload story image + thumbnail
  */
@@ -630,7 +682,11 @@ export async function uploadStoryImage(
   const storageName = `${Date.now()}_${safeName}`;
   const storagePath = STORAGE_PATHS.storyOriginal({ userId, storyId, filename: storageName });
   const storageRef = ref(storage, storagePath);
-  const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'image/jpeg');
+  const uploadTask = uploadBytesResumableWithCache(
+    storageRef,
+    file,
+    resolveStoryContentType(file, STORAGE_CONTENT_TYPES.image, 'image/webp'),
+  );
 
   const url = await new Promise<string>((resolve, reject) => {
     uploadTask.on(
@@ -691,7 +747,11 @@ export function uploadStoryVideo(
     const storageName = `${Date.now()}_${safeName}`;
     const storagePath = STORAGE_PATHS.storyOriginal({ userId, storyId, filename: storageName });
     const storageRef = ref(storage, storagePath);
-    const uploadTask = uploadBytesResumableWithCache(storageRef, file, 'video/mp4');
+    const uploadTask = uploadBytesResumableWithCache(
+      storageRef,
+      file,
+      resolveStoryContentType(file, STORAGE_CONTENT_TYPES.video, 'video/mp4'),
+    );
 
     uploadTask.on(
       'state_changed',

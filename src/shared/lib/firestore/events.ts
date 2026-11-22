@@ -276,7 +276,7 @@ export async function joinEvent(eventId: string, uid: string): Promise<void> {
     throw new Error('Evento no encontrado');
   }
   const visibility = (eventSnap.data().visibility as EventVisibility) ?? 'public';
-  if (visibility !== 'public') {
+  if (visibility !== 'public' && eventSnap.data().createdBy !== uid) {
     throw new Error('Este evento es privado');
   }
 

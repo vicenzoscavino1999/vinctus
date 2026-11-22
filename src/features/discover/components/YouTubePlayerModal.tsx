@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowRight, X } from 'lucide-react';
 import type { PublicationStreamItem } from '@/features/discover/model/publicationFeed';
+import { isSafeHttpUrl } from '@/features/discover/model/textHelpers';
 
 type YouTubePlayerModalProps = {
   publication: PublicationStreamItem;
@@ -30,6 +31,9 @@ const YouTubePlayerModal = ({ publication, onClose }: YouTubePlayerModalProps) =
 
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={publication.title}
       className="fixed inset-0 z-[320] overflow-y-auto safe-area-inset bg-black/80 backdrop-blur-sm p-4 md:p-8"
       onClick={onClose}
     >
@@ -68,7 +72,7 @@ const YouTubePlayerModal = ({ publication, onClose }: YouTubePlayerModalProps) =
                 {publication.youtubeChannelTitle || publication.group}
               </p>
             </div>
-            {publication.youtubeUrl && (
+            {isSafeHttpUrl(publication.youtubeUrl) && (
               <a
                 href={publication.youtubeUrl}
                 target="_blank"

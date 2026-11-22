@@ -5,6 +5,9 @@ type RecommendedGroupsSectionProps = {
   groups: FirestoreGroup[];
   loading: boolean;
   error: string | null;
+  /** A search or category filter is narrowing the list. */
+  isFiltered: boolean;
+  onRetry: () => void;
   /** Id of the group whose join action is running. */
   actionLoadingId: string | null;
   getActionLabel: (group: FirestoreGroup) => string;
@@ -96,6 +99,8 @@ const RecommendedGroupsSection = ({
   groups,
   loading,
   error,
+  isFiltered,
+  onRetry,
   actionLoadingId,
   getActionLabel,
   onAction,
@@ -109,9 +114,22 @@ const RecommendedGroupsSection = ({
     {loading ? (
       <div className="text-center text-neutral-500 py-6">Cargando grupos...</div>
     ) : error ? (
-      <div className="text-center text-red-400 py-6">{error}</div>
+      <div className="text-center py-6 space-y-3">
+        <p className="text-red-400">{error}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+        >
+          Reintentar
+        </button>
+      </div>
     ) : groups.length === 0 ? (
-      <div className="text-center text-neutral-500 py-6">Aun no hay grupos disponibles.</div>
+      <div className="text-center text-neutral-500 py-6">
+        {isFiltered
+          ? 'No hay grupos que coincidan con tu búsqueda o filtros.'
+          : 'Aun no hay grupos disponibles.'}
+      </div>
     ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {groups.map((group) => (

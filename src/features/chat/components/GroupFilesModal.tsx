@@ -1,5 +1,6 @@
-import { FileText, Image as ImageIcon, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import type { MessageAttachmentRead } from '@/features/chat/api';
+import ChatAttachment from './ChatAttachment';
 import { formatBytes } from '@/shared/lib/formatUtils';
 
 export type GroupFileItem = {
@@ -36,41 +37,15 @@ const GroupFilesModal = ({ open, items, onClose }: Props) => {
               No hay archivos compartidos en este chat.
             </div>
           ) : (
-            items.map((item) => {
-              const att = item.attachment;
-              const isImage = att.kind === 'image';
-              const title = isImage ? 'Imagen' : att.fileName || 'Archivo';
-              return (
-                <button
-                  key={`${item.messageId}_${att.path}`}
-                  type="button"
-                  onClick={() => window.open(att.url, '_blank')}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl bg-neutral-900/40 border border-neutral-800/60 text-left hover:bg-neutral-800/60 transition-colors"
-                >
-                  <div className="w-12 h-12 rounded-lg bg-neutral-800 flex items-center justify-center overflow-hidden">
-                    {isImage ? (
-                      att.thumbUrl ? (
-                        <img
-                          src={att.thumbUrl}
-                          alt={title}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <ImageIcon size={18} className="text-amber-400" />
-                      )
-                    ) : (
-                      <FileText size={18} className="text-amber-400" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm truncate">{title}</p>
-                    <p className="text-xs text-neutral-500">
-                      {isImage ? 'Imagen' : att.contentType} Â· {formatBytes(att.size || 0)}
-                    </p>
-                  </div>
-                </button>
-              );
-            })
+            items.map((item) => (
+              <div
+                key={`${item.messageId}_${item.attachment.path}`}
+                className="p-3 rounded-xl bg-neutral-800 space-y-2"
+              >
+                <ChatAttachment attachment={item.attachment} />
+                <p className="text-xs text-neutral-400">{formatBytes(item.attachment.size || 0)}</p>
+              </div>
+            ))
           )}
         </div>
       </div>

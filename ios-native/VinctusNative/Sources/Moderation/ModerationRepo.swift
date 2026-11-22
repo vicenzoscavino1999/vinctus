@@ -113,6 +113,27 @@ struct ReportFields: Equatable {
   var fitsRules: Bool {
     !reportedUID.isEmpty && (details?.utf8.count ?? 0) <= Self.maxDetailsLength
   }
+
+  /// Maximum UTF-8 bytes the user may enter in the details box so the combined report
+  /// (including target prefix and excerpt) always satisfies `fitsRules`.
+  static func maxUserDetailsLength(for target: ReportTarget) -> Int {
+    let prefix: String
+    switch target {
+    case let .post(postID, _):
+      prefix = "[Post \(postID)] "
+    case let .comment(postID, commentID, _):
+      prefix = "[Post \(postID)][Comment \(commentID)] "
+    case .user:
+      prefix = ""
+    case let .aiResponse(contextID, rawExcerpt):
+      prefix = "[IA \(contextID)] \(String(rawExcerpt.prefix(900))) | Motivo: "
+    case let .message(chatID, _, _, rawExcerpt):
+      prefix = "[Mensaje en \(chatID)] \(String(rawExcerpt.prefix(900))) | Motivo: "
+    case let .story(storyID, _):
+      prefix = "[Historia \(storyID)] "
+    }
+    return max(0, maxDetailsLength - prefix.utf8.count)
+  }
 }
 
 protocol ModerationRepo {
@@ -126,6 +147,7 @@ enum ModerationRepoError: LocalizedError {
   case firebaseNotConfigured
   case userNotAuthenticated
   case invalidReport
+  case cannotReportSelf
   case invalidUserID
   case cannotBlockSelf
   case missingSnapshot
@@ -138,6 +160,8 @@ enum ModerationRepoError: LocalizedError {
       return "Debes iniciar sesión."
     case .invalidReport:
       return "El detalle de la denuncia es demasiado largo."
+    case .cannotReportSelf:
+      return "No puedes denunciarte a ti mismo."
     case .invalidUserID:
       return "No se pudo identificar al usuario."
     case .cannotBlockSelf:
@@ -161,6 +185,7 @@ final class FirebaseModerationRepo: ModerationRepo {
   func report(_ target: ReportTarget, reason: ReportReason, details: String?) async throws {
     let (db, uid) = try firestoreAndUser()
     let fields = ReportFields(target: target, details: details)
+    guard fields.reportedUID != uid else { throw ModerationRepoError.cannotReportSelf }
     guard fields.fitsRules else { throw ModerationRepoError.invalidReport }
 
     let payload: [String: Any] = [

@@ -103,7 +103,11 @@ struct PasswordResetSheet: View {
               .autocorrectionDisabled()
               .textContentType(.username)
               .submitLabel(.send)
+              .disabled(isSending)
               .onSubmit(send)
+              .onChange(of: email) { _, _ in
+                if errorMessage != nil { errorMessage = nil }
+              }
           }
 
           if let errorMessage {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
@@ -14,9 +14,19 @@ import {
 } from '@/features/moderation/api';
 import { formatRelativeTime } from '@/shared/lib/formatUtils';
 
+type QueueFilter = 'all' | ModerationQueueStatus;
+
+const FILTER_OPTIONS: Array<{ value: QueueFilter; label: string }> = [
+  { value: 'all', label: 'Todos' },
+  { value: 'pending', label: 'Pendientes' },
+  { value: 'in_review', label: 'En revisión' },
+  { value: 'resolved', label: 'Resueltos' },
+  { value: 'dismissed', label: 'Descartados' },
+];
+
 const statusLabel: Record<ModerationQueueStatus, string> = {
   pending: 'Pendiente',
-  in_review: 'En revision',
+  in_review: 'En revisión',
   resolved: 'Resuelto',
   dismissed: 'Descartado',
 };
@@ -64,6 +74,8 @@ const ModerationQueuePage = () => {
   const [hasMore, setHasMore] = useState(false);
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<QueueFilter>('all');
+  const loadSeqRef = useRef(0);
 
   const loadQueue = useCallback(
     async (
@@ -71,6 +83,7 @@ const ModerationQueuePage = () => {
       nextCursor?: PaginatedResultModel<ModerationQueueItemRead>['lastDoc'],
     ) => {
       if (!hasAccess) return;
+      const seq = ++loadSeqRef.current;
       try {
         setError(null);
         if (loadMore) {
@@ -82,31 +95,43 @@ const ModerationQueuePage = () => {
           25,
           loadMore ? (nextCursor ?? undefined) : undefined,
         );
+        if (seq !== loadSeqRef.current) return;
         setItems((prev) => (loadMore ? [...prev, ...result.items] : result.items));
         setCursor(result.lastDoc);
         setHasMore(result.hasMore);
       } catch (loadError) {
+        if (seq !== loadSeqRef.current) return;
         console.error('Error loading moderation queue:', loadError);
-        setError('No se pudo cargar la cola de moderacion.');
+        setError('No se pudo cargar la cola de moderación.');
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
+        if (seq === loadSeqRef.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
     [hasAccess],
   );
 
+  const currentUid = user?.uid ?? null;
+
   useEffect(() => {
     let active = true;
+    loadSeqRef.current += 1;
+    setItems([]);
+    setCursor(null);
+    setHasMore(false);
+    setError(null);
+    setCheckingAccess(true);
 
     const checkAccess = async () => {
-      if (!user) {
+      if (!currentUid) {
         setHasAccess(false);
         setCheckingAccess(false);
         return;
       }
       try {
-        const access = await isCurrentUserAppAdmin(user.uid);
+        const access = await isCurrentUserAppAdmin(currentUid);
         if (!active) return;
         setHasAccess(access);
       } catch (accessError) {
@@ -122,7 +147,7 @@ const ModerationQueuePage = () => {
     return () => {
       active = false;
     };
-  }, [user]);
+  }, [currentUid]);
 
   useEffect(() => {
     if (!hasAccess) return;
@@ -134,15 +159,26 @@ const ModerationQueuePage = () => {
     [items],
   );
 
+  const visibleItems = useMemo(
+    () => (statusFilter === 'all' ? items : items.filter((item) => item.status === statusFilter)),
+    [items, statusFilter],
+  );
+
+  const resolveNoteForItem = (item: ModerationQueueItemRead): string | null => {
+    const raw = reviewNotes[item.id] ?? item.reviewNote ?? '';
+    const trimmed = raw.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  };
+
   const handleReviewAction = async (
     item: ModerationQueueItemRead,
     status: ModerationQueueStatus,
     reviewAction: string,
   ) => {
-    if (!user) return;
+    if (!user || updatingItemId) return;
     setUpdatingItemId(item.id);
     try {
-      const note = reviewNotes[item.id]?.trim() || null;
+      const note = resolveNoteForItem(item);
       await updateModerationQueueStatus({
         itemId: item.id,
         status,
@@ -166,7 +202,7 @@ const ModerationQueuePage = () => {
             : entry,
         ),
       );
-      showToast('Cola de moderacion actualizada.', 'success');
+      showToast('Cola de moderación actualizada.', 'success');
     } catch (updateError) {
       console.error('Error updating moderation queue item:', updateError);
       showToast('No se pudo actualizar el estado.', 'error');
@@ -179,11 +215,11 @@ const ModerationQueuePage = () => {
     item: ModerationQueueItemRead,
     action: ModerationEnforcementAction,
   ) => {
-    if (!user) return;
+    if (!user || updatingItemId) return;
     if (!window.confirm(enforcementConfirm[action])) return;
     setUpdatingItemId(item.id);
     try {
-      const note = reviewNotes[item.id]?.trim() || null;
+      const note = resolveNoteForItem(item);
       const result = await applyModerationAction({ itemId: item.id, action, reviewNote: note });
 
       setItems((prev) =>
@@ -259,25 +295,59 @@ const ModerationQueuePage = () => {
         </button>
       </header>
 
+      <div
+        className="flex flex-wrap items-center gap-2"
+        role="tablist"
+        aria-label="Filtrar reportes"
+      >
+        {FILTER_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="tab"
+            aria-selected={statusFilter === option.value}
+            onClick={() => setStatusFilter(option.value)}
+            className={`px-3 py-1.5 rounded-full text-xs uppercase tracking-wider border transition-colors ${
+              statusFilter === option.value
+                ? 'border-amber-400 bg-amber-500/15 text-amber-200'
+                : 'border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-600'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
       {loading ? (
         <div className="text-center py-12">
           <Loader2 size={28} className="animate-spin text-amber-500 mx-auto" />
         </div>
       ) : error ? (
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 text-red-300 p-5">
-          {error}
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 text-red-300 p-5 space-y-3">
+          <p>{error}</p>
+          <button
+            type="button"
+            onClick={() => void loadQueue(false)}
+            className="px-4 py-1.5 rounded-full border border-red-400/40 text-xs uppercase tracking-wider text-red-100 hover:bg-red-500/20 transition-colors"
+          >
+            Reintentar
+          </button>
         </div>
-      ) : items.length === 0 ? (
+      ) : visibleItems.length === 0 ? (
         <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-8 text-neutral-500 text-center">
-          No hay reportes pendientes en la cola.
+          No hay reportes para este filtro.
         </div>
       ) : (
         <div className="space-y-4">
-          {items.map((item) => {
+          {visibleItems.map((item) => {
             const createdAtLabel = item.createdAt
               ? formatRelativeTime(item.createdAt)
               : 'sin fecha';
             const isUpdating = updatingItemId === item.id;
+            const canSuspendReported =
+              Boolean(item.reportedUid) &&
+              !NON_USER_IDS.has(item.reportedUid ?? '') &&
+              item.reportedUid !== user.uid;
             return (
               <article
                 key={item.id}
@@ -298,6 +368,11 @@ const ModerationQueuePage = () => {
                     <ShieldCheck size={12} />
                     {item.targetType}
                   </span>
+                  {item.source === 'auto_moderation' && (
+                    <span className="inline-flex items-center rounded-full border border-purple-500/40 bg-purple-500/10 px-3 py-1 text-xs uppercase tracking-wider text-purple-200">
+                      Auto-moderación
+                    </span>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -376,8 +451,7 @@ const ModerationQueuePage = () => {
                       Eliminar contenido
                     </button>
                   )}
-                  {item.reportedUid &&
-                    !NON_USER_IDS.has(item.reportedUid) &&
+                  {canSuspendReported &&
                     (item.reviewAction === 'user_suspended' ? (
                       <button
                         type="button"

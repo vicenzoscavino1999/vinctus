@@ -37,8 +37,7 @@ struct DiscoverAvatarView: View {
   }
 
   private var avatarURL: URL? {
-    guard let photoURLString else { return nil }
-    return URL(string: photoURLString)
+    FirebaseDiscoverRepo.safeHTTPURL(photoURLString)
   }
 
   private var initials: some View {

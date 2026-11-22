@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Settings, MapPin, Mail, Edit3, Loader2, BookOpen, Bookmark, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/shared/ui/Toast';
@@ -12,6 +12,7 @@ import EditProfileModal from '@/features/profile/components/EditProfileModal';
 import CollectionsPanel from '@/features/collections/components/CollectionsPanel';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
 import ProfilePostsGrid from '@/features/posts/components/ProfilePostsGrid';
+import SavedPostsPanel from '@/features/posts/components/SavedPostsPanel';
 import ContributionsSection from '@/features/profile/components/ContributionsSection';
 import { CATEGORIES } from '@/shared/constants';
 
@@ -29,6 +30,7 @@ const ProfilePage = () => {
   const [loadingSavedDebates, setLoadingSavedDebates] = useState(false);
   const [savedDebatesError, setSavedDebatesError] = useState<string | null>(null);
   const [removingDebateId, setRemovingDebateId] = useState<string | null>(null);
+  const savedDebatesSeqRef = useRef(0);
 
   // Subscribe to user profile
   useEffect(() => {
@@ -82,26 +84,35 @@ const ProfilePage = () => {
 
   const loadSavedDebates = useCallback(async () => {
     if (!userId) return;
+    const seq = ++savedDebatesSeqRef.current;
     try {
       setSavedDebatesError(null);
       setLoadingSavedDebates(true);
       const data = await getSavedArenaDebates(userId, 20);
+      if (savedDebatesSeqRef.current !== seq) return;
       setSavedDebates(data);
     } catch (savedError) {
+      if (savedDebatesSeqRef.current !== seq) return;
       console.error('Error loading saved debates:', savedError);
       setSavedDebatesError('No se pudieron cargar tus debates guardados.');
     } finally {
-      setLoadingSavedDebates(false);
+      if (savedDebatesSeqRef.current === seq) {
+        setLoadingSavedDebates(false);
+      }
     }
   }, [userId]);
 
   useEffect(() => {
     if (!userId) {
+      savedDebatesSeqRef.current += 1;
       setSavedDebates([]);
       setSavedDebatesError(null);
       return;
     }
     void loadSavedDebates();
+    return () => {
+      savedDebatesSeqRef.current += 1;
+    };
   }, [userId, loadSavedDebates]);
 
   const interestEntries = karmaByInterest
@@ -369,6 +380,7 @@ const ProfilePage = () => {
 
           {/* Right column - Posts + Portfolio */}
           <div className="md:col-span-2 space-y-10">
+            {userId && <SavedPostsPanel key={userId} uid={userId} />}
             <section className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-5">
               <div className="mb-4 flex items-center gap-2">
                 <Bookmark size={16} className="text-brand-gold" />
@@ -383,10 +395,19 @@ const ProfilePage = () => {
                   Cargando debates guardados...
                 </div>
               ) : savedDebatesError ? (
-                <p className="text-sm text-red-400">{savedDebatesError}</p>
+                <div className="flex flex-wrap items-center gap-3 text-sm text-red-400">
+                  <p>{savedDebatesError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadSavedDebates()}
+                    className="rounded-lg border border-red-500/40 px-3 py-1 text-xs uppercase tracking-wider text-red-200 transition hover:border-red-400 hover:text-white"
+                  >
+                    Reintentar
+                  </button>
+                </div>
               ) : savedDebates.length === 0 ? (
                 <p className="text-sm text-neutral-500">
-                  Aun no tienes debates guardados. Desde Arena IA puedes guardarlos con un clic.
+                  Aún no tienes debates guardados. Desde Arena IA puedes guardarlos con un clic.
                 </p>
               ) : (
                 <div className="space-y-3">
@@ -454,11 +475,13 @@ const ProfilePage = () => {
       {activeSection === 'collections' && <CollectionsPanel />}
 
       {/* Edit Profile Modal */}
-      <EditProfileModal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        onSave={handleProfileSaved}
-      />
+      {isEditModalOpen && (
+        <EditProfileModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          onSave={handleProfileSaved}
+        />
+      )}
     </div>
   );
 };

@@ -5,11 +5,13 @@ import {
   getDebateSourceCount,
 } from '@/features/discover/model/debateCuration';
 import { extractHostname } from '@/features/discover/model/trendRanking';
+import { isSafeHttpUrl } from '@/features/discover/model/textHelpers';
 
 type CuratedDebatesSectionProps = {
   debates: Debate[];
   loading: boolean;
   error: string | null;
+  onRetry: () => void;
   onOpenDebate: (debateId: string) => void;
 };
 
@@ -24,7 +26,9 @@ const CuratedDebateCard = ({
   const personaBName = getPersonaById(debate.personaB)?.name || 'Persona B';
   const sourceCount = getDebateSourceCount(debate);
   const likesCount = getDebateLikesCount(debate);
-  const sourceLinks = Array.isArray(debate.sourceLinks) ? debate.sourceLinks.slice(0, 2) : [];
+  const sourceLinks = Array.isArray(debate.sourceLinks)
+    ? debate.sourceLinks.filter((url) => isSafeHttpUrl(url)).slice(0, 2)
+    : [];
   const sourceMentions = Array.isArray(debate.sourceMentions)
     ? debate.sourceMentions.slice(0, 2)
     : [];
@@ -107,6 +111,7 @@ const CuratedDebatesSection = ({
   debates,
   loading,
   error,
+  onRetry,
   onOpenDebate,
 }: CuratedDebatesSectionProps) => (
   <section className="mb-12">
@@ -117,7 +122,16 @@ const CuratedDebatesSection = ({
     {loading ? (
       <div className="text-center text-neutral-500 py-6">Cargando debates de Arena IA...</div>
     ) : error ? (
-      <div className="text-center text-red-400 py-6">{error}</div>
+      <div className="text-center py-6 space-y-3">
+        <p className="text-red-400">{error}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+        >
+          Reintentar
+        </button>
+      </div>
     ) : debates.length === 0 ? (
       <div className="text-center text-neutral-500 py-6">
         Aun no hay debates con fuentes detectadas. Cuando aparezcan referencias, se mostraran aqui.

@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   serverTimestamp,
   setDoc,
@@ -17,7 +18,8 @@ import {
 import { db, dbLite } from '@/shared/lib/firebase';
 import { toDate as toDateValue } from '@/shared/lib/formatUtils';
 import { STORY_DURATION_MS } from '@/shared/lib/storyConstants';
-import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
+import { COLLECTIONS, LIMITS } from '@/shared/lib/firestore/firestoreContract';
+import { deleteStoryFiles } from '@/shared/lib/storage';
 const storiesCollection = collection(db, COLLECTIONS.stories);
 
 export type StoryVisibility = 'friends';
@@ -89,6 +91,20 @@ const buildStoryRead = (id: string, data: Record<string, unknown>): StoryRead =>
   };
 };
 
+export function sanitizeStoryOwnerName(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, LIMITS.stories.ownerNameMaxLength);
+}
+
+export function sanitizeStoryOwnerPhoto(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > LIMITS.stories.photoURLMaxLength) return null;
+  return trimmed.startsWith('https://') || trimmed.startsWith('http://') ? trimmed : null;
+}
+
 export async function createStory(input: CreateStoryInput): Promise<string> {
   const storyRef = input.storyId ? doc(storiesCollection, input.storyId) : doc(storiesCollection);
   const expiresAt = Timestamp.fromMillis(Date.now() + STORY_DURATION_MS);
@@ -97,8 +113,8 @@ export async function createStory(input: CreateStoryInput): Promise<string> {
     {
       ownerId: input.ownerId,
       ownerSnapshot: {
-        displayName: input.ownerName ?? null,
-        photoURL: input.ownerPhoto ?? null,
+        displayName: sanitizeStoryOwnerName(input.ownerName),
+        photoURL: sanitizeStoryOwnerPhoto(input.ownerPhoto),
       },
       mediaType: input.mediaType,
       mediaUrl: input.mediaUrl,
@@ -112,6 +128,14 @@ export async function createStory(input: CreateStoryInput): Promise<string> {
     { merge: false },
   );
   return storyRef.id;
+}
+
+export async function deleteStory(
+  storyId: string,
+  mediaPaths?: { mediaPath?: string | null; thumbPath?: string | null },
+): Promise<void> {
+  await deleteDoc(doc(storiesCollection, storyId));
+  await deleteStoryFiles([mediaPaths?.mediaPath, mediaPaths?.thumbPath]).catch(() => undefined);
 }
 
 export function getNewStoryId(): string {

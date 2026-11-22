@@ -44,15 +44,19 @@ final class ProfileConnectionViewModel: ObservableObject {
     }
   }
 
-  func answerRequest(accept: Bool) async {
-    guard !isAnsweringRequest else { return }
+  @discardableResult
+  func answerRequest(accept: Bool) async -> Bool {
+    guard !isAnsweringRequest else { return false }
     isAnsweringRequest = true
+    messageError = nil
     defer { isAnsweringRequest = false }
     do {
       try await contentRepo.answerFollowRequest(from: userID, accept: accept)
       hasIncomingRequest = false
+      return true
     } catch {
       messageError = "No se pudo responder la solicitud."
+      return false
     }
   }
 }

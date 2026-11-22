@@ -49,6 +49,6 @@ export const sendCollaborationRequestInputSchema = z.object({
   fromUid: uidSchema,
   toUid: uidSchema,
   message: nullableText(1000),
-  fromUserName: nullableText(120),
+  fromUserName: nullableText(80),
   fromUserPhoto: urlSchema.nullable(),
 });

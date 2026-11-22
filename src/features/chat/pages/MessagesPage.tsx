@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+} from 'react';
 import { useAuth } from '@/context/auth';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
@@ -8,10 +16,7 @@ import {
   setConversationMute,
   clearConversationMute,
   subscribeToConversations,
-  subscribeToMessages,
   subscribeToUserMemberships,
-  sendMessage,
-  markConversationRead,
   getGroup,
   leaveGroupWithSync,
   createGroupReport,
@@ -33,13 +38,11 @@ import GroupReportModal from '@/features/chat/components/GroupReportModal';
 import MemberGroupCard from '@/features/chat/components/MemberGroupCard';
 import MessageComposer from '@/features/chat/components/MessageComposer';
 import MessageThread from '@/features/chat/components/MessageThread';
+import { directParticipants } from '@/features/chat/lib/conversationIds';
+import { ConversationOutbox } from '@/features/chat/lib/ConversationOutbox';
+import { useConversationMessages } from '@/features/chat/hooks/useConversationMessages';
+import { useVisibleReadReceipt } from '@/features/chat/hooks/useVisibleReadReceipt';
 import CreateGroupModal from '@/features/groups/components/CreateGroupModal';
-
-const parseDirectMemberIds = (conversationId: string): string[] | null => {
-  if (!conversationId.startsWith('dm_')) return null;
-  const parts = conversationId.slice(3).split('_');
-  return parts.length >= 2 ? parts : null;
-};
 
 // Group info cache type
 interface GroupInfo {
@@ -69,8 +72,36 @@ export default function MessagesPage() {
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<ConversationRead[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<MessageRead[]>([]);
-  const [newMessage, setNewMessage] = useState('');
+  const history = useConversationMessages(selectedConversationId, user?.uid);
+  const messages = history.messages;
+  const [outbox] = useState(() => new ConversationOutbox());
+  const session = useSyncExternalStore(
+    outbox.subscribe,
+    useCallback(
+      () => outbox.snapshot(user?.uid ?? '', selectedConversationId ?? ''),
+      [outbox, user?.uid, selectedConversationId],
+    ),
+  );
+  const [visibleReceipt, setVisibleReceipt] = useState<{ key: string; timestamp: number | null }>({
+    key: '',
+    timestamp: null,
+  });
+  const receiptKey = JSON.stringify([user?.uid, selectedConversationId]);
+  const reading = useVisibleReadReceipt(
+    selectedConversationId,
+    user?.uid,
+    visibleReceipt.key === receiptKey ? visibleReceipt.timestamp : null,
+  );
+  const reportVisible = useCallback(
+    (message: MessageRead | null) => {
+      const key = JSON.stringify([user?.uid, selectedConversationId]);
+      const timestamp = message?.clientCreatedAt ?? null;
+      setVisibleReceipt((previous) =>
+        previous.key === key && previous.timestamp === timestamp ? previous : { key, timestamp },
+      );
+    },
+    [user?.uid, selectedConversationId],
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'groups' | 'private'>('groups');
@@ -137,7 +168,7 @@ export default function MessagesPage() {
   const getOtherMemberId = useCallback(
     (conv: ConversationRead): string | null => {
       if (!user || conv.type !== 'direct') return null;
-      const memberIds = conv.memberIds ?? parseDirectMemberIds(conv.id);
+      const memberIds = conv.memberIds ?? directParticipants(conv.id, user.uid);
       if (!memberIds) return null;
       return memberIds.find((id) => id !== user.uid) ?? null;
     },
@@ -150,7 +181,9 @@ export default function MessagesPage() {
     setSelectedConversationId(conversationParam);
 
     const isGroupConversation = conversationParam.startsWith('grp_');
-    const memberIds = !isGroupConversation ? parseDirectMemberIds(conversationParam) : null;
+    const memberIds = !isGroupConversation
+      ? directParticipants(conversationParam, user?.uid ?? '')
+      : null;
     setActiveTab(isGroupConversation ? 'groups' : 'private');
 
     setConversations((prev) => {
@@ -168,7 +201,7 @@ export default function MessagesPage() {
         ...prev,
       ];
     });
-  }, [conversationParam]); // Removed selectedConversationId to prevent sync loop
+  }, [conversationParam, user?.uid]);
 
   // Subscribe to conversations
   useEffect(() => {
@@ -241,60 +274,64 @@ export default function MessagesPage() {
     let isActive = true;
     let requestId = 0;
 
-    const unsubscribe = subscribeToUserMemberships(user.uid, (groupIds) => {
-      requestId += 1;
-      const currentRequest = requestId;
-      setMemberGroupsLoading(true);
-      setMemberGroupsError(null);
+    const unsubscribe = subscribeToUserMemberships(
+      user.uid,
+      (groupIds) => {
+        requestId += 1;
+        const currentRequest = requestId;
+        setMemberGroupsLoading(true);
+        setMemberGroupsError(null);
 
-      void (async () => {
-        try {
-          const uniqueGroupIds = Array.from(new Set(groupIds));
-          const existingById = new Map(
-            memberGroupsRef.current.map((group) => [group.id, group] as const),
-          );
-          const reusedGroups: FirestoreGroup[] = [];
-          const missingIds: string[] = [];
+        void (async () => {
+          try {
+            const uniqueGroupIds = Array.from(new Set(groupIds));
+            const existingById = new Map(
+              memberGroupsRef.current.map((group) => [group.id, group] as const),
+            );
+            const reusedGroups: FirestoreGroup[] = [];
+            const missingIds: string[] = [];
 
-          uniqueGroupIds.forEach((groupId) => {
-            const existing = existingById.get(groupId);
-            if (existing) {
-              reusedGroups.push(existing);
-            } else {
-              missingIds.push(groupId);
-            }
-          });
-
-          const fetchedGroups =
-            missingIds.length > 0 ? await Promise.all(missingIds.map((id) => getGroup(id))) : [];
-
-          if (!isActive || currentRequest !== requestId) return;
-
-          const resolved = [
-            ...reusedGroups,
-            ...(fetchedGroups.filter(Boolean) as FirestoreGroup[]),
-          ];
-          setMemberGroups(resolved);
-          setMemberGroupsLoading(false);
-          setGroupInfoCache((prev) => {
-            const updates = { ...prev };
-            resolved.forEach((group) => {
-              updates[group.id] = {
-                name: group.name,
-                iconUrl: group.iconUrl ?? undefined,
-              };
+            uniqueGroupIds.forEach((groupId) => {
+              const existing = existingById.get(groupId);
+              if (existing) {
+                reusedGroups.push(existing);
+              } else {
+                missingIds.push(groupId);
+              }
             });
-            return updates;
-          });
-        } catch (loadError) {
-          console.error('Error loading member groups:', loadError);
-          if (!isActive || currentRequest !== requestId) return;
-          setMemberGroups([]);
-          setMemberGroupsError('No se pudieron cargar tus grupos.');
-          setMemberGroupsLoading(false);
-        }
-      })();
-    });
+
+            const fetchedGroups =
+              missingIds.length > 0 ? await Promise.all(missingIds.map((id) => getGroup(id))) : [];
+
+            if (!isActive || currentRequest !== requestId) return;
+
+            const resolved = [
+              ...reusedGroups,
+              ...(fetchedGroups.filter(Boolean) as FirestoreGroup[]),
+            ];
+            setMemberGroups(resolved);
+            setMemberGroupsLoading(false);
+            setGroupInfoCache((prev) => {
+              const updates = { ...prev };
+              resolved.forEach((group) => {
+                updates[group.id] = {
+                  name: group.name,
+                  iconUrl: group.iconUrl ?? undefined,
+                };
+              });
+              return updates;
+            });
+          } catch (loadError) {
+            console.error('Error loading member groups:', loadError);
+            if (!isActive || currentRequest !== requestId) return;
+            setMemberGroups([]);
+            setMemberGroupsError('No se pudieron cargar tus grupos.');
+            setMemberGroupsLoading(false);
+          }
+        })();
+      },
+      null,
+    );
 
     return () => {
       isActive = false;
@@ -360,17 +397,6 @@ export default function MessagesPage() {
     });
   }, [conversations, user, directInfoCache, getOtherMemberId]);
 
-  // Subscribe to messages of selected conversation
-  useEffect(() => {
-    if (!selectedConversationId) return;
-
-    const unsubscribe = subscribeToMessages(selectedConversationId, (msgs) => {
-      setMessages(msgs.reverse()); // Reverse to show oldest first
-    });
-
-    return () => unsubscribe();
-  }, [selectedConversationId]);
-
   useEffect(() => {
     if (!selectedConversationId || messages.length === 0) return;
     const jumpId = window.sessionStorage.getItem('vinctus:jumpMessageId');
@@ -383,12 +409,6 @@ export default function MessagesPage() {
     }
     window.sessionStorage.removeItem('vinctus:jumpMessageId');
   }, [selectedConversationId, messages]);
-
-  // Mark as read when opening conversation
-  useEffect(() => {
-    if (!selectedConversationId || !user) return;
-    markConversationRead(selectedConversationId, user.uid);
-  }, [selectedConversationId, user]);
 
   const handleSelectConversation = (conversationId: string) => {
     setSelectedConversationId(conversationId);
@@ -564,19 +584,10 @@ export default function MessagesPage() {
     }
   };
 
-  const handleSendMessage = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !selectedConversationId || !user) return;
-
-    const text = newMessage.trim();
-    setNewMessage('');
-    try {
-      await sendMessage(selectedConversationId, user.uid, text);
-    } catch (err) {
-      console.error('Error sending message:', err);
-      setNewMessage(text);
-      showToast('No se pudo enviar el mensaje.', 'error');
-    }
+  const handleSendMessage = (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedConversationId || !user) return;
+    void outbox.send(user.uid, selectedConversationId, undefined, user.displayName, user.photoURL);
   };
 
   const getGroupStats = (group: FirestoreGroup): { members: number; postsWeek: number } => {
@@ -679,7 +690,7 @@ export default function MessagesPage() {
             ? selectedConversationId.replace('grp_', '')
             : undefined,
           memberIds: selectedConversationId.startsWith('dm_')
-            ? (parseDirectMemberIds(selectedConversationId) ?? undefined)
+            ? (directParticipants(selectedConversationId, user?.uid ?? '') ?? undefined)
             : undefined,
           lastMessage: null,
           createdAt: new Date(),
@@ -716,9 +727,11 @@ export default function MessagesPage() {
     const clearedAt = selectedConversationId
       ? clearedConversations[selectedConversationId]
       : undefined;
-    const visibleMessages = clearedAt
-      ? messages.filter((msg) => msg.createdAt.getTime() > clearedAt)
-      : messages;
+    const visibleMessages = messages.filter(
+      (message) =>
+        !blockedUsers.has(message.senderId) &&
+        (!clearedAt || message.createdAt.getTime() > clearedAt),
+    );
 
     const attachmentItems: GroupFileItem[] = visibleMessages.flatMap((msg) =>
       (msg.attachments ?? []).map((attachment) => ({
@@ -739,7 +752,31 @@ export default function MessagesPage() {
         />
 
         {/* Messages */}
+        {history.error && (
+          <div role="alert" className="text-sm text-red-400">
+            {history.error}{' '}
+            <button type="button" onClick={history.retry}>
+              Reintentar carga
+            </button>
+          </div>
+        )}
+        {reading.error && (
+          <div role="alert" className="text-sm text-red-400">
+            {reading.error}{' '}
+            <button type="button" onClick={reading.retry}>
+              Reintentar lectura
+            </button>
+          </div>
+        )}
         <MessageThread
+          key={`thread:${receiptKey}`}
+          followRequest={session.pending}
+          hasMore={history.hasMore}
+          loadingOlder={history.loading}
+          onLoadOlder={() => {
+            void history.loadOlder();
+          }}
+          onLatestVisible={reportVisible}
           messages={visibleMessages}
           currentUserId={user?.uid}
           highlightMessageId={highlightMessageId}
@@ -749,8 +786,26 @@ export default function MessagesPage() {
 
         {/* Input */}
         <MessageComposer
-          value={newMessage}
-          onValueChange={setNewMessage}
+          key={`composer:${receiptKey}`}
+          value={session.draft}
+          onValueChange={(text) => outbox.draft(user!.uid, selectedConversationId, text)}
+          files={session.files}
+          onFiles={(files) => outbox.add(user!.uid, selectedConversationId, files)}
+          onRemove={(id) => outbox.remove(user!.uid, selectedConversationId, id)}
+          sending={!!session.pending}
+          progress={session.progress}
+          failed={session.failed}
+          error={session.error}
+          onRetry={(message) => {
+            void outbox.send(
+              user!.uid,
+              selectedConversationId,
+              message,
+              user!.displayName,
+              user!.photoURL,
+            );
+          }}
+          onDiscard={(id) => outbox.discard(user!.uid, selectedConversationId, id)}
           onSubmit={handleSendMessage}
         />
 

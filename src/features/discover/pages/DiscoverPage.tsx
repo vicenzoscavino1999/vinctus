@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type ChangeEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Filter, Search } from 'lucide-react';
+import { Filter, Search, X } from 'lucide-react';
 import SearchFilters from '@/features/discover/components/SearchFilters';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
 import TrendsSection from '@/features/discover/components/TrendsSection';
@@ -19,6 +19,7 @@ import {
 } from '@/features/discover/model/categoryFilter';
 import type { PublicationStreamItem } from '@/features/discover/model/publicationFeed';
 import { useAppState } from '@/context/app-state';
+import { useAuth } from '@/context/auth';
 import { CATEGORIES } from '@/shared/constants';
 import type { Category } from '@/shared/types';
 import { useToast } from '@/shared/ui/Toast';
@@ -29,7 +30,7 @@ type DiscoverCategoryNavigationSource =
   | 'category-grid'
   | 'publication-feed';
 
-const DiscoverPage = () => {
+const DiscoverSession = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchQuery = searchParams.get('q') || '';
@@ -44,10 +45,6 @@ const DiscoverPage = () => {
     followedCategories,
     toggleFollowCategory,
     isCategoryFollowed,
-    toggleLikePost,
-    isPostLiked,
-    toggleSavePost,
-    isPostSaved,
   } = useAppState();
   const { showToast } = useToast();
 
@@ -66,7 +63,7 @@ const DiscoverPage = () => {
     [searchQuery, filters, userInterests],
   );
 
-  const recommendedGroups = useRecommendedGroups();
+  const recommendedGroups = useRecommendedGroups({ searchQuery, filters });
   const curatedDebates = useCuratedDebates();
   const publicationFeed = usePublicationFeed();
   const trends = useTrendCategories({
@@ -74,11 +71,27 @@ const DiscoverPage = () => {
     groups: recommendedGroups.allGroups,
     followedCategories,
     userInterests,
+    sortBy: filters.sortBy,
   });
 
+  // Only `q` changes; any other query parameter on the URL stays.
+  const setSearchQuery = (value: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) {
+          next.set('q', value);
+        } else {
+          next.delete('q');
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
   const handleSearch = (e: ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchParams(value ? { q: value } : {}, { replace: true });
+    setSearchQuery(e.target.value);
   };
 
   const openCategoryFromDiscover = (
@@ -163,6 +176,16 @@ const DiscoverPage = () => {
               onChange={handleSearch}
               className="flex-1 bg-transparent text-white text-center focus:outline-none placeholder:text-neutral-600 font-light text-sm"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                aria-label="Limpiar búsqueda"
+                className="p-1 text-neutral-500 hover:text-white transition-colors"
+              >
+                <X size={16} />
+              </button>
+            )}
             <Search className="text-neutral-600" size={18} />
           </div>
         </div>
@@ -188,6 +211,7 @@ const DiscoverPage = () => {
         debates={curatedDebates.curatedArenaDebates}
         loading={curatedDebates.arenaDebatesLoading}
         error={curatedDebates.arenaDebatesError}
+        onRetry={curatedDebates.retryArenaDebates}
         onOpenDebate={(debateId) => navigate(`/arena/${debateId}`)}
       />
 
@@ -195,6 +219,8 @@ const DiscoverPage = () => {
         groups={recommendedGroups.groups}
         loading={recommendedGroups.groupsLoading}
         error={recommendedGroups.groupsError}
+        isFiltered={Boolean(searchQuery.trim() || filters.category)}
+        onRetry={recommendedGroups.retryGroups}
         actionLoadingId={recommendedGroups.groupActionLoading}
         getActionLabel={recommendedGroups.getGroupActionLabel}
         onAction={(group) => void recommendedGroups.handleGroupAction(group)}
@@ -203,10 +229,6 @@ const DiscoverPage = () => {
 
       <PublicationFeedSection
         feed={publicationFeed}
-        isPostLiked={isPostLiked}
-        isPostSaved={isPostSaved}
-        onToggleLike={toggleLikePost}
-        onToggleSave={toggleSavePost}
         onOpenPublication={openPublicationFromDiscover}
         onOpenComments={openPublicationComments}
       />
@@ -216,6 +238,12 @@ const DiscoverPage = () => {
       )}
     </div>
   );
+};
+
+// A new signed-in user gets a fresh session: no join statuses, likes or feed from the last one.
+const DiscoverPage = () => {
+  const { user } = useAuth();
+  return <DiscoverSession key={user?.uid ?? 'anonymous'} />;
 };
 
 export default DiscoverPage;

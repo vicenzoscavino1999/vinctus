@@ -1,14 +1,13 @@
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import PublicationCard from '@/features/discover/components/PublicationCard';
 import type { PublicationFeed } from '@/features/discover/hooks/usePublicationFeed';
-import type { PublicationStreamItem } from '@/features/discover/model/publicationFeed';
+import {
+  YOUTUBE_FALLBACK_QUERY,
+  type PublicationStreamItem,
+} from '@/features/discover/model/publicationFeed';
 
 type PublicationFeedSectionProps = {
   feed: PublicationFeed;
-  isPostLiked: (postId: string) => boolean;
-  isPostSaved: (postId: string) => boolean;
-  onToggleLike: (postId: string) => void;
-  onToggleSave: (postId: string) => void;
   onOpenPublication: (publication: PublicationStreamItem) => void;
   onOpenComments: (postId: string) => void;
 };
@@ -16,10 +15,6 @@ type PublicationFeedSectionProps = {
 /** "Publicaciones": the YouTube search box, the mixed feed and its load-more controls. */
 const PublicationFeedSection = ({
   feed,
-  isPostLiked,
-  isPostSaved,
-  onToggleLike,
-  onToggleSave,
   onOpenPublication,
   onOpenComments,
 }: PublicationFeedSectionProps) => {
@@ -36,6 +31,8 @@ const PublicationFeedSection = ({
     communityLoading,
     communityReady,
     communityCount,
+    likeCounts,
+    handleLikeCount,
   } = feed;
 
   return (
@@ -53,11 +50,22 @@ const PublicationFeedSection = ({
           />
           <input
             type="text"
+            aria-label="Buscar videos en YouTube"
             value={youtubeQueryInput}
             onChange={(event) => setYoutubeQueryInput(event.target.value)}
             placeholder="Buscar videos en YouTube dentro de Vinctus..."
-            className="w-full rounded-full border border-neutral-700 bg-neutral-900/70 py-2 pl-9 pr-4 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none"
+            className="w-full rounded-full border border-neutral-700 bg-neutral-900/70 py-2 pl-9 pr-9 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none"
           />
+          {youtubeQueryInput.trim() && youtubeQueryInput !== YOUTUBE_FALLBACK_QUERY && (
+            <button
+              type="button"
+              onClick={() => setYoutubeQueryInput(YOUTUBE_FALLBACK_QUERY)}
+              aria-label="Restablecer búsqueda de YouTube"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors"
+            >
+              <X size={14} />
+            </button>
+          )}
         </label>
         <span className="text-[10px] uppercase tracking-[0.22em] text-neutral-500">
           {youtubeLoading
@@ -93,12 +101,10 @@ const PublicationFeedSection = ({
               key={publication.streamKey}
               publication={publication}
               index={index}
-              liked={isPostLiked(publication.id)}
-              saved={isPostSaved(publication.id)}
+              confirmedLikeCount={publication.postId ? likeCounts[publication.postId] : undefined}
+              onLikeCount={handleLikeCount}
               onOpen={onOpenPublication}
               onOpenComments={onOpenComments}
-              onToggleLike={onToggleLike}
-              onToggleSave={onToggleSave}
             />
           ))}
         </div>

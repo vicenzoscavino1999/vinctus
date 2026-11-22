@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Vinctus usa el micrófono para grabar notas de voz que puedes enviar en tus conversaciones.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>es</string>
 	<key>CFBundleLocalizations</key>
@@ -55,6 +57,10 @@
 	</array>
 	<key>VINCTUS_API_BASE_URL</key>
 	<string>https://vinctus.vercel.app</string>
+	<key>VINCTUS_APP_CHECK_PROVIDER</key>
+	<string>auto</string>
+	<key>VINCTUS_ENABLE_APP_CHECK</key>
+	<true/>
 	<key>VINCTUS_ENV</key>
 	<string>$(VINCTUS_ENV)</string>
 	<key>VINCTUS_PRIVACY_URL</key>

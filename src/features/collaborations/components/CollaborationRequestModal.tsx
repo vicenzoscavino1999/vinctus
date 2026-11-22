@@ -3,6 +3,7 @@ import { Loader2, X } from 'lucide-react';
 
 import { useAuth } from '@/context/auth';
 import { sendCollaborationRequest, type CollaborationRead } from '@/features/collaborations/api';
+import { AppError } from '@/shared/lib/errors';
 import { useToast } from '@/shared/ui/Toast';
 
 interface CollaborationRequestModalProps {
@@ -30,8 +31,18 @@ const CollaborationRequestModal = ({
       setMessage('');
       setError(null);
       setIsSubmitting(false);
+      return;
     }
-  }, [isOpen]);
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isSubmitting) {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [isOpen, isSubmitting, onClose]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -40,7 +51,7 @@ const CollaborationRequestModal = ({
     if (!collaboration) return;
 
     if (!user) {
-      setError('Debes iniciar sesion para enviar solicitudes.');
+      setError('Debes iniciar sesión para enviar solicitudes.');
       return;
     }
 
@@ -58,16 +69,22 @@ const CollaborationRequestModal = ({
         fromUid: user.uid,
         toUid: collaboration.authorId,
         message: message.trim() ? message.trim() : null,
-        fromUserName: user.displayName || 'Usuario',
+        fromUserName: (user.displayName || 'Usuario').trim().slice(0, 80) || 'Usuario',
         fromUserPhoto: user.photoURL || null,
       });
       showToast('Solicitud enviada', 'success');
       onSent(collaboration.id);
     } catch (submitError) {
       console.error('Error sending collaboration request:', submitError);
-      setError(
-        submitError instanceof Error ? submitError.message : 'No se pudo enviar la solicitud.',
-      );
+      if (submitError instanceof AppError && submitError.code === 'PERMISSION_DENIED') {
+        setError(
+          'No se pudo enviar la solicitud. Es posible que el proyecto ya no esté disponible o exista un bloqueo.',
+        );
+      } else {
+        setError(
+          submitError instanceof Error ? submitError.message : 'No se pudo enviar la solicitud.',
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -76,21 +93,33 @@ const CollaborationRequestModal = ({
   if (!isOpen || !collaboration) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset py-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Enviar solicitud"
+    >
+      <div
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        onClick={() => {
+          if (!isSubmitting) onClose();
+        }}
+      />
+      <div className="relative w-full max-w-xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 flex-shrink-0">
           <h2 className="text-xl font-serif text-white">Enviar solicitud</h2>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
+            disabled={isSubmitting}
+            className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800 disabled:opacity-50"
             aria-label="Cerrar"
           >
             <X size={20} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
           <div className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-4">
             <p className="text-xs uppercase tracking-widest text-neutral-500">
               {collaboration.context}

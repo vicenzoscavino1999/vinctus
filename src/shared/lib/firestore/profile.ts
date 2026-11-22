@@ -42,10 +42,10 @@ interface UserProfileReadModel {
 interface UserProfileUpdateInput {
   displayName?: string;
   photoURL?: string | null;
-  bio?: string;
-  role?: string;
-  location?: string;
-  username?: string;
+  bio?: string | null;
+  role?: string | null;
+  location?: string | null;
+  username?: string | null;
 }
 
 interface NotificationSettingsInput {
@@ -251,7 +251,8 @@ export async function getUserProfile(uid: string): Promise<UserProfileReadModel 
         ? publicData.karmaGlobal
         : undefined;
   const karmaByInterest = (privateData?.karmaByInterest ?? publicData?.karmaByInterest) as
-    Record<string, number> | undefined;
+    | Record<string, number>
+    | undefined;
 
   // 4. Merge data (private first, complement with public)
   return {
@@ -436,26 +437,18 @@ const normalizePrivacySettings = (value: unknown): PrivacySettingsInput => {
 };
 
 export async function getUserSettings(uid: string): Promise<UserSettingsReadModel> {
-  try {
-    const snap = await getDoc(doc(db, COLLECTIONS.users, uid));
-    if (!snap.exists()) {
-      return {
-        notifications: DEFAULT_NOTIFICATION_SETTINGS,
-        privacy: DEFAULT_PRIVACY_SETTINGS,
-      };
-    }
-    const data = snap.data() as { settings?: { notifications?: unknown; privacy?: unknown } };
-    return {
-      notifications: normalizeNotificationSettings(data.settings?.notifications),
-      privacy: normalizePrivacySettings(data.settings?.privacy),
-    };
-  } catch (error) {
-    console.error('Error loading user settings:', error);
+  const snap = await getDoc(doc(db, COLLECTIONS.users, uid));
+  if (!snap.exists()) {
     return {
       notifications: DEFAULT_NOTIFICATION_SETTINGS,
       privacy: DEFAULT_PRIVACY_SETTINGS,
     };
   }
+  const data = snap.data() as { settings?: { notifications?: unknown; privacy?: unknown } };
+  return {
+    notifications: normalizeNotificationSettings(data.settings?.notifications),
+    privacy: normalizePrivacySettings(data.settings?.privacy),
+  };
 }
 
 export async function updateNotificationSettings(

@@ -178,50 +178,26 @@ export interface FollowRequestWrite {
 
 export type FollowStatus = 'none' | 'following' | 'pending_sent' | 'pending_received';
 
-export async function getFollowStatus(
-  currentUid: string,
-  targetUid: string,
-  targetVisibility?: AccountVisibility,
-): Promise<{ status: FollowStatus; requestId?: string; isMutual?: boolean }> {
-  try {
-    trackFirestoreRead('firestore.getDoc');
-    const followerDoc = await getDoc(
-      doc(db, COLLECTIONS.users, targetUid, SUBCOLLECTIONS.followers, currentUid),
-    );
-    if (followerDoc.exists()) {
-      try {
-        trackFirestoreRead('firestore.getDoc');
-        const reverseDoc = await getDoc(
-          doc(db, COLLECTIONS.users, currentUid, SUBCOLLECTIONS.followers, targetUid),
-        );
-        return { status: 'following', isMutual: reverseDoc.exists() };
-      } catch (error) {
-        const code = (error as { code?: string })?.code;
-        if (code !== 'permission-denied') {
-          throw error;
-        }
-        return { status: 'following', isMutual: false };
-      }
-    }
-  } catch (error) {
-    const code = (error as { code?: string })?.code;
-    if (code !== 'permission-denied') {
-      throw error;
-    }
-  }
+export interface FollowStatusResult {
+  status: FollowStatus;
+  requestId?: string;
+  isMutual?: boolean;
+  hasIncomingRequest?: boolean;
+  incomingRequestId?: string;
+}
 
-  if (targetVisibility && targetVisibility !== 'private') {
-    return { status: 'none' };
-  }
-
-  const incomingId = buildFollowRequestId(targetUid, currentUid);
+const getIncomingPendingRequestId = async (
+  fromUid: string,
+  toUid: string,
+): Promise<string | undefined> => {
+  const incomingId = buildFollowRequestId(fromUid, toUid);
   try {
     trackFirestoreRead('firestore.getDoc');
     const incoming = await getDoc(doc(db, COLLECTIONS.followRequests, incomingId));
     if (incoming.exists()) {
       const data = incoming.data() as { status?: FollowRequestStatus };
       if (data.status === 'pending') {
-        return { status: 'pending_received', requestId: incoming.id };
+        return incoming.id;
       }
     }
   } catch (error) {
@@ -229,6 +205,70 @@ export async function getFollowStatus(
     if (code !== 'permission-denied') {
       throw error;
     }
+  }
+  return undefined;
+};
+
+export async function getFollowStatus(
+  currentUid: string,
+  targetUid: string,
+  targetVisibility?: AccountVisibility,
+): Promise<FollowStatusResult> {
+  let isFollowing = false;
+  let isMutual = false;
+
+  try {
+    trackFirestoreRead('firestore.getDoc');
+    const followerDoc = await getDoc(
+      doc(db, COLLECTIONS.users, targetUid, SUBCOLLECTIONS.followers, currentUid),
+    );
+    if (followerDoc.exists()) {
+      isFollowing = true;
+      try {
+        trackFirestoreRead('firestore.getDoc');
+        const reverseDoc = await getDoc(
+          doc(db, COLLECTIONS.users, currentUid, SUBCOLLECTIONS.followers, targetUid),
+        );
+        isMutual = reverseDoc.exists();
+      } catch (error) {
+        const code = (error as { code?: string })?.code;
+        if (code !== 'permission-denied') {
+          throw error;
+        }
+      }
+    }
+  } catch (error) {
+    const code = (error as { code?: string })?.code;
+    if (code !== 'permission-denied') {
+      throw error;
+    }
+  }
+
+  // Always check whether targetUid sent an incoming request to currentUid (even if
+  // targetUid is public or currentUid already follows targetUid).
+  const incomingRequestId = isMutual
+    ? undefined
+    : await getIncomingPendingRequestId(targetUid, currentUid);
+
+  if (isFollowing) {
+    return {
+      status: 'following',
+      isMutual,
+      ...(incomingRequestId ? { hasIncomingRequest: true, incomingRequestId } : {}),
+    };
+  }
+
+  if (incomingRequestId) {
+    return {
+      status: 'pending_received',
+      requestId: incomingRequestId,
+      hasIncomingRequest: true,
+      incomingRequestId,
+    };
+  }
+
+  if (targetVisibility && targetVisibility !== 'private') {
+    return { status: 'none' };
   }
 
   const outgoingId = buildFollowRequestId(currentUid, targetUid);
@@ -252,6 +292,10 @@ export async function getFollowStatus(
 }
 
 export async function sendFollowRequest(fromUid: string, toUid: string): Promise<string> {
+  if (fromUid === toUid) {
+    throw new Error('No puedes enviarte una solicitud de seguimiento a ti mismo.');
+  }
+
   const requestId = buildFollowRequestId(fromUid, toUid);
   const requestRef = doc(db, COLLECTIONS.followRequests, requestId);
   let existing = null as null | DocumentSnapshot;
@@ -267,11 +311,6 @@ export async function sendFollowRequest(fromUid: string, toUid: string): Promise
   if (existing?.exists()) {
     const data = existing.data() as { status?: FollowRequestStatus };
     if (data.status === 'pending') {
-      trackFirestoreWrite('firestore.updateDoc');
-      await updateDoc(requestRef, {
-        status: 'pending',
-        updatedAt: serverTimestamp(),
-      });
       return requestId;
     }
     trackFirestoreWrite('firestore.updateDoc');
@@ -330,6 +369,10 @@ export async function declineFollowRequest(fromUid: string, toUid: string): Prom
 }
 
 export async function followPublicUser(followerUid: string, targetUid: string): Promise<void> {
+  if (followerUid === targetUid) {
+    throw new Error('No puedes seguirte a ti mismo.');
+  }
+
   const followerRef = docLite(
     dbLite,
     COLLECTIONS.users,
@@ -386,6 +429,26 @@ export async function unfollowUser(followerUid: string, targetUid: string): Prom
   batch.delete(followerRef);
   batch.delete(followingRef);
   await batch.commit();
+
+  // Remove any previously accepted follow_request document so re-following later creates cleanly.
+  const requestRef = doc(
+    db,
+    COLLECTIONS.followRequests,
+    buildFollowRequestId(followerUid, targetUid),
+  );
+  try {
+    trackFirestoreRead('firestore.getDoc');
+    const requestSnap = await getDoc(requestRef);
+    if (requestSnap.exists()) {
+      trackFirestoreWrite('firestore.deleteDoc');
+      await deleteDoc(requestRef);
+    }
+  } catch (error) {
+    const code = (error as { code?: string })?.code;
+    if (code !== 'permission-denied') {
+      console.warn('Failed to clean up follow request on unfollow:', error);
+    }
+  }
 }
 
 export async function getFollowList(

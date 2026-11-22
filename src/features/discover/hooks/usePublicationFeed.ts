@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
 import { getGlobalFeed, type PostCursor } from '@/features/posts/api';
 import { fetchYouTubeSearchVideos } from '@/shared/lib/youtubeSearchApi';
@@ -21,16 +22,29 @@ import {
  * them with editorial filler, and grows the rendered list when its sentinel scrolls into view.
  */
 export const usePublicationFeed = () => {
+  const { user } = useAuth();
   const { showToast } = useToast();
 
+  const isMountedRef = useRef(true);
+  const communityRequestSeqRef = useRef(0);
+  const youtubeRequestSeqRef = useRef(0);
   const publicationLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const publicationObserverLockedRef = useRef(false);
   const [visiblePublicationCount, setVisiblePublicationCount] = useState(PUBLICATION_BATCH_SIZE);
   const [communityPublications, setCommunityPublications] = useState<PublicationStreamItem[]>([]);
+  // Like counts the post actions confirmed, so a card that remounts keeps the fresh number.
+  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
+  const handleLikeCount = useCallback((postId: string, count: number) => {
+    setLikeCounts((previous) =>
+      previous[postId] === count ? previous : { ...previous, [postId]: count },
+    );
+  }, []);
   const [communityCursor, setCommunityCursor] = useState<PostCursor>(null);
   const [communityHasMore, setCommunityHasMore] = useState(true);
   const [communityLoading, setCommunityLoading] = useState(false);
   const [communityReady, setCommunityReady] = useState(false);
+  // Uid the current community page was read for; undefined while a read is in flight.
+  const [communityReader, setCommunityReader] = useState<string | null | undefined>(undefined);
   const [youtubeQueryInput, setYoutubeQueryInput] = useState(YOUTUBE_FALLBACK_QUERY);
   const [youtubeQuery, setYoutubeQuery] = useState(YOUTUBE_FALLBACK_QUERY);
   const [youtubePublications, setYoutubePublications] = useState<PublicationStreamItem[]>([]);
@@ -59,12 +73,17 @@ export const usePublicationFeed = () => {
 
   // Grow the rendered feed only once pending loads settle, and only by appending: items the user
   // already scrolled past never move, so scrolling back up shows the same feed.
+  const publicationScope = JSON.stringify([user?.uid ?? null, youtubeQuery]);
   const publicationSourcesSettled =
-    communityReady && !communityLoading && youtubeResultsQuery === youtubeQuery && !youtubeLoading;
+    communityReader === (user?.uid ?? null) &&
+    communityReady &&
+    !communityLoading &&
+    youtubeResultsQuery === youtubeQuery &&
+    !youtubeLoading;
   if (publicationSourcesSettled) {
     const nextShownPublications = appendToStream(
       shownPublications,
-      youtubeQuery,
+      publicationScope,
       candidatePublicationStream,
       publicationTargetCount,
       getPublicationDedupeKey,
@@ -73,31 +92,46 @@ export const usePublicationFeed = () => {
       setShownPublications(nextShownPublications);
     }
   }
-  const publicationStream = shownPublications.scope === youtubeQuery ? shownPublications.items : [];
+  const publicationStream =
+    shownPublications.scope === publicationScope ? shownPublications.items : [];
 
   const hasMoreEditorial = visiblePublicationCount < PUBLICATION_MAX_ITEMS;
   const hasMorePublications = communityHasMore || youtubeHasMore || hasMoreEditorial;
 
   useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     let active = true;
+    const seq = ++communityRequestSeqRef.current;
 
     const loadInitialCommunityPublications = async () => {
+      setCommunityReader(undefined);
       setCommunityLoading(true);
+      setCommunityPublications([]);
+      setCommunityCursor(null);
+      setCommunityHasMore(false);
       try {
         const result = await getGlobalFeed(PUBLICATION_BATCH_SIZE);
-        if (!active) return;
+        if (!active || communityRequestSeqRef.current !== seq) return;
         const mapped = result.items.map((post, index) => buildCommunityPublication(post, index));
         setCommunityPublications(mapped);
+        setCommunityReader(user?.uid ?? null);
         setCommunityCursor(result.lastDoc ?? null);
         setCommunityHasMore(result.hasMore);
       } catch (error) {
         console.error('Error loading community publications for Discover:', error);
-        if (!active) return;
+        if (!active || communityRequestSeqRef.current !== seq) return;
         setCommunityPublications([]);
+        setCommunityReader(user?.uid ?? null);
         setCommunityCursor(null);
         setCommunityHasMore(false);
       } finally {
-        if (active) {
+        if (active && communityRequestSeqRef.current === seq) {
           setCommunityLoading(false);
           setCommunityReady(true);
         }
@@ -108,7 +142,7 @@ export const usePublicationFeed = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [user?.uid]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -121,6 +155,7 @@ export const usePublicationFeed = () => {
 
   useEffect(() => {
     let active = true;
+    const seq = ++youtubeRequestSeqRef.current;
 
     const loadInitialYouTubePublications = async () => {
       setYoutubeLoading(true);
@@ -130,7 +165,7 @@ export const usePublicationFeed = () => {
           query: youtubeQuery,
           limit: YOUTUBE_BATCH_SIZE,
         });
-        if (!active) return;
+        if (!active || youtubeRequestSeqRef.current !== seq) return;
 
         const mapped = result.items.map((item, index) =>
           buildYouTubePublication(item, index, youtubeQuery),
@@ -141,12 +176,12 @@ export const usePublicationFeed = () => {
         setYoutubeHasMore(Boolean(result.nextPageToken));
       } catch (error) {
         console.error('Error loading YouTube publications for Discover:', error);
-        if (!active) return;
+        if (!active || youtubeRequestSeqRef.current !== seq) return;
         setYoutubePublications([]);
         setYoutubeNextPageToken(null);
         setYoutubeHasMore(false);
       } finally {
-        if (active) {
+        if (active && youtubeRequestSeqRef.current === seq) {
           setYoutubeLoading(false);
           setYoutubeReady(true);
           setYoutubeResultsQuery(youtubeQuery);
@@ -162,9 +197,11 @@ export const usePublicationFeed = () => {
 
   const loadMoreCommunityPublications = useCallback(async () => {
     if (communityLoading || !communityHasMore) return;
+    const seq = communityRequestSeqRef.current;
     setCommunityLoading(true);
     try {
       const result = await getGlobalFeed(PUBLICATION_BATCH_SIZE, communityCursor ?? undefined);
+      if (!isMountedRef.current || communityRequestSeqRef.current !== seq) return;
       setCommunityPublications((prev) => {
         const offset = prev.length;
         const mapped = result.items.map((post, index) =>
@@ -176,26 +213,32 @@ export const usePublicationFeed = () => {
       setCommunityHasMore(result.hasMore);
     } catch (error) {
       console.error('Error loading more community publications for Discover:', error);
+      if (!isMountedRef.current || communityRequestSeqRef.current !== seq) return;
       setCommunityHasMore(false);
       showToast('No se pudieron cargar más publicaciones de la comunidad.', 'error');
     } finally {
-      setCommunityLoading(false);
+      if (isMountedRef.current && communityRequestSeqRef.current === seq) {
+        setCommunityLoading(false);
+      }
     }
   }, [communityLoading, communityHasMore, communityCursor, showToast]);
 
   const loadMoreYouTubePublications = useCallback(async () => {
     if (youtubeLoading || !youtubeHasMore || !youtubeNextPageToken) return;
+    const seq = youtubeRequestSeqRef.current;
+    const querySnapshot = youtubeQuery;
     setYoutubeLoading(true);
     try {
       const result = await fetchYouTubeSearchVideos({
-        query: youtubeQuery,
+        query: querySnapshot,
         limit: YOUTUBE_BATCH_SIZE,
         pageToken: youtubeNextPageToken,
       });
+      if (!isMountedRef.current || youtubeRequestSeqRef.current !== seq) return;
       setYoutubePublications((prev) => {
         const offset = prev.length;
         const mapped = result.items.map((item, index) =>
-          buildYouTubePublication(item, offset + index, youtubeQuery),
+          buildYouTubePublication(item, offset + index, querySnapshot),
         );
         return Array.from(new Map([...prev, ...mapped].map((item) => [item.id, item])).values());
       });
@@ -203,10 +246,13 @@ export const usePublicationFeed = () => {
       setYoutubeHasMore(Boolean(result.nextPageToken));
     } catch (error) {
       console.error('Error loading more YouTube publications for Discover:', error);
+      if (!isMountedRef.current || youtubeRequestSeqRef.current !== seq) return;
       setYoutubeHasMore(false);
       showToast('No se pudieron cargar mas videos de YouTube.', 'error');
     } finally {
-      setYoutubeLoading(false);
+      if (isMountedRef.current && youtubeRequestSeqRef.current === seq) {
+        setYoutubeLoading(false);
+      }
     }
   }, [youtubeHasMore, youtubeLoading, youtubeNextPageToken, youtubeQuery, showToast]);
 
@@ -277,6 +323,8 @@ export const usePublicationFeed = () => {
     communityLoading,
     communityReady,
     communityCount: communityPublications.length,
+    likeCounts,
+    handleLikeCount,
   };
 };
 

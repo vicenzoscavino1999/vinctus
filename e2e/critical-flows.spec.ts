@@ -12,11 +12,14 @@ test.describe('Critical flows', () => {
   });
 
   test('@smoke login -> feed -> post -> chat -> groups', async ({ page }) => {
+    // Each hard navigation reconnects Firestore; leave the group assertions their
+    // own budget after the preceding login, feed, post and idempotent chat send.
+    test.setTimeout(60000);
     await loginWithSeedUser(page, 'alice');
     await waitForAuthenticatedShell(page);
 
     await page.goto('/feed');
-    const likeButton = page.getByLabel(/Dar like/i).first();
+    const likeButton = page.getByRole('button', { name: /^(Me gusta|Quitar me gusta)$/i }).first();
     await expect(likeButton).toBeVisible({ timeout: 15000 });
     await page.mouse.wheel(0, 2400);
     const loadMoreButton = page.getByRole('button', { name: /Cargar m/i });

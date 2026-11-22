@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Your private collections of links and notes, like the web's Colecciones tab.
+/// Your private collections of links, notes and files, like the web's Colecciones tab.
 struct CollectionsView: View {
+  @EnvironmentObject private var authVM: AuthViewModel
   @StateObject private var vm: CollectionsViewModel
   @State private var editing: CollectionEditorTarget?
   @State private var pendingDelete: UserCollection?
@@ -16,8 +17,19 @@ struct CollectionsView: View {
         ProgressView()
           .frame(maxWidth: .infinity)
       } else if let error = vm.errorMessage, vm.collections.isEmpty {
-        Text(error)
-          .foregroundStyle(.red)
+        VStack(spacing: 10) {
+          Text(error)
+            .font(.footnote)
+            .foregroundStyle(.red)
+            .multilineTextAlignment(.center)
+          Button("Reintentar") {
+            Task { await vm.load() }
+          }
+          .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+        .listRowBackground(SwiftUI.Color.clear)
       } else if vm.collections.isEmpty {
         VStack(spacing: 10) {
           Image(systemName: "books.vertical")
@@ -25,7 +37,7 @@ struct CollectionsView: View {
             .foregroundStyle(VinctusTokens.Color.accent)
           Text("Aún no tienes colecciones")
             .font(.headline)
-          Text("Guarda enlaces y notas en carpetas privadas. Solo tú puedes verlas.")
+          Text("Guarda enlaces, notas y archivos en carpetas privadas. Solo tú puedes verlas.")
             .font(.footnote)
             .foregroundStyle(VinctusTokens.Color.textMuted)
             .multilineTextAlignment(.center)
@@ -33,6 +45,20 @@ struct CollectionsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 30)
+        .listRowBackground(SwiftUI.Color.clear)
+      } else if vm.visibleCollections.isEmpty {
+        VStack(spacing: 10) {
+          Text("No hay colecciones para esa búsqueda.")
+            .font(.footnote)
+            .foregroundStyle(VinctusTokens.Color.textMuted)
+            .multilineTextAlignment(.center)
+          Button("Limpiar búsqueda") {
+            vm.searchText = ""
+          }
+          .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
         .listRowBackground(SwiftUI.Color.clear)
       } else {
         ForEach(vm.visibleCollections) { collection in
@@ -81,11 +107,21 @@ struct CollectionsView: View {
     ) {
       Button("Eliminar con todo su contenido", role: .destructive) {
         guard let collection = pendingDelete else { return }
+        pendingDelete = nil
         Task { await vm.delete(collection) }
       }
     }
-    .task { await vm.load() }
-    .refreshable { await vm.load() }
+    .task(id: authVM.currentUserID) {
+      guard authVM.currentUserID != nil else {
+        vm.reset()
+        return
+      }
+      await vm.load()
+    }
+    .refreshable {
+      guard authVM.currentUserID != nil else { return }
+      await vm.load()
+    }
   }
 }
 
@@ -140,8 +176,14 @@ private struct CollectionEditorSheet: View {
   var body: some View {
     NavigationStack {
       Form {
-        Section("Nombre") {
+        Section {
           TextField("Ej. Libros por leer", text: $vm.name)
+        } header: {
+          Text("Nombre")
+        } footer: {
+          let count = vm.name.trimmingCharacters(in: .whitespacesAndNewlines).count
+          Text("\(count)/\(Limits.Collections.nameMaxLength)")
+            .foregroundStyle(count > Limits.Collections.nameMaxLength ? .red : VinctusTokens.Color.textMuted)
         }
         Section("Icono") {
           Picker("Icono", selection: $vm.icon) {
@@ -164,6 +206,7 @@ private struct CollectionEditorSheet: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancelar") { dismiss() }
+            .disabled(vm.isSaving)
         }
         ToolbarItem(placement: .confirmationAction) {
           Button("Guardar") {
@@ -177,6 +220,7 @@ private struct CollectionEditorSheet: View {
           .disabled(!vm.canSave)
         }
       }
+      .interactiveDismissDisabled(vm.isSaving)
       .vinctusLoading(vm.isSaving)
     }
   }

@@ -74,6 +74,7 @@ protocol StoriesRepo {
 enum StoriesRepoError: LocalizedError {
   case firebaseNotConfigured
   case userNotAuthenticated
+  case imageTooLarge
 
   var errorDescription: String? {
     switch self {
@@ -81,6 +82,8 @@ enum StoriesRepoError: LocalizedError {
       return "Firebase no está configurado."
     case .userNotAuthenticated:
       return "Debes iniciar sesión."
+    case .imageTooLarge:
+      return "La imagen supera el límite permitido."
     }
   }
 }
@@ -97,13 +100,16 @@ final class FirebaseStoriesRepo: StoriesRepo {
     return (Firestore.firestore(), uid)
   }
 
-  /// Mirrors `useStories`: own stories plus those of friends and followed users.
+  /// Mirrors `useStories`: own stories plus those of friends and followed users, minus blocked users.
   func fetchStoryGroups() async throws -> [StoryGroup] {
     let (db, uid) = try context()
     let users = db.collection(FirestoreCollections.users).document(uid)
     async let friends = ids(users.collection(FirestoreSubcollections.friends).limit(to: 200))
     async let following = ids(users.collection(FirestoreSubcollections.following).limit(to: 1000))
-    let others = Set(await friends + following).subtracting([uid])
+    async let blocked = ids(users.collection(FirestoreSubcollections.blockedUsers).limit(to: 1000))
+    let others = Set(await friends + following)
+      .subtracting([uid])
+      .subtracting(await blocked)
 
     var owners = [uid] + Array(others)
     var stories: [Story] = []
@@ -115,7 +121,9 @@ final class FirebaseStoriesRepo: StoriesRepo {
         stories += found
       }
     }
-    stories += await YouTubeShorts.todaysStories()
+    let now = Date()
+    stories = stories.filter { $0.expiresAt > now }
+    stories += await YouTubeShorts.todaysStories(now: now)
     return StoryGroup.make(from: stories, currentUID: uid)
   }
 
@@ -137,6 +145,7 @@ final class FirebaseStoriesRepo: StoriesRepo {
   /// Mirrors `uploadStoryImage` + `createStory` (paths and fields checked by storage.rules and
   /// `isValidStoryCreate` in firestore.rules).
   func publishImageStory(jpegData: Data) async throws {
+    guard jpegData.count < StorageMaxBytes.image else { throw StoriesRepoError.imageTooLarge }
     let (db, uid) = try context()
     let storyRef = db.collection(FirestoreCollections.stories).document()
     let millis = Int64(Date().timeIntervalSince1970 * 1000)
@@ -147,31 +156,41 @@ final class FirebaseStoriesRepo: StoriesRepo {
     let metadata = StorageMetadata()
     metadata.contentType = "image/jpeg"
     _ = try await mediaRef.putDataAsync(jpegData, metadata: metadata)
-    let url = try await mediaRef.downloadURL().absoluteString
+    do {
+      let url = try await mediaRef.downloadURL().absoluteString
 
-    let profile = (try? await db.collection(FirestoreCollections.usersPublic).document(uid).getDocument().data()) ?? [:]
-    let user = Auth.auth().currentUser
-    let name = FirestoreValue.string(profile["displayName"]) ?? FirestoreValue.string(user?.displayName)
-    let photo = FirestoreValue.string(profile["photoURL"]) ?? user?.photoURL?.absoluteString
+      let profile = (try? await db.collection(FirestoreCollections.usersPublic).document(uid).getDocument().data()) ?? [:]
+      let user = Auth.auth().currentUser
+      let name = FirestoreValue.string(profile["displayName"]) ?? FirestoreValue.string(user?.displayName)
+      let rawPhoto = FirestoreValue.string(profile["photoURL"]) ?? user?.photoURL?.absoluteString
+      let photo = rawPhoto.flatMap { candidate -> String? in
+        guard candidate.count <= Limits.Stories.photoURLMaxLength,
+              candidate.hasPrefix("https://") || candidate.hasPrefix("http://") else { return nil }
+        return candidate
+      }
 
-    // `isValidStoryOwnerSnapshot`: a name of up to 80 characters and a photo URL, or nulls.
-    var ownerSnapshot: [String: Any] = ["displayName": NSNull(), "photoURL": NSNull()]
-    if let name { ownerSnapshot["displayName"] = String(name.prefix(Limits.Stories.ownerNameMaxLength)) }
-    if let photo { ownerSnapshot["photoURL"] = photo }
-    let expiresAt = Timestamp(date: Date().addingTimeInterval(Self.storyDuration))
-    let fields: [String: Any] = [
-      "ownerId": uid,
-      "ownerSnapshot": ownerSnapshot,
-      "mediaType": StoryMediaType.image.rawValue,
-      "mediaUrl": url,
-      "mediaPath": path,
-      "thumbUrl": NSNull(),
-      "thumbPath": NSNull(),
-      "visibility": "friends",
-      "createdAt": FieldValue.serverTimestamp(),
-      "expiresAt": expiresAt,
-    ]
-    try await storyRef.setData(fields)
+      // `isValidStoryOwnerSnapshot`: a name of up to 80 characters and a photo URL, or nulls.
+      var ownerSnapshot: [String: Any] = ["displayName": NSNull(), "photoURL": NSNull()]
+      if let name { ownerSnapshot["displayName"] = String(name.prefix(Limits.Stories.ownerNameMaxLength)) }
+      if let photo { ownerSnapshot["photoURL"] = photo }
+      let expiresAt = Timestamp(date: Date().addingTimeInterval(Self.storyDuration))
+      let fields: [String: Any] = [
+        "ownerId": uid,
+        "ownerSnapshot": ownerSnapshot,
+        "mediaType": StoryMediaType.image.rawValue,
+        "mediaUrl": url,
+        "mediaPath": path,
+        "thumbUrl": NSNull(),
+        "thumbPath": NSNull(),
+        "visibility": "friends",
+        "createdAt": FieldValue.serverTimestamp(),
+        "expiresAt": expiresAt,
+      ]
+      try await storyRef.setData(fields)
+    } catch {
+      try? await mediaRef.delete()
+      throw error
+    }
   }
 
   func deleteStory(_ story: Story) async throws {

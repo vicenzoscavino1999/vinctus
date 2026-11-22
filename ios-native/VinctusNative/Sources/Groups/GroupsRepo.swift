@@ -21,6 +21,20 @@ struct GroupPostPreview: Identifiable, Hashable {
   let authorID: String?
   let authorName: String
   let createdAt: Date?
+  var feedItem: FeedItem? = nil
+
+  var resolvedFeedItem: FeedItem {
+    feedItem ?? FeedItem(
+      id: id,
+      authorID: authorID,
+      authorName: authorName,
+      text: title,
+      createdAt: createdAt,
+      likeCount: 0,
+      commentCount: 0,
+      title: title
+    )
+  }
 }
 
 struct GroupMemberPreview: Identifiable, Hashable {
@@ -120,6 +134,7 @@ enum GroupsRepoError: LocalizedError {
   case firebaseNotConfigured
   case missingSnapshot
   case privateGroup
+  case alreadyMember
   case requestAlreadySent
   case invalidUpdate
 
@@ -131,6 +146,8 @@ enum GroupsRepoError: LocalizedError {
       return "No se pudo cargar grupos."
     case .privateGroup:
       return "Este grupo es privado: envía una solicitud para unirte."
+    case .alreadyMember:
+      return "Ya eres miembro de este grupo."
     case .requestAlreadySent:
       return "Ya enviaste una solicitud para este grupo."
     case .invalidUpdate:
@@ -177,33 +194,31 @@ final class FirebaseGroupsRepo: GroupsRepo {
     let postsLimit = max(1, min(10, recentPostLimit))
     let membersLimit = max(1, min(12, topMemberLimit))
 
-    let recentPostsQuery = db.collection(FirestoreCollections.posts)
-      .whereField("groupId", isEqualTo: normalizedGroupID)
-      .order(by: "createdAt", descending: true)
-      .limit(to: postsLimit)
-
     let membersQuery = db.collection(FirestoreCollections.groups)
       .document(normalizedGroupID)
       .collection(FirestoreSubcollections.members)
       .order(by: "joinedAt", descending: true)
       .limit(to: membersLimit)
 
-    let weekAgo = Timestamp(date: Date().addingTimeInterval(-7 * 24 * 60 * 60))
-    let weeklyPostsQuery = db.collection(FirestoreCollections.posts)
-      .whereField("groupId", isEqualTo: normalizedGroupID)
-      .whereField("createdAt", isGreaterThanOrEqualTo: weekAgo)
-      .limit(to: 200)
-
-    async let recentPostsResult = getDocumentsWithFallback(recentPostsQuery)
+    async let recentResult = PostReadClient.read(view: "group", id: normalizedGroupID, limit: postsLimit)
+    async let weeklyResult = PostReadClient.read(view: "groupSummary", id: normalizedGroupID)
     async let membersResult = getDocumentsWithFallback(membersQuery)
-    async let weeklyPostsResult = getDocumentsWithFallback(weeklyPostsQuery)
+    let recent = try await recentResult
+    let weekly = try await weeklyResult
 
-    let (recentPostsSnapshot, recentPostsFromCache) = try await recentPostsResult
-    let (membersSnapshot, membersFromCache) = try await membersResult
-    let (weeklyPostsSnapshot, weeklyPostsFromCache) = try await weeklyPostsResult
+    let memberDocs: [QueryDocumentSnapshot]
+    let membersFromCache: Bool
+    do {
+      let (membersSnapshot, fromCache) = try await membersResult
+      memberDocs = membersSnapshot.documents
+      membersFromCache = fromCache || membersSnapshot.metadata.isFromCache
+    } catch where FirestoreValue.isPermissionDenied(error) {
+      // Private groups restrict member list reads to active members and the owner.
+      memberDocs = []
+      membersFromCache = false
+    }
 
-    let memberDocs = membersSnapshot.documents
-    let memberProfiles = try await fetchMemberProfiles(db: db, memberDocs: memberDocs)
+    let memberProfiles = await fetchMemberProfiles(db: db, memberDocs: memberDocs)
 
     let topMembers = memberDocs.map { doc in
       let data = doc.data()
@@ -219,8 +234,9 @@ final class FirebaseGroupsRepo: GroupsRepo {
       )
     }
 
-    let recentPosts = recentPostsSnapshot.documents.map { doc in
-      let data = doc.data()
+    let recentPosts = recent.items.map { row in
+      let data = row.fields
+      let item = FirebaseFeedRepo.feedItem(id: row.id, data: data)
       let title = FirestoreValue.string(data["title"]) ?? FirestoreValue.string(data["text"]) ?? FirestoreValue.string(data["content"]) ?? "Publicacion"
 
       let authorName: String = {
@@ -234,11 +250,12 @@ final class FirebaseGroupsRepo: GroupsRepo {
       }()
 
       return GroupPostPreview(
-        id: doc.documentID,
+        id: row.id,
         title: normalizedPostTitle(title),
-        authorID: FirestoreValue.string(data["authorId"]) ?? FirestoreValue.string(data["authorID"]),
+        authorID: item.authorID,
         authorName: authorName,
-        createdAt: FirestoreValue.date(data["createdAt"])
+        createdAt: FirestoreValue.date(data["createdAt"]),
+        feedItem: item
       )
     }
 
@@ -246,13 +263,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
       ? ProfileAccountVisibility.private
       : ProfileAccountVisibility.public
 
-    let isFromCache = groupFromCache
-      || recentPostsFromCache
-      || membersFromCache
-      || weeklyPostsFromCache
-      || recentPostsSnapshot.metadata.isFromCache
-      || membersSnapshot.metadata.isFromCache
-      || weeklyPostsSnapshot.metadata.isFromCache
+    let isFromCache = groupFromCache || membersFromCache
 
     return GroupDetail(
       id: groupDoc.documentID,
@@ -263,7 +274,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
       visibility: visibility,
       iconURL: FirestoreValue.string(groupData["iconUrl"]),
       memberCount: FirestoreValue.int(groupData["memberCount"]) ?? max(memberDocs.count, 0),
-      postsPerWeek: max(weeklyPostsSnapshot.documents.count, 0),
+      postsPerWeek: weekly.weeklyPosts,
       createdAt: FirestoreValue.date(groupData["createdAt"]),
       updatedAt: FirestoreValue.date(groupData["updatedAt"]),
       recentPosts: recentPosts,
@@ -285,31 +296,46 @@ final class FirebaseGroupsRepo: GroupsRepo {
     guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
     let db = self.db ?? Firestore.firestore()
     let groupRef = db.collection(FirestoreCollections.groups).document(groupID)
-    let groupDoc = try await groupRef.getDocument(source: .server)
-    guard let data = groupDoc.data() else { throw GroupsRepoError.missingSnapshot }
-    if (data["visibility"] as? String) == ProfileAccountVisibility.private.rawValue {
-      throw GroupsRepoError.privateGroup
-    }
+    let memberRef = groupRef.collection(FirestoreSubcollections.members).document(uid)
+    let membershipRef = db.collection(FirestoreCollections.users).document(uid)
+      .collection(FirestoreSubcollections.memberships).document(groupID)
 
-    let batch = db.batch()
-    batch.setData(
-      [
-        "uid": uid,
-        "groupId": groupID,
-        "role": "member",
-        "joinedAt": FieldValue.serverTimestamp(),
-      ],
-      forDocument: groupRef.collection(FirestoreSubcollections.members).document(uid)
-    )
-    batch.setData(
-      [
-        "groupId": groupID,
-        "joinedAt": FieldValue.serverTimestamp(),
-      ],
-      forDocument: db.collection(FirestoreCollections.users).document(uid)
-        .collection(FirestoreSubcollections.memberships).document(groupID)
-    )
-    try await batch.commit()
+    _ = try await db.runTransaction { tx, errorPointer in
+      do {
+        let groupDoc = try tx.getDocument(groupRef)
+        guard let data = groupDoc.data() else { throw GroupsRepoError.missingSnapshot }
+        if (data["visibility"] as? String) == ProfileAccountVisibility.private.rawValue {
+          throw GroupsRepoError.privateGroup
+        }
+
+        let memberDoc = try tx.getDocument(memberRef)
+        let membershipDoc = try tx.getDocument(membershipRef)
+
+        if !memberDoc.exists {
+          tx.setData(
+            [
+              "uid": uid,
+              "groupId": groupID,
+              "role": "member",
+              "joinedAt": FieldValue.serverTimestamp(),
+            ],
+            forDocument: memberRef
+          )
+        }
+        if !membershipDoc.exists {
+          tx.setData(
+            [
+              "groupId": groupID,
+              "joinedAt": FieldValue.serverTimestamp(),
+            ],
+            forDocument: membershipRef
+          )
+        }
+      } catch {
+        errorPointer?.pointee = error as NSError
+      }
+      return nil
+    }
   }
 
   /// Mirrors `leaveGroupWithSync` in `src/shared/lib/firestore/groups.ts`.
@@ -328,14 +354,19 @@ final class FirebaseGroupsRepo: GroupsRepo {
     if ownerID == uid { return .owner }
     if try await isMember(groupID: groupID, uid: uid) { return .member }
     let db = self.db ?? Firestore.firestore()
-    // Only pending requests, like the web's `getGroupJoinStatus`: an older rejected request
-    // must not hide a newer pending one.
-    let requests = try? await db.collection(FirestoreCollections.groupRequests)
+    // Only pending requests, like the web's `getGroupJoinStatus`: an older rejected or accepted
+    // request must not hide a newer pending one or block re-applying after leaving.
+    let requestsQuery = db.collection(FirestoreCollections.groupRequests)
       .whereField("fromUid", isEqualTo: uid)
       .whereField("groupId", isEqualTo: groupID)
       .whereField("status", isEqualTo: "pending")
       .limit(to: 1)
-      .getDocuments()
+    let requests: QuerySnapshot?
+    if let serverRequests = try? await requestsQuery.getDocuments(source: .server) {
+      requests = serverRequests
+    } else {
+      requests = try? await requestsQuery.getDocuments()
+    }
     return requests?.documents.isEmpty == false ? .pending : .none
   }
 
@@ -343,13 +374,20 @@ final class FirebaseGroupsRepo: GroupsRepo {
   func requestToJoin(groupID: String, groupName: String, ownerID: String, uid: String) async throws {
     guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
     let db = self.db ?? Firestore.firestore()
-    if try await membershipStatus(groupID: groupID, ownerID: ownerID, uid: uid) == .pending {
+    let status = try await membershipStatus(groupID: groupID, ownerID: ownerID, uid: uid)
+    switch status {
+    case .owner, .member:
+      throw GroupsRepoError.alreadyMember
+    case .pending:
       throw GroupsRepoError.requestAlreadySent
+    case .none:
+      break
     }
+
     let profile = (try? await db.collection(FirestoreCollections.usersPublic).document(uid).getDocument().data()) ?? [:]
     var request: [String: Any] = [
       "groupId": groupID,
-      "groupName": String(groupName.prefix(Limits.GroupRequests.groupNameMaxLength)),
+      "groupName": String(groupName.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Limits.GroupRequests.groupNameMaxLength)),
       "fromUid": uid,
       "toUid": ownerID,
       "status": "pending",
@@ -362,7 +400,10 @@ final class FirebaseGroupsRepo: GroupsRepo {
     if let name = FirestoreValue.string(profile["displayName"]) {
       request["fromUserName"] = String(name.prefix(Limits.GroupRequests.fromUserNameMaxLength))
     }
-    if let photo = FirestoreValue.string(profile["photoURL"]) { request["fromUserPhoto"] = photo }
+    if let photo = FirestoreValue.string(profile["photoURL"]),
+       photo.count <= Limits.GroupRequests.fromUserPhotoMaxLength {
+      request["fromUserPhoto"] = photo
+    }
     try await db.collection(FirestoreCollections.groupRequests).document().setData(request)
   }
 
@@ -396,32 +437,33 @@ final class FirebaseGroupsRepo: GroupsRepo {
   private func fetchMemberProfiles(
     db: Firestore,
     memberDocs: [QueryDocumentSnapshot]
-  ) async throws -> [String: (name: String, photoURL: String?)] {
-    try await withThrowingTaskGroup(of: (String, (String, String?)).self) { group in
+  ) async -> [String: (name: String, photoURL: String?)] {
+    await withTaskGroup(of: (String, (String, String?)).self) { group in
       for memberDoc in memberDocs {
         let uid = memberDoc.documentID
         group.addTask {
           let publicRef = db.collection(FirestoreCollections.usersPublic).document(uid)
-          let (publicDoc, _) = try await self.getDocumentWithFallback(publicRef)
-
-          if let data = publicDoc.data() {
+          if let (publicDoc, _) = try? await self.getDocumentWithFallback(publicRef),
+             let data = publicDoc.data() {
             let name = FirestoreValue.string(data["displayName"]) ?? FirestoreValue.string(data["username"]) ?? "Usuario"
             let photoURL = FirestoreValue.string(data["photoURL"])
             return (uid, (name, photoURL))
           }
 
           let privateRef = db.collection(FirestoreCollections.users).document(uid)
-          let (privateDoc, _) = try await self.getDocumentWithFallback(privateRef)
-          let privateData = privateDoc.data() ?? [:]
+          if let (privateDoc, _) = try? await self.getDocumentWithFallback(privateRef),
+             let privateData = privateDoc.data() {
+            let name = FirestoreValue.string(privateData["displayName"]) ?? FirestoreValue.string(privateData["username"]) ?? "Usuario"
+            let photoURL = FirestoreValue.string(privateData["photoURL"])
+            return (uid, (name, photoURL))
+          }
 
-          let name = FirestoreValue.string(privateData["displayName"]) ?? FirestoreValue.string(privateData["username"]) ?? "Usuario"
-          let photoURL = FirestoreValue.string(privateData["photoURL"])
-          return (uid, (name, photoURL))
+          return (uid, ("Usuario", nil))
         }
       }
 
       var result: [String: (name: String, photoURL: String?)] = [:]
-      for try await (uid, profile) in group {
+      for await (uid, profile) in group {
         result[uid] = profile
       }
       return result
@@ -460,6 +502,9 @@ final class FirebaseGroupsRepo: GroupsRepo {
       let snapshot = try await query.getDocuments(source: .server)
       return (snapshot, false)
     } catch {
+      if FirestoreValue.isPermissionDenied(error) {
+        throw error
+      }
       let cachedSnapshot = try await query.getDocuments(source: .cache)
       return (cachedSnapshot, true)
     }
@@ -470,6 +515,9 @@ final class FirebaseGroupsRepo: GroupsRepo {
       let snapshot = try await ref.getDocument(source: .server)
       return (snapshot, false)
     } catch {
+      if FirestoreValue.isPermissionDenied(error) {
+        throw error
+      }
       let cachedSnapshot = try await ref.getDocument(source: .cache)
       return (cachedSnapshot, true)
     }

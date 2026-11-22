@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import type { FirestoreGroup } from '@/features/groups/api';
 import {
   getGroupJoinStatus,
@@ -21,10 +21,6 @@ const appState = {
   followedCategories: [] as string[],
   toggleFollowCategory: vi.fn(),
   isCategoryFollowed: vi.fn(() => false),
-  toggleLikePost: vi.fn(),
-  isPostLiked: vi.fn(() => false),
-  toggleSavePost: vi.fn(),
-  isPostSaved: vi.fn(() => false),
 };
 const showToast = vi.fn();
 
@@ -34,6 +30,26 @@ vi.mock('@/context/auth', () => ({
 }));
 vi.mock('@/shared/ui/Toast', () => ({ useToast: () => ({ showToast }) }));
 vi.mock('@/features/posts/components/StoriesWidget', () => ({ default: () => null }));
+// DiscoverPostActions has its own tests; here it only shows what the page hands it.
+vi.mock('@/features/discover/components/DiscoverPostActions', () => ({
+  default: (props: {
+    postId: string;
+    initialCount: number;
+    commentCount: number;
+    onComments: () => void;
+    onLikeCount: (postId: string, count: number) => void;
+  }) => (
+    <div data-testid={`post-actions-${props.postId}`}>
+      <span>{`likes:${props.initialCount} comments:${props.commentCount}`}</span>
+      <button type="button" onClick={props.onComments}>
+        open comments
+      </button>
+      <button type="button" onClick={() => props.onLikeCount(props.postId, 7)}>
+        confirm 7 likes
+      </button>
+    </div>
+  ),
+}));
 vi.mock('@/shared/lib/api', () => ({
   fetchArxivPapers: vi.fn(async () => []),
   fetchBooks: vi.fn(async () => []),
@@ -234,20 +250,38 @@ describe('DiscoverPage', () => {
     );
   });
 
-  it('likes and saves community posts, but not videos', async () => {
-    renderPage();
+  it('gives community posts their like, comment and save actions, but not videos', async () => {
+    const CommentsProbe = () => {
+      const location = useLocation();
+      const state = location.state as { openComments?: boolean } | null;
+      return <p>{`${location.pathname} openComments=${String(state?.openComments)}`}</p>;
+    };
+    render(
+      <MemoryRouter initialEntries={['/discover']}>
+        <Routes>
+          <Route path="/discover" element={<DiscoverPage />} />
+          <Route path="/post/:postId" element={<CommentsProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
 
     const postCard = (await screen.findByText('Post de la comunidad')).closest(
       'article',
     ) as HTMLElement;
-    fireEvent.click(within(postCard).getByRole('button', { name: /^Me gusta/ }));
-    fireEvent.click(within(postCard).getByRole('button', { name: 'Guardar publicacion' }));
-    expect(appState.toggleLikePost).toHaveBeenCalledWith('p1');
-    expect(appState.toggleSavePost).toHaveBeenCalledWith('p1');
+    const actions = within(postCard).getByTestId('post-actions-p1');
+    expect(within(actions).getByText('likes:2 comments:1')).toBeInTheDocument();
+
+    // The count the actions confirm replaces the feed's, so a remounted card starts from it.
+    fireEvent.click(within(actions).getByRole('button', { name: 'confirm 7 likes' }));
+    expect(await within(postCard).findByText('likes:7 comments:1')).toBeInTheDocument();
 
     const videoCard = screen.getByText('Video de YouTube').closest('article') as HTMLElement;
     expect(within(videoCard).getByRole('button', { name: /^Me gusta/ })).toBeDisabled();
     expect(within(videoCard).getByRole('button', { name: 'Guardar publicacion' })).toBeDisabled();
+    expect(within(videoCard).queryByTestId(/^post-actions-/)).not.toBeInTheDocument();
+
+    fireEvent.click(within(actions).getByRole('button', { name: 'open comments' }));
+    expect(await screen.findByText('/post/p1 openComments=true')).toBeInTheDocument();
   });
 
   it('follows and saves a category from its trend card', async () => {

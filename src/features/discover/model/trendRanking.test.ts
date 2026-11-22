@@ -115,6 +115,44 @@ describe('computeTrendScores and rankTrendCategories', () => {
     expect(labels).toEqual([...labels].sort((a, b) => a.localeCompare(b, 'es')));
   });
 
+  it('follows the filter sheet sort instead of the score when one is picked', () => {
+    const scores = scoresFor({ followed: ['nature'] });
+    const rank = (sortBy: string, extra: Partial<Parameters<typeof rankTrendCategories>[0]> = {}) =>
+      rankTrendCategories({
+        categories: CATEGORIES,
+        trendScoresByCategory: scores,
+        weeklyDeltaByCategory: {},
+        trendPreviewState: {},
+        sortBy,
+        ...extra,
+      }).map((category) => category.id);
+
+    expect(rank('relevance')[0]).toBe('nature');
+
+    const alphabetical = rankTrendCategories({
+      categories: CATEGORIES,
+      trendScoresByCategory: scores,
+      weeklyDeltaByCategory: {},
+      trendPreviewState: {},
+      sortBy: 'alphabetical',
+    }).map((category) => category.label);
+    expect(alphabetical).toEqual([...alphabetical].sort((a, b) => a.localeCompare(b, 'es')));
+
+    expect(
+      rank('popular', {
+        groupSocialByCategory: {
+          music: { groups: 1, members: 50 },
+          science: { groups: 3, members: 10 },
+        },
+        groupCountByCategory: { music: 1, science: 3 },
+      }).slice(0, 2),
+    ).toEqual(['music', 'science']);
+
+    expect(
+      rank('recent', { weeklyDeltaByCategory: { history: 3, nature: 1 } }).slice(0, 2),
+    ).toEqual(['history', 'nature']);
+  });
+
   it('puts the category with more live items and groups first', () => {
     const scores = scoresFor({
       groups: [group('music', 1, 40), group('music', 2, 10)],

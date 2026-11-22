@@ -16,7 +16,7 @@ const PrivacyPolicyPage = () => {
           <ArrowLeft size={24} />
         </button>
         <div>
-          <h1 className="text-2xl font-semibold">Politica de privacidad</h1>
+          <h1 className="text-2xl font-semibold">Política de privacidad</h1>
           <p className="text-xs text-neutral-500">Actualizado: {LEGAL_COPY.lastUpdated}</p>
         </div>
       </header>
@@ -25,32 +25,39 @@ const PrivacyPolicyPage = () => {
         <section className="card space-y-3">
           <h2 className="text-base font-semibold text-white">1. Datos que recopilamos</h2>
           <p>
-            Recopilamos datos de cuenta (correo, uid, nombre de perfil), contenido que publicas,
-            metadatos de uso y datos tecnicos de seguridad necesarios para operar Vinctus.
+            Recopilamos datos de cuenta (correo, uid, nombre de perfil), contenido que publicas o
+            envías (incluyendo mensajes, notas de voz y archivos adjuntos), metadatos de uso y
+            registros técnicos de seguridad necesarios para operar Vinctus. No vendemos tus datos ni
+            rastreamos tu actividad en otras apps.
           </p>
         </section>
 
         <section className="card space-y-3">
-          <h2 className="text-base font-semibold text-white">2. Para que usamos los datos</h2>
+          <h2 className="text-base font-semibold text-white">2. Para qué usamos los datos</h2>
           <p>
-            Usamos los datos para autenticacion, funcionamiento de la red social, prevencion de
-            abuso, soporte, analitica operativa y mejora de funciones.
+            Usamos los datos para autenticación, funcionamiento de la red social, prevención de
+            abuso, moderación, soporte y mejora operativa. En iPhone solo pedimos acceso al
+            micrófono cuando grabas una nota de voz y a tus fotos cuando eliges adjuntarlas.
           </p>
         </section>
 
         <section className="card space-y-3">
           <h2 className="text-base font-semibold text-white">3. Proveedores externos</h2>
           <p>
-            Parte del servicio usa proveedores externos para IA y almacenamiento.{' '}
-            {LEGAL_COPY.aiDisclosure}
+            Operamos sobre Google Firebase y Vercel para autenticación, base de datos,
+            almacenamiento y APIs. {LEGAL_COPY.aiDisclosure}
           </p>
         </section>
 
         <section className="card space-y-3">
-          <h2 className="text-base font-semibold text-white">4. Eliminacion de cuenta</h2>
+          <h2 className="text-base font-semibold text-white">
+            4. Retención, menores y eliminación de cuenta
+          </h2>
           <p>
-            Puedes solicitar la eliminacion de tu cuenta desde Configuracion. Eliminamos o
-            anonimamos datos de acuerdo con obligaciones legales aplicables.
+            Vinctus no está dirigido a menores de 13 años (o la edad mínima legal de tu país).
+            Puedes solicitar la eliminación de tu cuenta desde Configuración &gt; Privacidad y
+            seguridad (o en la app iOS desde Perfil &gt; Ajustes &gt; Zona de riesgo). El borrado
+            inicia de inmediato y se completa en un máximo de 30 días.
           </p>
         </section>
 
@@ -83,7 +90,7 @@ const PrivacyPolicyPage = () => {
           rel="noreferrer"
           className="inline-flex items-center gap-2 text-xs uppercase tracking-wider text-neutral-400 hover:text-white transition-colors"
         >
-          Ver version publica
+          Ver versión pública
           <ExternalLink size={14} />
         </a>
       </div>

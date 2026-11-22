@@ -14,9 +14,53 @@
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
-import { messageReportKey, moderateUserText, newlyMatchedTerms } from './moderation';
-import { clearLastMessagePreview } from './moderationActions';
-import { COLLECTIONS, SERVER_COLLECTIONS, SUBCOLLECTIONS } from './firestoreContract';
+import {
+  inferQueuePriority,
+  inferQueueSource,
+  inferReportTargetType,
+  messageReportKey,
+  moderateUserText,
+  newlyMatchedTerms,
+} from './moderation';
+import { clearLastMessagePreview, deleteMessageMedia } from './moderationActions';
+import { reconcileUserPostCount } from './postCounts';
+import {
+  acceptFollowRequestInTransaction,
+  cleanupFollowStateOnBlock,
+  reconcileUserFollowersCount,
+  reconcileUserFollowingCount,
+} from './followCounts';
+import { reconcilePostLikes, reconcilePostComments } from './postEngagementCounts';
+import {
+  ABANDONED_POST_STATUS,
+  cleanupAbandonedPostUploads,
+  isUnfinishedPostStatus,
+  reserveDeletedUnfinishedPost,
+} from './postUploadCleanup';
+import {
+  cleanupDeletedGroupJoinRequests,
+  cleanupDeletedGroupMembersAndMemberships,
+  reconcileGroupMemberCount,
+} from './groupCounts';
+import { cleanupDeletedStoryMedia } from './storyCleanup';
+import {
+  cleanupDeletedCollection,
+  cleanupDeletedCollectionItemMedia,
+  reconcileCollectionItemCount,
+} from './collectionCleanup';
+import { reconcileArenaDebateLikeCount } from './arenaCounts';
+export {
+  readPosts,
+  readPostMedia,
+  onPostMediaFinalized,
+  onPostMediaMetadataUpdated,
+} from './postReadEndpoints';
+import {
+  COLLECTIONS,
+  SERVER_COLLECTIONS,
+  SUBCOLLECTIONS,
+  storagePrefix,
+} from './firestoreContract';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -25,9 +69,6 @@ const db = admin.firestore();
 // ==========================================================
 // 🏆 REPUTATION / KARMA SETTINGS
 // ==========================================================
-
-const KARMA_PER_LIKE = 2;
-const REPUTATION_MAX = 100;
 
 type ApplyToBatch<T> = (batch: admin.firestore.WriteBatch, item: T) => void;
 
@@ -455,215 +496,9 @@ async function deduplicatedDecrement(
 // 🧮 KARMA UPDATES (Posts Likes)
 // ==========================================================
 
-async function handlePostLikeChange(eventId: string, postId: string, delta: number): Promise<void> {
-  const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(eventId);
-  const postRef = db.doc(`${COLLECTIONS.posts}/${postId}`);
-
-  await db.runTransaction(async (tx) => {
-    const dedupDoc = await tx.get(dedupRef);
-    if (dedupDoc.exists) {
-      functions.logger.info('Event already processed, skipping', { eventId });
-      return;
-    }
-
-    const postSnap = await tx.get(postRef);
-    if (!postSnap.exists) {
-      functions.logger.warn('Post not found, skipping like update', { postId });
-      return;
-    }
-
-    const postData = postSnap.data() || {};
-    const authorId = typeof postData.authorId === 'string' ? postData.authorId : null;
-    if (!authorId) {
-      functions.logger.warn('Post has no authorId, skipping like update', { postId });
-      return;
-    }
-
-    const categoryId =
-      typeof postData.categoryId === 'string' && postData.categoryId.length > 0
-        ? postData.categoryId
-        : null;
-
-    const currentLikes =
-      typeof postData.likesCount === 'number'
-        ? postData.likesCount
-        : typeof postData.likeCount === 'number'
-          ? postData.likeCount
-          : 0;
-    const nextLikes = Math.max(0, currentLikes + delta);
-
-    const karmaDelta = delta * KARMA_PER_LIKE;
-
-    const userRef = db.doc(`${COLLECTIONS.users}/${authorId}`);
-    const userPublicRef = db.doc(`${COLLECTIONS.usersPublic}/${authorId}`);
-    const userSnap = await tx.get(userRef);
-    const userData = userSnap.data() || {};
-
-    const currentKarma =
-      typeof userData.karmaGlobal === 'number'
-        ? userData.karmaGlobal
-        : typeof userData.reputation === 'number'
-          ? userData.reputation
-          : 0;
-    const nextKarma = Math.max(0, currentKarma + karmaDelta);
-    const nextReputation = Math.min(REPUTATION_MAX, nextKarma);
-
-    const karmaUpdates: Record<string, unknown> = {
-      karmaGlobal: nextKarma,
-      reputation: nextReputation,
-      updatedAt: FieldValue.serverTimestamp(),
-    };
-
-    if (categoryId) {
-      const currentByInterest =
-        typeof userData.karmaByInterest === 'object' && userData.karmaByInterest !== null
-          ? (userData.karmaByInterest as Record<string, number>)
-          : {};
-      const currentInterest =
-        typeof currentByInterest[categoryId] === 'number' ? currentByInterest[categoryId] : 0;
-      const nextInterest = Math.max(0, currentInterest + karmaDelta);
-      karmaUpdates[`karmaByInterest.${categoryId}`] = nextInterest;
-    }
-
-    tx.create(dedupRef, {
-      createdAt: FieldValue.serverTimestamp(),
-      processedAt: new Date().toISOString(),
-    });
-
-    tx.update(postRef, {
-      likesCount: nextLikes,
-      likeCount: nextLikes,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-
-    tx.set(userRef, karmaUpdates, { merge: true });
-    tx.set(userPublicRef, karmaUpdates, { merge: true });
-  });
-}
-
-async function handlePostCommentChange(
-  eventId: string,
-  postId: string,
-  delta: number,
-): Promise<void> {
-  const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(`post_comment_${eventId}`);
-  const postRef = db.doc(`${COLLECTIONS.posts}/${postId}`);
-
-  await db.runTransaction(async (tx) => {
-    const dedupDoc = await tx.get(dedupRef);
-    if (dedupDoc.exists) {
-      functions.logger.info('Event already processed, skipping', { eventId, postId, delta });
-      return;
-    }
-
-    const postSnap = await tx.get(postRef);
-    if (!postSnap.exists) {
-      functions.logger.warn('Post not found, skipping comment counter update', { postId });
-      return;
-    }
-
-    const postData = postSnap.data() || {};
-    const currentComments =
-      typeof postData.commentCount === 'number'
-        ? postData.commentCount
-        : typeof postData.commentsCount === 'number'
-          ? postData.commentsCount
-          : 0;
-    const nextComments = Math.max(0, currentComments + delta);
-
-    tx.create(dedupRef, {
-      createdAt: FieldValue.serverTimestamp(),
-      processedAt: new Date().toISOString(),
-    });
-
-    tx.update(postRef, {
-      commentCount: nextComments,
-      commentsCount: nextComments,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-  });
-}
-
-async function handleArenaDebateLikeChange(
-  eventId: string,
-  debateId: string,
-  delta: number,
-): Promise<void> {
-  const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(eventId);
-  const debateRef = db.doc(`${COLLECTIONS.arenaDebates}/${debateId}`);
-
-  await db.runTransaction(async (tx) => {
-    const dedupDoc = await tx.get(dedupRef);
-    if (dedupDoc.exists) {
-      functions.logger.info('Event already processed, skipping', { eventId });
-      return;
-    }
-
-    const debateSnap = await tx.get(debateRef);
-    if (!debateSnap.exists) {
-      functions.logger.warn('Arena debate not found, skipping like update', { debateId });
-      return;
-    }
-
-    const debateData = debateSnap.data() || {};
-    const currentLikes = typeof debateData.likesCount === 'number' ? debateData.likesCount : 0;
-    const nextLikes = Math.max(0, currentLikes + delta);
-
-    tx.create(dedupRef, {
-      createdAt: FieldValue.serverTimestamp(),
-      processedAt: new Date().toISOString(),
-    });
-
-    tx.update(debateRef, {
-      likesCount: nextLikes,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-  });
-}
-
 // ==========================================================
-// FOLLOW COUNTERS (With Deduplication)
+// FOLLOW COUNTERS (Reconciled from subcollection counts)
 // ==========================================================
-
-async function deduplicatedUserCounterUpdate(
-  eventId: string,
-  userId: string,
-  field: string,
-  delta: number,
-): Promise<void> {
-  const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(eventId);
-  const userRef = db.doc(`${COLLECTIONS.users}/${userId}`);
-  const publicRef = db.doc(`${COLLECTIONS.usersPublic}/${userId}`);
-
-  await db.runTransaction(async (tx) => {
-    const dedupDoc = await tx.get(dedupRef);
-
-    if (dedupDoc.exists) {
-      functions.logger.info('Event already processed, skipping', { eventId });
-      return;
-    }
-
-    const userSnap = await tx.get(userRef);
-    if (!userSnap.exists) {
-      tx.create(dedupRef, {
-        createdAt: FieldValue.serverTimestamp(),
-        processedAt: new Date().toISOString(),
-      });
-      functions.logger.warn('User document missing for counter update', { userId, field });
-      return;
-    }
-
-    const currentValue = (userSnap.data()?.[field] ?? 0) as number;
-    const nextValue = Math.max(0, currentValue + delta);
-
-    tx.create(dedupRef, {
-      createdAt: FieldValue.serverTimestamp(),
-      processedAt: new Date().toISOString(),
-    });
-    tx.set(userRef, { [field]: nextValue }, { merge: true });
-    tx.set(publicRef, { [field]: nextValue }, { merge: true });
-  });
-}
 
 export const onUserFollowerCreated = functions.firestore
   .document(`${COLLECTIONS.users}/{uid}/${SUBCOLLECTIONS.followers}/{followerUid}`)
@@ -673,9 +508,9 @@ export const onUserFollowerCreated = functions.firestore
 
     try {
       functions.logger.info('Follower added', { uid, followerUid, eventId });
-      await deduplicatedUserCounterUpdate(eventId, uid, 'followersCount', 1);
+      await reconcileUserFollowersCount(db, uid);
     } catch (error) {
-      functions.logger.error('Failed to increment followersCount', {
+      functions.logger.error('Failed to reconcile followersCount on create', {
         uid,
         followerUid,
         eventId,
@@ -743,9 +578,9 @@ export const onUserFollowerDeleted = functions.firestore
 
     try {
       functions.logger.info('Follower removed', { uid, followerUid, eventId });
-      await deduplicatedUserCounterUpdate(eventId, uid, 'followersCount', -1);
+      await reconcileUserFollowersCount(db, uid);
     } catch (error) {
-      functions.logger.error('Failed to decrement followersCount', {
+      functions.logger.error('Failed to reconcile followersCount on delete', {
         uid,
         followerUid,
         eventId,
@@ -762,9 +597,9 @@ export const onUserFollowingCreated = functions.firestore
 
     try {
       functions.logger.info('Following added', { uid, targetUid, eventId });
-      await deduplicatedUserCounterUpdate(eventId, uid, 'followingCount', 1);
+      await reconcileUserFollowingCount(db, uid);
     } catch (error) {
-      functions.logger.error('Failed to increment followingCount', {
+      functions.logger.error('Failed to reconcile followingCount on create', {
         uid,
         targetUid,
         eventId,
@@ -781,9 +616,9 @@ export const onUserFollowingDeleted = functions.firestore
 
     try {
       functions.logger.info('Following removed', { uid, targetUid, eventId });
-      await deduplicatedUserCounterUpdate(eventId, uid, 'followingCount', -1);
+      await reconcileUserFollowingCount(db, uid);
     } catch (error) {
-      functions.logger.error('Failed to decrement followingCount', {
+      functions.logger.error('Failed to reconcile followingCount on delete', {
         uid,
         targetUid,
         eventId,
@@ -811,42 +646,19 @@ export const onFollowRequestUpdated = functions.firestore
     }
 
     try {
-      const dedupRef = db.collection(SERVER_COLLECTIONS.dedupEvents).doc(eventId);
-      const followerRef = db.doc(
-        `${COLLECTIONS.users}/${toUid}/${SUBCOLLECTIONS.followers}/${fromUid}`,
-      );
-      const followingRef = db.doc(
-        `${COLLECTIONS.users}/${fromUid}/${SUBCOLLECTIONS.following}/${toUid}`,
-      );
-
-      await db.runTransaction(async (tx) => {
-        const dedupDoc = await tx.get(dedupRef);
-        if (dedupDoc.exists) {
-          functions.logger.info('Event already processed, skipping', { eventId });
-          return;
-        }
-
-        tx.create(dedupRef, {
-          createdAt: FieldValue.serverTimestamp(),
-          processedAt: new Date().toISOString(),
+      const outcome = await acceptFollowRequestInTransaction(db, fromUid, toUid);
+      if (outcome !== 'accepted') {
+        functions.logger.info('Skipped follow edges on request acceptance', {
+          requestId: context.params.requestId,
+          fromUid,
+          toUid,
+          outcome,
+          eventId,
         });
-        tx.set(
-          followerRef,
-          {
-            uid: fromUid,
-            createdAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
-        tx.set(
-          followingRef,
-          {
-            uid: toUid,
-            createdAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
-      });
+        if (outcome === 'blocked') {
+          await change.after.ref.delete().catch(() => undefined);
+        }
+      }
     } catch (error) {
       functions.logger.error('Failed to accept follow request', {
         fromUid,
@@ -857,17 +669,35 @@ export const onFollowRequestUpdated = functions.firestore
     }
   });
 
+export const onUserBlockedCreated = functions.firestore
+  .document(`${COLLECTIONS.users}/{uid}/${SUBCOLLECTIONS.blockedUsers}/{blockedUid}`)
+  .onCreate(async (_snap, context) => {
+    const { uid, blockedUid } = context.params;
+    const eventId = context.eventId;
+
+    try {
+      await cleanupFollowStateOnBlock(db, uid, blockedUid);
+    } catch (error) {
+      functions.logger.error('Failed to clean up follow state on block', {
+        uid,
+        blockedUid,
+        eventId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
 // ==========================================================
-// 📈 GROUP MEMBER COUNTERS (With Deduplication)
+// 📈 GROUP MEMBER COUNTERS (Current-state Reconciliation)
 // ==========================================================
 
 /**
- * Increment memberCount when a user joins a group
+ * Reconcile memberCount and group conversation membership when a user joins a group
  * Trigger: onCreate groups/{groupId}/members/{userId}
  */
 export const onGroupMemberCreated = functions.firestore
   .document(`${COLLECTIONS.groups}/{groupId}/${SUBCOLLECTIONS.members}/{userId}`)
-  .onCreate(async (snap, context) => {
+  .onCreate(async (_snap, context) => {
     const { groupId, userId } = context.params;
     const eventId = context.eventId;
 
@@ -878,11 +708,10 @@ export const onGroupMemberCreated = functions.firestore
     });
 
     try {
-      const groupRef = db.doc(`${COLLECTIONS.groups}/${groupId}`);
-      await deduplicatedIncrement(eventId, groupRef, 'memberCount', 1);
-      functions.logger.info('Member count incremented', { groupId, eventId });
+      await reconcileGroupMemberCount(db, groupId);
+      functions.logger.info('Member count reconciled', { groupId, eventId });
     } catch (error) {
-      functions.logger.error('Failed to increment member count', {
+      functions.logger.error('Failed to reconcile member count on create', {
         groupId,
         userId,
         eventId,
@@ -902,24 +731,21 @@ export const onGroupMemberCreated = functions.firestore
   });
 
 /**
- * Decrement memberCount when a user leaves a group
+ * Reconcile memberCount and group conversation membership when a user leaves a group
  * Trigger: onDelete groups/{groupId}/members/{userId}
  */
 export const onGroupMemberDeleted = functions.firestore
   .document(`${COLLECTIONS.groups}/{groupId}/${SUBCOLLECTIONS.members}/{userId}`)
-  .onDelete(async (snap, context) => {
+  .onDelete(async (_snap, context) => {
     const { groupId, userId } = context.params;
     const eventId = context.eventId;
 
     try {
       functions.logger.info('Member left group', { groupId, userId, eventId });
-
-      const groupRef = db.doc(`${COLLECTIONS.groups}/${groupId}`);
-      await deduplicatedDecrement(eventId, groupRef, 'memberCount');
-
-      functions.logger.info('Member count decremented', { groupId, eventId });
+      await reconcileGroupMemberCount(db, groupId);
+      functions.logger.info('Member count reconciled on delete', { groupId, eventId });
     } catch (error) {
-      functions.logger.error('Failed to decrement member count', {
+      functions.logger.error('Failed to reconcile member count on delete', {
         groupId,
         userId,
         eventId,
@@ -943,13 +769,27 @@ export const onGroupMemberDeleted = functions.firestore
 
 async function ensureGroupConversationForMember(groupId: string, uid: string): Promise<void> {
   const conversationId = `grp_${groupId}`;
+  const groupRef = db.doc(`${COLLECTIONS.groups}/${groupId}`);
+  const groupMemberRef = db.doc(
+    `${COLLECTIONS.groups}/${groupId}/${SUBCOLLECTIONS.members}/${uid}`,
+  );
   const convRef = db.doc(`${COLLECTIONS.conversations}/${conversationId}`);
   const memberRef = db.doc(
     `${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.members}/${uid}`,
   );
 
   await db.runTransaction(async (tx) => {
-    const [convSnap, memberSnap] = await Promise.all([tx.get(convRef), tx.get(memberRef)]);
+    const [groupSnap, groupMemberSnap, convSnap, memberSnap] = await Promise.all([
+      tx.get(groupRef),
+      tx.get(groupMemberRef),
+      tx.get(convRef),
+      tx.get(memberRef),
+    ]);
+
+    // Never recreate a group conversation after the group was deleted or the user left.
+    if (!groupSnap.exists || !groupMemberSnap.exists) {
+      return;
+    }
 
     if (!convSnap.exists) {
       tx.create(convRef, {
@@ -988,15 +828,16 @@ async function ensureGroupConversationForMember(groupId: string, uid: string): P
 }
 
 // ==========================================================
-// ❤️ POST LIKE COUNTERS (With Deduplication)
+// ❤️ POST LIKE COUNTERS (Current-state Reconciliation)
 // ==========================================================
 
 /**
- * Increment likesCount when a user likes a post
+ * Reconcile current likes and applied karma after a like is created
  * Trigger: onCreate posts/{postId}/likes/{userId}
  */
-export const onPostLikeCreated = functions.firestore
-  .document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.likes}/{userId}`)
+export const onPostLikeCreated = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.likes}/{userId}`)
   .onCreate(async (snap, context) => {
     const { postId, userId } = context.params;
     const eventId = context.eventId;
@@ -1004,7 +845,7 @@ export const onPostLikeCreated = functions.firestore
     try {
       functions.logger.info('Post liked', { postId, userId, eventId });
 
-      await handlePostLikeChange(eventId, postId, 1);
+      await reconcilePostLikes(db, postId);
 
       functions.logger.info('Like processed (post + karma)', { postId, eventId });
     } catch (error) {
@@ -1014,15 +855,17 @@ export const onPostLikeCreated = functions.firestore
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
     }
   });
 
 /**
- * Decrement likesCount when a user unlikes a post
+ * Reconcile current likes and applied karma after a like is deleted
  * Trigger: onDelete posts/{postId}/likes/{userId}
  */
-export const onPostLikeDeleted = functions.firestore
-  .document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.likes}/{userId}`)
+export const onPostLikeDeleted = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.likes}/{userId}`)
   .onDelete(async (snap, context) => {
     const { postId, userId } = context.params;
     const eventId = context.eventId;
@@ -1030,7 +873,7 @@ export const onPostLikeDeleted = functions.firestore
     try {
       functions.logger.info('Post unliked', { postId, userId, eventId });
 
-      await handlePostLikeChange(eventId, postId, -1);
+      await reconcilePostLikes(db, postId);
 
       functions.logger.info('Unlike processed (post + karma)', { postId, eventId });
     } catch (error) {
@@ -1040,59 +883,64 @@ export const onPostLikeDeleted = functions.firestore
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
     }
   });
 
 /**
- * Increment commentCount/commentsCount when a comment is created.
+ * Reconcile commentCount/commentsCount from current comments after creation.
  * Trigger: onCreate posts/{postId}/comments/{commentId}
  */
-export const onPostCommentCreated = functions.firestore
-  .document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.comments}/{commentId}`)
+export const onPostCommentCreated = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.comments}/{commentId}`)
   .onCreate(async (_snap, context) => {
     const { postId, commentId } = context.params;
     const eventId = context.eventId;
 
     try {
       functions.logger.info('Post comment created', { postId, commentId, eventId });
-      await handlePostCommentChange(eventId, postId, 1);
-      functions.logger.info('Post comment counter incremented', { postId, eventId });
+      await reconcilePostComments(db, postId);
+      functions.logger.info('Post comment counter reconciled', { postId, eventId });
     } catch (error) {
-      functions.logger.error('Failed to increment post comment counter', {
+      functions.logger.error('Failed to reconcile post comment counter', {
         postId,
         commentId,
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
     }
   });
 
 /**
- * Decrement commentCount/commentsCount when a comment is deleted.
+ * Reconcile commentCount/commentsCount from current comments after deletion.
  * Trigger: onDelete posts/{postId}/comments/{commentId}
  */
-export const onPostCommentDeleted = functions.firestore
-  .document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.comments}/{commentId}`)
+export const onPostCommentDeleted = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}/${SUBCOLLECTIONS.comments}/{commentId}`)
   .onDelete(async (_snap, context) => {
     const { postId, commentId } = context.params;
     const eventId = context.eventId;
 
     try {
       functions.logger.info('Post comment deleted', { postId, commentId, eventId });
-      await handlePostCommentChange(eventId, postId, -1);
-      functions.logger.info('Post comment counter decremented', { postId, eventId });
+      await reconcilePostComments(db, postId);
+      functions.logger.info('Post comment counter reconciled', { postId, eventId });
     } catch (error) {
-      functions.logger.error('Failed to decrement post comment counter', {
+      functions.logger.error('Failed to reconcile post comment counter', {
         postId,
         commentId,
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
     }
   });
 
 /**
- * Increment likesCount when a user likes an Arena debate
+ * Reconcile likesCount when a user likes an Arena debate
  * Trigger: onCreate arenaDebates/{debateId}/likes/{uid}
  */
 export const onArenaDebateLikeCreated = functions.firestore
@@ -1104,9 +952,9 @@ export const onArenaDebateLikeCreated = functions.firestore
     try {
       functions.logger.info('Arena debate liked', { debateId, uid, eventId });
 
-      await handleArenaDebateLikeChange(eventId, debateId, 1);
+      await reconcileArenaDebateLikeCount(db, debateId);
 
-      functions.logger.info('Arena debate like processed', { debateId, eventId });
+      functions.logger.info('Arena debate like reconciled', { debateId, eventId });
     } catch (error) {
       functions.logger.error('Failed to process arena debate like', {
         debateId,
@@ -1118,7 +966,7 @@ export const onArenaDebateLikeCreated = functions.firestore
   });
 
 /**
- * Decrement likesCount when a user removes like from an Arena debate
+ * Reconcile likesCount when a user removes like from an Arena debate
  * Trigger: onDelete arenaDebates/{debateId}/likes/{uid}
  */
 export const onArenaDebateLikeDeleted = functions.firestore
@@ -1130,9 +978,9 @@ export const onArenaDebateLikeDeleted = functions.firestore
     try {
       functions.logger.info('Arena debate unliked', { debateId, uid, eventId });
 
-      await handleArenaDebateLikeChange(eventId, debateId, -1);
+      await reconcileArenaDebateLikeCount(db, debateId);
 
-      functions.logger.info('Arena debate unlike processed', { debateId, eventId });
+      functions.logger.info('Arena debate unlike reconciled', { debateId, eventId });
     } catch (error) {
       functions.logger.error('Failed to process arena debate unlike', {
         debateId,
@@ -1156,35 +1004,86 @@ export const onGroupDeleted = functions.firestore
   .document(`${COLLECTIONS.groups}/{groupId}`)
   .onDelete(async (snap, context) => {
     const { groupId } = context.params;
+    const ownerId = snap.data()?.ownerId;
+
+    functions.logger.info('Group deleted, cleaning up members, requests, chat, and storage', {
+      groupId,
+    });
 
     try {
-      functions.logger.info('Group deleted, cleaning up subcollections', { groupId });
-
-      // Delete all members in batches (max 500 per batch)
-      const membersRef = db.collection(
-        `${COLLECTIONS.groups}/${groupId}/${SUBCOLLECTIONS.members}`,
-      );
-      const membersSnapshot = await membersRef.get();
-
-      if (membersSnapshot.empty) {
-        functions.logger.info('No members to clean up', { groupId });
-        return;
-      }
-
-      // Firestore batch has a hard limit of 500 writes.
-      const batchSize = 450;
-      const batchCount = await commitInBatches(membersSnapshot.docs, batchSize, (batch, doc) => {
-        batch.delete(doc.ref);
-      });
-
-      functions.logger.info('Members cleaned up', {
+      const membersDeleted = await cleanupDeletedGroupMembersAndMemberships(db, groupId, ownerId);
+      functions.logger.info('Group members and memberships cleaned up', {
         groupId,
-        totalDeleted: membersSnapshot.size,
-        batchCount,
+        membersDeleted,
       });
     } catch (error) {
       functions.logger.error('Failed to clean up group members', {
         groupId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    try {
+      const requestsDeleted = await cleanupDeletedGroupJoinRequests(db, groupId);
+      functions.logger.info('Group join requests cleaned up', {
+        groupId,
+        requestsDeleted,
+      });
+    } catch (error) {
+      functions.logger.error('Failed to clean up group join requests', {
+        groupId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    const conversationId = `grp_${groupId}`;
+    try {
+      await db.recursiveDelete(db.doc(`${COLLECTIONS.conversations}/${conversationId}`));
+      functions.logger.info('Group conversation cleaned up', { groupId, conversationId });
+    } catch (error) {
+      functions.logger.error('Failed to clean up group conversation', {
+        groupId,
+        conversationId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    const bucket = admin.storage().bucket();
+    const prefixes = [storagePrefix('conversationAttachment', { conversationId })];
+    if (typeof ownerId === 'string' && ownerId.length > 0 && !ownerId.includes('/')) {
+      prefixes.push(storagePrefix('groupIcon', { userId: ownerId, groupId }));
+    }
+
+    for (const prefix of prefixes) {
+      try {
+        await bucket.deleteFiles({ prefix, force: true });
+      } catch (error) {
+        functions.logger.warn('Failed to clean up group storage prefix', {
+          groupId,
+          prefix,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  });
+
+/**
+ * Clean up story media in Storage when a story document is deleted
+ * (owner delete, moderation removal, or Firestore TTL expiration).
+ * Trigger: onDelete stories/{storyId}
+ */
+export const onStoryDeleted = functions.firestore
+  .document(`${COLLECTIONS.stories}/{storyId}`)
+  .onDelete(async (snap, context) => {
+    const { storyId } = context.params;
+    const data = (snap.data() || {}) as Record<string, unknown>;
+
+    try {
+      const filesDeleted = await cleanupDeletedStoryMedia(admin.storage().bucket(), storyId, data);
+      functions.logger.info('Story storage media cleaned up', { storyId, filesDeleted });
+    } catch (error) {
+      functions.logger.warn('Failed to clean up story storage media', {
+        storyId,
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -1223,11 +1122,12 @@ export const onEventDeleted = functions.firestore
   });
 
 /**
- * Increment postsCount when a post is created
+ * Reconcile postsCount when a post is created (unfinished uploads do not count).
  * Trigger: onCreate posts/{postId}
  */
-export const onPostCreated = functions.firestore
-  .document(`${COLLECTIONS.posts}/{postId}`)
+export const onPostCreated = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}`)
   .onCreate(async (snap, context) => {
     const { postId } = context.params;
     const eventId = context.eventId;
@@ -1241,14 +1141,19 @@ export const onPostCreated = functions.firestore
 
     try {
       functions.logger.info('Post created', { postId, authorId, eventId });
-      await deduplicatedUserCounterUpdate(eventId, authorId, 'postsCount', 1);
+      await reconcileUserPostCount(db, authorId);
     } catch (error) {
-      functions.logger.error('Failed to increment postsCount', {
+      functions.logger.error('Failed to reconcile postsCount on create', {
         postId,
         authorId,
         eventId,
         error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
+    }
+
+    if (data?.status === ABANDONED_POST_STATUS) {
+      return;
     }
 
     try {
@@ -1263,6 +1168,20 @@ export const onPostCreated = functions.firestore
     }
   });
 
+/** Reconcile publication status transitions, including successful upload retries. */
+export const onPostUpdatedCount = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}`)
+  .onUpdate(async (change) => {
+    const before = change.before.data();
+    const after = change.after.data();
+    if (before.status === after.status && before.authorId === after.authorId) return;
+    const authors = new Set([before.authorId, after.authorId]);
+    for (const authorId of authors) {
+      if (typeof authorId === 'string' && authorId) await reconcileUserPostCount(db, authorId);
+    }
+  });
+
 /**
  * Moderate post edits to prevent bypassing create-time moderation.
  * Trigger: onUpdate posts/{postId}
@@ -1274,6 +1193,10 @@ export const onPostUpdatedModeration = functions.firestore
     const eventId = context.eventId;
     const before = change.before.data() || {};
     const after = change.after.data() || {};
+
+    if (after.status === ABANDONED_POST_STATUS) {
+      return;
+    }
 
     const textChanged =
       before.text !== after.text ||
@@ -1306,8 +1229,9 @@ export const onPostUpdatedModeration = functions.firestore
  * - Deletes comments subcollection (future-proofing)
  * Trigger: onDelete posts/{postId}
  */
-export const onPostDeleted = functions.firestore
-  .document(`${COLLECTIONS.posts}/{postId}`)
+export const onPostDeleted = functions
+  .runWith({ failurePolicy: true })
+  .firestore.document(`${COLLECTIONS.posts}/{postId}`)
   .onDelete(async (snap, context) => {
     const { postId } = context.params;
     const eventId = context.eventId;
@@ -1316,15 +1240,28 @@ export const onPostDeleted = functions.firestore
 
     if (authorId) {
       try {
-        await deduplicatedUserCounterUpdate(eventId, authorId, 'postsCount', -1);
+        await reconcileUserPostCount(db, authorId);
       } catch (error) {
-        functions.logger.error('Failed to decrement postsCount', {
+        functions.logger.error('Failed to reconcile postsCount on delete', {
           postId,
           authorId,
           eventId,
           error: error instanceof Error ? error.message : String(error),
         });
+        throw error;
       }
+    }
+
+    if (data?.status === ABANDONED_POST_STATUS) {
+      return;
+    }
+
+    if (data && isUnfinishedPostStatus(data.status)) {
+      const reserved = await reserveDeletedUnfinishedPost(db, postId, data);
+      if (reserved) {
+        await cleanupAbandonedPostUploads(db, admin.storage().bucket(), { limit: 10 });
+      }
+      return;
     }
 
     try {
@@ -1401,6 +1338,19 @@ export const onPostDeleted = functions.firestore
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  });
+
+/**
+ * Retire stale unfinished post uploads (>7 days without Storage activity) and
+ * purge their Storage objects in two passes without touching accepted posts.
+ */
+export const cleanupAbandonedPosts = functions
+  .runWith({ timeoutSeconds: 300, memory: '256MB' })
+  .pubsub.schedule('every 6 hours')
+  .onRun(async () => {
+    const report = await cleanupAbandonedPostUploads(db, admin.storage().bucket());
+    functions.logger.info('Completed abandoned post upload cleanup', report);
+    return null;
   });
 
 /**
@@ -1532,6 +1482,7 @@ export const onMessageCreatedModeration = functions.firestore
         conversationId: messageReportKey(conversationId, messageId),
       });
 
+      await deleteMessageMedia(admin.storage().bucket(), conversationId, messageId, data);
       await snap.ref.delete();
       await clearLastMessagePreview(db, conversationId, data);
 
@@ -1553,41 +1504,6 @@ export const onMessageCreatedModeration = functions.firestore
 // TRUST & SAFETY - REPORT QUEUE
 // ==========================================================
 
-type ReportQueuePriority = 'low' | 'medium' | 'high';
-type ReportQueueTargetType =
-  'user' | 'group' | 'post' | 'comment' | 'message' | 'story' | 'unknown';
-
-function inferQueuePriority(reason: unknown): ReportQueuePriority {
-  if (reason === 'abuse' || reason === 'harassment') return 'high';
-  if (reason === 'spam' || reason === 'fake') return 'medium';
-  return 'low';
-}
-
-function inferReportTargetType(conversationId: unknown): ReportQueueTargetType {
-  if (typeof conversationId !== 'string' || conversationId.length === 0) {
-    return 'unknown';
-  }
-  if (conversationId.startsWith('msg|')) {
-    return 'message';
-  }
-  if (conversationId.startsWith('story_')) {
-    return 'story';
-  }
-  if (conversationId.startsWith('post_') && conversationId.includes('_comment_')) {
-    return 'comment';
-  }
-  if (conversationId.startsWith('post_')) {
-    return 'post';
-  }
-  if (conversationId.startsWith('grp_')) {
-    return 'group';
-  }
-  if (conversationId.startsWith('dm_')) {
-    return 'user';
-  }
-  return 'unknown';
-}
-
 export const onReportCreatedQueue = functions.firestore
   .document(`${COLLECTIONS.reports}/{reportId}`)
   .onCreate(async (snap, context) => {
@@ -1600,9 +1516,9 @@ export const onReportCreatedQueue = functions.firestore
     const details = typeof data.details === 'string' ? data.details : null;
     const conversationId = typeof data.conversationId === 'string' ? data.conversationId : null;
     const status = typeof data.status === 'string' ? data.status : 'open';
-    const targetType: ReportQueueTargetType =
-      data.source === 'profile' ? 'user' : inferReportTargetType(conversationId);
-    const priority = inferQueuePriority(reason);
+    const source = inferQueueSource(reporterUid);
+    const targetType = inferReportTargetType(conversationId, reportedUid, data.source);
+    const priority = inferQueuePriority(reason, data.autoAction);
 
     try {
       await db.doc(`${COLLECTIONS.moderationQueue}/${reportId}`).set(
@@ -1615,7 +1531,7 @@ export const onReportCreatedQueue = functions.firestore
           details,
           conversationId,
           status: status === 'open' ? 'pending' : status,
-          source: 'user_report',
+          source,
           targetType,
           priority,
           createdAt: FieldValue.serverTimestamp(),
@@ -1626,6 +1542,7 @@ export const onReportCreatedQueue = functions.firestore
 
       functions.logger.info('Report queued for moderation', {
         reportId,
+        source,
         targetType,
         priority,
       });
@@ -1638,7 +1555,8 @@ export const onReportCreatedQueue = functions.firestore
   });
 
 /**
- * Delete collection files when a collection item is deleted
+ * Delete owned collection files when a collection item is deleted.
+ * Validates the storagePath stays strictly inside `collections/{uid}/{collectionId}/`.
  * Trigger: onDelete users/{uid}/collections/{collectionId}/items/{itemId}
  */
 export const onCollectionItemDeleted = functions.firestore
@@ -1647,50 +1565,78 @@ export const onCollectionItemDeleted = functions.firestore
   )
   .onDelete(async (snap, context) => {
     const { uid, collectionId, itemId } = context.params;
-    const data = snap.data();
-    const storagePath = data?.storagePath as string | undefined;
-
-    if (!storagePath) {
-      return;
-    }
+    const data = (snap.data() || {}) as Record<string, unknown>;
 
     try {
-      const bucket = admin.storage().bucket();
-      await bucket.file(storagePath).delete();
-      functions.logger.info('Deleted collection file', {
+      const deleted = await cleanupDeletedCollectionItemMedia(
+        admin.storage().bucket(),
         uid,
         collectionId,
-        itemId,
-        storagePath,
-      });
+        data,
+      );
+      if (deleted) {
+        functions.logger.info('Deleted collection item storage file', {
+          uid,
+          collectionId,
+          itemId,
+        });
+      }
     } catch (error) {
       functions.logger.warn('Failed to delete collection file (may not exist)', {
         uid,
         collectionId,
         itemId,
-        storagePath,
         error: error instanceof Error ? error.message : String(error),
       });
     }
   });
 
 /**
- * Clean up collection items when a collection is deleted
+ * Reconcile collection.itemCount whenever a collection item is created or deleted.
+ * Trigger: onWrite users/{uid}/collections/{collectionId}/items/{itemId}
+ */
+export const onCollectionItemWritten = functions.firestore
+  .document(
+    `${COLLECTIONS.users}/{uid}/${SUBCOLLECTIONS.collections}/{collectionId}/${SUBCOLLECTIONS.items}/{itemId}`,
+  )
+  .onWrite(async (_change, context) => {
+    const { uid, collectionId, itemId } = context.params;
+
+    try {
+      await reconcileCollectionItemCount(db, uid, collectionId);
+    } catch (error) {
+      functions.logger.error('Failed to reconcile collection itemCount', {
+        uid,
+        collectionId,
+        itemId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+/**
+ * Clean up remaining collection items and owned Storage files when a collection is deleted.
  * Trigger: onDelete users/{uid}/collections/{collectionId}
  */
 export const onCollectionDeleted = functions.firestore
   .document(`${COLLECTIONS.users}/{uid}/${SUBCOLLECTIONS.collections}/{collectionId}`)
-  .onDelete(async (snap, context) => {
+  .onDelete(async (_snap, context) => {
     const { uid, collectionId } = context.params;
 
     try {
-      const itemsRef = db.collection(
-        `${COLLECTIONS.users}/${uid}/${SUBCOLLECTIONS.collections}/${collectionId}/${SUBCOLLECTIONS.items}`,
+      const result = await cleanupDeletedCollection(
+        db,
+        admin.storage().bucket(),
+        uid,
+        collectionId,
       );
-      await db.recursiveDelete(itemsRef);
-      functions.logger.info('Deleted collection items', { uid, collectionId });
+      functions.logger.info('Deleted collection items and media', {
+        uid,
+        collectionId,
+        ...result,
+      });
     } catch (error) {
-      functions.logger.error('Failed to delete collection items', {
+      functions.logger.error('Failed to clean up deleted collection', {
         uid,
         collectionId,
         error: error instanceof Error ? error.message : String(error),
@@ -1795,6 +1741,14 @@ export const onFriendRequestWrite = functions.firestore
 
     try {
       if (isAccepted) {
+        const [firstBlockedSnap, secondBlockedSnap] = await Promise.all([
+          db.doc(`${COLLECTIONS.users}/${fromUid}/${SUBCOLLECTIONS.blockedUsers}/${toUid}`).get(),
+          db.doc(`${COLLECTIONS.users}/${toUid}/${SUBCOLLECTIONS.blockedUsers}/${fromUid}`).get(),
+        ]);
+        if (firstBlockedSnap.exists || secondBlockedSnap.exists) {
+          functions.logger.info('Skipping friend index sync due to block', { fromUid, toUid });
+          return;
+        }
         const payload = {
           uid: toUid,
           createdAt: FieldValue.serverTimestamp(),
@@ -1896,58 +1850,43 @@ export const onDirectConversationWrite = functions.firestore
       db.doc(`${COLLECTIONS.users}/${secondUid}/${SUBCOLLECTIONS.blockedUsers}/${firstUid}`).get(),
     ]);
 
-    const writes: Promise<unknown>[] = [];
-    if (!firstBlockedSnap.exists) {
-      writes.push(
-        db
-          .doc(
-            `${COLLECTIONS.users}/${firstUid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`,
-          )
-          .set(
-            {
-              conversationId,
-              otherUid: secondUid,
-              type: 'direct',
-              updatedAt,
-            },
-            { merge: true },
-          ),
-      );
-    } else {
-      functions.logger.info('Skipping direct conversation index for blocked user', {
+    if (firstBlockedSnap.exists || secondBlockedSnap.exists) {
+      functions.logger.info('Skipping direct conversation index due to block', {
         conversationId,
-        uid: firstUid,
-        blockedUid: secondUid,
+        firstUid,
+        secondUid,
       });
+      return;
     }
 
-    if (!secondBlockedSnap.exists) {
-      writes.push(
-        db
-          .doc(
-            `${COLLECTIONS.users}/${secondUid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`,
-          )
-          .set(
-            {
-              conversationId,
-              otherUid: firstUid,
-              type: 'direct',
-              updatedAt,
-            },
-            { merge: true },
-          ),
-      );
-    } else {
-      functions.logger.info('Skipping direct conversation index for blocked user', {
-        conversationId,
-        uid: secondUid,
-        blockedUid: firstUid,
-      });
-    }
-
-    if (writes.length > 0) {
-      await Promise.all(writes);
-    }
+    await Promise.all([
+      db
+        .doc(
+          `${COLLECTIONS.users}/${firstUid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`,
+        )
+        .set(
+          {
+            conversationId,
+            otherUid: secondUid,
+            type: 'direct',
+            updatedAt,
+          },
+          { merge: true },
+        ),
+      db
+        .doc(
+          `${COLLECTIONS.users}/${secondUid}/${SUBCOLLECTIONS.directConversations}/${conversationId}`,
+        )
+        .set(
+          {
+            conversationId,
+            otherUid: firstUid,
+            type: 'direct',
+            updatedAt,
+          },
+          { merge: true },
+        ),
+    ]);
   });
 
 // ==========================================================

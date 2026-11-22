@@ -8,6 +8,8 @@ struct SettingsView: View {
   @State private var deleteConfirmationText = ""
   @State private var showDeleteConfirmationDialog = false
   @State private var showAppleDeletionSheet = false
+  @State private var showRevokeSessionsDialog = false
+  @State private var isSendingPasswordReset = false
 
   var body: some View {
     List {
@@ -61,10 +63,87 @@ struct SettingsView: View {
         Text("Toca para permitir o retirar el permiso. Sin permiso, Chat con IA y Arena IA no envían nada.")
       }
 
-      Section("Privacidad") {
+      Section {
+        if let privacyError = viewModel.privacyErrorMessage {
+          VStack(alignment: .leading, spacing: 8) {
+            Text(privacyError)
+              .font(.footnote)
+              .foregroundStyle(.red)
+            Button("Reintentar") {
+              Task { await viewModel.refreshPrivacy(userID: authVM.currentUserID) }
+            }
+            .buttonStyle(.bordered)
+          }
+        } else {
+          Toggle(
+            isOn: Binding(
+              get: { viewModel.accountVisibility == .private },
+              set: { isPrivate in
+                Task { await viewModel.setAccountPrivate(isPrivate, userID: authVM.currentUserID) }
+              }
+            )
+          ) {
+            VStack(alignment: .leading, spacing: 2) {
+              Text("Cuenta privada")
+              Text("Solo seguidores aprobados ven tus publicaciones")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+          }
+          .disabled(
+            authVM.currentUserID == nil ||
+              viewModel.isLoadingPrivacy ||
+              viewModel.isSavingPrivacy
+          )
+        }
+
         NavigationLink(destination: BlockedUsersView()) {
           Label("Usuarios bloqueados", systemImage: "hand.raised")
         }
+
+        if let userEmail = authVM.currentUserEmail {
+          Button {
+            sendPasswordReset(to: userEmail)
+          } label: {
+            HStack {
+              Label("Cambiar contraseña", systemImage: "key")
+              Spacer()
+              if isSendingPasswordReset {
+                ProgressView()
+                  .controlSize(.small)
+              }
+            }
+          }
+          .disabled(isSendingPasswordReset)
+        }
+
+        Button {
+          showRevokeSessionsDialog = true
+        } label: {
+          HStack {
+            Label("Cerrar sesión en otros dispositivos", systemImage: "lock.shield")
+            Spacer()
+            if viewModel.isRevokingSessions {
+              ProgressView()
+                .controlSize(.small)
+            }
+          }
+        }
+        .disabled(authVM.currentUserID == nil || viewModel.isRevokingSessions)
+
+        if let securityError = viewModel.securityErrorMessage {
+          Text(securityError)
+            .font(.footnote)
+            .foregroundStyle(.red)
+        }
+
+        if let securityInfo = viewModel.securityInfoMessage {
+          Text(securityInfo)
+            .font(.footnote)
+            .foregroundStyle(.green)
+        }
+      } header: {
+        Text("Privacidad y seguridad")
       }
 
       Section("Legal y soporte") {
@@ -176,7 +255,11 @@ struct SettingsView: View {
             Text("Refrescar estado")
           }
         }
-        .disabled(authVM.currentUserID == nil || viewModel.isLoadingDeletionStatus)
+        .disabled(
+          authVM.currentUserID == nil ||
+            viewModel.isLoadingDeletionStatus ||
+            viewModel.isSubmittingDeletionRequest
+        )
 
         Button(role: .destructive) {
           if authVM.isSignedInWithApple {
@@ -236,7 +319,9 @@ struct SettingsView: View {
     }
     .navigationTitle("Ajustes")
     .task(id: authVM.currentUserID) {
+      deleteConfirmationText = ""
       await viewModel.refreshConsent(userID: authVM.currentUserID)
+      await viewModel.refreshPrivacy(userID: authVM.currentUserID)
       await viewModel.refreshDeletionStatus(userID: authVM.currentUserID)
     }
     .task(id: viewModel.deletionStatus.status) {
@@ -250,6 +335,18 @@ struct SettingsView: View {
         if Task.isCancelled { return }
         await viewModel.refreshDeletionStatus(userID: authVM.currentUserID, silent: true)
       }
+    }
+    .confirmationDialog(
+      "Cerrar sesión en otros dispositivos",
+      isPresented: $showRevokeSessionsDialog,
+      titleVisibility: .visible
+    ) {
+      Button("Cerrar otras sesiones", role: .destructive) {
+        Task { await viewModel.revokeOtherSessions(userID: authVM.currentUserID) }
+      }
+      Button("Cancelar", role: .cancel) {}
+    } message: {
+      Text("Se cerrará la sesión en todos tus demás equipos y deberás volver a ingresar en ellos.")
     }
     .confirmationDialog(
       "Confirmar eliminación de cuenta",
@@ -267,6 +364,21 @@ struct SettingsView: View {
       AppleDeletionConfirmationSheet { authorizationCode in
         showAppleDeletionSheet = false
         deleteAccount(appleAuthorizationCode: authorizationCode)
+      }
+    }
+  }
+
+  private func sendPasswordReset(to email: String) {
+    guard !isSendingPasswordReset else { return }
+    isSendingPasswordReset = true
+    viewModel.securityErrorMessage = nil
+    viewModel.securityInfoMessage = nil
+    Task {
+      defer { isSendingPasswordReset = false }
+      if let error = await authVM.requestPasswordReset(email: email) {
+        viewModel.securityErrorMessage = error
+      } else {
+        viewModel.securityInfoMessage = "Enviamos un enlace de recuperación a \(email)."
       }
     }
   }

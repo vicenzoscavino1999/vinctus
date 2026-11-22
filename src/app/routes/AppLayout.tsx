@@ -13,6 +13,10 @@ import {
 
 import Header from '@/app/routes/Header';
 import { useAuth } from '@/app/providers/AuthContext';
+import {
+  getUnreadNotificationBadgeCount,
+  NOTIFICATIONS_UPDATED_EVENT,
+} from '@/features/notifications/api';
 import PageLoader from '@/shared/ui/PageLoader';
 import SidebarItem from '@/shared/ui/SidebarItem';
 import CreatePostModal from '@/features/posts/components/CreatePostModal';
@@ -240,10 +244,62 @@ const AppLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const pathname = location.pathname;
+  const { user } = useAuth();
+  const userUid = user?.uid ?? null;
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
+  const [notificationBadge, setNotificationBadge] = useState<{
+    uid: string;
+    count: number;
+  } | null>(null);
+  const badgeSeqRef = useRef(0);
+  const prevPathnameRef = useRef(pathname);
   const [isOnline, setIsOnline] = useState(
     typeof window === 'undefined' ? true : window.navigator.onLine,
   );
+  const notificationCount =
+    userUid && notificationBadge?.uid === userUid ? notificationBadge.count : 0;
+
+  useEffect(() => {
+    if (!userUid || typeof window === 'undefined') return;
+    let cancelled = false;
+    const loadBadge = () => {
+      const seq = ++badgeSeqRef.current;
+      void getUnreadNotificationBadgeCount(userUid)
+        .then((count) => {
+          if (!cancelled && seq === badgeSeqRef.current) {
+            setNotificationBadge({ uid: userUid, count });
+          }
+        })
+        .catch(() => {
+          // Keep previous badge count on transient read failure.
+        });
+    };
+
+    loadBadge();
+    window.addEventListener(NOTIFICATIONS_UPDATED_EVENT, loadBadge);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(NOTIFICATIONS_UPDATED_EVENT, loadBadge);
+    };
+  }, [userUid]);
+
+  useEffect(() => {
+    const wasOnNotifications = prevPathnameRef.current === '/notifications';
+    prevPathnameRef.current = pathname;
+    if (!wasOnNotifications || pathname === '/notifications' || !userUid) {
+      return;
+    }
+    const seq = ++badgeSeqRef.current;
+    void getUnreadNotificationBadgeCount(userUid)
+      .then((count) => {
+        if (seq === badgeSeqRef.current) {
+          setNotificationBadge({ uid: userUid, count });
+        }
+      })
+      .catch(() => {
+        // Keep previous badge count on transient read failure.
+      });
+  }, [pathname, userUid]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -340,7 +396,7 @@ const AppLayout = () => {
       <div className="flex h-screen relative z-10">
         <Sidebar activeTab={getActiveTab()} onNavigate={navigate} />
         <MobileNav activeTab={getActiveTab()} onNavigate={navigate} />
-        <Header onCreatePost={handleCreatePost} />
+        <Header notificationCount={notificationCount} onCreatePost={handleCreatePost} />
 
         <main className="flex-1 md:ml-20 pt-[calc(4rem+env(safe-area-inset-top))] md:pt-16 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-6 px-4 md:px-16 overflow-y-auto scrollbar-hide">
           <div className="max-w-5xl mx-auto">
@@ -388,7 +444,11 @@ const AppLayout = () => {
       </div>
 
       {/* Create Post Modal */}
-      <CreatePostModal isOpen={isCreatePostOpen} onClose={() => setIsCreatePostOpen(false)} />
+      <CreatePostModal
+        isOpen={isCreatePostOpen}
+        onClose={() => setIsCreatePostOpen(false)}
+        redirectTo={pathname === '/profile' ? null : '/feed'}
+      />
     </div>
   );
 };

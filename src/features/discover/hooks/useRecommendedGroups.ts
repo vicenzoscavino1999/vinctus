@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/auth';
+import { AppError } from '@/shared/lib/errors';
 import { useToast } from '@/shared/ui/Toast';
 import {
   getGroupJoinStatus,
@@ -10,22 +11,37 @@ import {
   type FirestoreGroup,
   type GroupJoinStatus,
 } from '@/features/groups/api';
+import {
+  filterRecommendedGroups,
+  type SearchFiltersState,
+} from '@/features/discover/model/categoryFilter';
 
 /**
- * Every group (the trend ranking counts them) and the four biggest, with the signed-in user's
- * join status for each and the join or request action.
+ * Every group (the trend ranking counts them) and the ones the search and filters leave, with
+ * the signed-in user's join status for each and the join or request action.
  */
-export const useRecommendedGroups = () => {
+export const useRecommendedGroups = ({
+  searchQuery,
+  filters,
+}: {
+  searchQuery: string;
+  filters: SearchFiltersState;
+}) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { showToast } = useToast();
 
   const [allGroups, setAllGroups] = useState<FirestoreGroup[]>([]);
-  const [groups, setGroups] = useState<FirestoreGroup[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
+  const [groupsReloadToken, setGroupsReloadToken] = useState(0);
   const [groupJoinStatusMap, setGroupJoinStatusMap] = useState<Record<string, GroupJoinStatus>>({});
   const [groupActionLoading, setGroupActionLoading] = useState<string | null>(null);
+
+  const groups = useMemo(
+    () => filterRecommendedGroups(allGroups, { searchQuery, filters }),
+    [allGroups, searchQuery, filters],
+  );
 
   useEffect(() => {
     let isActive = true;
@@ -45,7 +61,6 @@ export const useRecommendedGroups = () => {
         });
         if (isActive) {
           setAllGroups(sorted);
-          setGroups(sorted.slice(0, 4));
         }
       } catch (loadError) {
         console.error('Error loading groups:', loadError);
@@ -64,11 +79,10 @@ export const useRecommendedGroups = () => {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [groupsReloadToken]);
 
   useEffect(() => {
     if (!user || groups.length === 0) {
-      if (!user) setGroupJoinStatusMap({});
       return;
     }
     let isActive = true;
@@ -76,28 +90,38 @@ export const useRecommendedGroups = () => {
     if (pending.length === 0) return;
 
     const loadStatuses = async () => {
-      try {
-        const updates: Record<string, GroupJoinStatus> = {};
-        await Promise.all(
-          pending.map(async (group) => {
-            const status = await getGroupJoinStatus(group.id, user.uid);
-            updates[group.id] = status;
-          }),
-        );
-        if (isActive) {
-          setGroupJoinStatusMap((prev) => ({ ...prev, ...updates }));
+      const updates: Record<string, GroupJoinStatus> = {};
+      const settled = await Promise.allSettled(
+        pending.map(async (group) => {
+          const status = await getGroupJoinStatus(group.id, user.uid);
+          return { groupId: group.id, status };
+        }),
+      );
+      for (const result of settled) {
+        if (result.status === 'fulfilled') {
+          updates[result.value.groupId] = result.value.status;
+        } else {
+          console.error('Error loading group status:', result.reason);
         }
-      } catch (statusError) {
-        console.error('Error loading group status:', statusError);
+      }
+      if (isActive && Object.keys(updates).length > 0) {
+        setGroupJoinStatusMap((prev) => ({ ...prev, ...updates }));
       }
     };
 
-    loadStatuses();
+    void loadStatuses();
 
     return () => {
       isActive = false;
     };
   }, [groups, user, groupJoinStatusMap]);
+
+  /** A public group never stays "pending": a stale request there means the user can just join. */
+  const getEffectiveJoinStatus = (group: FirestoreGroup): GroupJoinStatus => {
+    const rawStatus = groupJoinStatusMap[group.id] ?? 'none';
+    const visibility = group.visibility ?? 'public';
+    return visibility === 'public' && rawStatus === 'pending' ? 'none' : rawStatus;
+  };
 
   const handleGroupAction = async (group: FirestoreGroup) => {
     if (!user) {
@@ -105,7 +129,8 @@ export const useRecommendedGroups = () => {
       return;
     }
 
-    const status = groupJoinStatusMap[group.id] ?? 'none';
+    const visibility = group.visibility ?? 'public';
+    const status = getEffectiveJoinStatus(group);
     const isOwner = group.ownerId && group.ownerId === user.uid;
     if (isOwner || status === 'member') {
       navigate(`/group/${group.id}`);
@@ -118,7 +143,6 @@ export const useRecommendedGroups = () => {
 
     setGroupActionLoading(group.id);
     try {
-      const visibility = group.visibility ?? 'public';
       if (visibility === 'public') {
         await joinPublicGroup(group.id, user.uid);
         setGroupJoinStatusMap((prev) => ({ ...prev, [group.id]: 'member' }));
@@ -141,7 +165,11 @@ export const useRecommendedGroups = () => {
       }
     } catch (actionError) {
       console.error('Error joining group:', actionError);
-      showToast('No se pudo procesar la solicitud', 'error');
+      if (actionError instanceof AppError && actionError.code === 'PERMISSION_DENIED') {
+        showToast('No puedes unirte directamente a este grupo.', 'error');
+      } else {
+        showToast('No se pudo procesar la solicitud', 'error');
+      }
     } finally {
       setGroupActionLoading(null);
     }
@@ -149,7 +177,7 @@ export const useRecommendedGroups = () => {
 
   const getGroupActionLabel = (group: FirestoreGroup): string => {
     if (user && group.ownerId === user.uid) return 'Tu grupo';
-    const status = groupJoinStatusMap[group.id] ?? 'none';
+    const status = getEffectiveJoinStatus(group);
     if (status === 'member') return 'Unido';
     if (status === 'pending') return 'Pendiente';
     return (group.visibility ?? 'public') === 'public' ? 'Unirme' : 'Solicitar';
@@ -161,6 +189,7 @@ export const useRecommendedGroups = () => {
     groupsLoading,
     groupsError,
     groupActionLoading,
+    retryGroups: () => setGroupsReloadToken((prev) => prev + 1),
     handleGroupAction,
     getGroupActionLabel,
   };

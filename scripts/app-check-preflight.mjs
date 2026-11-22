@@ -137,6 +137,97 @@ const run = async () => {
     warn('Debug token configured', 'Use only in controlled staging/local tests.');
   }
 
+  // iOS native App Check verification (monitoring-safe before Enforcement).
+  const readOptional = async (relPath) => {
+    const abs = path.resolve(rootDir, relPath);
+    if (!existsSync(abs)) return null;
+    return fs.readFile(abs, 'utf8');
+  };
+
+  const iosProjectYml = await readOptional('ios-native/VinctusNative/project.yml');
+  if (iosProjectYml && /product:\s*FirebaseAppCheck\b/.test(iosProjectYml)) {
+    pass('iOS FirebaseAppCheck dependency declared', 'ios-native/VinctusNative/project.yml');
+  } else {
+    fail('iOS FirebaseAppCheck dependency missing', 'ios-native/VinctusNative/project.yml');
+  }
+
+  const iosBootstrap = await readOptional(
+    'ios-native/VinctusNative/Sources/App/FirebaseBootstrap.swift',
+  );
+  if (
+    iosBootstrap &&
+    iosBootstrap.includes('AppCheckBootstrap.configureProviderFactoryIfNeeded()') &&
+    iosBootstrap.indexOf('AppCheckBootstrap.configureProviderFactoryIfNeeded()') <
+      iosBootstrap.indexOf('FirebaseApp.configure(options:')
+  ) {
+    pass('iOS App Check configured before FirebaseApp.configure');
+  } else {
+    fail(
+      'iOS App Check bootstrap missing or ordered after FirebaseApp.configure',
+      'ios-native/VinctusNative/Sources/App/FirebaseBootstrap.swift',
+    );
+  }
+
+  const iosInfoPlist = await readOptional('ios-native/VinctusNative/Resources/Info.plist');
+  if (!iosInfoPlist) {
+    fail('iOS Info.plist missing', 'ios-native/VinctusNative/Resources/Info.plist');
+  } else {
+    const enabledMatch = iosInfoPlist.match(
+      /<key>VINCTUS_ENABLE_APP_CHECK<\/key>\s*<(true|false)\s*\/>/i,
+    );
+    const providerMatch = iosInfoPlist.match(
+      /<key>VINCTUS_APP_CHECK_PROVIDER<\/key>\s*<string>([^<]*)<\/string>/i,
+    );
+    const iosEnabled = enabledMatch ? enabledMatch[1].toLowerCase() === 'true' : null;
+    const iosProvider = providerMatch ? providerMatch[1].trim().toLowerCase() : '';
+
+    if (iosEnabled === null) {
+      fail('iOS VINCTUS_ENABLE_APP_CHECK key missing in Info.plist');
+    } else if (!iosEnabled && productionMode) {
+      fail('iOS VINCTUS_ENABLE_APP_CHECK must be true in production mode');
+    } else if (!iosEnabled) {
+      warn('iOS App Check disabled in Info.plist', 'VINCTUS_ENABLE_APP_CHECK=false');
+    } else {
+      pass('iOS VINCTUS_ENABLE_APP_CHECK enabled', 'true');
+    }
+
+    const validProviders = new Set([
+      'auto',
+      'debug',
+      'devicecheck',
+      'device_check',
+      'device-check',
+      'appattest',
+      'app_attest',
+      'app-attest',
+      'disabled',
+    ]);
+    if (!validProviders.has(iosProvider)) {
+      fail('iOS VINCTUS_APP_CHECK_PROVIDER invalid', iosProvider || '<empty>');
+    } else if (productionMode && (iosProvider === 'debug' || iosProvider === 'disabled')) {
+      fail('iOS VINCTUS_APP_CHECK_PROVIDER cannot be debug/disabled in production', iosProvider);
+    } else {
+      pass('iOS VINCTUS_APP_CHECK_PROVIDER valid', iosProvider);
+    }
+
+    if (['appattest', 'app_attest', 'app-attest'].includes(iosProvider)) {
+      const iosEntitlements = await readOptional(
+        'ios-native/VinctusNative/Resources/VinctusNative.entitlements',
+      );
+      if (
+        iosEntitlements &&
+        iosEntitlements.includes('com.apple.developer.devicecheck.appattest-environment')
+      ) {
+        pass('iOS App Attest entitlement present');
+      } else {
+        fail(
+          'iOS App Attest provider selected without appattest-environment entitlement',
+          'Add com.apple.developer.devicecheck.appattest-environment or use VINCTUS_APP_CHECK_PROVIDER=auto',
+        );
+      }
+    }
+  }
+
   const summary = results.reduce(
     (acc, item) => {
       if (item.status === STATUS.pass) acc.pass += 1;

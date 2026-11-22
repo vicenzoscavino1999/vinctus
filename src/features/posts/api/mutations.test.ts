@@ -2,10 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppError } from '@/shared/lib/errors';
 import {
   addPostComment,
+  blockUser,
   createPostCommentReport,
   createPostReport,
+  createStoryReport,
   createPostUploading,
   createStory,
+  deleteStory,
   getNewPostId,
   likePostWithSync,
   savePostWithSync,
@@ -16,9 +19,12 @@ import {
 
 vi.mock('@/shared/lib/firestore', () => ({
   addPostComment: vi.fn(),
+  blockUser: vi.fn(),
   createPostCommentReport: vi.fn(),
   createPostReport: vi.fn(),
+  createStoryReport: vi.fn(),
   createStory: vi.fn(),
+  deleteStory: vi.fn(),
   getNewPostId: vi.fn(),
   likePostWithSync: vi.fn(),
   savePostWithSync: vi.fn(),
@@ -37,6 +43,7 @@ const postUpload = await import('@/shared/lib/firestore-post-upload');
 describe('posts api mutations', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(firestore.getNewPostId).mockReturnValue('comment_generated');
   });
 
   it('returns a validated post id', () => {
@@ -45,7 +52,7 @@ describe('posts api mutations', () => {
   });
 
   it('throws validation error when generated post id is invalid', () => {
-    vi.mocked(firestore.getNewPostId).mockReturnValueOnce('');
+    vi.mocked(firestore.getNewPostId).mockReturnValue('');
     const run = () => getNewPostId();
     expect(run).toThrowError(AppError);
     expect(run).toThrowError('Validation failed');
@@ -68,7 +75,29 @@ describe('posts api mutations', () => {
       'user_1',
       { displayName: 'Alice', photoURL: null },
       'hello world',
+      'comment_generated',
     );
+  });
+
+  it('reuses the comment id when an automatic retry follows a lost response', async () => {
+    vi.mocked(firestore.addPostComment)
+      .mockRejectedValueOnce(new AppError('Respuesta perdida', 'NETWORK'))
+      .mockResolvedValueOnce('pending_1');
+    await expect(
+      addPostComment('p1', 'u1', { displayName: 'Ana', photoURL: null }, 'Hola', 'pending_1'),
+    ).resolves.toBe('pending_1');
+    expect(firestore.addPostComment).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(firestore.addPostComment).mock.calls.map((call) => call[4])).toEqual([
+      'pending_1',
+      'pending_1',
+    ]);
+  });
+
+  it('rejects an invalid comment id before writing', async () => {
+    await expect(
+      addPostComment('p1', 'u1', { displayName: 'Ana', photoURL: null }, 'Hola', ''),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect(firestore.addPostComment).not.toHaveBeenCalled();
   });
 
   it('rejects blocked terms in comment text', async () => {
@@ -137,7 +166,7 @@ describe('posts api mutations', () => {
   });
 
   it('validates createPostUploading input', async () => {
-    vi.mocked(postUpload.createPostUploading).mockResolvedValueOnce();
+    vi.mocked(postUpload.createPostUploading).mockResolvedValueOnce(false);
 
     await expect(
       createPostUploading({
@@ -147,7 +176,37 @@ describe('posts api mutations', () => {
         text: 'New post',
         title: null,
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
+  });
+
+  it('allows title-only posts and rejects a wholly empty post', async () => {
+    const input = {
+      postId: 'p1',
+      authorId: 'u1',
+      authorSnapshot: { displayName: 'Ana', photoURL: null },
+      title: ' Solo título ',
+      text: '',
+    };
+    await expect(createPostUploading(input)).resolves.toBeUndefined();
+    expect(postUpload.createPostUploading).toHaveBeenLastCalledWith(
+      expect.objectContaining({ title: 'Solo título', text: '' }),
+    );
+    await expect(createPostUploading({ ...input, title: '  ' })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+    });
+  });
+
+  it('normalizes a blank optional title to null for Firestore', async () => {
+    await createPostUploading({
+      postId: 'p1',
+      authorId: 'u1',
+      authorSnapshot: { displayName: 'Ana', photoURL: null },
+      title: '  ',
+      text: 'Hola',
+    });
+    expect(postUpload.createPostUploading).toHaveBeenLastCalledWith(
+      expect.objectContaining({ title: null, text: 'Hola' }),
+    );
   });
 
   it('rejects blocked terms in createPostUploading payload', async () => {
@@ -190,6 +249,43 @@ describe('posts api mutations', () => {
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
     expect(firestore.createStory).not.toHaveBeenCalled();
+  });
+
+  it('validates deleteStory, createStoryReport, and blockUser payloads', async () => {
+    vi.mocked(firestore.deleteStory).mockResolvedValueOnce();
+    vi.mocked(firestore.createStoryReport).mockResolvedValueOnce('report_story_1');
+    vi.mocked(firestore.blockUser).mockResolvedValueOnce();
+
+    await expect(
+      deleteStory('story_1', {
+        mediaPath: 'stories/user_1/story_1/original/pic.webp',
+        thumbPath: null,
+      }),
+    ).resolves.toBeUndefined();
+    expect(firestore.deleteStory).toHaveBeenCalledWith('story_1', {
+      mediaPath: 'stories/user_1/story_1/original/pic.webp',
+      thumbPath: null,
+    });
+
+    await expect(
+      createStoryReport({
+        reporterUid: 'user_1',
+        storyId: 'story_2',
+        storyOwnerId: 'user_2',
+        reason: 'abuse',
+        details: '  Contenido inapropiado ',
+      }),
+    ).resolves.toBe('report_story_1');
+    expect(firestore.createStoryReport).toHaveBeenCalledWith({
+      reporterUid: 'user_1',
+      storyId: 'story_2',
+      storyOwnerId: 'user_2',
+      reason: 'abuse',
+      details: 'Contenido inapropiado',
+    });
+
+    await expect(blockUser('user_1', 'user_2')).resolves.toBeUndefined();
+    expect(firestore.blockUser).toHaveBeenCalledWith('user_1', 'user_2');
   });
 
   it('updates post with non-empty patch', async () => {

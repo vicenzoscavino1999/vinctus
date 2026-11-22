@@ -111,6 +111,30 @@ final class AIChatHistoryTests: XCTestCase {
     XCTAssertEqual(trimmed.first?.role, "user")
     XCTAssertEqual(trimmed.last?.text, "ok")
   }
+
+  func testClampsOversizedPartsAndDropsOldMessagesBeyondTwelveThousandChars() {
+    let oversized = String(repeating: "x", count: 3500)
+    let history = [
+      message("user", "   "),
+      message("user", oversized),
+      message("model", oversized),
+      message("user", oversized),
+      message("model", oversized),
+      message("user", oversized),
+      message("model", oversized),
+      message("user", oversized),
+      message("model", "final"),
+    ]
+
+    let trimmed = FirebaseAIRepo.trimmedHistory(history)
+
+    XCTAssertTrue(trimmed.allSatisfy { msg in
+      msg.parts.allSatisfy { $0.text.count <= FirebaseAIRepo.maxMessageLength }
+    })
+    XCTAssertLessThanOrEqual(trimmed.reduce(0) { $0 + $1.text.count }, 12_000)
+    XCTAssertEqual(trimmed.first?.role, "user")
+    XCTAssertEqual(trimmed.last?.text, "final")
+  }
 }
 
 @MainActor

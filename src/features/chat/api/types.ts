@@ -9,7 +9,13 @@ import type {
   UserReportReason,
 } from '@/shared/lib/firestore';
 import { idSchema, validate } from '@/shared/lib/validators';
+import { chatFileLimit } from '@/shared/lib/chat-media';
 import { LIMITS, STORAGE_MAX_BYTES } from '@/shared/lib/firestore/firestoreContract';
+export type {
+  MessageCursor,
+  MessagePage,
+  MessageSubscriptionOptions,
+} from '@/shared/lib/firestore/messaging';
 
 export type {
   ConversationMemberRead,
@@ -39,18 +45,26 @@ export const reportDetailsSchema = z
   .nullable()
   .optional();
 
-export const messageAttachmentSchema = z.object({
-  kind: z.enum(['image', 'file']),
-  url: z.string().trim().url(),
-  thumbUrl: z.string().trim().url().nullable().optional(),
-  path: z.string().trim().min(1).max(600),
-  fileName: z.string().trim().min(1).max(200),
-  contentType: z.string().trim().min(1).max(120),
-  // storage.rules take files smaller than the limit.
-  size: z.number().int().min(0).lt(STORAGE_MAX_BYTES.file),
-  width: z.number().int().positive().nullable().optional(),
-  height: z.number().int().positive().nullable().optional(),
-});
+export const messageAttachmentSchema = z
+  .object({
+    kind: z.enum(['image', 'file']),
+    url: z.string().trim().url(),
+    thumbUrl: z.string().trim().url().nullable().optional(),
+    path: z.string().trim().min(1).max(600),
+    fileName: z.string().trim().min(1).max(200),
+    contentType: z.string().trim().min(1).max(120),
+    // storage.rules take files smaller than the limit.
+    size: z.number().int().min(0).lt(STORAGE_MAX_BYTES.file),
+    width: z.number().int().positive().nullable().optional(),
+    height: z.number().int().positive().nullable().optional(),
+  })
+  .refine(
+    (item) => {
+      const limit = chatFileLimit(item.contentType);
+      return !!limit && item.size > 0 && item.size < limit;
+    },
+    { message: 'Formato o tamaño de adjunto no compatible.' },
+  );
 
 export const sendMessageTextSchema = z.string().max(LIMITS.messages.textMaxLength);
 

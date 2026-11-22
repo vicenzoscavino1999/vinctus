@@ -1,5 +1,6 @@
 import {
   getBlockedUsers as getBlockedUsersRaw,
+  fetchOlderMessages as fetchOlderMessagesRaw,
   getConversationMember as getConversationMemberRaw,
   getGroup as getGroupRaw,
   getGroupMemberCount as getGroupMemberCountRaw,
@@ -18,6 +19,15 @@ import {
   type FirestoreGroup,
   type UserProfileRead,
 } from '@/features/chat/api/types';
+import type { MessageCursor, MessagePage } from './types';
+
+export const fetchOlderMessages = (
+  conversationId: string,
+  cursor: MessageCursor,
+): Promise<MessagePage> =>
+  runRead('chat.fetchOlderMessages', () =>
+    fetchOlderMessagesRaw(validate(conversationIdSchema, conversationId), cursor),
+  );
 
 const READ_TIMEOUT_MS = 5000;
 const READ_RETRYABLE_CODES = [

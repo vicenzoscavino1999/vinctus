@@ -29,6 +29,12 @@ async function seedPost(postId = 'post_alpha') {
   const env = await getRulesTestEnv();
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
+    await db.doc('users_public/user_a').set({
+      displayName: 'Alice',
+      username: 'alice',
+      photoURL: null,
+      accountVisibility: 'public',
+    });
     await db.doc(`posts/${postId}`).set({
       authorId: 'user_a',
       authorName: 'Alice',
@@ -327,11 +333,11 @@ describe('Firestore Rules - critical access controls', () => {
     await assertSucceeds(db.doc('posts/post_missing').get());
   });
 
-  it('allows empty comments query for any post', async () => {
+  it('denies direct comment lists even for missing posts', async () => {
     const env = await getRulesTestEnv();
     const db = env.authenticatedContext('user_a').firestore();
 
-    await assertSucceeds(db.collection('posts/post_empty/comments').limit(10).get());
+    await assertFails(db.collection('posts/post_empty/comments').limit(10).get());
   });
 
   it('denies creating likes when path uid does not match auth user', async () => {
@@ -377,6 +383,7 @@ describe('Firestore Rules - critical access controls', () => {
   });
 
   it('allows writing saved posts for own user', async () => {
+    await seedPost('post_x');
     const env = await getRulesTestEnv();
     const db = env.authenticatedContext('user_a').firestore();
 
@@ -456,6 +463,43 @@ describe('Firestore Rules - critical access controls', () => {
         categoryId: 'science',
         createdAt: serverTimestamp(),
       }),
+    );
+  });
+
+  it('enforces strict schema and immutable createdAt on savedCategories', async () => {
+    const env = await getRulesTestEnv();
+    const db = env.authenticatedContext('user_a').firestore();
+
+    await assertFails(
+      db.doc('users/user_a/savedCategories/science').set({
+        categoryId: 'music',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      db.doc('users/user_a/savedCategories/science').set({
+        categoryId: 'science',
+        createdAt: serverTimestamp(),
+        extraField: true,
+      }),
+    );
+    await assertSucceeds(
+      db.doc('users/user_a/savedCategories/science').set({
+        categoryId: 'science',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      db.doc('users/user_a/savedCategories/science').update({
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      env
+        .authenticatedContext('user_b')
+        .firestore()
+        .doc('users/user_a/savedCategories/science')
+        .get(),
     );
   });
 
@@ -610,6 +654,84 @@ describe('Firestore Rules - critical access controls', () => {
     const outsiderDb = env.authenticatedContext('user_c').firestore();
 
     await assertFails(outsiderDb.doc('stories/story_not_friend').get());
+  });
+
+  it('denies story read when blocked even if friend index or follower exists', async () => {
+    await seedStory('story_blocked', 'user_b');
+    await seedFriendIndex('user_a', 'user_b');
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('users/user_b/followers/user_a').set({
+        uid: 'user_a',
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('users/user_b/blockedUsers/user_a').set({
+        blockedUid: 'user_a',
+        status: 'active',
+        blockedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+    });
+
+    const blockedViewerDb = env.authenticatedContext('user_a').firestore();
+    await assertFails(blockedViewerDb.doc('stories/story_blocked').get());
+
+    const ownerDb = env.authenticatedContext('user_b').firestore();
+    await assertSucceeds(ownerDb.doc('stories/story_blocked').get());
+  });
+
+  it('validates story creation paths and field limits strictly', async () => {
+    const env = await getRulesTestEnv();
+    const ownerDb = env.authenticatedContext('user_a').firestore();
+    const validExpiresAt = firebase.firestore.Timestamp.fromMillis(
+      Date.now() + 24 * 60 * 60 * 1000,
+    );
+
+    await assertSucceeds(
+      ownerDb.doc('stories/story_valid').set({
+        ownerId: 'user_a',
+        ownerSnapshot: { displayName: 'Alicia', photoURL: null },
+        mediaType: 'image',
+        mediaUrl: 'https://example.com/story.jpg',
+        mediaPath: 'stories/user_a/story_valid/original/pic.webp',
+        thumbUrl: 'https://example.com/thumb.webp',
+        thumbPath: 'stories/user_a/story_valid/thumb/thumb.webp',
+        visibility: 'friends',
+        createdAt: serverTimestamp(),
+        expiresAt: validExpiresAt,
+      }),
+    );
+
+    // Rejects cross-user or non-storyId-scoped Storage mediaPath / thumbPath.
+    await assertFails(
+      ownerDb.doc('stories/story_bad_path').set({
+        ownerId: 'user_a',
+        ownerSnapshot: { displayName: 'Alicia', photoURL: null },
+        mediaType: 'image',
+        mediaUrl: 'https://example.com/story.jpg',
+        mediaPath: 'stories/user_b/other/original/victim.jpg',
+        thumbUrl: null,
+        thumbPath: null,
+        visibility: 'friends',
+        createdAt: serverTimestamp(),
+        expiresAt: validExpiresAt,
+      }),
+    );
+
+    await assertFails(
+      ownerDb.doc('stories/story_bad_thumb').set({
+        ownerId: 'user_a',
+        ownerSnapshot: { displayName: 'Alicia', photoURL: null },
+        mediaType: 'image',
+        mediaUrl: 'https://example.com/story.jpg',
+        mediaPath: 'stories/user_a/story_bad_thumb/original/pic.webp',
+        thumbUrl: 'https://example.com/thumb.webp',
+        thumbPath: 'posts/user_a/post_1/images/wrong.webp',
+        visibility: 'friends',
+        createdAt: serverTimestamp(),
+        expiresAt: validExpiresAt,
+      }),
+    );
   });
 
   it('protects follow_requests listing and keeps missing-get scoped by requestId', async () => {
@@ -827,5 +949,1078 @@ describe('Firestore Rules - critical access controls', () => {
         updatedAt: serverTimestamp(),
       }),
     );
+  });
+
+  it('protects user counters and validates profile text limits on users and users_public', async () => {
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      const base = {
+        uid: 'user_a',
+        displayName: 'Alice',
+        reputation: 0,
+        karmaGlobal: 0,
+        karmaByInterest: {},
+        followersCount: 3,
+        followingCount: 2,
+        postsCount: 1,
+      };
+      await db.doc('users/user_a').set(base);
+      await db.doc('users_public/user_a').set(base);
+    });
+
+    const userAdb = env.authenticatedContext('user_a').firestore();
+    await assertFails(userAdb.doc('users/user_a').update({ followersCount: 99 }));
+    await assertFails(userAdb.doc('users_public/user_a').update({ followingCount: 99 }));
+    await assertFails(userAdb.doc('users/user_a').update({ postsCount: 99 }));
+    await assertFails(userAdb.doc('users/user_a').update({ bio: 'x'.repeat(501) }));
+    await assertFails(userAdb.doc('users_public/user_a').update({ displayName: 'x'.repeat(121) }));
+
+    await assertSucceeds(
+      userAdb.doc('users/user_a').update({
+        displayName: 'Alice Actualizada',
+        bio: null,
+        role: null,
+        location: null,
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      userAdb.doc('users_public/user_a').update({
+        displayName: 'Alice Actualizada',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    await assertFails(
+      userAdb.doc('users/user_new_bad').set({
+        uid: 'user_new_bad',
+        followersCount: 10,
+      }),
+    );
+  });
+
+  it('enforces blocks, self-follow denial, list privacy, and strict follow_request transitions', async () => {
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('users_public/user_a').set({ uid: 'user_a', accountVisibility: 'public' });
+      await db.doc('users_public/user_b').set({ uid: 'user_b', accountVisibility: 'private' });
+      await db.doc('users_public/user_c').set({ uid: 'user_c', accountVisibility: 'public' });
+      await db
+        .doc('users_public/user_blocked')
+        .set({ uid: 'user_blocked', accountVisibility: 'public' });
+    });
+    await seedBlockedUser('user_b', 'user_blocked');
+    await seedBlockedUser('user_c', 'user_blocked');
+    await seedFollower('user_c', 'user_a');
+
+    const blockedDb = env.authenticatedContext('user_blocked').firestore();
+    const userAdb = env.authenticatedContext('user_a').firestore();
+    const userBdb = env.authenticatedContext('user_b').firestore();
+
+    // Blocked user cannot send follow request, create public follow, or view follow lists.
+    await assertFails(
+      blockedDb.doc('follow_requests/user_blocked_user_b').set({
+        fromUid: 'user_blocked',
+        toUid: 'user_b',
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      blockedDb.doc('users/user_c/followers/user_blocked').set({
+        uid: 'user_blocked',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(blockedDb.collection('users/user_c/followers').get());
+
+    // Self-follow and phantom target follow are denied.
+    await assertFails(
+      userAdb.doc('users/user_a/followers/user_a').set({
+        uid: 'user_a',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      userAdb.doc('users/ghost_uid/followers/user_a').set({
+        uid: 'user_a',
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Valid follow edge cannot mutate createdAt on update.
+    await assertSucceeds(
+      userAdb.doc('users/user_a/following/user_c').set({
+        uid: 'user_c',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      userAdb.doc('users/user_a/following/user_c').update({
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Follow request lifecycle: pending -> declined -> pending -> accepted; accepted cannot be flipped.
+    await assertSucceeds(
+      userAdb.doc('follow_requests/user_a_user_b').set({
+        fromUid: 'user_a',
+        toUid: 'user_b',
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      userBdb.doc('follow_requests/user_a_user_b').update({
+        status: 'declined',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      userBdb.doc('follow_requests/user_a_user_b').update({
+        status: 'accepted',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      userAdb.doc('follow_requests/user_a_user_b').update({
+        status: 'pending',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      userBdb.doc('follow_requests/user_a_user_b').update({
+        status: 'accepted',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    // While still following (seed follower edge), requester cannot revert accepted -> pending.
+    await seedFollower('user_b', 'user_a');
+    await assertFails(
+      userAdb.doc('follow_requests/user_a_user_b').update({
+        status: 'pending',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    // After unfollowing, re-requesting from accepted tombstone is permitted.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc('users/user_b/followers/user_a').delete();
+    });
+    await assertSucceeds(
+      userAdb.doc('follow_requests/user_a_user_b').update({
+        status: 'pending',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    // Self-blocking is denied.
+    await assertFails(
+      userAdb.doc('users/user_a/blockedUsers/user_a').set({
+        blockedUid: 'user_a',
+        status: 'active',
+        blockedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('enforces group member visibility, server-managed memberCount, blocks, and join request lifecycle', async () => {
+    const env = await getRulesTestEnv();
+    const ownerDb = env.authenticatedContext('user_a').firestore();
+    const memberDb = env.authenticatedContext('user_b').firestore();
+    const outsiderDb = env.authenticatedContext('user_c').firestore();
+    const blockedDb = env.authenticatedContext('user_d').firestore();
+
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('users/user_a/blockedUsers/user_d').set({
+        blockedUid: 'user_d',
+        status: 'active',
+        blockedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('groups/group_pub').set({
+        name: 'Grupo Publico',
+        description: 'Abierto',
+        categoryId: null,
+        visibility: 'public',
+        ownerId: 'user_a',
+        iconUrl: null,
+        memberCount: 1,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('groups/group_pub/members/user_a').set({
+        uid: 'user_a',
+        groupId: 'group_pub',
+        role: 'admin',
+        joinedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('groups/group_priv').set({
+        name: 'Grupo Privado',
+        description: 'Solo miembros',
+        categoryId: null,
+        visibility: 'private',
+        ownerId: 'user_a',
+        iconUrl: null,
+        memberCount: 2,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('groups/group_priv/members/user_a').set({
+        uid: 'user_a',
+        groupId: 'group_priv',
+        role: 'admin',
+        joinedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('groups/group_priv/members/user_b').set({
+        uid: 'user_b',
+        groupId: 'group_priv',
+        role: 'member',
+        joinedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+    });
+
+    // Spoofed initial memberCount is denied; memberCount update by owner is denied.
+    await assertFails(
+      ownerDb.doc('groups/group_spoofed').set({
+        name: 'Grupo Fake',
+        description: 'Desc',
+        categoryId: null,
+        visibility: 'public',
+        ownerId: 'user_a',
+        iconUrl: null,
+        memberCount: 500,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      ownerDb.doc('groups/group_pub').update({
+        memberCount: 99,
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    // Public group: non-member can list members and self-join as member (not admin); blocked user cannot join.
+    await assertSucceeds(outsiderDb.collection('groups/group_pub/members').get());
+    await assertFails(
+      outsiderDb.doc('groups/group_pub/members/user_c').set({
+        uid: 'user_c',
+        groupId: 'group_pub',
+        role: 'admin',
+        joinedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      blockedDb.doc('groups/group_pub/members/user_d').set({
+        uid: 'user_d',
+        groupId: 'group_pub',
+        role: 'member',
+        joinedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      outsiderDb.doc('groups/group_pub/members/user_c').set({
+        uid: 'user_c',
+        groupId: 'group_pub',
+        role: 'member',
+        joinedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      outsiderDb.doc('users/user_c/memberships/group_pub').set({
+        groupId: 'group_pub',
+        joinedAt: serverTimestamp(),
+      }),
+    );
+    // Owner can update timestamp metadata on own membership, but cannot spoof groupId or add extra keys.
+    await assertSucceeds(
+      outsiderDb.doc('users/user_c/memberships/group_pub').update({
+        joinedAt: new Date('2025-01-01T00:00:00Z'),
+      }),
+    );
+    await assertFails(
+      outsiderDb.doc('users/user_c/memberships/group_pub').update({
+        groupId: 'other_group',
+      }),
+    );
+    await assertFails(
+      outsiderDb.doc('users/user_c/memberships/group_pub').update({
+        role: 'admin',
+      }),
+    );
+
+    // Private group: outsider can check own status doc (missing) but cannot list or read other members.
+    await assertSucceeds(outsiderDb.doc('groups/group_priv/members/user_c').get());
+    await assertFails(outsiderDb.doc('groups/group_priv/members/user_b').get());
+    await assertFails(outsiderDb.collection('groups/group_priv/members').get());
+    await assertSucceeds(memberDb.collection('groups/group_priv/members').get());
+    await assertSucceeds(ownerDb.collection('groups/group_priv/members').get());
+
+    // Owner cannot self-demote or delete own member doc; other members can leave and be role-edited.
+    await assertFails(
+      ownerDb.doc('groups/group_priv/members/user_a').update({
+        role: 'member',
+      }),
+    );
+    await assertFails(ownerDb.doc('groups/group_priv/members/user_a').delete());
+    await assertSucceeds(
+      ownerDb.doc('groups/group_priv/members/user_b').update({
+        role: 'moderator',
+      }),
+    );
+
+    // Join requests: blocked user denied, existing member denied, outsider can create & cancel, owner cannot accept after rejection.
+    await assertFails(
+      blockedDb.doc('group_requests/req_blocked').set({
+        groupId: 'group_priv',
+        groupName: 'Grupo Privado',
+        fromUid: 'user_d',
+        toUid: 'user_a',
+        status: 'pending',
+        message: null,
+        fromUserName: 'Blocked',
+        fromUserPhoto: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      memberDb.doc('group_requests/req_member').set({
+        groupId: 'group_priv',
+        groupName: 'Grupo Privado',
+        fromUid: 'user_b',
+        toUid: 'user_a',
+        status: 'pending',
+        message: null,
+        fromUserName: 'Member',
+        fromUserPhoto: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      outsiderDb.doc('group_requests/req_outsider').set({
+        groupId: 'group_priv',
+        groupName: 'Grupo Privado',
+        fromUid: 'user_c',
+        toUid: 'user_a',
+        status: 'pending',
+        message: null,
+        fromUserName: 'Carol',
+        fromUserPhoto: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      ownerDb.doc('group_requests/req_outsider').update({
+        status: 'rejected',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      ownerDb.doc('group_requests/req_outsider').update({
+        status: 'accepted',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(outsiderDb.doc('group_requests/req_outsider').delete());
+
+    // Owner accepting a pending request can execute the full batch (request + member + membership).
+    await assertSucceeds(
+      outsiderDb.doc('group_requests/req_outsider_accept').set({
+        groupId: 'group_priv',
+        groupName: 'Grupo Privado',
+        fromUid: 'user_c',
+        toUid: 'user_a',
+        status: 'pending',
+        message: null,
+        fromUserName: 'Carol',
+        fromUserPhoto: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    const acceptBatch = ownerDb.batch();
+    acceptBatch.update(ownerDb.doc('group_requests/req_outsider_accept'), {
+      status: 'accepted',
+      updatedAt: serverTimestamp(),
+    });
+    acceptBatch.set(ownerDb.doc('groups/group_priv/members/user_c'), {
+      uid: 'user_c',
+      groupId: 'group_priv',
+      role: 'member',
+      joinedAt: serverTimestamp(),
+    });
+    acceptBatch.set(ownerDb.doc('users/user_c/memberships/group_priv'), {
+      groupId: 'group_priv',
+      joinedAt: serverTimestamp(),
+    });
+    await assertSucceeds(acceptBatch.commit());
+  });
+
+  it('enforces owner privacy, safe URLs, owned storagePath, and non-negative itemCount on collections', async () => {
+    const env = await getRulesTestEnv();
+    const ownerDb = env.authenticatedContext('user_a').firestore();
+    const otherDb = env.authenticatedContext('user_b').firestore();
+
+    await assertSucceeds(
+      ownerDb.doc('users/user_a/collections/col_1').set({
+        name: 'Lecturas',
+        icon: 'book',
+        itemCount: 0,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    // Other users cannot read or mutate private collections.
+    await assertFails(otherDb.doc('users/user_a/collections/col_1').get());
+    await assertFails(
+      otherDb.doc('users/user_a/collections/col_1').update({
+        name: 'Hack',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    // Negative itemCount update is rejected.
+    await assertFails(
+      ownerDb.doc('users/user_a/collections/col_1').update({
+        itemCount: -1,
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    // Link item rejects javascript: URLs and accepts https:// URLs.
+    await assertFails(
+      ownerDb.doc('users/user_a/collections/col_1/items/bad_link').set({
+        ownerId: 'user_a',
+        collectionId: 'col_1',
+        collectionName: 'Lecturas',
+        type: 'link',
+        title: 'Malo',
+        url: 'javascript:alert(1)',
+        text: null,
+        fileName: null,
+        fileSize: null,
+        contentType: null,
+        storagePath: null,
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      ownerDb.doc('users/user_a/collections/col_1/items/good_link').set({
+        ownerId: 'user_a',
+        collectionId: 'col_1',
+        collectionName: 'Lecturas',
+        type: 'link',
+        title: 'Paper',
+        url: 'https://arxiv.org/abs/2401.00001',
+        text: null,
+        fileName: null,
+        fileSize: null,
+        contentType: null,
+        storagePath: null,
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // File item rejects cross-user or cross-collection storagePath and accepts owned path.
+    await assertFails(
+      ownerDb.doc('users/user_a/collections/col_1/items/bad_file').set({
+        ownerId: 'user_a',
+        collectionId: 'col_1',
+        collectionName: 'Lecturas',
+        type: 'file',
+        title: 'Ajeno',
+        url: 'https://example.com/file.pdf',
+        text: null,
+        fileName: 'file.pdf',
+        fileSize: 1200,
+        contentType: 'application/pdf',
+        storagePath: 'collections/user_b/col_1/bad_file/file.pdf',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      ownerDb.doc('users/user_a/collections/col_1/items/good_file').set({
+        ownerId: 'user_a',
+        collectionId: 'col_1',
+        collectionName: 'Lecturas',
+        type: 'file',
+        title: 'Propio',
+        url: 'https://example.com/file.pdf',
+        text: null,
+        fileName: 'file.pdf',
+        fileSize: 1200,
+        contentType: 'application/pdf',
+        storagePath: 'collections/user_a/col_1/good_file/file.pdf',
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Items are immutable once created and private to the owner.
+    await assertFails(
+      ownerDb.doc('users/user_a/collections/col_1/items/good_link').update({ title: 'Editado' }),
+    );
+    await assertFails(otherDb.doc('users/user_a/collections/col_1/items/good_link').get());
+    await assertSucceeds(ownerDb.doc('users/user_a/collections/col_1/items/good_link').delete());
+  });
+
+  it('enforces Arena debate privacy, server-only writes, usage ownership, and AI consent ownership', async () => {
+    await seedArenaDebate('debate_private_a', {
+      createdBy: 'user_a',
+      visibility: 'private',
+      status: 'done',
+    });
+    await seedArenaDebate('debate_running_pub', {
+      createdBy: 'user_a',
+      visibility: 'public',
+      status: 'running',
+    });
+
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const adminDb = ctx.firestore();
+      await adminDb.doc('arenaDebates/debate_private_a/turns/t0').set({
+        idx: 0,
+        speaker: 'A',
+        text: 'Turno privado',
+        createdAt: serverTimestamp(),
+      });
+      await adminDb.doc('arenaUsage/user_a/days/2026-11-19').set({
+        count: 3,
+      });
+    });
+
+    const ownerDb = env.authenticatedContext('user_a').firestore();
+    const otherDb = env.authenticatedContext('user_b').firestore();
+
+    // Private debate + turns: owner can read, outsider cannot read or like.
+    await assertSucceeds(ownerDb.doc('arenaDebates/debate_private_a').get());
+    await assertSucceeds(ownerDb.doc('arenaDebates/debate_private_a/turns/t0').get());
+    await assertFails(otherDb.doc('arenaDebates/debate_private_a').get());
+    await assertFails(otherDb.doc('arenaDebates/debate_private_a/turns/t0').get());
+    await assertFails(
+      otherDb.doc('arenaDebates/debate_private_a/likes/user_b').set({
+        uid: 'user_b',
+        debateId: 'debate_private_a',
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Running debates cannot be liked until status == 'done'.
+    await assertFails(
+      ownerDb.doc('arenaDebates/debate_running_pub/likes/user_a').set({
+        uid: 'user_a',
+        debateId: 'debate_running_pub',
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Client cannot create, update, or delete arenaDebates or arenaUsage directly.
+    await assertFails(ownerDb.doc('arenaDebates/debate_private_a').update({ likesCount: 999 }));
+    await assertSucceeds(ownerDb.doc('arenaUsage/user_a/days/2026-11-19').get());
+    await assertFails(otherDb.doc('arenaUsage/user_a/days/2026-11-19').get());
+    await assertFails(ownerDb.doc('arenaUsage/user_a/days/2026-11-19').set({ count: 0 }));
+
+    // AI consent on users/{uid} can only be updated by the owner.
+    await assertSucceeds(
+      ownerDb.doc('users/user_a').set(
+        {
+          settings: {
+            ai: {
+              consentGranted: true,
+              consentSource: 'ai_chat',
+              consentUpdatedAt: serverTimestamp(),
+            },
+          },
+          updatedAt: serverTimestamp(),
+        },
+        {
+          mergeFields: [
+            'settings.ai.consentGranted',
+            'settings.ai.consentSource',
+            'settings.ai.consentUpdatedAt',
+            'updatedAt',
+          ],
+        },
+      ),
+    );
+    await assertFails(
+      otherDb.doc('users/user_a').set(
+        {
+          settings: {
+            ai: {
+              consentGranted: false,
+              consentSource: 'settings',
+              consentUpdatedAt: serverTimestamp(),
+            },
+          },
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      ),
+    );
+  });
+
+  it('enforces reports, app_admins, moderation_queue, and support_tickets access rules', async () => {
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const adminDb = ctx.firestore();
+      await adminDb.doc('app_admins/admin_1').set({ role: 'moderator' });
+      await adminDb.doc('moderation_queue/item_1').set({
+        reportId: 'item_1',
+        reporterUid: 'user_a',
+        reportedUid: 'user_b',
+        reason: 'harassment',
+        details: 'Acoso repetido',
+        conversationId: null,
+        source: 'user_report',
+        targetType: 'user',
+        priority: 'high',
+        status: 'pending',
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+    });
+
+    const userADb = env.authenticatedContext('user_a').firestore();
+    const adminDb = env.authenticatedContext('admin_1').firestore();
+
+    // Reports: valid report succeeds; self-report, oversized fields, and reads/updates fail.
+    await assertSucceeds(
+      userADb.doc('reports/rep_valid').set({
+        reporterUid: 'user_a',
+        reportedUid: 'user_b',
+        reason: 'harassment',
+        details: 'Mensajes ofensivos',
+        conversationId: 'dm_user_a_user_b',
+        status: 'open',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      userADb.doc('reports/rep_self').set({
+        reporterUid: 'user_a',
+        reportedUid: 'user_a',
+        reason: 'spam',
+        details: null,
+        conversationId: null,
+        status: 'open',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      userADb.doc('reports/rep_long_conv').set({
+        reporterUid: 'user_a',
+        reportedUid: 'user_b',
+        reason: 'spam',
+        details: null,
+        conversationId: 'x'.repeat(241),
+        status: 'open',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(userADb.doc('reports/rep_valid').get());
+    await assertFails(userADb.doc('reports/rep_valid').update({ status: 'closed' }));
+
+    // app_admins: self-get allowed, cross-user get and all writes denied.
+    await assertSucceeds(adminDb.doc('app_admins/admin_1').get());
+    await assertFails(userADb.doc('app_admins/admin_1').get());
+    await assertFails(userADb.doc('app_admins/user_a').set({ role: 'admin' }));
+
+    // moderation_queue: only app_admins can read and update allowed review fields.
+    await assertFails(userADb.doc('moderation_queue/item_1').get());
+    await assertSucceeds(adminDb.doc('moderation_queue/item_1').get());
+    await assertSucceeds(
+      adminDb.doc('moderation_queue/item_1').update({
+        status: 'in_review',
+        reviewAction: 'triage_started',
+        reviewNote: 'Revisando contexto',
+        reviewedBy: 'admin_1',
+        reviewedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      adminDb.doc('moderation_queue/item_1').update({
+        status: 'resolved',
+        reviewAction: 'resolved',
+        reviewNote: null,
+        reviewedBy: 'other_admin',
+        reviewedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(adminDb.doc('moderation_queue/item_1').delete());
+
+    // support_tickets: valid create allowed, read/delete denied.
+    await assertSucceeds(
+      userADb.doc('support_tickets/ticket_1').set({
+        uid: 'user_a',
+        email: 'alice@example.com',
+        type: 'issue',
+        title: 'Problema de acceso',
+        message: 'No pude abrir la configuracion de privacidad en Safari.',
+        context: { path: '/settings' },
+        status: 'open',
+        createdAt: serverTimestamp(),
+        appVersion: 'v0.0.2-alpha',
+      }),
+    );
+    await assertFails(userADb.doc('support_tickets/ticket_1').get());
+  });
+
+  it('enforces block rules on friend requests, collaboration requests, notifications, DM updates, and typing', async () => {
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('conversations/dm_user_a_user_b').set({
+        type: 'direct',
+        memberIds: ['user_a', 'user_b'],
+        lastMessage: null,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('conversations/dm_user_a_user_b/members/user_a').set({
+        uid: 'user_a',
+        role: 'member',
+        joinedAt: new Date('2026-01-01T00:00:00Z'),
+        lastReadClientAt: Date.now(),
+        lastReadAt: new Date('2026-01-01T00:00:00Z'),
+        muted: false,
+      });
+      await db.doc('conversations/dm_user_a_user_b/members/user_b').set({
+        uid: 'user_b',
+        role: 'member',
+        joinedAt: new Date('2026-01-01T00:00:00Z'),
+        lastReadClientAt: Date.now(),
+        lastReadAt: new Date('2026-01-01T00:00:00Z'),
+        muted: false,
+      });
+      await db.doc('collaborations/collab_1').set({
+        title: 'Proyecto IA',
+        context: 'Investigacion',
+        seekingRole: 'Dev',
+        mode: 'virtual',
+        location: null,
+        level: 'intermedio',
+        topic: null,
+        tags: ['ia'],
+        authorId: 'user_b',
+        authorSnapshot: { displayName: 'User B', photoURL: null },
+        status: 'open',
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('notifications/notif_existing_blocked').set({
+        type: 'post_like',
+        toUid: 'user_b',
+        fromUid: 'user_a',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        postId: 'post_1',
+        postSnippet: null,
+        commentText: null,
+        read: true,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+      });
+    });
+    await seedBlockedUser('user_b', 'user_a');
+
+    const blockedDb = env.authenticatedContext('user_a').firestore();
+
+    await assertFails(
+      blockedDb.doc('friend_requests/fr_blocked').set({
+        fromUid: 'user_a',
+        toUid: 'user_b',
+        status: 'pending',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        toUserName: 'Bob',
+        toUserPhoto: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      blockedDb.doc('collaboration_requests/cr_blocked').set({
+        collaborationId: 'collab_1',
+        collaborationTitle: 'Proyecto IA',
+        fromUid: 'user_a',
+        toUid: 'user_b',
+        status: 'pending',
+        message: 'Me interesa',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      blockedDb.doc('notifications/notif_blocked').set({
+        type: 'post_like',
+        toUid: 'user_b',
+        fromUid: 'user_a',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        postId: 'post_1',
+        postSnippet: null,
+        commentText: null,
+        read: false,
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      blockedDb.doc('notifications/notif_existing_blocked').update({
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      blockedDb.doc('conversations/dm_user_a_user_b').update({
+        lastMessage: { text: 'Spam bloqueado', senderId: 'user_a' },
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      blockedDb.doc('conversations/dm_user_a_user_b/typing/user_a').set({
+        typing: true,
+        updatedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('enforces pending-only transitions and block-aware reject on collaboration_requests', async () => {
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('collaboration_requests/cr_pending_blocked').set({
+        collaborationId: 'collab_1',
+        collaborationTitle: 'Proyecto IA',
+        fromUid: 'user_a',
+        toUid: 'user_b',
+        status: 'pending',
+        message: 'Me interesa',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await db.doc('collaboration_requests/cr_already_accepted').set({
+        collaborationId: 'collab_1',
+        collaborationTitle: 'Proyecto IA',
+        fromUid: 'user_c',
+        toUid: 'user_b',
+        status: 'accepted',
+        message: null,
+        fromUserName: 'Carlos',
+        fromUserPhoto: null,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+    });
+    await seedBlockedUser('user_b', 'user_a');
+
+    const ownerDb = env.authenticatedContext('user_b').firestore();
+
+    // Accepting a request from a blocked user must fail
+    await assertFails(
+      ownerDb.doc('collaboration_requests/cr_pending_blocked').update({
+        status: 'accepted',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    // Rejecting a pending request from a blocked user (or during collaboration deletion) must succeed
+    await assertSucceeds(
+      ownerDb.doc('collaboration_requests/cr_pending_blocked').update({
+        status: 'rejected',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    // Flipping an already-decided collaboration request must fail
+    await assertFails(
+      ownerDb.doc('collaboration_requests/cr_already_accepted').update({
+        status: 'rejected',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('validates notification post ownership, field bounds, recipient read/delete, and re-like updates', async () => {
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('users_public/user_a').set({
+        displayName: 'Alice',
+        username: 'alice',
+        photoURL: null,
+        accountVisibility: 'public',
+      });
+      await db.doc('users_public/user_b').set({
+        displayName: 'Bob',
+        username: 'bob',
+        photoURL: null,
+        accountVisibility: 'public',
+      });
+      await db.doc('users_public/user_c').set({
+        displayName: 'Carol',
+        username: 'carol',
+        photoURL: null,
+        accountVisibility: 'private',
+      });
+      await db.doc('posts/post_bob_public').set({
+        authorId: 'user_b',
+        authorName: 'Bob',
+        authorUsername: 'bob',
+        authorPhoto: null,
+        content: 'Public post by Bob',
+        media: [],
+        groupId: null,
+        categoryId: null,
+        likeCount: 0,
+        commentCount: 0,
+        status: 'ready',
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: null,
+      });
+      await db.doc('posts/post_carol_private').set({
+        authorId: 'user_c',
+        authorName: 'Carol',
+        authorUsername: 'carol',
+        authorPhoto: null,
+        content: 'Private post by Carol',
+        media: [],
+        groupId: null,
+        categoryId: null,
+        likeCount: 0,
+        commentCount: 0,
+        status: 'ready',
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: null,
+      });
+    });
+
+    const aliceDb = env.authenticatedContext('user_a').firestore();
+    const bobDb = env.authenticatedContext('user_b').firestore();
+
+    // Forged notification for a nonexistent post fails
+    await assertFails(
+      aliceDb.doc('notifications/like_fake_user_a').set({
+        type: 'post_like',
+        toUid: 'user_b',
+        fromUid: 'user_a',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        postId: 'post_does_not_exist',
+        postSnippet: null,
+        commentText: null,
+        read: false,
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Forged notification where toUid does not match post authorId fails
+    await assertFails(
+      aliceDb.doc('notifications/like_wrong_recipient_user_a').set({
+        type: 'post_like',
+        toUid: 'user_c',
+        fromUid: 'user_a',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        postId: 'post_bob_public',
+        postSnippet: null,
+        commentText: null,
+        read: false,
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Forged notification for a private account's post when sender is not a follower fails
+    await assertFails(
+      aliceDb.doc('notifications/like_private_nonfollower_user_a').set({
+        type: 'post_like',
+        toUid: 'user_c',
+        fromUid: 'user_a',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        postId: 'post_carol_private',
+        postSnippet: null,
+        commentText: null,
+        read: false,
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Oversized fromUserName fails
+    await assertFails(
+      aliceDb.doc('notifications/like_oversized_user_a').set({
+        type: 'post_like',
+        toUid: 'user_b',
+        fromUid: 'user_a',
+        fromUserName: 'A'.repeat(121),
+        fromUserPhoto: null,
+        postId: 'post_bob_public',
+        postSnippet: null,
+        commentText: null,
+        read: false,
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Valid post_like notification succeeds
+    await assertSucceeds(
+      aliceDb.doc('notifications/like_post_bob_public_user_a').set({
+        type: 'post_like',
+        toUid: 'user_b',
+        fromUid: 'user_a',
+        fromUserName: 'Alice',
+        fromUserPhoto: null,
+        postId: 'post_bob_public',
+        postSnippet: null,
+        commentText: null,
+        read: false,
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    // Sender cannot mark notification read or delete it
+    await assertFails(
+      aliceDb.doc('notifications/like_post_bob_public_user_a').update({ read: true }),
+    );
+    await assertFails(aliceDb.doc('notifications/like_post_bob_public_user_a').delete());
+
+    // Recipient can mark notification read
+    await assertSucceeds(
+      bobDb.doc('notifications/like_post_bob_public_user_a').update({ read: true }),
+    );
+
+    // Unblocked sender re-liking after recipient marked read succeeds via merge set
+    await assertSucceeds(
+      aliceDb.doc('notifications/like_post_bob_public_user_a').set(
+        {
+          type: 'post_like',
+          toUid: 'user_b',
+          fromUid: 'user_a',
+          fromUserName: 'Alice',
+          fromUserPhoto: null,
+          postId: 'post_bob_public',
+          postSnippet: null,
+          commentText: null,
+          read: false,
+          createdAt: serverTimestamp(),
+        },
+        { merge: true },
+      ),
+    );
+
+    // Recipient can delete their own notification
+    await assertSucceeds(bobDb.doc('notifications/like_post_bob_public_user_a').delete());
   });
 });

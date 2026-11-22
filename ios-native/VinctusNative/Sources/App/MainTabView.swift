@@ -2,9 +2,11 @@ import SwiftUI
 import UIKit
 
 struct MainTabView: View {
+  @EnvironmentObject private var authVM: AuthViewModel
   private let discoverRepo = AppRepos.discover()
   private let feedRepo = AppRepos.feed()
   private let profileRepo = AppRepos.profile()
+  private let profileContentRepo = AppRepos.profileContent()
   private let groupsRepo = AppRepos.groups()
   private let aiRepo = AppRepos.ai()
   private let chatRepo = AppRepos.chat()
@@ -13,6 +15,7 @@ struct MainTabView: View {
   /// Screenshot builds open a tab with `-VinctusTab <name>`.
   @State private var selectedTab = AppRepos.demoArgument("-VinctusTab") ?? "discover"
   @State private var isKeyboardVisible = false
+  @State private var isBottomNavigationHidden = false
 
   var body: some View {
     TabView(selection: $selectedTab) {
@@ -21,7 +24,8 @@ struct MainTabView: View {
           repo: discoverRepo,
           profileRepo: profileRepo,
           groupsRepo: groupsRepo,
-          aiRepo: aiRepo
+          aiRepo: aiRepo,
+          profileContentRepo: profileContentRepo
         )
       }
       .toolbar(.hidden, for: .tabBar)
@@ -58,7 +62,7 @@ struct MainTabView: View {
     // The web's flat bottom bar instead of the system tab bar. It hides while typing, so it
     // never sits above the keyboard (for example over the chat composer).
     .safeAreaInset(edge: .bottom, spacing: 0) {
-      if !isKeyboardVisible {
+      if !isKeyboardVisible && !isBottomNavigationHidden {
         FlatTabBar(selection: $selectedTab)
       }
     }
@@ -71,8 +75,11 @@ struct MainTabView: View {
     .tint(VinctusTokens.Color.accent)
     .background(VinctusTokens.Color.background.ignoresSafeArea())
     .environmentObject(blockedUsers)
-    .task {
-      await blockedUsers.refresh()
+    .environment(\.setBottomNavigationHidden) { hidden in
+      isBottomNavigationHidden = hidden
+    }
+    .task(id: authVM.currentUserID) {
+      await blockedUsers.refresh(for: authVM.currentUserID)
     }
   }
 }

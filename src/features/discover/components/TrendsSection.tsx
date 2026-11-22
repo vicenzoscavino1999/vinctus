@@ -62,6 +62,7 @@ const TrendsSection = ({
         category={activeTrendCategory}
         preview={activeTrendPreview}
         onOpenCategory={(target) => onOpenCategory(target.id, 'trend-preview')}
+        onRetry={trends.retryTrendPreview}
         className={className}
       />
     );

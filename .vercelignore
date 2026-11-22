@@ -11,3 +11,10 @@ docs
 scripts
 functions
 dist
+
+# Local credentials and Firebase CLI logs
+.env*
+**/.env*
+**/*-debug.log
+.firebase
+.claude

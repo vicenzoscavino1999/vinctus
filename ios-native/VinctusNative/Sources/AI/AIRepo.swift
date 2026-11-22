@@ -10,12 +10,35 @@ struct AIChatMessage: Codable, Equatable, Identifiable {
     let text: String
   }
 
-  let id = UUID()
+  let id: UUID
   let role: String
   let parts: [Part]
+  /// Present on an assistant reply when `/api/chat` created a group (`action.type == "createGroup"`).
+  let groupID: String?
 
   var isUser: Bool { role == "user" }
   var text: String { parts.map(\.text).joined(separator: "\n") }
+
+  init(role: String, parts: [Part], groupID: String? = nil) {
+    self.id = UUID()
+    self.role = role
+    self.parts = parts
+    self.groupID = groupID
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.id = UUID()
+    self.role = try container.decode(String.self, forKey: .role)
+    self.parts = try container.decode([Part].self, forKey: .parts)
+    self.groupID = nil
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(role, forKey: .role)
+    try container.encode(parts, forKey: .parts)
+  }
 
   enum CodingKeys: String, CodingKey {
     case role
@@ -23,7 +46,7 @@ struct AIChatMessage: Codable, Equatable, Identifiable {
   }
 
   static func == (lhs: AIChatMessage, rhs: AIChatMessage) -> Bool {
-    lhs.role == rhs.role && lhs.parts == rhs.parts
+    lhs.role == rhs.role && lhs.parts == rhs.parts && lhs.groupID == rhs.groupID
   }
 }
 
@@ -116,16 +139,7 @@ final class FirebaseAIRepo: AIRepo {
 
     let (data, response) = try await session.data(for: request)
     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-    let payload = try? JSONDecoder().decode(ChatResponseBody.self, from: data)
-
-    if (200..<300).contains(status), let history = payload?.history {
-      return history
-    }
-    if let history = payload?.history, payload?.response != nil {
-      // The API answers some failures with a reply the user should see (e.g. an action that failed).
-      return history
-    }
-    throw AIRepoError.server(Self.chatErrorMessage(status: status, serverMessage: payload?.error))
+    return try Self.decodeChatResponse(from: data, status: status)
   }
 
   func fetchArenaPersonas() async throws -> [ArenaPersona] {
@@ -149,12 +163,14 @@ final class FirebaseAIRepo: AIRepo {
   }
 
   func createDebate(topic: String, personaA: String, personaB: String) async throws -> ArenaDebateResult {
+    let clientDebateID = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
     let payload: [String: Any] = [
       "topic": topic,
       "personaA": personaA,
       "personaB": personaB,
       // Debates made in the app stay private: they are only shown to their author here.
       "visibility": "private",
+      "clientDebateId": clientDebateID,
     ]
     guard
       let data = try await call("createDebate", payload: payload, timeout: Self.createDebateTimeout)
@@ -215,10 +231,58 @@ final class FirebaseAIRepo: AIRepo {
     }
   }
 
-  /// Keeps the newest messages within the API's count and size limits.
+  /// Decodes `/api/chat` responses and attaches optional group creation actions to the assistant reply.
+  static func decodeChatResponse(from data: Data, status: Int) throws -> [AIChatMessage] {
+    let payload = try? JSONDecoder().decode(ChatResponseBody.self, from: data)
+    let actionGroupID: String? = {
+      guard payload?.action?.type == "createGroup",
+            let rawID = payload?.action?.groupId?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !rawID.isEmpty
+      else {
+        return nil
+      }
+      return rawID
+    }()
+
+    func attachAction(to messages: [AIChatMessage]) -> [AIChatMessage] {
+      guard let actionGroupID, let lastIndex = messages.lastIndex(where: { !$0.isUser }) else {
+        return messages
+      }
+      var updated = messages
+      let last = updated[lastIndex]
+      updated[lastIndex] = AIChatMessage(role: last.role, parts: last.parts, groupID: actionGroupID)
+      return updated
+    }
+
+    if (200..<300).contains(status), let history = payload?.history {
+      return attachAction(to: history)
+    }
+    if let history = payload?.history, payload?.response != nil {
+      // The API answers some failures with a reply the user should see (e.g. an action that failed).
+      return attachAction(to: history)
+    }
+    throw AIRepoError.server(Self.chatErrorMessage(status: status, serverMessage: payload?.error))
+  }
+
+  /// Keeps the newest messages within the API's count, per-part, and total size limits.
   static func trimmedHistory(_ history: [AIChatMessage]) -> [AIChatMessage] {
-    var trimmed = Array(history.suffix(maxHistoryMessages))
-    while !trimmed.isEmpty, trimmed.reduce(0, { $0 + $1.text.count }) > maxHistoryCharacters {
+    let normalized: [AIChatMessage] = history.compactMap { entry in
+      guard entry.role == "user" || entry.role == "model" else { return nil }
+      let parts: [AIChatMessage.Part] = entry.parts.compactMap { part in
+        let trimmed = part.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return AIChatMessage.Part(text: String(trimmed.prefix(maxMessageLength)))
+      }
+      guard !parts.isEmpty else { return nil }
+      return AIChatMessage(role: entry.role, parts: parts, groupID: entry.groupID)
+    }
+
+    var trimmed = Array(normalized.suffix(maxHistoryMessages))
+    while !trimmed.isEmpty,
+      trimmed.reduce(0, { total, message in
+        total + message.parts.reduce(0) { $0 + $1.text.count }
+      }) > maxHistoryCharacters
+    {
       trimmed.removeFirst()
     }
     // Gemini expects the conversation to start with a user turn.
@@ -249,8 +313,14 @@ private struct ChatRequestBody: Encodable {
   let history: [AIChatMessage]
 }
 
+private struct ChatActionBody: Decodable {
+  let type: String?
+  let groupId: String?
+}
+
 private struct ChatResponseBody: Decodable {
   let response: String?
   let history: [AIChatMessage]?
   let error: String?
+  let action: ChatActionBody?
 }

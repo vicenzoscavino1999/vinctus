@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react';
-import { Search, UserPlus, UserCheck, Check, Clock, X, MessageCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Search, UserPlus, UserCheck, Check, Clock, X, MessageCircle, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { AppError } from '@/shared/lib/errors';
+import { CATEGORIES } from '@/shared/constants';
 import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
+import { getGroups, type FirestoreGroup } from '@/features/groups/api';
 import {
+  getBlockedUsers,
   getOrCreateDirectConversation,
   searchUsersByDisplayName,
   getRecentUsers,
@@ -22,6 +26,21 @@ import {
 
 const MIN_QUERY_LENGTH = 2;
 
+const normalizeSearchTerm = (value: string): string =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+const isSafeHttpUrl = (value: string | null | undefined): value is string =>
+  typeof value === 'string' && /^https?:\/\//i.test(value.trim());
+
+const isPermissionDeniedError = (err: unknown): boolean => {
+  if (err instanceof AppError) return err.code === 'PERMISSION_DENIED';
+  const code = (err as { code?: unknown })?.code;
+  return code === 'permission-denied' || code === 'PERMISSION_DENIED';
+};
+
 type FollowStatusState = FollowStatus | 'loading';
 
 interface UserWithStatus extends PublicUserRead {
@@ -36,29 +55,60 @@ export default function UserSearchPage() {
   const [queryText, setQueryText] = useState('');
   const [results, setResults] = useState<UserWithStatus[]>([]);
   const [suggestedUsers, setSuggestedUsers] = useState<UserWithStatus[]>([]);
+  const [allGroups, setAllGroups] = useState<FirestoreGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingSuggested, setLoadingSuggested] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [suggestedError, setSuggestedError] = useState<string | null>(null);
+  const [suggestedReloadToken, setSuggestedReloadToken] = useState(0);
+  const [searchReloadToken, setSearchReloadToken] = useState(0);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const currentUid = user?.uid ?? null;
 
-  // Load suggested users on mount
+  // Load groups once so search also surfaces matching groups (matching native Search tab)
   useEffect(() => {
+    let isActive = true;
+    const loadGroups = async () => {
+      try {
+        const items = await getGroups();
+        if (isActive) {
+          setAllGroups(items);
+        }
+      } catch (err) {
+        console.error('Error loading groups for search:', err);
+      }
+    };
+    void loadGroups();
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  // Load suggested users on mount / user change
+  useEffect(() => {
+    let isActive = true;
+
     const loadSuggested = async () => {
       setLoadingSuggested(true);
+      setSuggestedError(null);
       try {
-        const users = await getRecentUsers(15, user?.uid);
+        const [users, blockedIds] = await Promise.all([
+          getRecentUsers(20, currentUid ?? undefined),
+          currentUid ? getBlockedUsers(currentUid).catch(() => []) : Promise.resolve<string[]>([]),
+        ]);
+        const blockedSet = new Set(blockedIds);
+        const visibleUsers = users
+          .filter((item) => item.uid !== currentUid && !blockedSet.has(item.uid))
+          .slice(0, 15);
 
         // Get follow status for each
         const usersWithStatus: UserWithStatus[] = await Promise.all(
-          users.map(async (item) => {
-            if (!user) return { ...item, followStatus: 'none' as FollowStatusState };
+          visibleUsers.map(async (item) => {
+            if (!currentUid) return { ...item, followStatus: 'none' as FollowStatusState };
             try {
-              const status = await getFollowStatus(user.uid, item.uid, item.accountVisibility);
+              const status = await getFollowStatus(currentUid, item.uid, item.accountVisibility);
               let nextStatus = status.status;
-              if (
-                item.accountVisibility !== 'private' &&
-                (nextStatus === 'pending_sent' || nextStatus === 'pending_received')
-              ) {
+              if (item.accountVisibility !== 'private' && nextStatus === 'pending_sent') {
                 nextStatus = 'none';
               }
               return { ...item, followStatus: nextStatus, isMutual: status.isMutual };
@@ -68,16 +118,27 @@ export default function UserSearchPage() {
           }),
         );
 
-        setSuggestedUsers(usersWithStatus);
+        if (isActive) {
+          setSuggestedUsers(usersWithStatus);
+        }
       } catch (err) {
         console.error('Error loading suggested users:', err);
+        if (isActive) {
+          setSuggestedUsers([]);
+          setSuggestedError('No se pudieron cargar los usuarios sugeridos.');
+        }
       } finally {
-        setLoadingSuggested(false);
+        if (isActive) {
+          setLoadingSuggested(false);
+        }
       }
     };
 
     void loadSuggested();
-  }, [user]);
+    return () => {
+      isActive = false;
+    };
+  }, [currentUid, suggestedReloadToken]);
 
   useEffect(() => {
     const trimmed = queryText.trim();
@@ -94,20 +155,23 @@ export default function UserSearchPage() {
       setLoading(true);
       setError(null);
       try {
-        const matches = await searchUsersByDisplayName(trimmed);
-        const filtered = user ? matches.filter((item) => item.uid !== user.uid) : matches;
+        const [matches, blockedIds] = await Promise.all([
+          searchUsersByDisplayName(trimmed, 20),
+          currentUid ? getBlockedUsers(currentUid).catch(() => []) : Promise.resolve<string[]>([]),
+        ]);
+        const blockedSet = new Set(blockedIds);
+        const filtered = matches
+          .filter((item) => item.uid !== currentUid && !blockedSet.has(item.uid))
+          .slice(0, 15);
 
         // Get follow status for each result
         const resultsWithStatus: UserWithStatus[] = await Promise.all(
           filtered.map(async (item) => {
-            if (!user) return { ...item, followStatus: 'none' as FollowStatusState };
+            if (!currentUid) return { ...item, followStatus: 'none' as FollowStatusState };
             try {
-              const status = await getFollowStatus(user.uid, item.uid, item.accountVisibility);
+              const status = await getFollowStatus(currentUid, item.uid, item.accountVisibility);
               let nextStatus = status.status;
-              if (
-                item.accountVisibility !== 'private' &&
-                (nextStatus === 'pending_sent' || nextStatus === 'pending_received')
-              ) {
+              if (item.accountVisibility !== 'private' && nextStatus === 'pending_sent') {
                 nextStatus = 'none';
               }
               return { ...item, followStatus: nextStatus, isMutual: status.isMutual };
@@ -137,16 +201,35 @@ export default function UserSearchPage() {
       isActive = false;
       clearTimeout(handle);
     };
-  }, [queryText, user]);
+  }, [queryText, currentUid, searchReloadToken]);
+
+  const matchingGroups = useMemo(() => {
+    const trimmed = queryText.trim();
+    if (trimmed.length < MIN_QUERY_LENGTH) return [];
+    const normalized = normalizeSearchTerm(trimmed);
+    return allGroups
+      .filter((group) => {
+        const categoryLabel = group.categoryId
+          ? (CATEGORIES.find((cat) => cat.id === group.categoryId)?.label ?? '')
+          : '';
+        return (
+          normalizeSearchTerm(group.name || '').includes(normalized) ||
+          normalizeSearchTerm(group.description || '').includes(normalized) ||
+          normalizeSearchTerm(group.categoryId || '').includes(normalized) ||
+          normalizeSearchTerm(categoryLabel).includes(normalized)
+        );
+      })
+      .slice(0, 6);
+  }, [allGroups, queryText]);
 
   const updateUserStatus = (uid: string, updater: (item: UserWithStatus) => UserWithStatus) => {
-    setResults((prev) => prev.map((item) => (item.uid == uid ? updater(item) : item)));
-    setSuggestedUsers((prev) => prev.map((item) => (item.uid == uid ? updater(item) : item)));
+    setResults((prev) => prev.map((item) => (item.uid === uid ? updater(item) : item)));
+    setSuggestedUsers((prev) => prev.map((item) => (item.uid === uid ? updater(item) : item)));
   };
 
   const handleFollow = async (target: UserWithStatus) => {
     if (!user) {
-      showToast('Necesitas iniciar sesi??n', 'error');
+      showToast('Necesitas iniciar sesión', 'error');
       return;
     }
 
@@ -179,16 +262,21 @@ export default function UserSearchPage() {
           }));
           showToast('Solicitud enviada', 'success');
         } catch (err) {
-          const code = (err as { code?: string })?.code;
-          if (code === 'permission-denied') {
-            await followPublicUser(user.uid, target.uid);
-            const status = await getFollowStatus(user.uid, target.uid, 'public');
-            updateUserStatus(target.uid, (item) => ({
-              ...item,
-              followStatus: status.status,
-              isMutual: status.isMutual,
-            }));
-            showToast('Siguiendo', 'success');
+          if (isPermissionDeniedError(err)) {
+            const fallbackVisibility = await getAccountVisibilityServer(target.uid);
+            if (fallbackVisibility !== 'private') {
+              await followPublicUser(user.uid, target.uid);
+              const status = await getFollowStatus(user.uid, target.uid, fallbackVisibility);
+              updateUserStatus(target.uid, (item) => ({
+                ...item,
+                accountVisibility: fallbackVisibility,
+                followStatus: status.status,
+                isMutual: status.isMutual,
+              }));
+              showToast('Siguiendo', 'success');
+            } else {
+              throw err;
+            }
           } else {
             throw err;
           }
@@ -205,13 +293,13 @@ export default function UserSearchPage() {
           }));
           showToast('Siguiendo', 'success');
         } catch (err) {
-          const code = (err as { code?: string })?.code;
-          if (code === 'permission-denied') {
+          if (isPermissionDeniedError(err)) {
             const fallbackVisibility = await getAccountVisibilityServer(target.uid);
             if (fallbackVisibility === 'private') {
               await sendFollowRequest(user.uid, target.uid);
               updateUserStatus(target.uid, (item) => ({
                 ...item,
+                accountVisibility: 'private',
                 followStatus: 'pending_sent' as FollowStatusState,
                 isMutual: false,
               }));
@@ -225,7 +313,11 @@ export default function UserSearchPage() {
         }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al seguir usuario';
+      const message = isPermissionDeniedError(err)
+        ? 'No se pudo seguir a este usuario en este momento.'
+        : err instanceof Error
+          ? err.message
+          : 'Error al seguir usuario';
       showToast(message, 'error');
     } finally {
       setActionLoading(null);
@@ -238,10 +330,13 @@ export default function UserSearchPage() {
     setActionLoading(target.uid);
     try {
       await acceptFollowRequest(target.uid, user.uid);
+      const refreshed = await getFollowStatus(user.uid, target.uid, target.accountVisibility).catch(
+        () => ({ status: 'none' as FollowStatus, isMutual: false }),
+      );
       updateUserStatus(target.uid, (item) => ({
         ...item,
-        followStatus: 'none' as FollowStatusState,
-        isMutual: false,
+        followStatus: refreshed.status,
+        isMutual: refreshed.isMutual,
       }));
       showToast('Solicitud aceptada', 'success');
     } catch (err) {
@@ -340,6 +435,7 @@ export default function UserSearchPage() {
         type="button"
         onClick={() => handleStartChat(result)}
         disabled={isLoading}
+        aria-label="Enviar mensaje"
         className="p-2 rounded-full border border-neutral-700 text-white hover:bg-neutral-900 disabled:opacity-50"
       >
         <MessageCircle size={18} />
@@ -402,6 +498,7 @@ export default function UserSearchPage() {
               type="button"
               onClick={() => handleDeclineRequest(result)}
               disabled={isLoading}
+              aria-label="Rechazar solicitud"
               className="p-2 rounded-full border border-neutral-700 text-neutral-400 hover:text-red-400 hover:border-red-500/50 disabled:opacity-50"
             >
               <X size={16} />
@@ -433,30 +530,71 @@ export default function UserSearchPage() {
     <div className="page-feed pt-10 max-w-5xl mx-auto">
       <h1 className="text-3xl font-serif font-light text-white mb-6">Buscar usuarios</h1>
 
-      <div className="relative bg-neutral-900/50 border border-neutral-800 rounded-full px-6 py-3 mb-3">
+      <div className="relative bg-neutral-900/50 border border-neutral-800 rounded-full px-6 py-3 mb-3 flex items-center gap-3">
         <input
           type="text"
           aria-label="Buscar usuarios"
-          placeholder="Buscar usuarios..."
+          placeholder="Buscar usuarios o grupos..."
           value={queryText}
           onChange={(event) => setQueryText(event.target.value)}
           className="w-full bg-transparent text-white text-center focus:outline-none placeholder:text-neutral-600 font-light text-sm"
         />
-        <Search className="absolute right-5 top-1/2 -translate-y-1/2 text-neutral-600" size={18} />
+        {queryText && (
+          <button
+            type="button"
+            onClick={() => setQueryText('')}
+            aria-label="Limpiar búsqueda"
+            className="text-neutral-500 hover:text-white transition-colors"
+          >
+            <X size={16} />
+          </button>
+        )}
+        <Search className="text-neutral-600 shrink-0" size={18} />
       </div>
 
       {showHint && (
         <div className="text-center text-neutral-500 text-sm mb-4">
-          {loadingSuggested ? 'Cargando usuarios...' : 'Usuarios sugeridos'}
+          {trimmedQuery.length === 1
+            ? 'Escribe al menos 2 caracteres para buscar.'
+            : loadingSuggested
+              ? 'Cargando usuarios...'
+              : 'Usuarios sugeridos'}
         </div>
       )}
 
       <div className="space-y-2">
         {loading && <div className="p-6 text-center text-neutral-500">Buscando usuarios...</div>}
-        {!loading && error && <div className="p-6 text-center text-red-400">{error}</div>}
-        {!loading && !error && trimmedQuery.length >= MIN_QUERY_LENGTH && results.length === 0 && (
-          <div className="p-6 text-center text-neutral-500">No hay resultados.</div>
+        {!loading && error && (
+          <div className="p-6 text-center space-y-3">
+            <p className="text-red-400">{error}</p>
+            <button
+              type="button"
+              onClick={() => setSearchReloadToken((prev) => prev + 1)}
+              className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+            >
+              Reintentar
+            </button>
+          </div>
         )}
+        {showHint && !loadingSuggested && suggestedError && (
+          <div className="p-6 text-center space-y-3">
+            <p className="text-red-400">{suggestedError}</p>
+            <button
+              type="button"
+              onClick={() => setSuggestedReloadToken((prev) => prev + 1)}
+              className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
+        {!loading &&
+          !error &&
+          trimmedQuery.length >= MIN_QUERY_LENGTH &&
+          results.length === 0 &&
+          matchingGroups.length === 0 && (
+            <div className="p-6 text-center text-neutral-500">No hay resultados.</div>
+          )}
 
         {/* Show search results or suggested users */}
         {!loading &&
@@ -469,35 +607,84 @@ export default function UserSearchPage() {
                 className="flex items-center gap-4 bg-neutral-900/20 border border-neutral-800/50 rounded-lg p-4"
               >
                 <div
-                  className="w-12 h-12 rounded-full bg-neutral-800/80 flex items-center justify-center text-lg font-medium text-neutral-300 cursor-pointer hover:ring-2 hover:ring-amber-500/50 transition-all overflow-hidden"
+                  role="button"
+                  tabIndex={0}
+                  className="flex flex-1 min-w-0 items-center gap-4 cursor-pointer"
                   onClick={() => navigate(`/user/${result.uid}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      navigate(`/user/${result.uid}`);
+                    }
+                  }}
                 >
-                  {result.photoURL ? (
-                    <img
-                      src={result.photoURL}
-                      alt={result.displayName ?? 'Usuario'}
-                      className="w-full h-full rounded-full object-cover"
-                    />
-                  ) : (
-                    initial
-                  )}
-                </div>
-                <div
-                  className="flex-1 min-w-0 cursor-pointer"
-                  onClick={() => navigate(`/user/${result.uid}`)}
-                >
-                  <div className="text-white font-medium truncate hover:text-amber-400 transition-colors">
-                    {result.displayName ?? 'Usuario sin nombre'}
+                  <div className="w-12 h-12 rounded-full bg-neutral-800/80 flex items-center justify-center text-lg font-medium text-neutral-300 hover:ring-2 hover:ring-amber-500/50 transition-all overflow-hidden shrink-0">
+                    {isSafeHttpUrl(result.photoURL) ? (
+                      <img
+                        src={result.photoURL}
+                        alt={result.displayName ?? 'Usuario'}
+                        className="w-full h-full rounded-full object-cover"
+                      />
+                    ) : (
+                      initial
+                    )}
                   </div>
-                  <div className="text-neutral-600 text-xs truncate">Toca para ver perfil</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-white font-medium truncate hover:text-amber-400 transition-colors">
+                      {result.displayName ?? 'Usuario sin nombre'}
+                    </div>
+                    <div className="text-neutral-600 text-xs truncate">Toca para ver perfil</div>
+                  </div>
                 </div>
                 {renderActionButton(result)}
               </div>
             );
           })}
 
+        {trimmedQuery.length >= MIN_QUERY_LENGTH && matchingGroups.length > 0 && (
+          <section className="pt-6 space-y-2" aria-label="Grupos encontrados">
+            <h2 className="text-xs uppercase tracking-[0.2em] text-neutral-500 mb-2">Grupos</h2>
+            {matchingGroups.map((group) => (
+              <div
+                key={group.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/group/${group.id}`)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    navigate(`/group/${group.id}`);
+                  }
+                }}
+                className="flex items-center gap-4 bg-neutral-900/20 border border-neutral-800/50 rounded-lg p-4 cursor-pointer hover:border-neutral-700 transition-colors"
+              >
+                <div className="w-12 h-12 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center overflow-hidden shrink-0">
+                  {isSafeHttpUrl(group.iconUrl) ? (
+                    <img
+                      src={group.iconUrl}
+                      alt={group.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Users size={18} className="text-neutral-500" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-white font-medium truncate">{group.name}</div>
+                  <div className="text-neutral-500 text-xs truncate">
+                    {group.description || 'Grupo en Vinctus'}
+                  </div>
+                </div>
+                <span className="text-xs text-neutral-500 shrink-0">
+                  {(group.memberCount ?? 0).toLocaleString('es-ES')} miembros
+                </span>
+              </div>
+            ))}
+          </section>
+        )}
+
         {/* Empty state for suggested users */}
-        {showHint && !loadingSuggested && suggestedUsers.length === 0 && (
+        {showHint && !loadingSuggested && !suggestedError && suggestedUsers.length === 0 && (
           <div className="p-6 text-center text-neutral-500">No hay usuarios registrados aún.</div>
         )}
       </div>

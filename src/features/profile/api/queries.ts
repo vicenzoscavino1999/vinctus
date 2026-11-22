@@ -1,6 +1,7 @@
 import type { DocumentSnapshot, Unsubscribe } from 'firebase/firestore';
 import {
   getAccountVisibilityServer as getAccountVisibilityServerRaw,
+  getBlockedUsers as getBlockedUsersRaw,
   getContributionsByCategory as getContributionsByCategoryRaw,
   getFollowList as getFollowListRaw,
   getFollowStatus as getFollowStatusRaw,
@@ -111,7 +112,13 @@ export const getFollowStatus = async (
   currentUid: string,
   targetUid: string,
   targetVisibility?: AccountVisibility,
-): Promise<{ status: FollowStatus; requestId?: string; isMutual?: boolean }> => {
+): Promise<{
+  status: FollowStatus;
+  requestId?: string;
+  isMutual?: boolean;
+  hasIncomingRequest?: boolean;
+  incomingRequestId?: string;
+}> => {
   const safeCurrentUid = validate(uidSchema, currentUid, { field: 'currentUid' });
   const safeTargetUid = validate(uidSchema, targetUid, { field: 'targetUid' });
   const safeTargetVisibility =
@@ -217,4 +224,9 @@ export const isUserBlocked = async (currentUid: string, otherUid: string): Promi
   const safeCurrentUid = validate(uidSchema, currentUid, { field: 'currentUid' });
   const safeOtherUid = validate(uidSchema, otherUid, { field: 'otherUid' });
   return runRead('profile.isUserBlocked', () => isUserBlockedRaw(safeCurrentUid, safeOtherUid));
+};
+
+export const getBlockedUsers = async (uid: string): Promise<string[]> => {
+  const safeUid = validate(uidSchema, uid, { field: 'uid' });
+  return runRead('profile.getBlockedUsers', () => getBlockedUsersRaw(safeUid));
 };

@@ -78,6 +78,24 @@ async function seedStorageFile(path: string, contentType: string) {
   });
 }
 
+async function seedPost(
+  postId = 'post_alpha',
+  authorId = 'user_a',
+  status: 'uploading' | 'failed' | 'ready' | 'abandoned' | null = 'uploading',
+) {
+  const env = await getRulesTestEnv();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await db.doc(`posts/${postId}`).set({
+      postId,
+      authorId,
+      text: 'Texto',
+      media: [],
+      ...(status === null ? {} : { status }),
+    });
+  });
+}
+
 describe('Storage Rules - upload security', () => {
   beforeAll(async () => {
     await getRulesTestEnv();
@@ -91,7 +109,8 @@ describe('Storage Rules - upload security', () => {
     await cleanupRulesTestEnv();
   });
 
-  it('allows owner to upload a valid post image', async () => {
+  it('allows owner to upload a valid post image while the post is uploading', async () => {
+    await seedPost('post_alpha', 'user_a', 'uploading');
     const env = await getRulesTestEnv();
     const storage = env.authenticatedContext('user_a').storage();
     const fileRef = storage.ref('posts/user_a/post_alpha/images/cover.jpg');
@@ -103,7 +122,55 @@ describe('Storage Rules - upload security', () => {
     );
   });
 
+  it('denies post media uploads when post is missing, ready, abandoned or anonymous, and denies client deletes', async () => {
+    const env = await getRulesTestEnv();
+    const ownerStorage = env.authenticatedContext('user_a').storage();
+
+    // Missing post document
+    await assertFails(
+      ownerStorage
+        .ref('posts/user_a/post_missing/images/cover.jpg')
+        .putString('image-bytes', 'raw', { contentType: 'image/jpeg' })
+        .then((snapshot) => snapshot),
+    );
+
+    // Already published (ready) post
+    await seedPost('post_ready', 'user_a', 'ready');
+    await assertFails(
+      ownerStorage
+        .ref('posts/user_a/post_ready/images/cover.jpg')
+        .putString('image-bytes', 'raw', { contentType: 'image/jpeg' })
+        .then((snapshot) => snapshot),
+    );
+
+    // Server-retired abandoned tombstone
+    await seedPost('post_abandoned', 'user_a', 'abandoned');
+    await assertFails(
+      ownerStorage
+        .ref('posts/user_a/post_abandoned/images/cover.jpg')
+        .putString('image-bytes', 'raw', { contentType: 'image/jpeg' })
+        .then((snapshot) => snapshot),
+    );
+
+    // Anonymous auth session
+    await seedPost('post_alpha', 'user_a', 'uploading');
+    const anonymousOwner = env
+      .authenticatedContext('user_a', { firebase: { sign_in_provider: 'anonymous' } })
+      .storage();
+    await assertFails(
+      anonymousOwner
+        .ref('posts/user_a/post_alpha/images/anon.jpg')
+        .putString('image-bytes', 'raw', { contentType: 'image/jpeg' })
+        .then((snapshot) => snapshot),
+    );
+
+    // Client-side deletion of post media is always denied (handled by server Admin SDK)
+    await seedStorageFile('posts/user_a/post_alpha/images/existing.jpg', 'image/jpeg');
+    await assertFails(ownerStorage.ref('posts/user_a/post_alpha/images/existing.jpg').delete());
+  });
+
   it('denies upload when auth user does not match path owner', async () => {
+    await seedPost('post_alpha', 'user_a', 'uploading');
     const env = await getRulesTestEnv();
     const storage = env.authenticatedContext('user_b').storage();
     const fileRef = storage.ref('posts/user_a/post_alpha/images/cover.jpg');
@@ -116,6 +183,7 @@ describe('Storage Rules - upload security', () => {
   });
 
   it('denies invalid content type for post image path', async () => {
+    await seedPost('post_alpha', 'user_a', 'uploading');
     const env = await getRulesTestEnv();
     const storage = env.authenticatedContext('user_a').storage();
     const fileRef = storage.ref('posts/user_a/post_alpha/images/readme.txt');
@@ -173,6 +241,83 @@ describe('Storage Rules - upload security', () => {
     );
   });
 
+  it.each(['image/jpeg', 'video/mp4', 'video/quicktime', 'audio/mp4', 'audio/mpeg', 'audio/webm'])(
+    'allows a conversation member to upload %s',
+    async (contentType) => {
+      await seedDirectConversation();
+      const env = await getRulesTestEnv();
+      await assertSucceeds(
+        env
+          .authenticatedContext('user_b')
+          .storage()
+          .ref(
+            `conversations/dm_user_b_user_c/attachments/user_b/msg_media/${contentType.replace('/', '-')}`,
+          )
+          .putString('media-bytes', 'raw', { contentType })
+          .then((snapshot) => snapshot),
+      );
+    },
+  );
+
+  it.each([
+    ['video/mp4', 25],
+    ['audio/mp4', 10],
+    ['image/jpeg', 10],
+  ] as const)(
+    'rejects chat %s at its %i MB size limit',
+    async (contentType, megabytes) => {
+      await seedDirectConversation();
+      const env = await getRulesTestEnv();
+      await assertFails(
+        env
+          .authenticatedContext('user_b')
+          .storage()
+          .ref('conversations/dm_user_b_user_c/attachments/user_b/msg_large/media')
+          .put(new Uint8Array(megabytes * 1024 * 1024), { contentType })
+          .then((snapshot) => snapshot),
+      );
+    },
+    30000,
+  );
+
+  it('rejects unsupported media, owner spoofing, outsiders and anonymous uploads', async () => {
+    await seedDirectConversation();
+    const env = await getRulesTestEnv();
+    const base = 'conversations/dm_user_b_user_c/attachments';
+    await assertFails(
+      env
+        .authenticatedContext('user_b')
+        .storage()
+        .ref(`${base}/user_b/msg_invalid/media`)
+        .putString('x', 'raw', { contentType: 'application/javascript' })
+        .then((snapshot) => snapshot),
+    );
+    await assertFails(
+      env
+        .authenticatedContext('user_b')
+        .storage()
+        .ref(`${base}/user_c/msg_spoof/media`)
+        .putString('x', 'raw', { contentType: 'audio/mp4' })
+        .then((snapshot) => snapshot),
+    );
+    await assertFails(
+      env
+        .authenticatedContext('user_a')
+        .storage()
+        .ref(`${base}/user_a/msg_outside/media`)
+        .putString('x', 'raw', { contentType: 'video/mp4' })
+        .then((snapshot) => snapshot),
+    );
+    await assertFails(
+      env
+        .unauthenticatedContext()
+        .storage()
+        .ref(`${base}/user_b/msg_anon/media`)
+        .putString('x', 'raw', { contentType: 'image/jpeg' })
+        .then((snapshot) => snapshot),
+    );
+  });
+
   it('denies story media read for non-friend users', async () => {
     await seedStory('story_friend_only', 'user_b');
     await seedStorageFile('stories/user_b/story_friend_only/original/story.jpg', 'image/jpeg');
@@ -198,6 +343,96 @@ describe('Storage Rules - upload security', () => {
     const friendStorage = env.authenticatedContext('user_a').storage();
     await assertSucceeds(
       friendStorage.ref('stories/user_b/story_visible/original/story.jpg').getMetadata(),
+    );
+  });
+
+  it('allows follower to read story media and denies blocked user', async () => {
+    await seedStory('story_follower_visible', 'user_b');
+    await seedStorageFile('stories/user_b/story_follower_visible/original/story.jpg', 'image/jpeg');
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('users/user_b/followers/user_a').set({
+        uid: 'user_a',
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+      });
+    });
+
+    const followerStorage = env.authenticatedContext('user_a').storage();
+    await assertSucceeds(
+      followerStorage.ref('stories/user_b/story_follower_visible/original/story.jpg').getMetadata(),
+    );
+
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc('users/user_b/blockedUsers/user_a').set({
+        blockedUid: 'user_a',
+        status: 'active',
+        blockedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+    });
+
+    await assertFails(
+      followerStorage.ref('stories/user_b/story_follower_visible/original/story.jpg').getMetadata(),
+    );
+  });
+
+  it('restricts collection files to the owner and validates content type', async () => {
+    const env = await getRulesTestEnv();
+    const ownerStorage = env.authenticatedContext('user_a').storage();
+    const otherStorage = env.authenticatedContext('user_b').storage();
+    const validPath = 'collections/user_a/col_1/item_1/paper.pdf';
+
+    await assertSucceeds(
+      ownerStorage
+        .ref(validPath)
+        .putString('%PDF-1.4 sample', 'raw', { contentType: 'application/pdf' })
+        .then((snapshot) => snapshot),
+    );
+    await assertSucceeds(ownerStorage.ref(validPath).getMetadata());
+    await assertFails(otherStorage.ref(validPath).getMetadata());
+    await assertFails(otherStorage.ref(validPath).delete());
+    await assertFails(
+      otherStorage
+        .ref('collections/user_a/col_1/item_2/spoof.pdf')
+        .putString('%PDF-1.4 spoof', 'raw', { contentType: 'application/pdf' })
+        .then((snapshot) => snapshot),
+    );
+    await assertFails(
+      ownerStorage
+        .ref('collections/user_a/col_1/item_3/script.js')
+        .putString('alert(1)', 'raw', { contentType: 'application/javascript' })
+        .then((snapshot) => snapshot),
+    );
+    await assertSucceeds(ownerStorage.ref(validPath).delete());
+  });
+
+  it('denies direct conversation attachment and thumbnail uploads when either participant blocked the other', async () => {
+    await seedDirectConversation('dm_user_b_user_c');
+    const env = await getRulesTestEnv();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx
+        .firestore()
+        .doc('users/user_c/blockedUsers/user_b')
+        .set({
+          blockedUid: 'user_b',
+          status: 'active',
+          blockedAt: new Date('2026-01-01T00:00:00Z'),
+        });
+    });
+
+    const blockedStorage = env.authenticatedContext('user_b').storage();
+    await assertFails(
+      blockedStorage
+        .ref('conversations/dm_user_b_user_c/attachments/user_b/msg_blocked/photo.jpg')
+        .putString('image-bytes', 'raw', { contentType: 'image/jpeg' })
+        .then((snapshot) => snapshot),
+    );
+    await assertFails(
+      blockedStorage
+        .ref('conversations/dm_user_b_user_c/thumbnails/user_b/msg_blocked/thumb.jpg')
+        .putString('thumb-bytes', 'raw', { contentType: 'image/jpeg' })
+        .then((snapshot) => snapshot),
     );
   });
 });

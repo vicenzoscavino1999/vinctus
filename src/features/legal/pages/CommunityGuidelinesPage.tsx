@@ -16,7 +16,7 @@ const CommunityGuidelinesPage = () => {
           <ArrowLeft size={24} />
         </button>
         <div>
-          <h1 className="text-2xl font-semibold">Community Guidelines</h1>
+          <h1 className="text-2xl font-semibold">Normas de la comunidad</h1>
           <p className="text-xs text-neutral-500">Actualizado: {LEGAL_COPY.lastUpdated}</p>
         </div>
       </header>
@@ -24,23 +24,23 @@ const CommunityGuidelinesPage = () => {
       <article className="space-y-6 text-sm text-neutral-300 leading-7">
         <section className="card space-y-3">
           <h2 className="text-base font-semibold text-white">1. Respeto y seguridad</h2>
-          <p>No permitimos acoso, amenazas, doxxing, extorsion ni contenido de odio.</p>
+          <p>No permitimos acoso, amenazas, doxxing, extorsión ni contenido de odio.</p>
         </section>
 
         <section className="card space-y-3">
           <h2 className="text-base font-semibold text-white">2. Contenido prohibido</h2>
           <ul className="list-disc pl-5 space-y-2">
-            <li>Contenido ilegal o de explotacion sexual de menores.</li>
-            <li>Fraude, phishing, suplantacion de identidad y estafas.</li>
-            <li>Spam masivo o manipulacion coordinada.</li>
+            <li>Contenido ilegal o de explotación sexual de menores.</li>
+            <li>Fraude, phishing, suplantación de identidad y estafas.</li>
+            <li>Spam masivo, manipulación coordinada o infracción de derechos de autor.</li>
           </ul>
         </section>
 
         <section className="card space-y-3">
-          <h2 className="text-base font-semibold text-white">3. Reportes y moderacion</h2>
+          <h2 className="text-base font-semibold text-white">3. Reportes y moderación</h2>
           <p>
-            Puedes reportar usuarios, grupos, posts y comentarios desde la app. Evaluamos segun
-            prioridad y podemos retirar contenido o limitar cuentas.
+            Puedes reportar y bloquear usuarios, grupos, posts y comentarios desde la app. Evaluamos
+            según prioridad y podemos retirar contenido o limitar cuentas.
           </p>
           <p>{LEGAL_COPY.moderationSla}</p>
         </section>
@@ -48,7 +48,7 @@ const CommunityGuidelinesPage = () => {
         <section className="card space-y-3">
           <h2 className="text-base font-semibold text-white">4. Cumplimiento</h2>
           <p>
-            Las reincidencias o infracciones graves pueden terminar en suspension o bloqueo
+            Las reincidencias o infracciones graves pueden terminar en suspensión o expulsión
             permanente.
           </p>
         </section>
@@ -82,7 +82,7 @@ const CommunityGuidelinesPage = () => {
           rel="noreferrer"
           className="inline-flex items-center gap-2 text-xs uppercase tracking-wider text-neutral-400 hover:text-white transition-colors"
         >
-          Ver version publica
+          Ver versión pública
           <ExternalLink size={14} />
         </a>
       </div>

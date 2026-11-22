@@ -50,6 +50,12 @@ final class GroupSuggestionsViewModel: ObservableObject {
     self.limit = limit
   }
 
+  func reset() {
+    groups = []
+    errorMessage = nil
+    isShowingCachedData = false
+  }
+
   func refresh() async {
     guard !isLoading else { return }
     isLoading = true
@@ -64,15 +70,24 @@ final class GroupSuggestionsViewModel: ObservableObject {
     }
   }
 
-  /// Groups whose name, description or category contains `query`, ignoring case and spaces
-  /// around it. An empty query returns every group.
+  /// Groups whose name, description or category contains `query`, ignoring case, diacritics,
+  /// and spaces around it. An empty query returns every group.
   func filtered(by query: String) -> [GroupSummary] {
-    let query = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    guard !query.isEmpty else { return groups }
+    let needle = DiscoverCategory.normalizedSearch(query)
+    guard !needle.isEmpty else { return groups }
     return groups.filter { group in
-      group.name.lowercased().contains(query)
-        || group.description.lowercased().contains(query)
-        || (group.categoryID?.lowercased().contains(query) ?? false)
+      if DiscoverCategory.normalizedSearch(group.name).contains(needle)
+        || DiscoverCategory.normalizedSearch(group.description).contains(needle)
+      {
+        return true
+      }
+      if let categoryID = group.categoryID {
+        if DiscoverCategory.normalizedSearch(categoryID).contains(needle) { return true }
+        if DiscoverCategory.normalizedSearch(InterestCategory.title(for: categoryID)).contains(needle) {
+          return true
+        }
+      }
+      return false
     }
   }
 }
@@ -143,13 +158,19 @@ final class GroupCardViewModel: ObservableObject {
   }
 
   func loadStatus(uid: String?) async {
-    guard let uid else { return }
+    guard let uid else {
+      status = nil
+      return
+    }
     status = try? await repo.membershipStatus(groupID: group.id, ownerID: group.ownerID, uid: uid)
   }
 
   /// Only acts when the user is not in the group yet; leaving happens on the group's screen.
   func join(uid: String?) async {
-    guard let uid, status == GroupMembershipStatus.none, !isWorking else { return }
+    let canJoinPublicWithStaleRequest = status == .pending && group.visibility == .public
+    guard let uid, !isWorking, status == GroupMembershipStatus.none || canJoinPublicWithStaleRequest else {
+      return
+    }
     isWorking = true
     errorMessage = nil
     defer { isWorking = false }
@@ -227,7 +248,10 @@ final class GroupDetailViewModel: ObservableObject {
 
   /// Needs the detail loaded first, to know the owner.
   func loadMembership(uid: String?) async {
-    guard let uid else { return }
+    guard let uid else {
+      membership = nil
+      return
+    }
     do {
       membership = try await repo.membershipStatus(groupID: groupID, ownerID: detail?.ownerID, uid: uid)
     } catch {
@@ -247,6 +271,7 @@ final class GroupDetailViewModel: ObservableObject {
       case .member:
         try await repo.leaveGroup(groupID: groupID, uid: uid)
         self.membership = GroupMembershipStatus.none
+        if detail != nil { await refresh() }
       case .none:
         self.membership = try await repo.joinOrRequest(
           groupID: groupID,
@@ -255,6 +280,16 @@ final class GroupDetailViewModel: ObservableObject {
           isPrivate: detail?.visibility == .private,
           uid: uid
         )
+        if detail != nil, self.membership == .member { await refresh() }
+      case .pending where detail?.visibility == .public:
+        self.membership = try await repo.joinOrRequest(
+          groupID: groupID,
+          groupName: detail?.name ?? "",
+          ownerID: detail?.ownerID,
+          isPrivate: false,
+          uid: uid
+        )
+        if detail != nil, self.membership == .member { await refresh() }
       case .owner, .pending:
         break
       }

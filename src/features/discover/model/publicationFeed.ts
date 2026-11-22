@@ -2,6 +2,7 @@ import { CATEGORIES, PUBLICATIONS } from '@/shared/constants';
 import type { PostRead } from '@/features/posts/api';
 import { getYouTubeThumbnailUrl } from '@/shared/lib/youtube';
 import type { YouTubeSearchVideo } from '@/shared/lib/youtubeSearchApi';
+import { normalizeKeyword } from '@/features/discover/model/textHelpers';
 
 /** The Discover "Publicaciones" feed: community posts, YouTube videos and editorial filler. */
 
@@ -66,9 +67,6 @@ const CATEGORY_HINTS: Record<string, string[]> = {
   science: ['ciencia', 'science', 'quantum', 'fisica', 'physics', 'cosmology', 'astronomy'],
   technology: ['tecnologia', 'technology', 'ai', 'codigo', 'programming', 'software', 'startup'],
 };
-
-const normalizeKeyword = (value: string): string =>
-  value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 export const inferCategoryIdFromText = (value: string): string => {
   const normalized = normalizeKeyword(value);

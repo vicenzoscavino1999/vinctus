@@ -17,7 +17,7 @@ interface SupportModalProps {
   initialType?: SupportTicketType;
 }
 
-const APP_VERSION = 'v0.0.2-alpha';
+const APP_VERSION = 'web-1.0.0';
 
 const buildContext = (): SupportTicketContext | null => {
   if (typeof window === 'undefined') return null;
@@ -66,7 +66,7 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !isSubmitting) {
         onClose();
       }
     };
@@ -75,7 +75,7 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', handleKey);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, isSubmitting, onClose]);
 
   if (!isOpen) return null;
 
@@ -90,14 +90,15 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
   };
 
   const handleSubmit = async () => {
+    if (isSubmitting) return;
     if (!user) {
-      showToast('Inicia sesion para enviar el formulario.', 'warning');
+      showToast('Inicia sesión para enviar el formulario.', 'warning');
       return;
     }
     const cleanTitle = title.trim();
     const cleanMessage = message.trim();
     if (cleanTitle.length < 4 || cleanMessage.length < 10) {
-      showToast('Completa el titulo y detalle.', 'warning');
+      showToast('Completa el título (mín. 4 caracteres) y el detalle (mín. 10).', 'warning');
       return;
     }
 
@@ -123,8 +124,18 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center safe-area-inset">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center safe-area-inset"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Ayuda y comentarios"
+    >
+      <div
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={() => {
+          if (!isSubmitting) onClose();
+        }}
+      />
       <div
         className="relative w-full max-w-2xl bg-[#121212] border border-neutral-800 rounded-t-3xl px-6 pt-4 pb-8 max-h-[85vh] overflow-y-auto animate-fade-up"
         onClick={(event) => event.stopPropagation()}
@@ -132,11 +143,13 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-semibold">Ayuda y comentarios</h2>
-            <p className="text-xs text-neutral-500">Cuentanos lo que necesitas</p>
+            <p className="text-xs text-neutral-500">Cuéntanos lo que necesitas</p>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 rounded-full hover:bg-white/5 transition-colors"
+            disabled={isSubmitting}
+            className="p-2 rounded-full hover:bg-white/5 transition-colors disabled:opacity-50"
             aria-label="Cerrar"
           >
             <X size={18} />
@@ -146,6 +159,7 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
         {view === 'menu' ? (
           <div className="space-y-3">
             <button
+              type="button"
               onClick={() => openForm('issue')}
               className="w-full flex items-center justify-between p-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 hover:bg-white/5 transition-colors"
             >
@@ -162,6 +176,7 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
             </button>
 
             <button
+              type="button"
               onClick={() => openForm('feature')}
               className="w-full flex items-center justify-between p-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 hover:bg-white/5 transition-colors"
             >
@@ -178,6 +193,7 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
             </button>
 
             <button
+              type="button"
               onClick={openHelpCenter}
               className="w-full flex items-center justify-between p-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 hover:bg-white/5 transition-colors"
             >
@@ -187,14 +203,14 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
                 </div>
                 <div>
                   <div className="font-medium">Centro de ayuda (FAQ)</div>
-                  <div className="text-xs text-neutral-500">Guias y respuestas rapidas</div>
+                  <div className="text-xs text-neutral-500">Guías y respuestas rápidas</div>
                 </div>
               </div>
               <span className="text-xs text-neutral-500">&gt;</span>
             </button>
 
-            <button
-              onClick={() => window.open(`mailto:${LEGAL_LINKS.supportEmail}`, '_blank')}
+            <a
+              href={`mailto:${LEGAL_LINKS.supportEmail}`}
               className="w-full flex items-center justify-between p-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 hover:bg-white/5 transition-colors"
             >
               <div className="flex items-center gap-3 text-left">
@@ -207,10 +223,10 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
                 </div>
               </div>
               <span className="text-xs text-neutral-500">&gt;</span>
-            </button>
+            </a>
 
-            <button
-              onClick={() => window.open(`mailto:${LEGAL_LINKS.securityEmail}`, '_blank')}
+            <a
+              href={`mailto:${LEGAL_LINKS.securityEmail}`}
               className="w-full flex items-center justify-between p-4 rounded-2xl border border-red-500/30 bg-red-500/5 hover:bg-red-500/10 transition-colors"
             >
               <div className="flex items-center gap-3 text-left">
@@ -223,14 +239,16 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
                 </div>
               </div>
               <span className="text-xs text-red-200">&gt;</span>
-            </button>
+            </a>
           </div>
         ) : (
           <div className="space-y-5">
             <div className="flex items-center justify-between">
               <button
+                type="button"
                 onClick={() => setView('menu')}
-                className="text-xs uppercase tracking-widest text-neutral-500 hover:text-white transition-colors"
+                disabled={isSubmitting}
+                className="text-xs uppercase tracking-widest text-neutral-500 hover:text-white transition-colors disabled:opacity-50"
               >
                 Volver
               </button>
@@ -241,9 +259,12 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
-                  Titulo
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs text-neutral-500 uppercase tracking-wider">
+                    Título
+                  </label>
+                  <span className="text-[11px] text-neutral-500">{title.length}/120</span>
+                </div>
                 <input
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
@@ -256,16 +277,19 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
               </div>
 
               <div>
-                <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
-                  Detalle
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs text-neutral-500 uppercase tracking-wider">
+                    Detalle
+                  </label>
+                  <span className="text-[11px] text-neutral-500">{message.length}/2000</span>
+                </div>
                 <textarea
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
                   rows={4}
                   maxLength={2000}
                   className="w-full bg-neutral-900/60 border border-neutral-700 rounded-xl px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-                  placeholder="Cuentanos que paso y en que pantalla."
+                  placeholder="Cuéntanos qué pasó y en qué pantalla."
                 />
               </div>
             </div>
@@ -275,7 +299,8 @@ const SupportModal = ({ isOpen, onClose, initialView, initialType }: SupportModa
             </div>
 
             <button
-              onClick={handleSubmit}
+              type="button"
+              onClick={() => void handleSubmit()}
               disabled={isSubmitting}
               className="w-full px-4 py-3 rounded-full bg-amber-500 text-black font-semibold hover:bg-amber-400 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >

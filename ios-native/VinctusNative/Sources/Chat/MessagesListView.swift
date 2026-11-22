@@ -21,6 +21,18 @@ struct MessagesListView: View {
 
   var body: some View {
     List {
+      if let error = vm.errorMessage, !vm.conversations.isEmpty {
+        VStack(alignment: .leading, spacing: 6) {
+          Text(error)
+            .font(.footnote)
+            .foregroundStyle(.red)
+          Button("Reintentar") {
+            vm.stop()
+            vm.start()
+          }
+        }
+        .listRowBackground(SwiftUI.Color.clear)
+      }
       if vm.isLoading, vm.conversations.isEmpty {
         HStack {
           Spacer()

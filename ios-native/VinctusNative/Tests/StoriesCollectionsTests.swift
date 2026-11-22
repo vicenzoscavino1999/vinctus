@@ -60,6 +60,65 @@ final class StoriesTests: XCTestCase {
     XCTAssertEqual(fields.details, "[Historia s1] ofensiva")
     XCTAssertEqual(ReportFields(target: .story(storyID: "s1", ownerID: "u1"), details: nil).details, "[Historia s1]")
   }
+
+  func testEmptyYouTubeEmbedIDProducesBlankPage() {
+    let html = YouTubeEmbedView.html(videoID: "!!!")
+    XCTAssertFalse(html.contains("<iframe"))
+  }
+
+  @MainActor
+  func testStoriesViewModelDeleteResetAndExcludeOwner() async {
+    let repo = FakeStoriesRepo()
+    let s1 = story("s1", owner: "me", minutesAgo: 5)
+    let s2 = story("s2", owner: "me", minutesAgo: 2)
+    let other = story("s3", owner: "other", minutesAgo: 1)
+    repo.stored = [s1, s2, other]
+
+    let vm = StoriesViewModel(repo: repo)
+    await vm.load()
+    XCTAssertEqual(vm.groups.count, 2)
+    XCTAssertFalse(vm.isSeen(StoryGroup(ownerID: "empty", ownerName: "Empty", ownerPhotoURL: nil, stories: [])))
+
+    vm.markSeen(s1)
+    XCTAssertFalse(vm.isSeen(vm.groups[0]))
+    vm.markSeen(s2)
+    XCTAssertTrue(vm.isSeen(vm.groups[0]))
+
+    repo.failsOnDelete = true
+    let failedDelete = await vm.delete(s1)
+    XCTAssertFalse(failedDelete)
+    XCTAssertEqual(vm.errorMessage, "No se pudo eliminar la historia.")
+
+    repo.failsOnDelete = false
+    let succeededDelete = await vm.delete(s1)
+    XCTAssertTrue(succeededDelete)
+    XCTAssertNil(vm.errorMessage)
+    XCTAssertEqual(vm.groups.first?.stories.map(\.id), ["s2"])
+
+    vm.excludeOwner("other")
+    XCTAssertEqual(vm.groups.map(\.ownerID), ["me"])
+
+    vm.reset()
+    XCTAssertTrue(vm.groups.isEmpty)
+    XCTAssertTrue(vm.seenStoryIDs.isEmpty)
+    XCTAssertNil(vm.errorMessage)
+  }
+}
+
+private final class FakeStoriesRepo: StoriesRepo {
+  var stored: [Story] = []
+  var failsOnDelete = false
+
+  func fetchStoryGroups() async throws -> [StoryGroup] {
+    StoryGroup.make(from: stored, currentUID: "me")
+  }
+
+  func publishImageStory(jpegData: Data) async throws {}
+
+  func deleteStory(_ story: Story) async throws {
+    if failsOnDelete { throw FakeError() }
+    stored.removeAll { $0.id == story.id }
+  }
 }
 
 /// Collections must pass `isValidCollectionCreate` / `isValidCollectionItemCreate`.
@@ -87,9 +146,55 @@ final class CollectionsTests: XCTestCase {
     XCTAssertEqual(fields.title, "Cosmos")
     XCTAssertEqual(fields.url, "https://example.com/cosmos")
     XCTAssertNil(fields.text)
+    XCTAssertNil(fields.file)
 
     item.url = "ftp://example.com"
     XCTAssertThrowsError(try item.validatedFields())
+    item.url = "javascript:alert(1)"
+    XCTAssertThrowsError(try item.validatedFields())
+    item.url = "https://"
+    XCTAssertThrowsError(try item.validatedFields())
+  }
+
+  func testSafeHTTPURL() {
+    XCTAssertNotNil(NewCollectionItem.safeHTTPURL("https://example.com/path"))
+    XCTAssertNotNil(NewCollectionItem.safeHTTPURL(" http://127.0.0.1:9199/file.pdf "))
+    XCTAssertNil(NewCollectionItem.safeHTTPURL("javascript:alert(1)"))
+    XCTAssertNil(NewCollectionItem.safeHTTPURL("ftp://example.com"))
+    XCTAssertNil(NewCollectionItem.safeHTTPURL("https://"))
+    XCTAssertNil(NewCollectionItem.safeHTTPURL("   "))
+    XCTAssertNil(NewCollectionItem.safeHTTPURL(nil))
+  }
+
+  func testFileItemValidation() throws {
+    var item = NewCollectionItem()
+    item.kind = .file
+    item.title = "Guía"
+    XCTAssertThrowsError(try item.validatedFields())
+
+    let emptyFile = CollectionUploadFile(data: Data(), fileName: "vacio.pdf", contentType: "application/pdf")
+    XCTAssertThrowsError(try emptyFile.validated())
+
+    let badMime = CollectionUploadFile(data: Data("<html>".utf8), fileName: "page.html", contentType: "text/html")
+    XCTAssertThrowsError(try badMime.validated())
+
+    let validFile = CollectionUploadFile(
+      data: Data("%PDF-1.4\n".utf8),
+      fileName: " guía (final)/2026.pdf ",
+      contentType: "APPLICATION/PDF; charset=utf-8"
+    )
+    let meta = try validFile.validated()
+    XCTAssertEqual(meta.contentType, "application/pdf")
+    XCTAssertFalse(meta.storageFileName.contains("/"))
+    XCTAssertFalse(meta.storageFileName.contains(" "))
+
+    item.file = validFile
+    let fields = try item.validatedFields()
+    XCTAssertEqual(fields.type, .file)
+    XCTAssertEqual(fields.title, "Guía")
+    XCTAssertNil(fields.url)
+    XCTAssertNil(fields.text)
+    XCTAssertEqual(fields.file, validFile)
   }
 
   func testNoteItem() throws {
@@ -110,14 +215,22 @@ final class CollectionsTests: XCTestCase {
   }
 
   @MainActor
-  func testSearchFiltersByName() async {
+  func testSearchFiltersByNameIgnoringDiacriticsAndResetClearsState() async {
     let vm = CollectionsViewModel(repo: FakeCollectionsRepo())
     await vm.load()
 
     vm.searchText = "JAZZ"
-    XCTAssertEqual(vm.visibleCollections.map(\.name), ["Discos de jazz"])
+    XCTAssertEqual(vm.visibleCollections.map(\.name), ["Música de jazz"])
+    vm.searchText = "musica"
+    XCTAssertEqual(vm.visibleCollections.map(\.name), ["Música de jazz"])
     vm.searchText = " "
     XCTAssertEqual(vm.visibleCollections.count, 2)
+
+    vm.reset()
+    XCTAssertTrue(vm.collections.isEmpty)
+    XCTAssertEqual(vm.searchText, "")
+    XCTAssertNil(vm.errorMessage)
+    XCTAssertFalse(vm.isLoading)
   }
 }
 
@@ -125,7 +238,7 @@ private struct FakeCollectionsRepo: CollectionsRepo {
   func fetchCollections() async throws -> [UserCollection] {
     [
       UserCollection(id: "c1", name: "Libros por leer", icon: .book, itemCount: 1, updatedAt: Date()),
-      UserCollection(id: "c2", name: "Discos de jazz", icon: .music, itemCount: 2, updatedAt: Date()),
+      UserCollection(id: "c2", name: "Música de jazz", icon: .music, itemCount: 2, updatedAt: Date()),
     ]
   }
 

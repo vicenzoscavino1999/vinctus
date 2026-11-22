@@ -91,10 +91,10 @@ describe('api/youtube', () => {
             id: 'dQw4w9WgXcQ',
             snippet: {
               channelId: 'channel_1',
-              channelTitle: 'RickAstleyVEVO',
+              channelTitle: 'RickAstleyVEVO &amp; Co',
               publishedAt: '2009-10-25T06:57:33Z',
               thumbnails: { high: { url: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg' } },
-              title: 'Never Gonna Give You Up',
+              title: 'Never Gonna Give You Up &#39;HD&#39;',
             },
             statistics: { commentCount: '100', likeCount: '5000', viewCount: '1234567' },
             status: { embeddable: true, privacyStatus: 'public' },
@@ -116,9 +116,9 @@ describe('api/youtube', () => {
     expect(firstResult.payload).toEqual(
       expect.objectContaining({
         cached: false,
-        channelTitle: 'RickAstleyVEVO',
+        channelTitle: 'RickAstleyVEVO & Co',
         embeddable: true,
-        title: 'Never Gonna Give You Up',
+        title: "Never Gonna Give You Up 'HD'",
         videoId: 'dQw4w9WgXcQ',
         viewCount: 1234567,
       }),

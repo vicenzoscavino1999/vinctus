@@ -1,8 +1,33 @@
-import { doc, setDoc, updateDoc, serverTimestamp, type FieldValue } from 'firebase/firestore';
+import {
+  doc,
+  runTransaction,
+  updateDoc,
+  serverTimestamp,
+  type FieldValue,
+} from 'firebase/firestore';
 import { db } from './firebase';
 import { COLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
 
-export type PostStatus = 'uploading' | 'ready' | 'failed';
+export type PostStatus = 'uploading' | 'ready' | 'failed' | 'abandoned';
+
+export const POST_UPLOAD_ABANDONED_CODE = 'POST_UPLOAD_ABANDONED';
+
+const makeAbandonedUploadError = () => {
+  const error = new Error(
+    'La subida pendiente anterior caducó. Se iniciará una publicación nueva.',
+  ) as Error & { code?: string };
+  error.code = POST_UPLOAD_ABANDONED_CODE;
+  return error;
+};
+
+export const isAbandonedPostUploadError = (error: unknown): boolean => {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as { code?: unknown; cause?: { code?: unknown } };
+  return (
+    candidate.code === POST_UPLOAD_ABANDONED_CODE ||
+    candidate.cause?.code === POST_UPLOAD_ABANDONED_CODE
+  );
+};
 
 export type AuthorSnapshot = {
   displayName: string;
@@ -22,24 +47,46 @@ export type CreatePostUploadingInput = {
 /**
  * Create post with "uploading" status (Phase 1 of 3)
  */
-export async function createPostUploading(input: CreatePostUploadingInput): Promise<void> {
+export async function createPostUploading(input: CreatePostUploadingInput): Promise<boolean> {
   const ref = doc(db, COLLECTIONS.posts, input.postId);
 
-  await setDoc(ref, {
-    postId: input.postId,
-    authorId: input.authorId,
-    authorSnapshot: input.authorSnapshot,
-    title: input.title ?? null,
-    text: input.text,
-    status: 'uploading' as PostStatus,
+  return runTransaction(db, async (transaction) => {
+    const existing = await transaction.get(ref);
+    if (existing.exists()) {
+      const data = existing.data();
+      if (data.authorId !== input.authorId) {
+        throw new Error('La publicación pendiente no coincide con este borrador.');
+      }
+      if (data.status === 'abandoned') {
+        throw makeAbandonedUploadError();
+      }
+      if (
+        data.text !== input.text ||
+        (data.title ?? null) !== (input.title ?? null) ||
+        (data.groupId ?? null) !== (input.groupId ?? null) ||
+        (data.categoryId ?? null) !== (input.categoryId ?? null)
+      ) {
+        throw new Error('La publicación pendiente no coincide con este borrador.');
+      }
+      return data.status === 'ready';
+    }
+    transaction.set(ref, {
+      postId: input.postId,
+      authorId: input.authorId,
+      authorSnapshot: input.authorSnapshot,
+      title: input.title ?? null,
+      text: input.text,
+      status: 'uploading' as PostStatus,
 
-    media: [],
-    likeCount: 0,
-    commentCount: 0,
-    createdAt: serverTimestamp(),
-    updatedAt: null,
-    groupId: input.groupId ?? null,
-    categoryId: input.categoryId ?? null,
+      media: [],
+      likeCount: 0,
+      commentCount: 0,
+      createdAt: serverTimestamp(),
+      updatedAt: null,
+      groupId: input.groupId ?? null,
+      categoryId: input.categoryId ?? null,
+    });
+    return false;
   });
 }
 
@@ -52,6 +99,22 @@ export async function updatePost(
   patch: Record<string, unknown> & { updatedAt?: FieldValue },
 ): Promise<void> {
   const ref = doc(db, COLLECTIONS.posts, postId);
+  if (patch.status === 'ready' || patch.status === 'failed') {
+    await runTransaction(db, async (transaction) => {
+      const existing = await transaction.get(ref);
+      if (!existing.exists()) throw new Error('No se encontró la publicación pendiente.');
+      if (existing.data().status === 'abandoned') {
+        throw makeAbandonedUploadError();
+      }
+      if (existing.data().status === 'ready') {
+        // Ready is terminal for the upload workflow. A late failure or a lost
+        // acknowledgement must not remove media or change an accepted post.
+        return;
+      }
+      transaction.update(ref, { ...patch, updatedAt: serverTimestamp() });
+    });
+    return;
+  }
   await updateDoc(ref, {
     ...patch,
     updatedAt: serverTimestamp(),

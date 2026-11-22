@@ -1,11 +1,13 @@
 import { ArrowRight } from 'lucide-react';
 import type { Category } from '@/shared/types';
 import type { TrendPreviewItem, TrendPreviewState } from '@/features/discover/model/trendRanking';
+import { isSafeHttpUrl } from '@/features/discover/model/textHelpers';
 
 type TrendPreviewPanelProps = {
   category: Category;
   preview: TrendPreviewState;
   onOpenCategory: (category: Category) => void;
+  onRetry: (category: Category) => void;
   className?: string;
 };
 
@@ -21,6 +23,7 @@ const TrendPreviewPanel = ({
   category,
   preview,
   onOpenCategory,
+  onRetry,
   className,
 }: TrendPreviewPanelProps) => (
   <div
@@ -52,7 +55,16 @@ const TrendPreviewPanel = ({
       {preview.loading ? (
         <div className="text-sm text-neutral-500">Cargando vista previa...</div>
       ) : preview.error ? (
-        <div className="text-sm text-red-400">{preview.error}</div>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-red-400">
+          <span>{preview.error}</span>
+          <button
+            type="button"
+            onClick={() => onRetry(category)}
+            className="rounded-full border border-neutral-700 px-3 py-1 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+          >
+            Reintentar
+          </button>
+        </div>
       ) : preview.items.length === 0 ? (
         <div className="text-sm text-neutral-500">
           No hay resultados disponibles para esta categoria ahora.
@@ -60,7 +72,7 @@ const TrendPreviewPanel = ({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {preview.items.map((item, index) =>
-            item.href ? (
+            isSafeHttpUrl(item.href) ? (
               <a
                 key={`${category.id}-${item.id}`}
                 href={item.href}

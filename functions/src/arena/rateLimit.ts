@@ -13,6 +13,7 @@ export async function checkRateLimit(uid: string): Promise<{
   allowed: boolean;
   remaining: number;
   resetAt: string;
+  dayKey: string;
 }> {
   const db = admin.firestore();
   const today = new Date().toISOString().split('T')[0];
@@ -54,7 +55,33 @@ export async function checkRateLimit(uid: string): Promise<{
     allowed: result.allowed,
     remaining: result.remaining,
     resetAt: tomorrow.toISOString(),
+    dayKey: today,
   };
+}
+
+export async function refundRateLimit(uid: string, dayKey: string): Promise<void> {
+  if (!uid || !dayKey) return;
+  try {
+    const db = admin.firestore();
+    const usageRef = db.doc(`${ARENA_USAGE_COLLECTION}/${uid}/${SUBCOLLECTIONS.days}/${dayKey}`);
+    await db.runTransaction(async (tx) => {
+      const usageDoc = await tx.get(usageRef);
+      if (!usageDoc.exists) return;
+      const currentCount = (usageDoc.data()?.count as number | undefined) ?? 0;
+      if (Number.isSafeInteger(currentCount) && currentCount > 0) {
+        tx.set(
+          usageRef,
+          {
+            count: currentCount - 1,
+            lastUsed: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+      }
+    });
+  } catch {
+    // Best-effort quota refund; never mask the original caller error.
+  }
 }
 
 export async function getUsage(uid: string): Promise<{

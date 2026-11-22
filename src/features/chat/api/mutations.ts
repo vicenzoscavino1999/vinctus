@@ -132,13 +132,18 @@ export const leaveGroupWithSync = async (groupId: string, uid: string): Promise<
   return runWrite('chat.leaveGroupWithSync', () => leaveGroupWithSyncRaw(safeGroupId, safeUid));
 };
 
-export const markConversationRead = async (conversationId: string, uid: string): Promise<void> => {
+export const markConversationRead = async (
+  conversationId: string,
+  uid: string,
+  through?: number,
+): Promise<void> => {
   const safeConversationId = validate(conversationIdSchema, conversationId, {
     field: 'conversationId',
   });
   const safeUid = validate(uidSchema, uid, { field: 'uid' });
+  if (through !== undefined) validate(z.number().int().positive(), through, { field: 'through' });
   return runWrite('chat.markConversationRead', () =>
-    markConversationReadRaw(safeConversationId, safeUid),
+    markConversationReadRaw(safeConversationId, safeUid, through),
   );
 };
 
@@ -173,6 +178,7 @@ export const sendMessage = async (
     });
   }
 
+  const clientId = clientIdOverride ?? crypto.randomUUID();
   return runWrite('chat.sendMessage', () =>
     sendMessageRaw(
       safeConversationId,
@@ -181,7 +187,7 @@ export const sendMessage = async (
       safeSenderName,
       safeSenderPhotoURL,
       safeAttachments,
-      clientIdOverride,
+      clientId,
     ),
   );
 };

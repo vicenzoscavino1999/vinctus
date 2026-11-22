@@ -1,4 +1,7 @@
+import { useId } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Image as ImageIcon, Loader2, Film, FileText, Link2 } from 'lucide-react';
+import { useAuth } from '@/context/auth';
 import { useCreatePost } from '@/features/posts/hooks/useCreatePost';
 import { formatBytes } from '@/shared/lib/formatUtils';
 import { formatYouTubeDuration, formatYouTubeViews } from '@/shared/lib/youtubeApi';
@@ -15,7 +18,19 @@ interface CreatePostModalProps {
 
 const MAX_ATTACHMENTS = 10;
 
-const CreatePostModal = ({
+const CreatePostModal = (props: CreatePostModalProps) => {
+  const { user } = useAuth();
+  if (!props.isOpen) return null;
+  return createPortal(
+    <CreatePostSession
+      key={`${user?.uid ?? 'anonymous'}:${props.groupId ?? ''}:${props.categoryId ?? ''}`}
+      {...props}
+    />,
+    document.body,
+  );
+};
+
+const CreatePostSession = ({
   isOpen,
   onClose,
   groupId = null,
@@ -23,6 +38,7 @@ const CreatePostModal = ({
   redirectTo = '/feed',
   onCreated,
 }: CreatePostModalProps) => {
+  const formId = useId();
   const {
     user,
     title,
@@ -41,9 +57,17 @@ const CreatePostModal = ({
     usedMediaSlots,
     totalAttachmentSize,
     isSubmitting,
+    isPreparingMedia,
     error,
     progress,
     canSubmit,
+    draftRestoring,
+    draftSaving,
+    draftError,
+    retryDraftSave,
+    discardDraft,
+    closeEditor,
+    isPublished,
     imageInputRef,
     videoInputRef,
     fileInputRef,
@@ -68,12 +92,17 @@ const CreatePostModal = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset bg-black/70 p-4">
-      <div className="bg-[#1a1a1a] border border-neutral-800 rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Crear publicación"
+        className="bg-[#1a1a1a] border border-neutral-800 rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col"
+      >
         <div className="flex items-center justify-between p-4 border-b border-neutral-800">
           <h2 className="text-lg font-medium text-white">Crear Publicacion</h2>
           <button
-            onClick={onClose}
-            disabled={isSubmitting}
+            onClick={() => void closeEditor().catch(() => {})}
+            disabled={isSubmitting || isPreparingMedia || (draftRestoring && !draftError)}
             className="text-neutral-400 hover:text-white transition-colors disabled:opacity-50"
             aria-label="Cerrar"
           >
@@ -82,6 +111,44 @@ const CreatePostModal = ({
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
+          <div className="mb-4 text-xs text-neutral-400">
+            <p role="status">
+              {draftError
+                ? 'Borrador pendiente de recuperar o guardar'
+                : draftRestoring
+                  ? 'Recuperando borrador…'
+                  : draftSaving
+                    ? 'Guardando borrador…'
+                    : 'Borrador guardado en este dispositivo'}
+            </p>
+            {draftError && (
+              <div role="alert" className="mt-2 text-amber-300">
+                <p>{draftError} No cierres el editor si tienes cambios sin guardar.</p>
+                <button
+                  type="button"
+                  onClick={() => void retryDraftSave().catch(() => {})}
+                  className="mt-1 underline"
+                >
+                  Reintentar guardado
+                </button>
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={isSubmitting || isPreparingMedia || draftRestoring}
+              className="mt-2 text-neutral-500 underline disabled:opacity-50"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    '¿Descartar este borrador y sus adjuntos guardados en este dispositivo?',
+                  )
+                )
+                  void discardDraft().catch(() => {});
+              }}
+            >
+              Descartar borrador
+            </button>
+          </div>
           <div className="flex items-center gap-3 mb-4">
             {user?.photoURL ? (
               <img
@@ -101,17 +168,21 @@ const CreatePostModal = ({
           </div>
 
           <div className="mb-4">
-            <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-2">
+            <label
+              htmlFor={`${formId}-title`}
+              className="block text-xs text-neutral-500 uppercase tracking-wider mb-2"
+            >
               Titulo (opcional)
             </label>
             <input
+              id={`${formId}-title`}
               type="text"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               placeholder="Escribe un titulo breve"
               className="w-full bg-neutral-900/40 border border-neutral-800 rounded-lg px-4 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
               maxLength={LIMITS.posts.titleMaxLength}
-              disabled={isSubmitting}
+              disabled={isSubmitting || draftRestoring}
             />
             <div className="text-right text-xs text-neutral-600 mt-1">
               {title.length}/{LIMITS.posts.titleMaxLength}
@@ -119,13 +190,14 @@ const CreatePostModal = ({
           </div>
 
           <textarea
+            disabled={draftRestoring}
+            aria-label="Descripción de la publicación"
             value={text}
             onChange={(event) => setText(event.target.value)}
             placeholder="Escribe la descripcion de tu publicacion"
             className="w-full h-32 bg-transparent text-white placeholder-neutral-500 resize-none focus:outline-none text-base leading-relaxed"
             maxLength={LIMITS.posts.textMaxLength}
             autoFocus
-            disabled={isSubmitting}
           />
 
           <div className="text-right text-neutral-500 text-sm">
@@ -133,7 +205,10 @@ const CreatePostModal = ({
           </div>
 
           <div className="mt-4">
-            <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-2">
+            <label
+              htmlFor={`${formId}-youtube`}
+              className="block text-xs text-neutral-500 uppercase tracking-wider mb-2"
+            >
               Link de YouTube (opcional)
             </label>
             <div className="relative">
@@ -142,12 +217,13 @@ const CreatePostModal = ({
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500"
               />
               <input
+                id={`${formId}-youtube`}
                 type="url"
                 value={youtubeUrl}
                 onChange={(event) => setYoutubeUrl(event.target.value)}
                 placeholder="https://www.youtube.com/watch?v=..."
                 className="w-full bg-neutral-900/40 border border-neutral-800 rounded-lg pl-10 pr-4 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-                disabled={isSubmitting}
+                disabled={isSubmitting || draftRestoring}
               />
             </div>
             {youtubeUrl.trim() && (
@@ -276,9 +352,18 @@ const CreatePostModal = ({
           )}
 
           {error && (
-            <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+            <div
+              role="alert"
+              className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm"
+            >
               {error}
             </div>
+          )}
+
+          {isPreparingMedia && (
+            <p role="status" className="mt-3 text-sm text-neutral-400">
+              Preparando imágenes…
+            </p>
           )}
 
           {isSubmitting && progress.total > 0 && (
@@ -301,6 +386,7 @@ const CreatePostModal = ({
           <div className="flex flex-wrap items-center gap-2">
             <input
               ref={imageInputRef}
+              aria-label="Seleccionar imágenes de la publicación"
               type="file"
               accept="image/*"
               multiple
@@ -309,6 +395,7 @@ const CreatePostModal = ({
             />
             <input
               ref={videoInputRef}
+              aria-label="Seleccionar videos de la publicación"
               type="file"
               accept="video/*"
               multiple
@@ -317,6 +404,7 @@ const CreatePostModal = ({
             />
             <input
               ref={fileInputRef}
+              aria-label="Seleccionar documentos de la publicación"
               type="file"
               accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,application/pdf,application/msword,application/vnd.ms-excel,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
               multiple
@@ -325,7 +413,12 @@ const CreatePostModal = ({
             />
             <button
               onClick={openImagePicker}
-              disabled={isSubmitting || usedMediaSlots >= MAX_ATTACHMENTS}
+              disabled={
+                isSubmitting ||
+                isPreparingMedia ||
+                draftRestoring ||
+                usedMediaSlots >= MAX_ATTACHMENTS
+              }
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-300 hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ImageIcon size={20} />
@@ -333,7 +426,12 @@ const CreatePostModal = ({
             </button>
             <button
               onClick={openVideoPicker}
-              disabled={isSubmitting || usedMediaSlots >= MAX_ATTACHMENTS}
+              disabled={
+                isSubmitting ||
+                isPreparingMedia ||
+                draftRestoring ||
+                usedMediaSlots >= MAX_ATTACHMENTS
+              }
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-300 hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Film size={20} />
@@ -341,7 +439,12 @@ const CreatePostModal = ({
             </button>
             <button
               onClick={openFilePicker}
-              disabled={isSubmitting || usedMediaSlots >= MAX_ATTACHMENTS}
+              disabled={
+                isSubmitting ||
+                isPreparingMedia ||
+                draftRestoring ||
+                usedMediaSlots >= MAX_ATTACHMENTS
+              }
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-300 hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <FileText size={20} />
@@ -365,6 +468,8 @@ const CreatePostModal = ({
                 <Loader2 size={18} className="animate-spin" />
                 Publicando...
               </>
+            ) : isPublished ? (
+              'Abrir publicación'
             ) : (
               'Publicar'
             )}

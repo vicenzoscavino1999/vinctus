@@ -5,6 +5,7 @@ final class FakeModerationRepo: ModerationRepo {
   var blocked: Set<String> = []
   var reports: [(target: ReportTarget, reason: ReportReason, details: String?)] = []
   var fails = false
+  var fetchFails = false
 
   func report(_ target: ReportTarget, reason: ReportReason, details: String?) async throws {
     if fails { throw FakeError() }
@@ -12,7 +13,8 @@ final class FakeModerationRepo: ModerationRepo {
   }
 
   func fetchBlockedUserIDs() async throws -> Set<String> {
-    blocked
+    if fetchFails { throw FakeError() }
+    return blocked
   }
 
   func blockUser(_ blockedUID: String) async throws {

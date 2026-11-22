@@ -12,7 +12,7 @@ Scope: pasos finales para enviar Vinctus a App Store sin perder nada entre tarea
 - [x] `npm run test:delete-account:harness` en verde.
 - [x] Membresia Apple Developer activa.
 - [x] Sign in with Apple configurado en Apple + Firebase (baseline web/compliance).
-- [ ] Setup Mac/Xcode + firma/provisioning.
+- [x] Mac/Xcode + firma/provisioning en GitHub Actions: Vinctus 1.0.0 (2) subida y procesada en TestFlight el 13 de noviembre de 2026; ver `docs/testflight-sin-mac.md`.
 - [ ] Pruebas reales en iPhone (SIWA nativo, push, camara, haptics).
 - [ ] Cierre manual en App Store Connect (labels, age rating, screenshots, review notes finales).
 - [ ] Rollout App Check en staging antes de enforcement.

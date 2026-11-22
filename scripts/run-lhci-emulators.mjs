@@ -16,7 +16,7 @@ const env = {
 };
 
 const command =
-  'npx firebase emulators:exec --project vinctus-dev --only auth,firestore,storage "npm run seed && npm run lhci"';
+  'npm run functions:build && npx firebase emulators:exec --project vinctus-dev --only auth,firestore,storage,functions "npm run seed && npm run lhci"';
 
 const child = spawn(command, {
   shell: true,

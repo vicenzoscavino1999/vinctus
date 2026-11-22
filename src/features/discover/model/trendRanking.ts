@@ -229,18 +229,52 @@ export const computeTrendScores = ({
 };
 
 /** Highest score first; ties go to the bigger weekly change, then more live items, then label. */
+/**
+ * Trend order: by trend score, or by the filter sheet's sort when it asks for A-Z, popular
+ * (members, then groups, then subgroups) or recent (weekly growth, then live results).
+ */
 export const rankTrendCategories = ({
   categories,
   trendScoresByCategory,
   weeklyDeltaByCategory,
   trendPreviewState,
+  sortBy = 'relevance',
+  groupCountByCategory = {},
+  groupSocialByCategory = {},
 }: {
   categories: Category[];
   trendScoresByCategory: Record<string, TrendScore>;
   weeklyDeltaByCategory: Record<string, number>;
   trendPreviewState: Record<string, TrendPreviewState>;
-}): Category[] =>
-  [...categories].sort((a, b) => {
+  sortBy?: string;
+  groupCountByCategory?: Record<string, number>;
+  groupSocialByCategory?: Record<string, { groups: number; members: number }>;
+}): Category[] => {
+  if (sortBy === 'alphabetical') {
+    return [...categories].sort((a, b) => a.label.localeCompare(b.label, 'es'));
+  }
+  if (sortBy === 'popular') {
+    return [...categories].sort((a, b) => {
+      const memberDiff =
+        (groupSocialByCategory[b.id]?.members ?? 0) - (groupSocialByCategory[a.id]?.members ?? 0);
+      if (memberDiff !== 0) return memberDiff;
+      const groupDiff = (groupCountByCategory[b.id] ?? 0) - (groupCountByCategory[a.id] ?? 0);
+      if (groupDiff !== 0) return groupDiff;
+      return b.subgroups.length - a.subgroups.length;
+    });
+  }
+  if (sortBy === 'recent') {
+    return [...categories].sort((a, b) => {
+      const weeklyDiff = (weeklyDeltaByCategory[b.id] ?? 0) - (weeklyDeltaByCategory[a.id] ?? 0);
+      if (weeklyDiff !== 0) return weeklyDiff;
+      const liveDiff =
+        (trendPreviewState[b.id]?.liveCount ?? 0) - (trendPreviewState[a.id]?.liveCount ?? 0);
+      if (liveDiff !== 0) return liveDiff;
+      return a.label.localeCompare(b.label, 'es');
+    });
+  }
+
+  return [...categories].sort((a, b) => {
     const scoreDiff =
       (trendScoresByCategory[b.id]?.score ?? 0) - (trendScoresByCategory[a.id]?.score ?? 0);
     if (scoreDiff !== 0) return scoreDiff;
@@ -254,6 +288,7 @@ export const rankTrendCategories = ({
 
     return a.label.localeCompare(b.label, 'es');
   });
+};
 
 export const getTrendSignals = ({
   categoryId,

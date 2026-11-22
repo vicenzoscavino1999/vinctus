@@ -1,6 +1,7 @@
 import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
+import FirebaseStorage
 import Foundation
 
 /// Interest categories, same ids and names as `CATEGORIES` in `src/shared/constants/mockData.ts`.
@@ -40,7 +41,10 @@ struct ProfileUserSummary: Identifiable, Hashable {
 
 /// Where the next page of a profile list starts. Opaque outside the repo.
 struct ProfileListCursor {
-  fileprivate let lastDocument: DocumentSnapshot
+  fileprivate let lastDocument: DocumentSnapshot?
+  fileprivate let postToken: String?
+  init(lastDocument: DocumentSnapshot) { self.lastDocument = lastDocument; self.postToken = nil }
+  init(postToken: String) { self.lastDocument = nil; self.postToken = postToken }
 }
 
 /// One page of a profile list; `next` is nil on the last page.
@@ -170,6 +174,7 @@ enum ProfileContentRepoError: LocalizedError {
   case firebaseNotConfigured
   case userNotAuthenticated
   case invalidContribution
+  case invalidDebate
 
   var errorDescription: String? {
     switch self {
@@ -179,6 +184,8 @@ enum ProfileContentRepoError: LocalizedError {
       return "Debes iniciar sesión."
     case .invalidContribution:
       return "Revisa el título (máximo 140 caracteres) y el enlace."
+    case .invalidDebate:
+      return "No se pudo guardar el debate por datos incompletos."
     }
   }
 }
@@ -201,14 +208,10 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
 
   /// Mirrors `getPostsByUser` in `src/shared/lib/firestore/posts.ts`.
   func fetchPosts(uid: String, limit: Int, after cursor: ProfileListCursor?) async throws -> ProfileListPage<FeedItem> {
-    let query = try database().collection(FirestoreCollections.posts)
-      .whereField("authorId", isEqualTo: uid)
-      .order(by: "createdAt", descending: true)
-    let snapshot = try await page(query, limit: limit, after: cursor).getDocuments()
-    return ProfileListPage(
-      items: snapshot.documents.map(FirebaseFeedRepo.feedItem(from:)),
-      next: Self.nextCursor(snapshot, limit: limit)
-    )
+    if let cursor, cursor.postToken == nil { throw PostReadError.invalidResponse }
+    let result = try await PostReadClient.read(view: "author", id: uid, limit: limit, cursor: cursor?.postToken)
+    return ProfileListPage(items: result.items.map { FirebaseFeedRepo.feedItem(id: $0.id, data: $0.fields) },
+      next: result.cursor.map { ProfileListCursor(postToken: $0) })
   }
 
   // MARK: Follows
@@ -311,7 +314,18 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
   }
 
   func deleteContribution(id: String) async throws {
-    try await database().collection(FirestoreCollections.contributions).document(id).delete()
+    let ref = try database().collection(FirestoreCollections.contributions).document(id)
+    if let snapshot = try? await ref.getDocument(),
+       let filePath = FirestoreValue.string(snapshot.data()?["filePath"]) {
+      do {
+        try await Storage.storage().reference(withPath: filePath).delete()
+      } catch let error as NSError where error.domain == StorageErrorDomain && error.code == StorageErrorCode.objectNotFound.rawValue {
+        // Already removed in Storage.
+      } catch {
+        // Ignore best-effort Storage cleanup failures before deleting metadata, matching web.
+      }
+    }
+    try await ref.delete()
   }
 
   // MARK: Followed categories
@@ -330,6 +344,8 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
     let ref = db.collection(FirestoreCollections.users).document(uid)
       .collection(FirestoreSubcollections.followedCategories).document(categoryID)
     if followed {
+      let existing = try? await ref.getDocument()
+      if existing?.exists == true { return }
       try await ref.setData(["categoryId": categoryID, "createdAt": FieldValue.serverTimestamp()])
     } else {
       try await ref.delete()
@@ -360,22 +376,36 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
     }
   }
 
-  /// Mirrors `saveArenaDebateWithSync`.
+  /// Mirrors `saveArenaDebateWithSync`. Idempotent so retries do not violate immutable `createdAt`.
   func saveDebate(_ debate: SavedDebate) async throws {
     let (db, uid) = try context()
+    let safeID = debate.id.trimmingCharacters(in: .whitespacesAndNewlines)
+    let safeTopic = debate.topic.trimmingCharacters(in: .whitespacesAndNewlines)
+    let safePersonaA = debate.personaA.trimmingCharacters(in: .whitespacesAndNewlines)
+    let safePersonaB = debate.personaB.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !safeID.isEmpty, !safeTopic.isEmpty, !safePersonaA.isEmpty, !safePersonaB.isEmpty else {
+      throw ProfileContentRepoError.invalidDebate
+    }
+
+    let ref = db.collection(FirestoreCollections.users).document(uid)
+      .collection(FirestoreSubcollections.savedArenaDebates).document(safeID)
+    let existing = try? await ref.getDocument()
+    if existing?.exists == true { return }
+
     let winner = debate.winner.flatMap { ["A", "B", "draw"].contains($0) ? $0 : nil }
-    try await db.collection(FirestoreCollections.users).document(uid)
-      .collection(FirestoreSubcollections.savedArenaDebates).document(debate.id)
-      .setData([
-        "debateId": debate.id,
-        "topic": String(debate.topic.prefix(Limits.SavedArenaDebates.topicMaxLength)),
-        "personaA": debate.personaA,
-        "personaB": debate.personaB,
-        "summary": debate.summary.map { String($0.prefix(Limits.SavedArenaDebates.summaryMaxLength)) }
-          ?? NSNull(),
-        "verdictWinner": winner ?? NSNull(),
-        "createdAt": FieldValue.serverTimestamp(),
-      ])
+    let trimmedSummary = debate.summary?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let safeSummary = trimmedSummary.flatMap {
+      $0.isEmpty ? nil : String($0.prefix(Limits.SavedArenaDebates.summaryMaxLength))
+    }
+    try await ref.setData([
+      "debateId": safeID,
+      "topic": String(safeTopic.prefix(Limits.SavedArenaDebates.topicMaxLength)),
+      "personaA": String(safePersonaA.prefix(Limits.SavedArenaDebates.personaMaxLength)),
+      "personaB": String(safePersonaB.prefix(Limits.SavedArenaDebates.personaMaxLength)),
+      "summary": safeSummary ?? NSNull(),
+      "verdictWinner": winner ?? NSNull(),
+      "createdAt": FieldValue.serverTimestamp(),
+    ])
   }
 
   func removeSavedDebate(id: String) async throws {
@@ -386,10 +416,11 @@ final class FirebaseProfileContentRepo: ProfileContentRepo {
 
   // MARK: Helpers
 
-  private func page(_ query: Query, limit: Int, after cursor: ProfileListCursor?) -> Query {
+  private func page(_ query: Query, limit: Int, after cursor: ProfileListCursor?) throws -> Query {
     let limited = query.limit(to: limit)
     guard let cursor else { return limited }
-    return limited.start(afterDocument: cursor.lastDocument)
+    guard let document = cursor.lastDocument else { throw PostReadError.invalidResponse }
+    return limited.start(afterDocument: document)
   }
 
   /// A full page may have more after it; a short one is the last.

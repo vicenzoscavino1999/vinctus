@@ -93,10 +93,38 @@ function parseNumberEnv(
   return Math.min(max, Math.max(min, parsed));
 }
 
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, code) => {
+      const parsed = Number.parseInt(code, 10);
+      return Number.isFinite(parsed) && parsed > 0 && parsed <= 0x10ffff
+        ? String.fromCodePoint(parsed)
+        : '';
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
+      const parsed = Number.parseInt(hex, 16);
+      return Number.isFinite(parsed) && parsed > 0 && parsed <= 0x10ffff
+        ? String.fromCodePoint(parsed)
+        : '';
+    })
+    .replace(/&amp;/g, '&');
+}
+
 function normalizeString(value: string | undefined): string | null {
   if (!value) return null;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeDecodedString(value: string | undefined): string | null {
+  if (!value) return null;
+  const decoded = decodeHtmlEntities(value).trim();
+  return decoded.length > 0 ? decoded : null;
 }
 
 function normalizeQuery(rawQuery: string | null): string {
@@ -111,7 +139,11 @@ function normalizeQuery(rawQuery: string | null): string {
 
 function parseLimit(rawLimit: string | null): number {
   if (!rawLimit) return 6;
-  const parsed = Number.parseInt(rawLimit, 10);
+  const trimmed = rawLimit.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    throw new RequestError('Invalid "limit"', 400);
+  }
+  const parsed = Number.parseInt(trimmed, 10);
   if (!Number.isFinite(parsed)) {
     throw new RequestError('Invalid "limit"', 400);
   }
@@ -212,11 +244,11 @@ function mapSearchItems(items: YouTubeSearchApiItem[]): YouTubeSearchItem[] {
     .map((item) => {
       const videoId = normalizeString(item.id?.videoId);
       if (!videoId || !VIDEO_ID_REGEX.test(videoId)) return null;
-      const title = normalizeString(item.snippet?.title) ?? 'Video en YouTube';
+      const title = normalizeDecodedString(item.snippet?.title) ?? 'Video en YouTube';
       return {
         channelId: normalizeString(item.snippet?.channelId),
-        channelTitle: normalizeString(item.snippet?.channelTitle),
-        description: normalizeString(item.snippet?.description),
+        channelTitle: normalizeDecodedString(item.snippet?.channelTitle),
+        description: normalizeDecodedString(item.snippet?.description),
         embedUrl: `https://www.youtube-nocookie.com/embed/${videoId}`,
         liveBroadcastContent: normalizeString(item.snippet?.liveBroadcastContent),
         publishedAt: normalizeString(item.snippet?.publishedAt),

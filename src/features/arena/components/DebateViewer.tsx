@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Bookmark, Heart, Loader2 } from 'lucide-react';
+import { Bookmark, ExternalLink, Heart, Loader2 } from 'lucide-react';
 import type { Debate, Turn } from '@/features/arena/types';
 import { getPersonaById } from '@/features/arena/types';
 
@@ -7,6 +7,7 @@ interface DebateViewerProps {
   debate: Debate | null;
   turns: Turn[];
   isLoading: boolean;
+  notFound?: boolean;
   onRetry?: () => void;
   onBack?: () => void;
   onCreateAnother?: () => void;
@@ -18,10 +19,20 @@ interface DebateViewerProps {
   isSaving?: boolean;
 }
 
+const isSafeHttpUrl = (value: string): boolean => {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
 export function DebateViewer({
   debate,
   turns,
   isLoading,
+  notFound = false,
   onRetry,
   onBack,
   onCreateAnother,
@@ -34,9 +45,29 @@ export function DebateViewer({
 }: DebateViewerProps) {
   const personaA = useMemo(() => getPersonaById(debate?.personaA || ''), [debate?.personaA]);
   const personaB = useMemo(() => getPersonaById(debate?.personaB || ''), [debate?.personaB]);
+  const safeSourceLinks = useMemo(
+    () =>
+      (debate?.sourceLinks ?? []).filter((link) => typeof link === 'string' && isSafeHttpUrl(link)),
+    [debate?.sourceLinks],
+  );
   const nextTurnNumber = Math.min(6, turns.length + 1);
   const nextSpeaker =
     nextTurnNumber % 2 === 1 ? personaA?.name || 'Persona A' : personaB?.name || 'Persona B';
+
+  if (notFound && !debate) {
+    return (
+      <section className="error-state space-y-3">
+        <p className="text-sm text-neutral-200">
+          Este debate no existe o no tienes acceso para verlo.
+        </p>
+        {onBack && (
+          <button type="button" className="btn-accent" onClick={onBack}>
+            Volver a Arena
+          </button>
+        )}
+      </section>
+    );
+  }
 
   if (isLoading || !debate) {
     return (
@@ -53,11 +84,22 @@ export function DebateViewer({
     return (
       <section className="error-state">
         <p className="mb-3 text-sm text-red-300">{debate.error || 'Error al generar el debate.'}</p>
-        {onRetry && (
-          <button type="button" className="btn-accent" onClick={onRetry}>
-            Intentar de nuevo
-          </button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {onRetry && (
+            <button type="button" className="btn-accent" onClick={onRetry}>
+              Intentar de nuevo
+            </button>
+          )}
+          {onBack && (
+            <button
+              type="button"
+              className="rounded-lg border border-neutral-700 px-4 py-2 text-xs uppercase tracking-[0.15em] text-neutral-300 hover:border-neutral-500 hover:text-white"
+              onClick={onBack}
+            >
+              Volver
+            </button>
+          )}
+        </div>
       </section>
     );
   }
@@ -67,7 +109,9 @@ export function DebateViewer({
       <header className="card card-premium">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-wider text-neutral-500">Arena IA</p>
+            <p className="text-xs uppercase tracking-wider text-neutral-500">
+              Arena IA{debate.visibility === 'private' ? ' · Privado' : ''}
+            </p>
             <h2 className="mt-2 text-heading-lg font-display text-white">{debate.topic}</h2>
             <p className="mt-3 text-sm text-neutral-400">
               {personaA?.name || 'Persona A'} vs {personaB?.name || 'Persona B'}
@@ -95,6 +139,7 @@ export function DebateViewer({
                 onClick={onToggleLike}
                 disabled={isLiking}
                 aria-pressed={isLiked}
+                aria-label={isLiked ? 'Quitar me gusta' : 'Dar me gusta'}
               >
                 {isLiking ? (
                   <Loader2 size={14} className="animate-spin" />
@@ -114,6 +159,7 @@ export function DebateViewer({
                 } disabled:cursor-not-allowed disabled:opacity-60`}
                 onClick={onToggleSave}
                 disabled={isSaving}
+                aria-pressed={isSaved}
               >
                 {isSaving ? (
                   <Loader2 size={14} className="animate-spin" />
@@ -159,7 +205,9 @@ export function DebateViewer({
                 <p className="mb-2 text-xs uppercase tracking-wider text-neutral-400">
                   Turno {turn.idx + 1} - {speakerName || `Persona ${turn.speaker}`}
                 </p>
-                <p className="text-sm leading-relaxed text-neutral-200">{turn.text}</p>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-200">
+                  {turn.text}
+                </p>
               </article>
             );
           })}
@@ -180,6 +228,28 @@ export function DebateViewer({
           </p>
           <p className="mt-2 text-sm text-neutral-300">{debate.verdict.reason}</p>
           {debate.summary && <p className="mt-4 text-sm text-neutral-400">{debate.summary}</p>}
+          {safeSourceLinks.length > 0 && (
+            <div className="mt-4 border-t border-brand-gold/20 pt-3">
+              <p className="text-[11px] uppercase tracking-wider text-neutral-400">
+                Enlaces mencionados
+              </p>
+              <ul className="mt-2 space-y-1">
+                {safeSourceLinks.map((link) => (
+                  <li key={link}>
+                    <a
+                      href={link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-brand-gold hover:underline break-all"
+                    >
+                      <ExternalLink size={12} />
+                      <span>{link}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {onCreateAnother && (
             <button type="button" className="btn-accent mt-4" onClick={onCreateAnother}>
               Crear otro debate

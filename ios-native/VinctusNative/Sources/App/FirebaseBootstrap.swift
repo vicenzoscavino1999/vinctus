@@ -3,13 +3,29 @@ import FirebaseCore
 import OSLog
 
 enum FirebaseBootstrap {
+  static func isProjectAllowed(_ projectID: String?, for environment: AppEnvironment) -> Bool {
+    guard let trimmed = projectID?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+      return false
+    }
+    switch environment {
+    case .staging:
+      return trimmed == "vinctus-staging"
+    case .prod:
+      return trimmed != "vinctus-staging"
+    case .dev:
+      return true
+    }
+  }
+
   static func configureIfPossible() {
     guard FirebaseApp.app() == nil else { return }
 
     // Prefer env-scoped plist.
     let env = AppEnvironment.current
     AppLog.firebase.info("configureIfPossible.start env=\(env.rawValue, privacy: .public)")
-    if let options = optionsFromPlist(named: env.firebasePlistBaseName) {
+    if let options = optionsFromPlist(named: env.firebasePlistBaseName),
+       isProjectAllowed(options.projectID, for: env) {
+      AppCheckBootstrap.configureProviderFactoryIfNeeded()
       FirebaseApp.configure(options: options)
       AppLog.firebase.info(
         "configureIfPossible.success source=\(env.firebasePlistBaseName, privacy: .public)"
@@ -18,7 +34,10 @@ enum FirebaseBootstrap {
     }
 
     // Fallback: allow dropping a default GoogleService-Info.plist into Resources.
-    if let options = optionsFromPlist(named: "GoogleService-Info") {
+    if env != .staging,
+       let options = optionsFromPlist(named: "GoogleService-Info"),
+       isProjectAllowed(options.projectID, for: env) {
+      AppCheckBootstrap.configureProviderFactoryIfNeeded()
       FirebaseApp.configure(options: options)
       AppLog.firebase.info("configureIfPossible.success source=GoogleService-Info")
       return

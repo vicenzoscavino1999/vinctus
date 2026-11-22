@@ -157,8 +157,12 @@ enum Limits {
   enum GroupRequests {
     /// Group name copied into a join request (group_requests).
     static let groupNameMaxLength = 120
+    /// Optional message included with a group join request.
+    static let messageMaxLength = 1000
     /// Requester's display name copied into a join request.
     static let fromUserNameMaxLength = 80
+    /// Requester's photo URL copied into a join request.
+    static let fromUserPhotoMaxLength = 600
   }
 
   enum Moderation {
@@ -183,6 +187,12 @@ enum Limits {
   enum Stories {
     /// Owner display name copied into a story (ownerSnapshot.displayName).
     static let ownerNameMaxLength = 80
+    /// Owner photo URL copied into a story (ownerSnapshot.photoURL).
+    static let photoURLMaxLength = 600
+    /// Media and thumbnail download URL length in a story document.
+    static let mediaUrlMaxLength = 1000
+    /// Storage object path length in a story document.
+    static let mediaPathMaxLength = 600
   }
 }
 
@@ -194,6 +204,10 @@ enum StorageMaxBytes {
   static let video = 100 * 1024 * 1024
   /// Story videos.
   static let storyVideo = 25 * 1024 * 1024
+  /// Videos attached to a conversation.
+  static let chatVideo = 25 * 1024 * 1024
+  /// Voice notes and audio attached to a conversation.
+  static let chatAudio = 10 * 1024 * 1024
   /// Files: post and chat files, collection and contribution files. Also the largest file size that contributions, collection items and post media store in Firestore.
   static let file = 25 * 1024 * 1024
 }
@@ -236,6 +250,15 @@ enum StorageContentTypes {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   ]
+  /// Audio attached to a conversation, including AAC voice notes in an MP4 container.
+  static let chatAudio = [
+    "audio/mp4",
+    "audio/aac",
+    "audio/mpeg",
+    "audio/wav",
+    "audio/ogg",
+    "audio/webm",
+  ]
 }
 
 /// Where uploaded files go, as storage.rules match them.
@@ -275,7 +298,7 @@ enum StoragePaths {
     "stories/\(userID)/\(storyID)/thumb/\(filename)"
   }
 
-  /// `conversations/{conversationId}/attachments/{userId}/{messageId}/{filename}`: `image` under 10 MB or `chatFile` under 25 MB.
+  /// `conversations/{conversationId}/attachments/{userId}/{messageId}/{filename}`: `image` under 10 MB or `chatFile` under 25 MB or `video` under 25 MB or `chatAudio` under 10 MB.
   static func conversationAttachment(
     conversationID: String,
     userID: String,

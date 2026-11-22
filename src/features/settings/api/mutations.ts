@@ -1,4 +1,5 @@
 import {
+  unblockUser as unblockUserRaw,
   updateNotificationSettings as updateNotificationSettingsRaw,
   updatePrivacySettings as updatePrivacySettingsRaw,
 } from '@/shared/lib/firestore';
@@ -54,5 +55,13 @@ export const updatePrivacySettings = async (
   const safeSettings = validate(privacySettingsSchema, settings, { field: 'settings' });
   return runWrite('settings.updatePrivacySettings', () =>
     updatePrivacySettingsRaw(safeUid, safeSettings),
+  );
+};
+
+export const unblockBlockedUser = async (currentUid: string, blockedUid: string): Promise<void> => {
+  const safeCurrentUid = validate(uidSchema, currentUid, { field: 'currentUid' });
+  const safeBlockedUid = validate(uidSchema, blockedUid, { field: 'blockedUid' });
+  return runWrite('settings.unblockBlockedUser', () =>
+    unblockUserRaw(safeCurrentUid, safeBlockedUid),
   );
 };

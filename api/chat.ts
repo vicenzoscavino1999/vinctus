@@ -121,7 +121,8 @@ type AICallResult =
     };
 
 type ValidationResult =
-  { ok: true; value: ChatRequest } | { error: string; ok: false; status: number };
+  | { ok: true; value: ChatRequest }
+  | { error: string; ok: false; status: number };
 
 class PayloadTooLargeError extends Error {
   constructor() {
@@ -930,12 +931,12 @@ async function callOpenAIResponses(
   }
 }
 
-async function reserveImageGeneration(uid: string): Promise<boolean> {
+async function reserveImageGeneration(uid: string): Promise<{ reserved: boolean; day: string }> {
   const db = getDb();
   const day = new Date().toISOString().slice(0, 10);
   const dailyRef = db.collection('aiImageUsage').doc(day);
   const userRef = dailyRef.collection('users').doc(uid);
-  return db.runTransaction(async (transaction) => {
+  const reserved = await db.runTransaction(async (transaction) => {
     const [daily, user] = await Promise.all([transaction.get(dailyRef), transaction.get(userRef)]);
     const total = Number(daily.data()?.count ?? 0);
     const userCount = Number(user.data()?.count ?? 0);
@@ -952,6 +953,63 @@ async function reserveImageGeneration(uid: string): Promise<boolean> {
     transaction.set(userRef, { count: userCount + 1 }, { merge: true });
     return true;
   });
+  return { reserved, day };
+}
+
+function trimChatHistory(entries: GeminiMessage[]): GeminiMessage[] {
+  const normalized: GeminiMessage[] = [];
+  for (const entry of entries) {
+    const parts = entry.parts
+      .map((part) => ({ text: part.text.trim().slice(0, MAX_PART_TEXT_CHARS) }))
+      .filter((part) => part.text.length > 0)
+      .slice(0, MAX_PARTS_PER_MESSAGE);
+    if (parts.length > 0) {
+      normalized.push({ role: entry.role, parts });
+    }
+  }
+
+  const trimmed = normalized.slice(-MAX_HISTORY_MESSAGES);
+  const entryChars = (entry: GeminiMessage) =>
+    entry.parts.reduce((sum, part) => sum + part.text.length, 0);
+  let totalChars = trimmed.reduce((sum, entry) => sum + entryChars(entry), 0);
+
+  while (trimmed.length > 0 && totalChars > MAX_TOTAL_HISTORY_CHARS) {
+    const removed = trimmed.shift();
+    if (removed) {
+      totalChars -= entryChars(removed);
+    }
+  }
+
+  while (trimmed.length > 0 && trimmed[0]?.role !== 'user') {
+    trimmed.shift();
+  }
+
+  return trimmed;
+}
+
+async function releaseImageGeneration(uid: string, day: string): Promise<void> {
+  try {
+    const db = getDb();
+    const dailyRef = db.collection('aiImageUsage').doc(day);
+    const userRef = dailyRef.collection('users').doc(uid);
+    await db.runTransaction(async (transaction) => {
+      const [daily, user] = await Promise.all([
+        transaction.get(dailyRef),
+        transaction.get(userRef),
+      ]);
+      const total = Number(daily.data()?.count ?? 0);
+      const userCount = Number(user.data()?.count ?? 0);
+      if (Number.isSafeInteger(total) && total > 0) {
+        transaction.set(dailyRef, { count: total - 1 }, { merge: true });
+      }
+      if (Number.isSafeInteger(userCount) && userCount > 0) {
+        transaction.set(userRef, { count: userCount - 1 }, { merge: true });
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[chat-api] failed to refund image quota: ${truncateForLog(message, 160)}`);
+  }
 }
 
 function buildSystemInstruction(): { parts: { text: string }[] } {
@@ -968,7 +1026,10 @@ function buildSystemInstruction(): { parts: { text: string }[] } {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+
   if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
@@ -1052,13 +1113,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!sanitizedRequest.useOpenAI && !geminiApiKey && !nvidiaApiKey) {
     return res.status(503).json({ error: 'Selecciona OpenAI para usar el chat.' });
   }
+  let reservedImageDay: string | null = null;
   if (sanitizedRequest.generateImage) {
     try {
-      if (!(await reserveImageGeneration(authUid))) {
+      const reservation = await reserveImageGeneration(authUid);
+      if (!reservation.reserved) {
         return res
           .status(429)
           .json({ error: 'Límite diario de imágenes alcanzado. Intenta mañana.' });
       }
+      reservedImageDay = reservation.day;
     } catch {
       return res.status(503).json({ error: 'No se pudo verificar el límite de imágenes.' });
     }
@@ -1137,6 +1201,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (!successData) {
+    if (reservedImageDay) {
+      await releaseImageGeneration(authUid, reservedImageDay);
+    }
     const errorCode = latestFailure?.code ?? 'upstream';
     if (errorCode === 'rate_limit') {
       return res.status(429).json({ error: 'AI provider rate limit reached' });
@@ -1161,17 +1228,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const confirmation = `Listo. Cree el grupo "${result.name}" (${result.visibility}). Puedes verlo en /group/${result.groupId}.`;
       return res.status(200).json({
         action: { groupId: result.groupId, type: 'createGroup' },
-        history: [...contents, { parts: [{ text: confirmation }], role: 'model' }],
+        history: trimChatHistory([...contents, { parts: [{ text: confirmation }], role: 'model' }]),
         model: usedModel,
         provider: usedProvider,
         response: confirmation,
       });
     } catch {
       return res.status(500).json({
-        history: [
+        history: trimChatHistory([
           ...contents,
           { parts: [{ text: 'No pude crear el grupo. Intenta nuevamente.' }], role: 'model' },
-        ],
+        ]),
         model: usedModel,
         provider: usedProvider,
         response: 'No pude crear el grupo. Intenta nuevamente.',
@@ -1182,7 +1249,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const responseText = successData.responseText ?? 'Lo siento, no pude generar una respuesta.';
 
   return res.status(200).json({
-    history: [...contents, { parts: [{ text: responseText }], role: 'model' }],
+    history: trimChatHistory([...contents, { parts: [{ text: responseText }], role: 'model' }]),
     model: usedModel,
     provider: usedProvider,
     response: responseText,

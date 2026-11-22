@@ -8,6 +8,7 @@ export const useCuratedDebates = () => {
   const [arenaDebates, setArenaDebates] = useState<Debate[]>([]);
   const [arenaDebatesLoading, setArenaDebatesLoading] = useState(false);
   const [arenaDebatesError, setArenaDebatesError] = useState<string | null>(null);
+  const [arenaReloadToken, setArenaReloadToken] = useState(0);
 
   useEffect(() => {
     let isActive = true;
@@ -37,9 +38,14 @@ export const useCuratedDebates = () => {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [arenaReloadToken]);
 
   const curatedArenaDebates = useMemo(() => curateArenaDebates(arenaDebates), [arenaDebates]);
 
-  return { curatedArenaDebates, arenaDebatesLoading, arenaDebatesError };
+  return {
+    curatedArenaDebates,
+    arenaDebatesLoading,
+    arenaDebatesError,
+    retryArenaDebates: () => setArenaReloadToken((prev) => prev + 1),
+  };
 };
