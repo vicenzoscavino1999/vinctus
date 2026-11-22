@@ -1,6 +1,7 @@
 import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
+import FirebaseFunctions
 import FirebaseStorage
 import UIKit
 import XCTest
@@ -27,6 +28,8 @@ enum Emulator {
     }
 
     Auth.auth().useEmulator(withHost: "127.0.0.1", port: 9099)
+    Functions.functions().useEmulator(withHost: "127.0.0.1", port: 5001)
+    Functions.functions(region: "us-central1").useEmulator(withHost: "127.0.0.1", port: 5001)
 
     let settings = FirestoreSettings()
     settings.host = "127.0.0.1:8080"
@@ -34,7 +37,12 @@ enum Emulator {
     settings.cacheSettings = MemoryCacheSettings()
     Firestore.firestore().settings = settings
 
-    Storage.storage().useEmulator(withHost: "127.0.0.1", port: 9199)
+    let storage = Storage.storage()
+    storage.useEmulator(withHost: "127.0.0.1", port: 9199)
+    // Fail fast in emulator tests instead of waiting on the SDK's 10-minute default retry window.
+    storage.maxUploadRetryTime = 20
+    storage.maxDownloadRetryTime = 20
+    storage.maxOperationRetryTime = 20
   }
 
   private static var isFirestoreReady = false

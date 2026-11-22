@@ -11,18 +11,36 @@ final class StoriesViewModel: ObservableObject {
   @Published private(set) var seenStoryIDs: Set<String> = []
 
   private let repo: StoriesRepo
+  private var sessionGeneration = 0
 
   init(repo: StoriesRepo) {
     self.repo = repo
   }
 
+  func reset() {
+    sessionGeneration += 1
+    groups = []
+    seenStoryIDs = []
+    errorMessage = nil
+    isLoading = false
+    isPublishing = false
+  }
+
   func load() async {
+    let generation = sessionGeneration
     isLoading = true
-    defer { isLoading = false }
+    defer {
+      if sessionGeneration == generation {
+        isLoading = false
+      }
+    }
     do {
-      groups = try await repo.fetchStoryGroups()
+      let fetched = try await repo.fetchStoryGroups()
+      guard sessionGeneration == generation else { return }
+      groups = fetched
       errorMessage = nil
     } catch {
+      guard sessionGeneration == generation else { return }
       errorMessage = "No se pudieron cargar las historias."
     }
   }
@@ -32,25 +50,54 @@ final class StoriesViewModel: ObservableObject {
       errorMessage = "No se pudo preparar la foto."
       return false
     }
+    let generation = sessionGeneration
     isPublishing = true
-    defer { isPublishing = false }
+    errorMessage = nil
+    defer {
+      if sessionGeneration == generation {
+        isPublishing = false
+      }
+    }
     do {
       try await repo.publishImageStory(jpegData: data)
+      guard sessionGeneration == generation else { return false }
       await load()
       return true
     } catch {
+      guard sessionGeneration == generation else { return false }
       errorMessage = "No se pudo publicar la historia."
       return false
     }
   }
 
-  func delete(_ story: Story) async {
+  @discardableResult
+  func delete(_ story: Story) async -> Bool {
+    let generation = sessionGeneration
+    errorMessage = nil
     do {
       try await repo.deleteStory(story)
+      guard sessionGeneration == generation else { return false }
+      groups = groups.compactMap { group in
+        let remaining = group.stories.filter { $0.id != story.id }
+        guard !remaining.isEmpty else { return nil }
+        return StoryGroup(
+          ownerID: group.ownerID,
+          ownerName: group.ownerName,
+          ownerPhotoURL: group.ownerPhotoURL,
+          stories: remaining
+        )
+      }
       await load()
+      return true
     } catch {
+      guard sessionGeneration == generation else { return false }
       errorMessage = "No se pudo eliminar la historia."
+      return false
     }
+  }
+
+  func excludeOwner(_ ownerID: String) {
+    groups.removeAll { $0.ownerID == ownerID }
   }
 
   func markSeen(_ story: Story) {
@@ -58,6 +105,6 @@ final class StoriesViewModel: ObservableObject {
   }
 
   func isSeen(_ group: StoryGroup) -> Bool {
-    group.stories.allSatisfy { seenStoryIDs.contains($0.id) }
+    !group.stories.isEmpty && group.stories.allSatisfy { seenStoryIDs.contains($0.id) }
   }
 }

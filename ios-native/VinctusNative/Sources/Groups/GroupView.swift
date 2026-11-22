@@ -65,7 +65,7 @@ struct GroupView: View {
     .background(VinctusTokens.Color.background)
     .navigationTitle("")
     .navigationBarTitleDisplayMode(.inline)
-    .task {
+    .task(id: "\(groupID):\(currentUserID ?? "anon")") {
       vm.handleConnectivityChange(connectivity.isOnline)
       await vm.refresh()
       await vm.loadMembership(uid: currentUserID)
@@ -94,7 +94,15 @@ struct GroupView: View {
       ProfileView(repo: profileRepo, userID: userID)
     }
     .navigationDestination(isPresented: $isComposing) {
-      CreatePostView(repo: AppRepos.createPost(), groupID: groupID)
+      CreatePostView(repo: AppRepos.createPost(), groupID: groupID, categoryID: vm.detail?.categoryID)
+    }
+    .onChange(of: isComposing) { _, composing in
+      if !composing {
+        Task { await vm.refresh() }
+      }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .vinctusPostPublished)) { _ in
+      Task { await vm.refresh() }
     }
     .confirmationDialog("¿Salir del grupo?", isPresented: $isConfirmingLeave, titleVisibility: .visible) {
       Button("Salir", role: .destructive) {
@@ -162,17 +170,18 @@ struct GroupView: View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: 10) {
         if let membership = vm.membership, membership != .owner {
-          if membership == .member {
+          let effectiveMembership = (!isPrivate && membership == .pending) ? GroupMembershipStatus.none : membership
+          if effectiveMembership == .member {
             GroupActionButton(title: "Unido", systemImage: "checkmark", style: .gold) {}
               .disabled(true)
           } else {
             GroupActionButton(
-              title: vm.isUpdatingMembership ? "Procesando..." : membership.buttonTitle(isPrivate: isPrivate).uppercased(),
-              style: membership == .pending ? .muted : .neutral
+              title: vm.isUpdatingMembership ? "Procesando..." : effectiveMembership.buttonTitle(isPrivate: isPrivate).uppercased(),
+              style: effectiveMembership == .pending ? .muted : .neutral
             ) {
               Task { await vm.performMembershipAction(uid: currentUserID) }
             }
-            .disabled(vm.isUpdatingMembership || membership == .pending)
+            .disabled(vm.isUpdatingMembership || effectiveMembership == .pending)
           }
         }
 
@@ -224,8 +233,14 @@ struct GroupView: View {
         }
       }
 
+      let isPrivateLocked = detail.visibility == .private && !isJoined
       let posts = detail.recentPosts.filter { !blockedUsers.isBlocked($0.authorID) }
-      if posts.isEmpty {
+      if isPrivateLocked {
+        Text("Este grupo es privado. Solicita acceso para ver las publicaciones.")
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 20)
+      } else if posts.isEmpty {
         Text("Aún no hay publicaciones en este grupo.")
           .foregroundStyle(VinctusTokens.Color.textMuted)
           .frame(maxWidth: .infinity)
@@ -233,22 +248,39 @@ struct GroupView: View {
       } else {
         ForEach(posts) { post in
           HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-              Text(post.title)
-                .font(.body.weight(.medium))
-                .foregroundStyle(VinctusTokens.Color.textPrimary)
-                .lineLimit(2)
-              HStack(spacing: 6) {
-                Text(post.authorName)
-                if let createdAt = post.createdAt {
-                  Text("·")
-                  Text(createdAt, style: .relative)
+            NavigationLink {
+              PostDetailView(
+                item: post.resolvedFeedItem,
+                profileRepo: profileRepo,
+                commentsRepo: AppRepos.postComments()
+              )
+            } label: {
+              HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                  Text(post.title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(VinctusTokens.Color.textPrimary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                  HStack(spacing: 6) {
+                    Text(post.authorName)
+                    if let createdAt = post.createdAt {
+                      Text("·")
+                      Text(createdAt, style: .relative)
+                    }
+                  }
+                  .font(.subheadline)
+                  .foregroundStyle(VinctusTokens.Color.textMuted)
                 }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                  .font(.caption.weight(.semibold))
+                  .foregroundStyle(VinctusTokens.Color.textMuted)
               }
-              .font(.subheadline)
-              .foregroundStyle(VinctusTokens.Color.textMuted)
+              .contentShape(Rectangle())
             }
-            Spacer()
+            .buttonStyle(.plain)
+
             ModerationMenu(
               target: .post(postID: post.id, authorID: post.authorID),
               authorID: post.authorID,
@@ -275,13 +307,20 @@ struct GroupView: View {
         .font(VinctusTokens.Typography.serif(24))
         .foregroundStyle(VinctusTokens.Color.textPrimary)
 
-      if detail.topMembers.isEmpty {
+      let isPrivateLocked = detail.visibility == .private && !isJoined
+      let members = detail.topMembers.filter { !blockedUsers.isBlocked($0.uid) }
+      if isPrivateLocked {
+        Text("Solo los miembros pueden ver la lista de participantes.")
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 20)
+      } else if members.isEmpty {
         Text("Sin miembros destacados por ahora.")
           .foregroundStyle(VinctusTokens.Color.textMuted)
           .frame(maxWidth: .infinity)
           .padding(.vertical, 20)
       } else {
-        ForEach(detail.topMembers.filter { !blockedUsers.isBlocked($0.uid) }) { member in
+        ForEach(members) { member in
           Button {
             openedProfileID = member.uid
           } label: {

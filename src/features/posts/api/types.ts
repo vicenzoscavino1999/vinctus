@@ -1,24 +1,23 @@
 import { z } from 'zod';
-import type { DocumentSnapshot } from 'firebase/firestore';
 import type { CreatePostUploadingInput } from '@/shared/lib/firestore-post-upload';
 import type { CreateStoryInput, StoryMediaType, StoryRead } from '@/shared/lib/firestore/stories';
 import type { PostCommentRead } from '@/shared/lib/firestore/postEngagement';
 import type { PostRead } from '@/shared/lib/firestore/posts';
-import type { PaginatedResult } from '@/shared/lib/firestore/sharedTypes';
+import type { PostPage, PostReadCursor } from '@/shared/lib/post-reads-client';
 import { idSchema, limitSchema, urlSchema } from '@/shared/lib/validators';
 import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 export type {
   CreatePostUploadingInput,
   CreateStoryInput,
-  PaginatedResult,
   PostCommentRead,
   PostRead,
   StoryMediaType,
   StoryRead,
 };
 
-export type PostCursor = DocumentSnapshot | undefined | null;
+export type PaginatedResult<T> = PostPage<T>;
+export type PostCursor = PostReadCursor | undefined | null;
 
 export const postIdSchema = idSchema;
 export const storyIdSchema = idSchema;
@@ -46,25 +45,41 @@ export const ownerIdsSchema = z.array(idSchema).min(1).max(OWNER_IDS_READ_CHUNK_
 export const createStoryInputSchema = z.object({
   storyId: idSchema.optional(),
   ownerId: idSchema,
-  ownerName: z.string().trim().min(1).max(120).nullable(),
-  ownerPhoto: urlSchema.nullable(),
+  ownerName: z.string().trim().min(1).max(LIMITS.stories.ownerNameMaxLength).nullable(),
+  ownerPhoto: urlSchema.max(LIMITS.stories.photoURLMaxLength).nullable(),
   mediaType: z.enum(['image', 'video']),
-  mediaUrl: urlSchema,
-  mediaPath: z.string().trim().min(1).max(500),
-  thumbUrl: urlSchema.nullable().optional(),
-  thumbPath: z.string().trim().min(1).max(500).nullable().optional(),
+  mediaUrl: urlSchema.max(LIMITS.stories.mediaUrlMaxLength),
+  mediaPath: z.string().trim().min(1).max(LIMITS.stories.mediaPathMaxLength),
+  thumbUrl: urlSchema.max(LIMITS.stories.mediaUrlMaxLength).nullable().optional(),
+  thumbPath: z.string().trim().min(1).max(LIMITS.stories.mediaPathMaxLength).nullable().optional(),
   visibility: z.literal('friends').optional(),
 });
 
-export const createPostUploadingInputSchema = z.object({
-  postId: idSchema,
-  authorId: idSchema,
-  authorSnapshot: authorSnapshotSchema,
-  title: z.string().trim().max(LIMITS.posts.titleMaxLength).nullable().optional(),
-  text: z.string().trim().min(1).max(LIMITS.posts.textMaxLength),
-  groupId: idSchema.nullable().optional(),
-  categoryId: z.string().trim().min(1).max(LIMITS.posts.categoryIdMaxLength).nullable().optional(),
-});
+export const createPostUploadingInputSchema = z
+  .object({
+    postId: idSchema,
+    authorId: idSchema,
+    authorSnapshot: authorSnapshotSchema,
+    title: z
+      .string()
+      .trim()
+      .max(LIMITS.posts.titleMaxLength)
+      .transform((title) => title || null)
+      .nullable()
+      .optional(),
+    text: z.string().trim().max(LIMITS.posts.textMaxLength),
+    groupId: idSchema.nullable().optional(),
+    categoryId: z
+      .string()
+      .trim()
+      .min(1)
+      .max(LIMITS.posts.categoryIdMaxLength)
+      .nullable()
+      .optional(),
+  })
+  .refine((input) => Boolean(input.text || input.title?.trim()), {
+    message: 'Escribe un título o una descripción.',
+  });
 
 export const updatePostPatchSchema = z
   .record(z.string(), z.unknown())
@@ -83,6 +98,14 @@ export const createPostCommentReportInputSchema = z.object({
   postId: postIdSchema,
   commentId: idSchema,
   commentAuthorId: userIdSchema.nullable().optional(),
+  reason: reportReasonSchema,
+  details: reportDetailsSchema,
+});
+
+export const createStoryReportInputSchema = z.object({
+  reporterUid: userIdSchema,
+  storyId: storyIdSchema,
+  storyOwnerId: userIdSchema.nullable().optional(),
   reason: reportReasonSchema,
   details: reportDetailsSchema,
 });

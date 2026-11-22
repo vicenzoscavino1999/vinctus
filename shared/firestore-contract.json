@@ -32,7 +32,8 @@
   "serverCollections": {
     "deletionJobs": "deletionJobs",
     "dedupEvents": "_dedup_events",
-    "moderationActions": "moderation_actions"
+    "moderationActions": "moderation_actions",
+    "postReadCursors": "_post_read_cursors"
   },
   "subcollections": {
     "followers": { "name": "followers", "parents": ["users"] },
@@ -71,11 +72,36 @@
     "profile": {
       "displayNameMaxLength": {
         "value": 120,
-        "doc": "Profile display name (userProfileUpdateSchema)."
+        "doc": "Profile display name (userProfileUpdateSchema).",
+        "rules": [
+          { "in": "isValidProfileTextFieldsOnCreate", "field": "data.displayName" },
+          { "in": "isValidProfileTextUpdate", "field": "data.displayName" }
+        ]
       },
-      "roleMaxLength": { "value": 120, "doc": "Profile role (userProfileUpdateSchema)." },
-      "bioMaxLength": { "value": 500, "doc": "Profile bio (userProfileUpdateSchema)." },
-      "locationMaxLength": { "value": 120, "doc": "Profile location (userProfileUpdateSchema)." }
+      "roleMaxLength": {
+        "value": 120,
+        "doc": "Profile role (userProfileUpdateSchema).",
+        "rules": [
+          { "in": "isValidProfileTextFieldsOnCreate", "field": "data.role" },
+          { "in": "isValidProfileTextUpdate", "field": "data.role" }
+        ]
+      },
+      "bioMaxLength": {
+        "value": 500,
+        "doc": "Profile bio (userProfileUpdateSchema).",
+        "rules": [
+          { "in": "isValidProfileTextFieldsOnCreate", "field": "data.bio" },
+          { "in": "isValidProfileTextUpdate", "field": "data.bio" }
+        ]
+      },
+      "locationMaxLength": {
+        "value": 120,
+        "doc": "Profile location (userProfileUpdateSchema).",
+        "rules": [
+          { "in": "isValidProfileTextFieldsOnCreate", "field": "data.location" },
+          { "in": "isValidProfileTextUpdate", "field": "data.location" }
+        ]
+      }
     },
     "aiChat": {
       "messageMaxLength": {
@@ -232,10 +258,20 @@
         "doc": "Group name copied into a join request (group_requests).",
         "rules": [{ "in": "isValidGroupJoinRequestCreate", "field": "data.groupName" }]
       },
+      "messageMaxLength": {
+        "value": 1000,
+        "doc": "Optional message included with a group join request.",
+        "rules": [{ "in": "isValidGroupJoinRequestCreate", "field": "data.message" }]
+      },
       "fromUserNameMaxLength": {
         "value": 80,
         "doc": "Requester's display name copied into a join request.",
         "rules": [{ "in": "isValidGroupJoinRequestCreate", "field": "data.fromUserName" }]
+      },
+      "fromUserPhotoMaxLength": {
+        "value": 600,
+        "doc": "Requester's photo URL copied into a join request.",
+        "rules": [{ "in": "isValidGroupJoinRequestCreate", "field": "data.fromUserPhoto" }]
       }
     },
     "moderation": {
@@ -283,6 +319,21 @@
         "value": 80,
         "doc": "Owner display name copied into a story (ownerSnapshot.displayName).",
         "rules": [{ "in": "isValidStoryOwnerSnapshot", "field": "snapshot.displayName" }]
+      },
+      "photoURLMaxLength": {
+        "value": 600,
+        "doc": "Owner photo URL copied into a story (ownerSnapshot.photoURL).",
+        "rules": [{ "in": "isValidStoryOwnerSnapshot", "field": "snapshot.photoURL" }]
+      },
+      "mediaUrlMaxLength": {
+        "value": 1000,
+        "doc": "Media and thumbnail download URL length in a story document.",
+        "rules": [{ "in": "isValidStoryCreate", "field": "data.mediaUrl" }]
+      },
+      "mediaPathMaxLength": {
+        "value": 600,
+        "doc": "Storage object path length in a story document.",
+        "rules": [{ "in": "isValidStoryCreate", "field": "data.mediaPath" }]
       }
     }
   },
@@ -302,6 +353,16 @@
         "megabytes": 25,
         "doc": "Story videos.",
         "rules": "isUnderStoryVideoSizeLimit"
+      },
+      "chatVideo": {
+        "megabytes": 25,
+        "doc": "Videos attached to a conversation.",
+        "rules": "isUnderChatVideoSizeLimit"
+      },
+      "chatAudio": {
+        "megabytes": 10,
+        "doc": "Voice notes and audio attached to a conversation.",
+        "rules": "isUnderChatAudioSizeLimit"
       },
       "file": {
         "megabytes": 25,
@@ -363,6 +424,11 @@
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         ]
+      },
+      "chatAudio": {
+        "doc": "Audio attached to a conversation, including AAC voice notes in an MP4 container.",
+        "rules": "isValidChatAudioType",
+        "values": ["audio/mp4", "audio/aac", "audio/mpeg", "audio/wav", "audio/ogg", "audio/webm"]
       }
     },
     "paths": {
@@ -443,6 +509,14 @@
           {
             "contentTypes": "chatFile",
             "maxBytes": "file"
+          },
+          {
+            "contentTypes": "video",
+            "maxBytes": "chatVideo"
+          },
+          {
+            "contentTypes": "chatAudio",
+            "maxBytes": "chatAudio"
           }
         ]
       },

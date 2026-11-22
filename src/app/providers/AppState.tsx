@@ -30,6 +30,11 @@ import {
   unfollowCategoryWithSync as unfollowCategoryWithSyncProfile,
 } from '@/features/profile/api';
 import { COLLECTIONS, SUBCOLLECTIONS } from '@/shared/lib/firestore/firestoreContract';
+import {
+  POST_REACTION_CONFIRMED_EVENT,
+  mergeReactionIds,
+  type ConfirmedPostReaction,
+} from '@/features/posts/model/postEngagementEvents';
 
 // Create the context with proper typing
 const AppStateContext = createContext<AppStateContextType | null>(null);
@@ -74,6 +79,10 @@ interface AppStateProviderProps {
 export const AppStateProvider = ({ children }: AppStateProviderProps) => {
   const { user } = useAuth();
   const uid = user?.uid;
+  const reactionOverrides = useMemo(
+    () => ({ uid, like: new Map<string, boolean>(), save: new Map<string, boolean>() }),
+    [uid],
+  );
 
   // State
   const [joinedGroups, setJoinedGroups] = useState<string[]>(() =>
@@ -93,6 +102,20 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
   );
 
   // ==================== Firestore bootstrap sync ====================
+
+  useEffect(() => {
+    if (!uid) return;
+    const confirmed = (event: Event) => {
+      const detail = (event as CustomEvent<ConfirmedPostReaction>).detail;
+      if (!detail || detail.uid !== uid || (detail.kind !== 'like' && detail.kind !== 'save'))
+        return;
+      reactionOverrides[detail.kind].set(detail.postId, detail.value);
+      const update = detail.kind === 'like' ? setLikedPosts : setSavedPosts;
+      update((previous) => mergeReactionIds(previous, reactionOverrides[detail.kind]));
+    };
+    window.addEventListener(POST_REACTION_CONFIRMED_EVENT, confirmed);
+    return () => window.removeEventListener(POST_REACTION_CONFIRMED_EVENT, confirmed);
+  }, [uid, reactionOverrides]);
 
   useEffect(() => {
     if (!uid) {
@@ -145,8 +168,18 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
         setFollowedCategories(
           uniqueValues(followedCategoriesSnap.docs.map((docSnap) => docSnap.id)),
         );
-        setLikedPosts(uniqueValues(likesSnap.docs.map((docSnap) => docSnap.id)));
-        setSavedPosts(uniqueValues(savedSnap.docs.map((docSnap) => docSnap.id)));
+        setLikedPosts(
+          mergeReactionIds(
+            likesSnap.docs.map((docSnap) => docSnap.id),
+            reactionOverrides.like,
+          ),
+        );
+        setSavedPosts(
+          mergeReactionIds(
+            savedSnap.docs.map((docSnap) => docSnap.id),
+            reactionOverrides.save,
+          ),
+        );
       } catch (error) {
         console.error('Failed to load app state from Firestore:', error);
       }
@@ -157,7 +190,7 @@ export const AppStateProvider = ({ children }: AppStateProviderProps) => {
     return () => {
       isActive = false;
     };
-  }, [uid]);
+  }, [uid, reactionOverrides]);
 
   // ==================== Optimistic UI Helpers ====================
 

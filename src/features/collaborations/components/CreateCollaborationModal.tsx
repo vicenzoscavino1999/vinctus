@@ -69,6 +69,19 @@ const CreateCollaborationModal = ({
     }
   }, [isOpen, editingCollaboration]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isSubmitting) {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [isOpen, isSubmitting, onClose]);
+
   const parsedTags = useMemo(() => {
     return tagsInput
       .split(',')
@@ -152,23 +165,35 @@ const CreateCollaborationModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset py-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={editingCollaboration ? 'Editar proyecto' : 'Publicar proyecto'}
+    >
+      <div
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        onClick={() => {
+          if (!isSubmitting) onClose();
+        }}
+      />
+      <div className="relative w-full max-w-2xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 flex-shrink-0">
           <h2 className="text-xl font-serif text-white">
             {editingCollaboration ? 'Editar proyecto' : 'Publicar proyecto'}
           </h2>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
+            disabled={isSubmitting}
+            className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800 disabled:opacity-50"
             aria-label="Cerrar"
           >
             <X size={20} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1">
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">

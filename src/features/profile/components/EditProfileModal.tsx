@@ -33,15 +33,25 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const userRef = useRef(user);
+  userRef.current = user;
+  const userId = user?.uid ?? null;
 
   // Load current profile data
   useEffect(() => {
-    if (!isOpen || !user) return;
+    if (!isOpen || !userId) {
+      setLoading(true);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
 
     const loadProfile = async () => {
-      setLoading(true);
       try {
-        const profile = await getUserProfile(user.uid);
+        const profile = await getUserProfile(userId);
+        if (cancelled) return;
+        const currentUser = userRef.current;
         if (profile) {
           setDisplayName(profile.displayName || '');
           setBio(profile.bio || '');
@@ -50,23 +60,32 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
           setPhotoPreview(profile.photoURL || null);
         } else {
           // Use data from auth if no profile exists
-          setDisplayName(user.displayName || '');
-          setPhotoPreview(user.photoURL || null);
+          setDisplayName(currentUser?.displayName || '');
+          setBio('');
+          setRole('');
+          setLocation('');
+          setPhotoPreview(currentUser?.photoURL || null);
         }
         setPhotoFile(null);
         setPhotoRemoved(false);
         setPhotoError(null);
         setUploadProgress(null);
       } catch (error) {
+        if (cancelled) return;
         console.error('Error loading profile:', error);
         showToast('Error al cargar el perfil', 'error');
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     void loadProfile();
-  }, [isOpen, user, showToast]);
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, userId, showToast]);
 
   useEffect(() => {
     return () => {
@@ -143,9 +162,14 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
     e.preventDefault();
     if (!user) return;
 
+    const normalizedDisplayName = displayName.trim();
+    if (!normalizedDisplayName) {
+      showToast('El nombre no puede estar vacío.', 'error');
+      return;
+    }
+
     setSaving(true);
     try {
-      const normalizedDisplayName = displayName.trim();
       let uploadedPhotoURL: string | null | undefined = undefined;
 
       if (photoRemoved) {
@@ -165,11 +189,11 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
       }
 
       await updateUserProfile(user.uid, {
-        displayName: normalizedDisplayName || undefined,
+        displayName: normalizedDisplayName,
         photoURL: uploadedPhotoURL,
-        bio: bio.trim() || undefined,
-        role: role.trim() || undefined,
-        location: location.trim() || undefined,
+        bio: bio.trim() || null,
+        role: role.trim() || null,
+        location: location.trim() || null,
       });
 
       const currentUser = auth.currentUser;
@@ -177,7 +201,7 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
         const authUpdates: { displayName?: string | null; photoURL?: string | null } = {};
         const currentDisplayName = currentUser.displayName?.trim() ?? '';
         if (currentDisplayName !== normalizedDisplayName) {
-          authUpdates.displayName = normalizedDisplayName || null;
+          authUpdates.displayName = normalizedDisplayName;
         }
         if (uploadedPhotoURL !== undefined) {
           authUpdates.photoURL = uploadedPhotoURL;
@@ -287,6 +311,8 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
+                maxLength={LIMITS.profile.displayNameMaxLength}
+                required
                 placeholder="Tu nombre"
                 className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
               />
@@ -302,6 +328,7 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
                 type="text"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
+                maxLength={LIMITS.profile.roleMaxLength}
                 placeholder="Ej: Desarrollador, Músico, Estudiante..."
                 className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
               />
@@ -317,6 +344,7 @@ export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfil
                 type="text"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
+                maxLength={LIMITS.profile.locationMaxLength}
                 placeholder="Ej: Lima, Perú"
                 className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
               />

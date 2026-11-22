@@ -9,6 +9,7 @@ import type {
 import { AppError } from '@/shared/lib/errors';
 import {
   getAccountVisibilityServer,
+  getBlockedUsers,
   getContributionsByCategory,
   getFollowList,
   getFollowStatus,
@@ -23,6 +24,7 @@ import {
 
 vi.mock('@/shared/lib/firestore', () => ({
   getAccountVisibilityServer: vi.fn(),
+  getBlockedUsers: vi.fn(),
   getContributionsByCategory: vi.fn(),
   getFollowList: vi.fn(),
   getFollowStatus: vi.fn(),
@@ -196,5 +198,23 @@ describe('profile api queries', () => {
     const task = getUserProfile('user_1');
     await expect(task).rejects.toBeInstanceOf(AppError);
     await expect(task).rejects.toMatchObject({ code: 'PERMISSION_DENIED' });
+  });
+
+  it('forwards blocked users list and incoming request flags in follow status', async () => {
+    vi.mocked(firestore.getBlockedUsers).mockResolvedValueOnce(['user_9']);
+    vi.mocked(firestore.getFollowStatus).mockResolvedValueOnce({
+      status: 'following',
+      isMutual: false,
+      hasIncomingRequest: true,
+      incomingRequestId: 'user_2_user_1',
+    });
+
+    await expect(getBlockedUsers('user_1')).resolves.toEqual(['user_9']);
+    await expect(getFollowStatus('user_1', 'user_2', 'private')).resolves.toEqual({
+      status: 'following',
+      isMutual: false,
+      hasIncomingRequest: true,
+      incomingRequestId: 'user_2_user_1',
+    });
   });
 });

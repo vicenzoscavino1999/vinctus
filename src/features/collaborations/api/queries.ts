@@ -1,6 +1,7 @@
 import {
   getCollaborations as getCollaborationsRaw,
   getPendingCollaborationRequests as getPendingCollaborationRequestsRaw,
+  getSentCollaborationRequestIds as getSentCollaborationRequestIdsRaw,
 } from '@/shared/lib/firestore';
 import { toAppError } from '@/shared/lib/errors';
 import { withRetry, withTimeout } from '@/shared/lib/firebase-helpers';
@@ -50,5 +51,18 @@ export const getPendingCollaborationRequests = async (
   });
   return runRead('collaborations.getPendingCollaborationRequests', () =>
     getPendingCollaborationRequestsRaw(safeUid, safeLimitCount),
+  );
+};
+
+export const getSentCollaborationRequestIds = async (
+  uid: string,
+  limitCount: number = 50,
+): Promise<string[]> => {
+  const safeUid = validate(uidSchema, uid, { field: 'uid' });
+  const safeLimitCount = validate(collaborationPageLimitSchema, safeLimit(limitCount, 50), {
+    field: 'limitCount',
+  });
+  return runRead('collaborations.getSentCollaborationRequestIds', () =>
+    getSentCollaborationRequestIdsRaw(safeUid, safeLimitCount),
   );
 };

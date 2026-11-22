@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppError } from '@/shared/lib/errors';
 import {
   getBlockedUsers,
+  fetchOlderMessages,
   getConversationMember,
   getGroup,
   getGroupMemberCount,
@@ -12,6 +13,7 @@ import {
 
 vi.mock('@/shared/lib/firestore', () => ({
   getBlockedUsers: vi.fn(),
+  fetchOlderMessages: vi.fn(),
   getConversationMember: vi.fn(),
   getGroup: vi.fn(),
   getGroupMemberCount: vi.fn(),
@@ -23,6 +25,13 @@ vi.mock('@/shared/lib/firestore', () => ({
 const firestore = await import('@/shared/lib/firestore');
 
 describe('chat api queries', () => {
+  it('loads a validated older page using both timestamp and message ID', async () => {
+    const page = { messages: [], oldestCursor: null, hasMore: false, isFromCache: false };
+    vi.mocked(firestore.fetchOlderMessages).mockResolvedValueOnce(page);
+    const cursor = { clientCreatedAt: 100, messageId: 'message-id' };
+    await expect(fetchOlderMessages('dm_user_1_user_2', cursor)).resolves.toEqual(page);
+    expect(firestore.fetchOlderMessages).toHaveBeenCalledWith('dm_user_1_user_2', cursor);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });

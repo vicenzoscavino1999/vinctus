@@ -209,21 +209,36 @@ const getHeaderValue = (value: string | string[] | undefined): string | null => 
 
 const normalizeText = (value: string): string => value.replace(/\s+/g, ' ').trim();
 
-const decodeXmlEntities = (value: string): string =>
+const decodeHtmlEntities = (value: string): string =>
   value
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/g, "'");
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, code) => {
+      const parsed = Number.parseInt(code, 10);
+      return Number.isFinite(parsed) && parsed > 0 && parsed <= 0x10ffff
+        ? String.fromCodePoint(parsed)
+        : '';
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
+      const parsed = Number.parseInt(hex, 16);
+      return Number.isFinite(parsed) && parsed > 0 && parsed <= 0x10ffff
+        ? String.fromCodePoint(parsed)
+        : '';
+    })
+    .replace(/&amp;/g, '&');
 
 const stripHtmlTags = (value: string): string => value.replace(/<[^>]+>/g, '');
+
+const isSafeHttpUrl = (value: unknown): value is string =>
+  typeof value === 'string' && /^https?:\/\//i.test(value.trim());
 
 const normalizeWikipediaThumbnail = (url: string | undefined): string | null => {
   if (!url) return null;
   if (url.startsWith('//')) return `https:${url}`;
-  return url;
+  return isSafeHttpUrl(url) ? url.trim() : null;
 };
 
 const withEllipsis = (value: string, maxChars: number): string => {
@@ -233,7 +248,9 @@ const withEllipsis = (value: string, maxChars: number): string => {
 
 const parseLimit = (rawLimit: string | null): number => {
   if (!rawLimit) return 8;
-  const parsed = Number.parseInt(rawLimit, 10);
+  const trimmed = rawLimit.trim();
+  if (!/^\d+$/.test(trimmed)) throw new RequestError('Invalid "limit" value', 400);
+  const parsed = Number.parseInt(trimmed, 10);
   if (!Number.isFinite(parsed)) throw new RequestError('Invalid "limit" value', 400);
   if (parsed < 1 || parsed > 20) throw new RequestError('"limit" must be between 1 and 20', 400);
   return parsed;
@@ -329,7 +346,7 @@ const fetchTextWithTimeout = async (url: string, label: string): Promise<string>
 const extractXmlTag = (entry: string, tag: string): string => {
   const regex = new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, 'i');
   const match = entry.match(regex);
-  return decodeXmlEntities(normalizeText(match?.[1] ?? ''));
+  return decodeHtmlEntities(normalizeText(match?.[1] ?? ''));
 };
 
 const fetchArxiv = async (query: string, limit: number): Promise<ArxivPaper[]> => {
@@ -346,7 +363,7 @@ const fetchArxiv = async (query: string, limit: number): Promise<ArxivPaper[]> =
     const authors = [
       ...entry.matchAll(/<author>[\s\S]*?<name>([\s\S]*?)<\/name>[\s\S]*?<\/author>/gi),
     ]
-      .map((authorMatch) => decodeXmlEntities(normalizeText(authorMatch[1] ?? '')))
+      .map((authorMatch) => decodeHtmlEntities(normalizeText(authorMatch[1] ?? '')))
       .filter(Boolean)
       .slice(0, 3)
       .join(', ');
@@ -358,7 +375,7 @@ const fetchArxiv = async (query: string, limit: number): Promise<ArxivPaper[]> =
       summary: withEllipsis(summaryRaw || 'Sin resumen disponible', 220),
       authors: authors || 'Anonimo',
       published: publishedRaw.split('T')[0] || '',
-      link: idRaw || `https://arxiv.org/abs/${arxivId}`,
+      link: isSafeHttpUrl(idRaw) ? idRaw : `https://arxiv.org/abs/${encodeURIComponent(arxivId)}`,
       type: 'Paper',
     };
   });
@@ -368,9 +385,13 @@ const fetchWikipedia = async (query: string, limit: number): Promise<WikipediaAr
   const mapFromRestSearch = (pages: WikipediaSearchPage[]): WikipediaArticle[] =>
     pages.slice(0, limit).map((page, index) => {
       const pageId = Number(page.id);
-      const title = page.title?.trim() || 'Sin titulo';
+      const title =
+        normalizeText(decodeHtmlEntities(page.title?.trim() || 'Sin titulo')) || 'Sin titulo';
       const summaryRaw = page.excerpt || page.description || 'Sin resumen disponible';
-      const summary = withEllipsis(stripHtmlTags(summaryRaw), 220);
+      const summary = withEllipsis(
+        normalizeText(decodeHtmlEntities(stripHtmlTags(summaryRaw))),
+        220,
+      );
       const key = page.key?.trim() || title.replace(/\s+/g, '_');
 
       return {
@@ -388,8 +409,14 @@ const fetchWikipedia = async (query: string, limit: number): Promise<WikipediaAr
       .slice(0, limit)
       .map((page, index) => {
         const pageId = Number(page.pageid);
-        const title = page.title?.trim() || 'Sin titulo';
-        const summary = withEllipsis(stripHtmlTags(page.extract || 'Sin resumen disponible'), 220);
+        const title =
+          normalizeText(decodeHtmlEntities(page.title?.trim() || 'Sin titulo')) || 'Sin titulo';
+        const summary = withEllipsis(
+          normalizeText(
+            decodeHtmlEntities(stripHtmlTags(page.extract || 'Sin resumen disponible')),
+          ),
+          220,
+        );
         const key = title.replace(/\s+/g, '_');
         return {
           id: Number.isFinite(pageId) ? pageId : index,
@@ -427,30 +454,44 @@ const fetchHackerNews = async (query: string, limit: number): Promise<HackerNews
     'Hacker News list',
   );
   const topIds = Array.isArray(ids) ? ids.slice(0, limit) : [];
-  const items = await Promise.all(
+  const settled = await Promise.allSettled(
     topIds.map((id) =>
-      fetchJsonWithTimeout<Record<string, unknown>>(
+      fetchJsonWithTimeout<Record<string, unknown> | null>(
         `https://hacker-news.firebaseio.com/v0/item/${id}.json`,
         `Hacker News item ${id}`,
       ),
     ),
   );
+  const items = settled
+    .filter(
+      (result): result is PromiseFulfilledResult<Record<string, unknown> | null> =>
+        result.status === 'fulfilled',
+    )
+    .map((result) => result.value)
+    .filter(
+      (item): item is Record<string, unknown> =>
+        Boolean(item) &&
+        typeof item === 'object' &&
+        typeof item.title === 'string' &&
+        item.title.trim().length > 0,
+    );
 
-  return items
-    .filter((item) => typeof item.title === 'string' && item.title.trim().length > 0)
-    .map((item) => ({
-      id: Number(item.id ?? 0),
-      title: String(item.title ?? 'Sin titulo'),
-      url:
-        typeof item.url === 'string' && item.url.length > 0
-          ? item.url
-          : `https://news.ycombinator.com/item?id=${String(item.id ?? '')}`,
+  return items.map((item) => {
+    const id = Number(item.id ?? 0);
+    const url = isSafeHttpUrl(item.url)
+      ? item.url.trim()
+      : `https://news.ycombinator.com/item?id=${String(item.id ?? '')}`;
+    return {
+      id,
+      title: decodeHtmlEntities(String(item.title ?? 'Sin titulo').trim()),
+      url,
       author: String(item.by ?? 'Anonimo'),
       score: Number(item.score ?? 0),
       comments: Number(item.descendants ?? 0),
       time: new Date(Number(item.time ?? 0) * 1000).toLocaleDateString('es-ES'),
       type: item.type === 'job' ? 'Empleo' : 'Noticia',
-    }));
+    };
+  });
 };
 
 const fetchOpenLibrary = async (query: string, limit: number): Promise<Book[]> => {
@@ -461,7 +502,7 @@ const fetchOpenLibrary = async (query: string, limit: number): Promise<Book[]> =
   );
   const works = Array.isArray(payload.works) ? payload.works : [];
 
-  return works.map((work) => {
+  return works.map((work, index) => {
     const authorsRaw = Array.isArray(work.authors) ? work.authors : [];
     const authors = authorsRaw
       .map((author) =>
@@ -471,17 +512,20 @@ const fetchOpenLibrary = async (query: string, limit: number): Promise<Book[]> =
       )
       .filter((author) => author.trim().length > 0)
       .join(', ');
-    const coverId = Number(work.cover_id);
+    const coverId = typeof work.cover_id === 'number' ? work.cover_id : Number.NaN;
+    const rawKey = typeof work.key === 'string' ? work.key.trim() : '';
+    const safeKey = rawKey.startsWith('/') ? rawKey : '';
 
     return {
-      id: String(work.key ?? ''),
-      title: String(work.title ?? 'Sin titulo'),
+      id: rawKey || `book-${index + 1}`,
+      title: decodeHtmlEntities(String(work.title ?? 'Sin titulo')),
       authors: authors || 'Anonimo',
-      cover: Number.isFinite(coverId)
-        ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`
-        : null,
+      cover:
+        Number.isFinite(coverId) && coverId > 0
+          ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`
+          : null,
       firstPublished: (work.first_publish_year as number | string | undefined) ?? 'Desconocido',
-      link: `https://openlibrary.org${String(work.key ?? '')}`,
+      link: `https://openlibrary.org${safeKey}`,
       type: 'Libro',
     };
   });
@@ -516,7 +560,9 @@ const fetchINaturalist = async (query: string, limit: number): Promise<NatureObs
       species: taxon.preferred_common_name || taxon.name || 'Especie desconocida',
       scientificName: taxon.name || '',
       location: String(observation.place_guess ?? 'Ubicacion desconocida'),
-      photo: firstPhoto?.url ? firstPhoto.url.replace('square', 'medium') : null,
+      photo: isSafeHttpUrl(firstPhoto?.url)
+        ? firstPhoto.url.trim().replace('square', 'medium')
+        : null,
       observer: observer || 'Anonimo',
       date: String(observation.observed_on ?? ''),
       link: `https://www.inaturalist.org/observations/${String(observation.id ?? '')}`,
@@ -541,12 +587,11 @@ const fetchMusic = async (query: string, limit: number): Promise<MusicTrack[]> =
     const trackId = track.trackId ?? track.collectionId ?? `track-${index + 1}`;
     const title = String(track.trackName ?? track.collectionName ?? 'Sin titulo');
     const artist = String(track.artistName ?? 'Desconocido');
-    const link =
-      typeof track.trackViewUrl === 'string'
-        ? track.trackViewUrl
-        : typeof track.collectionViewUrl === 'string'
-          ? track.collectionViewUrl
-          : undefined;
+    const link = isSafeHttpUrl(track.trackViewUrl)
+      ? track.trackViewUrl.trim()
+      : isSafeHttpUrl(track.collectionViewUrl)
+        ? track.collectionViewUrl.trim()
+        : undefined;
 
     return {
       id:
@@ -599,6 +644,7 @@ const sendSuccess = (
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET');
     return res.status(405).json({ error: 'Method not allowed' });
   }
 

@@ -2,10 +2,12 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   limit,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   writeBatch,
   type FieldValue,
@@ -71,16 +73,17 @@ export interface SavedArenaDebateWrite {
  * Save a post
  */
 export const savePostWithSync = async (postId: string, uid: string): Promise<void> => {
-  const batch = writeBatch(db);
-  batch.set(
-    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedPosts, postId),
-    {
-      postId,
-      createdAt: serverTimestamp(),
-    } as SavedPostWrite,
-    { merge: false },
-  );
-  await batch.commit();
+  const ref = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedPosts, postId);
+  await runTransaction(db, async (tx) => {
+    const [post, saved] = await Promise.all([
+      tx.get(doc(db, COLLECTIONS.posts, postId)),
+      tx.get(ref),
+    ]);
+    if (!post.exists() || (post.data().status && post.data().status !== 'ready')) {
+      throw new Error('La publicación ya no está disponible.');
+    }
+    if (!saved.exists()) tx.set(ref, { postId, createdAt: serverTimestamp() } as SavedPostWrite);
+  });
 };
 
 /**
@@ -97,17 +100,24 @@ export const unsavePostWithSync = async (postId: string, uid: string): Promise<v
  */
 export const isPostSaved = async (postId: string, uid: string): Promise<boolean> => {
   trackFirestoreRead('firestore.getDoc');
-  const docSnap = await getDoc(doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedPosts, postId));
+  const docSnap = await getDocFromServer(
+    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedPosts, postId),
+  );
   return docSnap.exists();
 };
 
 /**
- * Save a category
+ * Save a category (idempotent so retries preserve createdAt under strict rules)
  */
 export const saveCategoryWithSync = async (categoryId: string, uid: string): Promise<void> => {
+  const ref = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedCategories, categoryId);
+  const existing = await getDoc(ref);
+  if (existing.exists()) {
+    return;
+  }
   const batch = writeBatch(db);
   batch.set(
-    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedCategories, categoryId),
+    ref,
     {
       categoryId,
       createdAt: serverTimestamp(),
@@ -138,12 +148,17 @@ export const isCategorySaved = async (categoryId: string, uid: string): Promise<
 };
 
 /**
- * Follow a category
+ * Follow a category (idempotent so retries preserve createdAt under strict rules)
  */
 export const followCategoryWithSync = async (categoryId: string, uid: string): Promise<void> => {
+  const ref = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.followedCategories, categoryId);
+  const existing = await getDoc(ref);
+  if (existing.exists()) {
+    return;
+  }
   const batch = writeBatch(db);
   batch.set(
-    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.followedCategories, categoryId),
+    ref,
     {
       categoryId,
       createdAt: serverTimestamp(),
@@ -174,22 +189,23 @@ export const isCategoryFollowed = async (categoryId: string, uid: string): Promi
 };
 
 /**
- * Save an Arena debate
+ * Save an Arena debate idempotently (preserves immutable createdAt when already saved).
  */
 export const saveArenaDebateWithSync = async (
   debate: Omit<SavedArenaDebateWrite, 'createdAt'>,
   uid: string,
 ): Promise<void> => {
-  const batch = writeBatch(db);
-  batch.set(
-    doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedArenaDebates, debate.debateId),
-    {
+  const ref = doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedArenaDebates, debate.debateId);
+  await runTransaction(db, async (tx) => {
+    const existing = await tx.get(ref);
+    if (existing.exists()) {
+      return;
+    }
+    tx.set(ref, {
       ...debate,
       createdAt: serverTimestamp(),
-    } as SavedArenaDebateWrite,
-    { merge: false },
-  );
-  await batch.commit();
+    } as SavedArenaDebateWrite);
+  });
 };
 
 /**
@@ -206,7 +222,7 @@ export const unsaveArenaDebateWithSync = async (debateId: string, uid: string): 
  */
 export const isArenaDebateSaved = async (debateId: string, uid: string): Promise<boolean> => {
   trackFirestoreRead('firestore.getDoc');
-  const docSnap = await getDoc(
+  const docSnap = await getDocFromServer(
     doc(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.savedArenaDebates, debateId),
   );
   return docSnap.exists();

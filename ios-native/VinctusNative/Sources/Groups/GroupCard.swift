@@ -79,20 +79,21 @@ struct GroupCard: View {
   @ViewBuilder
   private var actionButton: some View {
     if let status = vm.status {
-      let joined = status.isJoined
+      let effectiveStatus = (!isPrivate && status == .pending) ? GroupMembershipStatus.none : status
+      let joined = effectiveStatus.isJoined
       Button {
         Task { await vm.join(uid: authVM.currentUserID) }
       } label: {
-        Text(vm.isWorking ? "Procesando..." : status.buttonTitle(isPrivate: isPrivate))
+        Text(vm.isWorking ? "Procesando..." : effectiveStatus.buttonTitle(isPrivate: isPrivate))
           .font(.caption)
           .padding(.horizontal, 12)
           .padding(.vertical, 7)
-          .foregroundStyle(joined ? SwiftUI.Color.black : (status == .pending ? VinctusTokens.Color.textMuted : SwiftUI.Color(white: 0.83)))
+          .foregroundStyle(joined ? SwiftUI.Color.black : (effectiveStatus == .pending ? VinctusTokens.Color.textMuted : SwiftUI.Color(white: 0.83)))
           .background(joined ? VinctusTokens.Color.accent : VinctusTokens.Color.surface3)
           .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
       }
       .buttonStyle(.borderless)
-      .disabled(vm.isWorking || joined || status == .pending)
+      .disabled(vm.isWorking || joined || effectiveStatus == .pending)
     }
   }
 }

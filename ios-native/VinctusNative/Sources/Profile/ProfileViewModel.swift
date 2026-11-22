@@ -34,4 +34,13 @@ final class ProfileViewModel: ObservableObject {
       errorMessage = error.localizedDescription
     }
   }
+
+  /// Refreshes profile counters without triggering a full-screen loading spinner.
+  func refreshSilently(userID: String) async {
+    let normalizedUID = userID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalizedUID.isEmpty else { return }
+    if let refreshed = try? await repo.fetchUserProfile(uid: normalizedUID) {
+      profile = refreshed
+    }
+  }
 }

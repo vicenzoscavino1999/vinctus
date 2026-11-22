@@ -1,5 +1,7 @@
+import type { PostPage } from '@/shared/lib/post-reads-client';
 import type { DocumentSnapshot } from 'firebase/firestore';
 import {
+  getBlockedUsers as getBlockedUsersRaw,
   getFollowing as getFollowingRaw,
   getGroup as getGroupRaw,
   getGroupJoinStatus as getGroupJoinStatusRaw,
@@ -58,6 +60,11 @@ export const getFollowing = async (uid: string): Promise<UserProfileRead[]> => {
     const profiles = await getFollowingRaw(safeUid);
     return profiles as UserProfileRead[];
   });
+};
+
+export const getBlockedUsers = async (uid: string): Promise<string[]> => {
+  const safeUid = validate(uidSchema, uid, { field: 'uid' });
+  return runRead('groups.getBlockedUsers', () => getBlockedUsersRaw(safeUid));
 };
 
 export const getGroups = async (): Promise<FirestoreGroup[]> =>
@@ -133,8 +140,8 @@ export const getPendingGroupJoinRequests = async (
 export const getPostsByGroup = async (
   groupId: string,
   pageSize: number = 30,
-  lastDoc?: DocumentSnapshot,
-): Promise<PaginatedResult<PostRead>> => {
+  lastDoc?: string,
+): Promise<PostPage<PostRead>> => {
   const safeGroupId = validate(groupIdSchema, groupId, { field: 'groupId' });
   const safePageSize = validate(groupPageLimitSchema, safeLimit(pageSize, 30), {
     field: 'pageSize',

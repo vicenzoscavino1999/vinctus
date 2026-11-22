@@ -8,6 +8,7 @@ import {
   createGroup,
   updateGroup,
   addGroupMember,
+  getBlockedUsers,
   getFollowing,
   type CreateGroupInput,
   type GroupVisibility,
@@ -70,21 +71,37 @@ const CreateGroupModal = ({
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen || !user?.uid) return;
+    if (!isOpen || !user?.uid) {
+      setAvailableUsers([]);
+      setIsLoadingUsers(false);
+      return;
+    }
 
+    let isActive = true;
     const loadFollowing = async () => {
       setIsLoadingUsers(true);
       try {
-        const following = await getFollowing(user.uid);
-        setAvailableUsers(following);
+        const [following, blocked] = await Promise.all([
+          getFollowing(user.uid),
+          getBlockedUsers(user.uid).catch(() => []),
+        ]);
+        const blockedSet = new Set(blocked);
+        if (isActive) {
+          setAvailableUsers(following.filter((profile) => !blockedSet.has(profile.uid)));
+        }
       } catch (err) {
         console.error('Error loading following:', err);
       } finally {
-        setIsLoadingUsers(false);
+        if (isActive) {
+          setIsLoadingUsers(false);
+        }
       }
     };
 
     void loadFollowing();
+    return () => {
+      isActive = false;
+    };
   }, [isOpen, user?.uid]);
 
   useEffect(() => {
@@ -195,17 +212,15 @@ const CreateGroupModal = ({
         }
       }
 
-      // Add selected members to the group
+      // Add selected members to the group without aborting the rest if one user fails (e.g. block)
       if (selectedMembers.length > 0) {
-        try {
-          // Filter out the creator (already added by createGroup)
-          const membersToAdd = selectedMembers.filter((profile) => profile.uid !== user.uid);
-
-          await Promise.all(
-            membersToAdd.map((profile) => addGroupMember(groupId, profile.uid, 'member')),
-          );
-        } catch (memberError) {
-          console.error('Error adding selected members:', memberError);
+        const membersToAdd = selectedMembers.filter((profile) => profile.uid !== user.uid);
+        const results = await Promise.allSettled(
+          membersToAdd.map((profile) => addGroupMember(groupId, profile.uid, 'member')),
+        );
+        const failed = results.filter((result) => result.status === 'rejected');
+        if (failed.length > 0) {
+          console.error('Error adding some selected members:', failed);
           showToast('Grupo creado, pero algunos miembros no se pudieron agregar.', 'warning');
         }
       }
@@ -224,9 +239,9 @@ const CreateGroupModal = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 safe-area-inset">
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={handleClose} />
-        <div className="relative w-full max-w-2xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
+        <div className="relative w-full max-w-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-2xl">
           <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
             <h2 className="text-xl font-serif text-white">Crear grupo</h2>
             <button

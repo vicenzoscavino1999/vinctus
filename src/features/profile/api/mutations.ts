@@ -1,19 +1,26 @@
 import {
   acceptFollowRequest as acceptFollowRequestRaw,
+  blockUser as blockUserRaw,
   cancelFollowRequest as cancelFollowRequestRaw,
   createContribution as createContributionRaw,
+  createUserReport as createUserReportRaw,
   declineFollowRequest as declineFollowRequestRaw,
+  deleteContribution as deleteContributionRaw,
   followCategoryWithSync as followCategoryWithSyncRaw,
   followPublicUser as followPublicUserRaw,
   getOrCreateDirectConversation as getOrCreateDirectConversationRaw,
   saveCategoryWithSync as saveCategoryWithSyncRaw,
   sendFollowRequest as sendFollowRequestRaw,
+  unblockUser as unblockUserRaw,
   unfollowCategoryWithSync as unfollowCategoryWithSyncRaw,
   unfollowUser as unfollowUserRaw,
   unsaveCategoryWithSync as unsaveCategoryWithSyncRaw,
   updateContributionFile as updateContributionFileRaw,
   updateUserProfile as updateUserProfileRaw,
 } from '@/shared/lib/firestore';
+import type { UserReportReason } from '@/shared/lib/firestore';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
+import { deleteCollectionFile } from '@/shared/lib/storage';
 import { toAppError } from '@/shared/lib/errors';
 import { withRetry, withTimeout } from '@/shared/lib/firebase-helpers';
 import { validate } from '@/shared/lib/validators';
@@ -106,6 +113,46 @@ export const unfollowUser = async (followerUid: string, targetUid: string): Prom
   return runWrite('profile.unfollowUser', () => unfollowUserRaw(safeFollowerUid, safeTargetUid));
 };
 
+export const blockUser = async (currentUid: string, blockedUid: string): Promise<void> => {
+  const safeCurrentUid = validate(uidSchema, currentUid, { field: 'currentUid' });
+  const safeBlockedUid = validate(uidSchema, blockedUid, { field: 'blockedUid' });
+  return runWrite('profile.blockUser', () => blockUserRaw(safeCurrentUid, safeBlockedUid));
+};
+
+export const unblockUser = async (currentUid: string, blockedUid: string): Promise<void> => {
+  const safeCurrentUid = validate(uidSchema, currentUid, { field: 'currentUid' });
+  const safeBlockedUid = validate(uidSchema, blockedUid, { field: 'blockedUid' });
+  return runWrite('profile.unblockUser', () => unblockUserRaw(safeCurrentUid, safeBlockedUid));
+};
+
+export const reportUserProfile = async (input: {
+  reporterUid: string;
+  reportedUid: string;
+  reason: UserReportReason;
+  details?: string | null;
+}): Promise<string> => {
+  const safeReporterUid = validate(uidSchema, input.reporterUid, { field: 'reporterUid' });
+  const safeReportedUid = validate(uidSchema, input.reportedUid, { field: 'reportedUid' });
+  if (safeReporterUid === safeReportedUid) {
+    throw toAppError(new Error('No puedes reportarte a ti mismo.'), {
+      operation: 'profile.reportUserProfile',
+    });
+  }
+  const trimmedDetails = input.details?.trim();
+  const safeDetails = trimmedDetails
+    ? trimmedDetails.slice(0, LIMITS.reports.detailsMaxLength)
+    : null;
+  return runWrite('profile.reportUserProfile', () =>
+    createUserReportRaw({
+      reporterUid: safeReporterUid,
+      reportedUid: safeReportedUid,
+      reason: input.reason,
+      details: safeDetails,
+      conversationId: null,
+    }),
+  );
+};
+
 export const getOrCreateDirectConversation = async (
   uid1: string,
   uid2: string,
@@ -123,10 +170,10 @@ export const updateUserProfile = async (uid: string, updates: UserProfileUpdate)
   const normalizedUpdates: UserProfileUpdate = {
     displayName: normalizeOptionalText(safeUpdates.displayName),
     photoURL: safeUpdates.photoURL,
-    bio: normalizeOptionalText(safeUpdates.bio),
-    role: normalizeOptionalText(safeUpdates.role),
-    location: normalizeOptionalText(safeUpdates.location),
-    username: normalizeOptionalText(safeUpdates.username),
+    bio: normalizeNullableText(safeUpdates.bio),
+    role: normalizeNullableText(safeUpdates.role),
+    location: normalizeNullableText(safeUpdates.location),
+    username: normalizeNullableText(safeUpdates.username),
   };
   return runWrite('profile.updateUserProfile', () =>
     updateUserProfileRaw(safeUid, normalizedUpdates),
@@ -167,6 +214,25 @@ export const updateContributionFile = async (
   return runWrite('profile.updateContributionFile', () =>
     updateContributionFileRaw(safeContributionId, safeInput),
   );
+};
+
+export const deleteContribution = async (
+  contributionId: string,
+  filePath?: string | null,
+): Promise<void> => {
+  const safeContributionId = validate(uidSchema, contributionId, { field: 'contributionId' });
+  const safeFilePath = normalizeNullableText(filePath);
+  if (safeFilePath) {
+    try {
+      await deleteCollectionFile(safeFilePath);
+    } catch (error) {
+      const code = (error as { code?: string })?.code;
+      if (code !== 'storage/object-not-found') {
+        console.warn('Failed to delete contribution attachment before doc delete:', error);
+      }
+    }
+  }
+  return runWrite('profile.deleteContribution', () => deleteContributionRaw(safeContributionId));
 };
 
 export const saveCategoryWithSync = async (categoryId: string, uid: string): Promise<void> => {

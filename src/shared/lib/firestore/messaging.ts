@@ -3,6 +3,11 @@ import {
   doc,
   getDoc as _getDoc,
   limit,
+  documentId,
+  endAt,
+  startAfter,
+  getDocsFromServer,
+  runTransaction,
   onSnapshot as _onSnapshot,
   orderBy,
   query,
@@ -208,33 +213,54 @@ export interface MessageAttachmentRead {
 
 export interface MessageAttachmentWrite extends MessageAttachmentRead {}
 
+export interface MessageCursor {
+  clientCreatedAt: number;
+  messageId: string;
+}
+
+export interface MessagePage {
+  messages: MessageRead[];
+  oldestCursor: MessageCursor | null;
+  hasMore: boolean;
+  isFromCache: boolean;
+}
+
+export interface MessageSubscriptionOptions {
+  through?: MessageCursor | null;
+  onPage?: (page: MessagePage) => void;
+  onError?: (error: unknown) => void;
+}
+
 export const subscribeToUserMemberships = (
   uid: string,
   onUpdate: (groupIds: string[]) => void,
-  limitCount: number = SMALL_LIST_LIMIT,
+  limitCount: number | null = SMALL_LIST_LIMIT,
+  onError?: (error: unknown) => void,
 ): Unsubscribe => {
   const q = query(
     collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.memberships),
-    orderBy('joinedAt', 'desc'),
-    limit(limitCount),
+    ...(limitCount === null ? [] : [orderBy('joinedAt', 'desc'), limit(limitCount)]),
   );
 
-  return observeSnapshot(q, (snapshot) => {
-    const groupIds = snapshot.docs.map((d) => d.id);
-    onUpdate(groupIds);
-  });
+  return observeSnapshot(
+    q,
+    (snapshot) => {
+      const groupIds = snapshot.docs.map((d) => d.id);
+      onUpdate(groupIds);
+    },
+    onError,
+  );
 };
 
 export const subscribeToUserDirectConversations = (
   uid: string,
   onUpdate: (conversationIds: string[]) => void,
-  limitCount: number = SMALL_LIST_LIMIT,
+  limitCount: number | null = SMALL_LIST_LIMIT,
   onError?: (error: unknown) => void,
 ): Unsubscribe => {
   const q = query(
     collection(db, COLLECTIONS.users, uid, SUBCOLLECTIONS.directConversations),
-    orderBy('updatedAt', 'desc'),
-    limit(limitCount),
+    ...(limitCount === null ? [] : [orderBy('updatedAt', 'desc'), limit(limitCount)]),
   );
 
   return observeSnapshot(
@@ -505,8 +531,6 @@ export const sendMessage = async (
     return fileCount === 1 ? 'Archivo' : 'Archivos';
   })();
 
-  const batch = writeBatch(db);
-
   const messagePayload: MessageWrite = {
     senderId: uid,
     senderName: senderName ?? null,
@@ -521,23 +545,34 @@ export const sendMessage = async (
     messagePayload.attachments = normalizedAttachments;
   }
 
-  // Message (deterministic ID = offline dedup)
-  batch.set(messageRef, messagePayload, { merge: false });
-
-  // Update lastMessage
-  batch.update(convRef, {
-    lastMessage: {
-      text: lastMessageText,
-      senderId: uid,
-      senderName: senderName ?? null,
-      senderPhotoURL: senderPhotoURL ?? null,
-      createdAt: serverTimestamp(),
-      clientCreatedAt: Date.now(),
-    },
-    updatedAt: serverTimestamp(),
+  await runTransaction(db, async (transaction) => {
+    const existing = await transaction.get(messageRef);
+    if (existing.exists()) {
+      const data = existing.data();
+      const paths = (items?: MessageAttachmentRead[]) =>
+        (items ?? []).map((item) => item.path).join('\n');
+      if (
+        data.senderId !== uid ||
+        data.text !== normalizedText ||
+        paths(data.attachments) !== paths(normalizedAttachments)
+      ) {
+        throw new Error('El identificador del mensaje ya está en uso.');
+      }
+      return;
+    }
+    transaction.set(messageRef, messagePayload);
+    transaction.update(convRef, {
+      lastMessage: {
+        text: lastMessageText,
+        senderId: uid,
+        senderName: senderName ?? null,
+        senderPhotoURL: senderPhotoURL ?? null,
+        createdAt: serverTimestamp(),
+        clientCreatedAt: Date.now(),
+      },
+      updatedAt: serverTimestamp(),
+    });
   });
-
-  await batch.commit();
 };
 
 /**
@@ -550,11 +585,13 @@ export const subscribeToConversations = (
   callback: (conversations: ConversationRead[]) => void,
   onError?: (error: unknown) => void,
 ): Unsubscribe => {
-  const handleError = (error: unknown) => {
-    console.error('Error subscribing to conversations:', error);
-    if (onError) {
-      onError(error);
-    }
+  let closed = false;
+  const errors = new Map<string, unknown>();
+  const tokens = new Map<string, symbol>();
+  const handleError = (error: unknown, key = 'index') => {
+    if (closed) return;
+    errors.set(key, error);
+    emit();
   };
 
   const conversationMap = new Map<string, ConversationRead>();
@@ -563,10 +600,12 @@ export const subscribeToConversations = (
   const groupConversationIds = new Set<string>();
 
   const emit = () => {
+    if (closed) return;
     const conversations = Array.from(conversationMap.values()).sort(
       (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
     );
     callback(conversations);
+    if (errors.size) onError?.(errors.values().next().value);
   };
 
   const buildConversation = (
@@ -609,10 +648,15 @@ export const subscribeToConversations = (
   ) => {
     if (conversationUnsubs.has(conversationId)) return;
     const convRef = doc(db, COLLECTIONS.conversations, conversationId);
+    const token = Symbol();
+    tokens.set(conversationId, token);
     const unsubscribe = observeSnapshot(
       convRef,
       (convSnap) => {
+        if (closed || tokens.get(conversationId) !== token) return;
+        errors.delete(conversationId);
         if (!convSnap.exists()) {
+          if (convSnap.metadata.fromCache) return;
           conversationMap.delete(conversationId);
           emit();
           return;
@@ -623,8 +667,7 @@ export const subscribeToConversations = (
       },
       (error) => {
         console.error(`Error subscribing to conversation ${conversationId}:`, error);
-        unsubscribeConversation(conversationId);
-        emit();
+        if (tokens.get(conversationId) === token) handleError(error, conversationId);
       },
     );
     conversationUnsubs.set(conversationId, unsubscribe);
@@ -636,12 +679,16 @@ export const subscribeToConversations = (
       unsubscribe();
     }
     conversationUnsubs.delete(conversationId);
+    tokens.delete(conversationId);
+    errors.delete(conversationId);
     conversationMap.delete(conversationId);
   };
 
   const unsubscribeDirectIndex = subscribeToUserDirectConversations(
     uid,
     (conversationIds) => {
+      if (closed) return;
+      errors.delete('direct-index');
       const nextIds = new Set(conversationIds.filter((id) => id.startsWith('dm_')));
 
       nextIds.forEach((conversationId) => {
@@ -662,13 +709,15 @@ export const subscribeToConversations = (
       nextIds.forEach((conversationId) => directConversationIds.add(conversationId));
       emit();
     },
-    SMALL_LIST_LIMIT,
-    handleError,
+    null,
+    (error) => handleError(error, 'direct-index'),
   );
 
   const unsubscribeMemberships = subscribeToUserMemberships(
     uid,
     (groupIds) => {
+      if (closed) return;
+      errors.delete('group-index');
       const nextIds = new Set(groupIds.map((groupId) => `grp_${groupId}`));
 
       nextIds.forEach((conversationId) => {
@@ -689,10 +738,13 @@ export const subscribeToConversations = (
       nextIds.forEach((conversationId) => groupConversationIds.add(conversationId));
       emit();
     },
-    SMALL_LIST_LIMIT,
+    null,
+    (error) => handleError(error, 'group-index'),
   );
 
   return () => {
+    closed = true;
+    tokens.clear();
     unsubscribeDirectIndex();
     unsubscribeMemberships();
     conversationUnsubs.forEach((unsubscribe) => unsubscribe());
@@ -705,85 +757,109 @@ export const subscribeToConversations = (
  * Subscribe to messages in a conversation
  * Ordered by clientCreatedAt (offline-safe)
  */
+export const messageFromSnapshot = (docSnap: { id: string; data: () => unknown }): MessageRead => {
+  const data = (docSnap.data() ?? {}) as Record<string, unknown>;
+  const attachments = Array.isArray(data.attachments)
+    ? data.attachments
+        .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+        .map((item) => ({
+          kind: item.kind === 'image' ? ('image' as const) : ('file' as const),
+          url: String(item.url || ''),
+          path: String(item.path || ''),
+          fileName: String(item.fileName || ''),
+          contentType: String(item.contentType || ''),
+          size: Number(item.size || 0),
+          thumbUrl: typeof item.thumbUrl === 'string' ? item.thumbUrl : null,
+        }))
+    : undefined;
+  return {
+    ...data,
+    id: docSnap.id,
+    text: typeof data.text === 'string' ? data.text : '',
+    attachments,
+    createdAt: toDate(data.createdAt) || new Date(Number(data.clientCreatedAt) || Date.now()),
+  } as MessageRead;
+};
+
+const messageQuery = (conversationId: string) =>
+  query(
+    collection(db, COLLECTIONS.conversations, conversationId, SUBCOLLECTIONS.messages),
+    orderBy('clientCreatedAt', 'desc'),
+    orderBy(documentId(), 'desc'),
+  );
+
+const messagePage = (snapshot: Awaited<ReturnType<typeof getDocsFromServer>>): MessagePage => {
+  const messages = snapshot.docs.map(messageFromSnapshot);
+  const oldest = messages[messages.length - 1];
+  return {
+    messages,
+    oldestCursor: oldest ? { clientCreatedAt: oldest.clientCreatedAt, messageId: oldest.id } : null,
+    hasMore: messages.length >= 50,
+    isFromCache: snapshot.metadata.fromCache,
+  };
+};
+
+export const fetchOlderMessages = async (
+  conversationId: string,
+  before: MessageCursor,
+): Promise<MessagePage> =>
+  messagePage(
+    await getDocsFromServer(
+      query(
+        messageQuery(conversationId),
+        startAfter(before.clientCreatedAt, before.messageId),
+        limit(50),
+      ),
+    ),
+  );
+
 export const subscribeToMessages = (
   conversationId: string,
   callback: (messages: MessageRead[]) => void,
+  options: MessageSubscriptionOptions = {},
 ): Unsubscribe => {
+  const through = options.through;
   const q = query(
-    collection(db, `${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.messages}`),
-    orderBy('clientCreatedAt', 'desc'),
-    limit(50),
+    messageQuery(conversationId),
+    ...(through ? [endAt(through.clientCreatedAt, through.messageId)] : [limit(50)]),
   );
-
-  return observeSnapshot(q, (snapshot) => {
-    const messages = snapshot.docs.map((docSnap) => {
-      const data = docSnap.data();
-      const attachments = Array.isArray(data.attachments)
-        ? data.attachments.map((item: Record<string, unknown>) => ({
-            kind: item.kind === 'image' ? 'image' : 'file',
-            url: String(item.url || ''),
-            thumbUrl: typeof item.thumbUrl === 'string' ? item.thumbUrl : null,
-            path: String(item.path || ''),
-            fileName: String(item.fileName || ''),
-            contentType: String(item.contentType || ''),
-            size: Number(item.size || 0),
-            width: typeof item.width === 'number' ? item.width : null,
-            height: typeof item.height === 'number' ? item.height : null,
-          }))
-        : undefined;
-      return {
-        id: docSnap.id,
-        senderId: data.senderId,
-        senderName: data.senderName ?? null,
-        senderPhotoURL: data.senderPhotoURL ?? null,
-        text: typeof data.text === 'string' ? data.text : '',
-        attachments,
-        createdAt: toDate(data.createdAt) || new Date(),
-        clientCreatedAt: data.clientCreatedAt,
-        clientId: data.clientId,
-      } as MessageRead;
-    });
-    callback(messages);
-  });
+  // Metadata-only events finalize an initially partial offline cache when the server responds.
+  return observeSnapshot(
+    q,
+    { includeMetadataChanges: true },
+    (snapshot) => {
+      const page = messagePage(snapshot);
+      callback(page.messages);
+      options.onPage?.(page);
+    },
+    options.onError,
+  );
 };
 
-export const markConversationRead = async (conversationId: string, uid: string): Promise<void> => {
-  const memberRef = doc(
-    db,
-    `${COLLECTIONS.conversations}/${conversationId}/${SUBCOLLECTIONS.members}`,
-    uid,
-  );
-  try {
-    await writeBatch(db)
-      .update(memberRef, {
-        lastReadClientAt: Date.now(),
+export const markConversationRead = async (
+  conversationId: string,
+  uid: string,
+  through = Date.now(),
+): Promise<void> => {
+  const memberRef = doc(db, COLLECTIONS.conversations, conversationId, SUBCOLLECTIONS.members, uid);
+  await runTransaction(db, async (transaction) => {
+    const member = await transaction.get(memberRef);
+    if (member.exists()) {
+      if (Number(member.data().lastReadClientAt || 0) < through) {
+        transaction.update(memberRef, { lastReadClientAt: through, lastReadAt: serverTimestamp() });
+      }
+    } else {
+      transaction.set(memberRef, {
+        uid,
+        role: 'member',
+        joinedAt: serverTimestamp(),
+        lastReadClientAt: through,
         lastReadAt: serverTimestamp(),
-      })
-      .commit();
-  } catch (error) {
-    const code = (error as { code?: string })?.code;
-    if (code !== 'not-found') {
-      console.error('Error marking conversation read:', error);
-      return;
+        muted: false,
+        mutedUntil: null,
+      });
     }
-    try {
-      await setDoc(
-        memberRef,
-        {
-          uid,
-          role: 'member',
-          joinedAt: serverTimestamp(),
-          lastReadClientAt: Date.now(),
-          lastReadAt: serverTimestamp(),
-          muted: false,
-          mutedUntil: null,
-        } as ConversationMemberWrite,
-        { merge: false },
-      );
-    } catch (createError) {
-      console.error('Error creating conversation member:', createError);
-    }
-  }
+  });
 };
 
 export const setTyping = async (

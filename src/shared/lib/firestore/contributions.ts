@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc as _deleteDoc,
   doc,
   getDocs as _getDocs,
   limit,
@@ -204,4 +205,9 @@ export async function updateContributionFile(
     fileType: input.fileType,
     updatedAt: serverTimestamp(),
   });
+}
+
+export async function deleteContribution(contributionId: string): Promise<void> {
+  trackFirestoreWrite('firestore.deleteDoc');
+  await _deleteDoc(doc(db, COLLECTIONS.contributions, contributionId));
 }

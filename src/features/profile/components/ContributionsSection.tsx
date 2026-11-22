@@ -1,15 +1,36 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BookOpen, FileText, Link as LinkIcon, Loader2, Plus, UploadCloud, X } from 'lucide-react';
+import {
+  BookOpen,
+  FileText,
+  Link as LinkIcon,
+  Loader2,
+  Plus,
+  Trash2,
+  UploadCloud,
+  X,
+} from 'lucide-react';
 import { useToast } from '@/shared/ui/Toast';
 import {
   createContribution,
+  deleteContribution,
   getUserContributions,
   updateContributionFile,
   type ContributionRead,
   type ContributionType,
 } from '@/features/profile/api';
+import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 import { uploadContributionFile } from '@/shared/lib/storage';
 import { CATEGORIES } from '@/shared/constants';
+
+const isSafeHttpUrl = (value: string | null | undefined): value is string => {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
 
 const CONTRIBUTION_TYPES: Array<{ value: ContributionType; label: string }> = [
   { value: 'project', label: 'Proyecto' },
@@ -46,6 +67,7 @@ export default function ContributionsSection({
   const [file, setFile] = useState<File | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   const loadContributions = useCallback(async () => {
@@ -137,6 +159,21 @@ export default function ContributionsSection({
     }
   };
 
+  const handleDelete = async (item: ContributionRead) => {
+    if (!canEdit || deletingId) return;
+    setDeletingId(item.id);
+    try {
+      await deleteContribution(item.id, item.filePath);
+      setItems((prev) => prev.filter((entry) => entry.id !== item.id));
+      showToast('Contribución eliminada', 'info');
+    } catch (err) {
+      console.error('Error deleting contribution:', err);
+      showToast('No se pudo eliminar la contribución.', 'error');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -186,18 +223,36 @@ export default function ContributionsSection({
               key={item.id}
               className="p-5 border border-neutral-800/80 rounded-2xl bg-neutral-900/20"
             >
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-2 gap-2">
                 <span className="text-xs text-neutral-500 uppercase tracking-wider">
                   {CONTRIBUTION_TYPES.find((t) => t.value === item.type)?.label || 'Otro'}
                 </span>
-                <span className="text-xs text-neutral-600">{formatDate(item.createdAt)}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-neutral-600">{formatDate(item.createdAt)}</span>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(item)}
+                      disabled={deletingId === item.id}
+                      aria-label={`Eliminar ${item.title}`}
+                      className="text-xs text-neutral-400 hover:text-red-400 transition-colors inline-flex items-center gap-1 disabled:opacity-50"
+                    >
+                      {deletingId === item.id ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={13} />
+                      )}
+                      Eliminar
+                    </button>
+                  )}
+                </div>
               </div>
               <h3 className="text-lg text-white font-medium mb-2">{item.title}</h3>
               {item.description && (
                 <p className="text-sm text-neutral-400 mb-3">{item.description}</p>
               )}
               <div className="flex flex-wrap gap-2">
-                {item.link && (
+                {isSafeHttpUrl(item.link) && (
                   <a
                     href={item.link}
                     target="_blank"
@@ -208,7 +263,7 @@ export default function ContributionsSection({
                     Ver enlace
                   </a>
                 )}
-                {item.fileUrl && (
+                {isSafeHttpUrl(item.fileUrl) && (
                   <a
                     href={item.fileUrl}
                     target="_blank"
@@ -256,6 +311,7 @@ export default function ContributionsSection({
                 <input
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
+                  maxLength={LIMITS.contributions.titleMaxLength}
                   className="w-full bg-neutral-800/60 border border-neutral-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-amber-500/60 transition-colors"
                   placeholder="Ej: Proyecto de investigación"
                 />
@@ -300,6 +356,7 @@ export default function ContributionsSection({
                 <textarea
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
+                  maxLength={LIMITS.contributions.descriptionMaxLength}
                   rows={3}
                   className="w-full bg-neutral-800/60 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/60 transition-colors resize-none"
                   placeholder="Breve resumen"
@@ -312,6 +369,7 @@ export default function ContributionsSection({
                 <input
                   value={link}
                   onChange={(event) => setLink(event.target.value)}
+                  maxLength={LIMITS.contributions.linkMaxLength}
                   className="w-full bg-neutral-800/60 border border-neutral-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-amber-500/60 transition-colors"
                   placeholder="https://..."
                 />

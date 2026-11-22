@@ -34,9 +34,10 @@ struct AuthGateView: View {
 
         messages
 
-        socialButtons
-
-        orDivider
+        if AppEnvironment.current != .staging {
+          socialButtons
+          orDivider
+        }
 
         emailForm
 
@@ -51,6 +52,7 @@ struct AuthGateView: View {
     }
     .scrollDismissesKeyboard(.interactively)
     .background(background)
+    .vinctusLoading(authVM.isSubmitting)
     .sheet(isPresented: $isShowingPasswordReset) {
       PasswordResetSheet(initialEmail: trimmedEmail)
         .presentationDetents([.medium, .large])
@@ -171,7 +173,9 @@ struct AuthGateView: View {
         )
       }
       .buttonStyle(.plain)
+      .disabled(authVM.isSubmitting)
     }
+    .disabled(authVM.isSubmitting)
   }
 
   private var orDivider: some View {
@@ -209,9 +213,10 @@ struct AuthGateView: View {
         .foregroundStyle(VinctusTokens.Color.accent)
       }
 
-      VButton("Ingresar", variant: .primary) {
+      VButton(authVM.isSubmitting ? "Ingresando..." : "Ingresar", variant: .primary) {
         guarded { authVM.signIn(email: trimmedEmail, password: password) }
       }
+      .disabled(authVM.isSubmitting)
       .padding(.top, 4)
 
       HStack(spacing: 4) {
@@ -222,6 +227,7 @@ struct AuthGateView: View {
         }
         .fontWeight(.semibold)
         .foregroundStyle(VinctusTokens.Color.accent)
+        .disabled(authVM.isSubmitting)
       }
       .font(.subheadline)
       .padding(.top, 4)

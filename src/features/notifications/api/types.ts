@@ -8,6 +8,7 @@ export type { ActivityRead, PaginatedResult };
 export type ActivityCursor = DocumentSnapshot | undefined | null;
 
 export const uidSchema = idSchema;
+export const notificationIdSchema = idSchema;
 export const activityPageLimitSchema = limitSchema;
 
 export const activityTypeSchema = z.enum(['post_like', 'post_comment', 'follow']);

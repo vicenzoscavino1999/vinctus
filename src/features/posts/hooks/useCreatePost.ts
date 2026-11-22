@@ -1,18 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/auth';
-import { createPostUploading, getNewPostId, updatePost } from '@/features/posts/api';
+import { getNewPostId } from '@/features/posts/api';
+import { isAbandonedPostUploadError } from '@/shared/lib/firestore-post-upload';
+import { usePostDraft } from './usePostDraft';
+import { postDraftAttemptKey, hasPostDraft } from '@/features/posts/model/postDraftStore';
+import { PostSubmission } from '@/features/posts/model/PostSubmission';
 import { notifyFeedCacheInvalidated } from '@/features/posts/model/feedCache';
 import { compressToWebp, validateImage } from '@/shared/lib/compression';
 import { parseYouTubeUrl } from '@/shared/lib/youtube';
 import { fetchYouTubeVideoDetails, type YouTubeVideoDetails } from '@/shared/lib/youtubeApi';
-import { deletePostAllMedia, uploadPostMedia } from '@/shared/lib/storage';
-import {
-  LIMITS,
-  STORAGE_CONTENT_TYPES,
-  STORAGE_MAX_BYTES,
-  STORAGE_PATHS,
-} from '@/shared/lib/firestore/firestoreContract';
+import { validatePostFile } from '@/shared/lib/post-media';
+import { LIMITS, STORAGE_PATHS } from '@/shared/lib/firestore/firestoreContract';
 
 export type CreatePostAttachment = {
   id: string;
@@ -37,16 +36,6 @@ type UseCreatePostOptions = {
 };
 
 const MAX_ATTACHMENTS = 10;
-// storage.rules take files smaller than these, so a file of exactly the limit is rejected too.
-const MAX_VIDEO_BYTES = STORAGE_MAX_BYTES.video;
-const MAX_FILE_BYTES = STORAGE_MAX_BYTES.file;
-const BYTES_PER_MB = 1024 * 1024;
-
-const ALLOWED_VIDEO_TYPES = new Set(STORAGE_CONTENT_TYPES.video);
-const ALLOWED_VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'mov']);
-const ALLOWED_FILE_TYPES = new Set(STORAGE_CONTENT_TYPES.chatFile);
-const ALLOWED_FILE_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx']);
-
 const logCreatePostError = (message: string, error: unknown) => {
   if (import.meta.env.DEV) {
     console.error(message, error);
@@ -58,14 +47,6 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
     return error.message;
   }
   return fallback;
-};
-
-const revokePreviewUrls = (items: CreatePostAttachment[]) => {
-  items.forEach((item) => {
-    if (item.previewUrl) {
-      URL.revokeObjectURL(item.previewUrl);
-    }
-  });
 };
 
 const buildAttachmentId = () => `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -81,13 +62,15 @@ export const useCreatePost = ({
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [title, setTitle] = useState('');
-  const [text, setText] = useState('');
-  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const scope = { uid: user?.uid ?? '', groupId, categoryId };
+  const draftStore = usePostDraft(scope);
+  const { title, text, youtubeUrl, files: attachments } = draftStore.draft;
+  const setTitle = (title: string) => draftStore.edit({ title });
+  const setText = (text: string) => draftStore.edit({ text });
+  const setYoutubeUrl = (youtubeUrl: string) => draftStore.edit({ youtubeUrl });
   const [youtubeDetails, setYoutubeDetails] = useState<YouTubeVideoDetails | null>(null);
   const [youtubeLoading, setYoutubeLoading] = useState(false);
   const [youtubeError, setYoutubeError] = useState<string | null>(null);
-  const [attachments, setAttachments] = useState<CreatePostAttachment[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<CreatePostProgress>({
@@ -99,7 +82,24 @@ export const useCreatePost = ({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const latestAttachmentsRef = useRef<CreatePostAttachment[]>([]);
+  const pending = useRef<{ key: string; submission: PostSubmission } | null>(null);
+  const confirmedId = useRef<string | null>(null);
+  const sending = useRef(false);
+  const alive = useRef(false);
+  const epoch = useRef(0);
+  const [isPreparingMedia, setIsPreparingMedia] = useState(false);
+  const preparing = useRef(false);
+
+  useEffect(() => {
+    const leaving = (event: BeforeUnloadEvent) => {
+      if (preparing.current) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', leaving);
+    return () => window.removeEventListener('beforeunload', leaving);
+  }, []);
 
   const youtubeMeta = useMemo(() => parseYouTubeUrl(youtubeUrl), [youtubeUrl]);
   const usedMediaSlots = attachments.length + (youtubeMeta ? 1 : 0);
@@ -119,35 +119,38 @@ export const useCreatePost = ({
     () => attachments.filter((item) => item.kind === 'file'),
     [attachments],
   );
-  const canSubmit = !isSubmitting && (!!text.trim() || !!title.trim() || !!youtubeUrl.trim());
+  const canSubmit =
+    !isSubmitting &&
+    !draftStore.restoring &&
+    !draftStore.error &&
+    !isPreparingMedia &&
+    (!!confirmedId.current ||
+      !!text.trim() ||
+      !!title.trim() ||
+      !!youtubeUrl.trim() ||
+      attachments.length > 0);
 
   useEffect(() => {
-    latestAttachmentsRef.current = attachments;
-  }, [attachments]);
-
-  useEffect(
-    () => () => {
-      revokePreviewUrls(latestAttachmentsRef.current);
-    },
-    [],
-  );
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      epoch.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
+    epoch.current += 1;
     if (!isOpen) {
-      setTitle('');
-      setText('');
-      setYoutubeUrl('');
+      pending.current = null;
+      sending.current = false;
+      preparing.current = false;
+      setIsPreparingMedia(false);
       setYoutubeDetails(null);
       setYoutubeLoading(false);
       setYoutubeError(null);
       setError(null);
       setIsSubmitting(false);
       setProgress({ percent: 0, transferred: 0, total: 0 });
-      setAttachments((prev) => {
-        if (prev.length === 0) return prev;
-        revokePreviewUrls(prev);
-        return [];
-      });
     }
   }, [isOpen]);
 
@@ -192,17 +195,18 @@ export const useCreatePost = ({
   const openFilePicker = () => fileInputRef.current?.click();
 
   const addAttachment = (item: CreatePostAttachment) => {
-    if (usedMediaSlots >= MAX_ATTACHMENTS) {
+    if (draftStore.peek().files.length + (youtubeMeta ? 1 : 0) >= MAX_ATTACHMENTS) {
       setError('Maximo 10 adjuntos por publicacion.');
       if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
       return;
     }
-    setAttachments((prev) => [...prev, item]);
+    draftStore.edit({ files: [...draftStore.peek().files, item] });
   };
 
   const handleImageSelect = async (event: ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(event.target.files ?? []);
     event.target.value = '';
+    if (sending.current || preparing.current) return;
     setError(null);
 
     if (picked.length === 0) return;
@@ -217,9 +221,13 @@ export const useCreatePost = ({
       }
     }
 
+    const version = epoch.current;
+    preparing.current = true;
+    setIsPreparingMedia(true);
     try {
       for (const file of limited) {
         const compressedFile = await compressToWebp(file);
+        if (!alive.current || epoch.current !== version) return;
         addAttachment({
           id: buildAttachmentId(),
           kind: 'image',
@@ -228,29 +236,31 @@ export const useCreatePost = ({
         });
       }
     } catch (handleError) {
-      setError(getErrorMessage(handleError, 'Error procesando imagenes.'));
+      if (alive.current && epoch.current === version)
+        setError(getErrorMessage(handleError, 'Error procesando imagenes.'));
+    } finally {
+      if (alive.current && epoch.current === version) {
+        preparing.current = false;
+        setIsPreparingMedia(false);
+      }
     }
   };
 
   const handleVideoSelect = (event: ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(event.target.files ?? []);
     event.target.value = '';
+    if (sending.current || preparing.current) return;
     setError(null);
 
     if (picked.length === 0) return;
     const remaining = Math.max(0, MAX_ATTACHMENTS - usedMediaSlots);
     const limited = picked.slice(0, remaining);
 
-    for (const file of limited) {
-      const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
-      if (!ALLOWED_VIDEO_TYPES.has(file.type) && !ALLOWED_VIDEO_EXTENSIONS.has(extension)) {
-        setError('Video no permitido. Usa MP4 o WebM.');
-        return;
-      }
-      if (file.size >= MAX_VIDEO_BYTES) {
-        setError(`El video supera el limite de ${MAX_VIDEO_BYTES / BYTES_PER_MB}MB.`);
-        return;
-      }
+    try {
+      limited.forEach((file) => validatePostFile(file, 'video'));
+    } catch (error) {
+      setError(getErrorMessage(error, 'Video no permitido.'));
+      return;
     }
 
     limited.forEach((file) => {
@@ -266,22 +276,18 @@ export const useCreatePost = ({
   const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(event.target.files ?? []);
     event.target.value = '';
+    if (sending.current || preparing.current) return;
     setError(null);
 
     if (picked.length === 0) return;
     const remaining = Math.max(0, MAX_ATTACHMENTS - usedMediaSlots);
     const limited = picked.slice(0, remaining);
 
-    for (const file of limited) {
-      const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
-      if (!ALLOWED_FILE_TYPES.has(file.type) && !ALLOWED_FILE_EXTENSIONS.has(extension)) {
-        setError('Archivo no permitido. Usa PDF, Word, Excel o PowerPoint.');
-        return;
-      }
-      if (file.size >= MAX_FILE_BYTES) {
-        setError(`El archivo supera el limite de ${MAX_FILE_BYTES / BYTES_PER_MB}MB.`);
-        return;
-      }
+    try {
+      limited.forEach((file) => validatePostFile(file, 'file'));
+    } catch (error) {
+      setError(getErrorMessage(error, 'Archivo no permitido.'));
+      return;
     }
 
     limited.forEach((file) => {
@@ -294,16 +300,31 @@ export const useCreatePost = ({
   };
 
   const removeAttachment = (id: string) => {
-    setAttachments((prev) => {
-      const removed = prev.find((item) => item.id === id);
-      if (removed?.previewUrl) {
-        URL.revokeObjectURL(removed.previewUrl);
-      }
-      return prev.filter((item) => item.id !== id);
-    });
+    if (sending.current) return;
+    const files = draftStore.peek().files;
+    const removed = files.find((item) => item.id === id);
+    if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+    draftStore.edit({ files: files.filter((item) => item.id !== id) });
   };
 
+  const present = (publishedId: string) => {
+    notifyFeedCacheInvalidated();
+    onCreated?.(publishedId);
+    if (hasPostDraft(draftStore.peek())) return;
+    onClose();
+    if (redirectTo) navigate(redirectTo);
+  };
   const handleSubmit = async () => {
+    if (sending.current || preparing.current || draftStore.restoring) return;
+    if (confirmedId.current && !hasPostDraft(draftStore.peek())) {
+      try {
+        present(confirmedId.current);
+      } catch {
+        /* The confirmed post remains terminal. */
+      }
+      return;
+    }
+    const { title, text, youtubeUrl, files: attachments } = draftStore.peek();
     if (!user) {
       setError('Debes iniciar sesion');
       return;
@@ -329,7 +350,7 @@ export const useCreatePost = ({
       return;
     }
 
-    if (!trimmedText && !trimmedTitle && !parsedYouTube) {
+    if (!trimmedText && !trimmedTitle && !parsedYouTube && attachments.length === 0) {
       setError('Escribe un titulo o una descripcion antes de publicar.');
       return;
     }
@@ -338,90 +359,149 @@ export const useCreatePost = ({
       trimmedTitle ||
       (youtubeDetails?.title?.trim()
         ? youtubeDetails.title.trim().slice(0, LIMITS.posts.titleMaxLength)
-        : '');
+        : parsedYouTube
+          ? 'Video de YouTube'
+          : attachments.length > 0 && !trimmedText
+            ? 'Publicación'
+            : '');
 
+    sending.current = true;
+    const version = epoch.current;
+    const current = () => alive.current && epoch.current === version;
     setIsSubmitting(true);
     setError(null);
     setProgress({ percent: 0, transferred: 0, total: 0 });
 
-    const postId = getNewPostId();
-    let created = false;
-    let uploadedMedia: Awaited<ReturnType<typeof uploadPostMedia>> = [];
-
+    const key = postDraftAttemptKey(scope, draftStore.peek());
+    const publishAttempt = async (forceNewId: boolean): Promise<string | null> => {
+      if (pending.current?.key !== key || forceNewId) {
+        const cached = !forceNewId ? draftStore.peek().pending : undefined;
+        const postId = cached?.key === key ? cached.input.postId : getNewPostId();
+        const input =
+          cached?.key === key
+            ? cached.input
+            : {
+                postId,
+                authorId: user.uid,
+                authorSnapshot: {
+                  displayName: user.displayName || 'Usuario',
+                  photoURL: user.photoURL || null,
+                },
+                title: autoTitle || null,
+                text: trimmedText,
+                groupId,
+                categoryId,
+              };
+        draftStore.edit({ pending: { key, input } });
+        pending.current = {
+          key,
+          submission: new PostSubmission(
+            input,
+            attachments.map((item) => ({ id: item.id, kind: item.kind, file: item.file })),
+            parsedYouTube
+              ? [
+                  {
+                    url: parsedYouTube.embedUrl,
+                    path: STORAGE_PATHS.postVideo({
+                      userId: user.uid,
+                      postId,
+                      filename: `youtube-${parsedYouTube.videoId}`,
+                    }),
+                    type: 'video',
+                    contentType: 'video/youtube',
+                    fileName: `youtube-${parsedYouTube.videoId}.url`,
+                    size: 0,
+                  },
+                ]
+              : [],
+          ),
+        };
+      }
+      if (draftStore.peek().pending?.key !== key || forceNewId) {
+        draftStore.edit({ pending: { key, input: pending.current.submission.input } });
+      }
+      await draftStore.flush();
+      if (!current()) return null;
+      return pending.current.submission.publish((total, transferred) => {
+        if (current())
+          setProgress({
+            percent: total > 0 ? Math.round((transferred / total) * 100) : 0,
+            total,
+            transferred,
+          });
+      });
+    };
     try {
-      await createPostUploading({
-        postId,
-        authorId: user.uid,
-        authorSnapshot: {
-          displayName: user.displayName || 'Usuario',
-          photoURL: user.photoURL || null,
-        },
-        title: autoTitle ? autoTitle : null,
-        text: trimmedText,
-        groupId,
-        categoryId,
-      });
-      created = true;
-
-      if (attachments.length > 0) {
-        uploadedMedia = await uploadPostMedia(
-          attachments.map((item) => ({ kind: item.kind, file: item.file })),
-          user.uid,
-          postId,
-          (total, transferred) => {
-            const percent = total > 0 ? Math.round((transferred / total) * 100) : 0;
-            setProgress({ percent, transferred, total });
-          },
-        );
+      let publishedId: string | null;
+      try {
+        publishedId = await publishAttempt(false);
+      } catch (firstError) {
+        if (!isAbandonedPostUploadError(firstError)) throw firstError;
+        if (!current()) return;
+        setProgress({ percent: 0, transferred: 0, total: 0 });
+        publishedId = await publishAttempt(true);
       }
-
-      if (parsedYouTube) {
-        uploadedMedia = [
-          ...uploadedMedia,
-          {
-            url: parsedYouTube.embedUrl,
-            path: STORAGE_PATHS.postVideo({
-              userId: user.uid,
-              postId,
-              filename: `youtube-${parsedYouTube.videoId}`,
-            }),
-            type: 'video',
-            contentType: 'video/youtube',
-            fileName: `youtube-${parsedYouTube.videoId}.url`,
-            size: 0,
-          },
-        ];
+      if (!publishedId) return;
+      confirmedId.current = publishedId;
+      try {
+        await draftStore.complete(key);
+      } catch {
+        if (current())
+          setError('La publicación se guardó, pero no se pudo actualizar el borrador local.');
+        return;
       }
-
-      await updatePost(postId, {
-        media: uploadedMedia,
-        status: 'ready',
-      });
-
-      notifyFeedCacheInvalidated();
-      onClose();
-      onCreated?.(postId);
-      if (redirectTo) {
-        navigate(redirectTo);
+      if (!current()) return;
+      // Presentation callbacks cannot roll back a confirmed post or delete its files.
+      try {
+        present(publishedId);
+      } catch (error) {
+        logCreatePostError('Post saved, screen update failed:', error);
+        setError('La publicación ya se guardó, pero no se pudo actualizar la pantalla.');
       }
-    } catch (submitError) {
-      logCreatePostError('Error creating post:', submitError);
-      setError(getErrorMessage(submitError, 'Error al publicar.'));
-      if (created) {
-        await updatePost(postId, { status: 'failed' }).catch(() => {});
-      }
-      if (uploadedMedia.length > 0) {
-        await deletePostAllMedia(uploadedMedia.map((item) => item.path)).catch((cleanupError) => {
-          logCreatePostError('Cleanup error:', cleanupError);
-        });
-      }
+    } catch (error) {
+      logCreatePostError('Error creating post:', error);
+      if (current())
+        setError(getErrorMessage(error, 'No se pudo confirmar la publicación. Puedes reintentar.'));
+      return;
     } finally {
-      setIsSubmitting(false);
+      if (current()) {
+        sending.current = false;
+        setIsSubmitting(false);
+      }
     }
   };
 
   return {
     user,
+    draftRestoring: draftStore.restoring,
+    draftSaving: draftStore.saving,
+    draftError: draftStore.error,
+    retryDraftSave: draftStore.retry,
+    discardDraft: async () => {
+      if (!sending.current && !preparing.current && !draftStore.restoring) {
+        await draftStore.discard();
+        onClose();
+      }
+    },
+    closeEditor: async () => {
+      if (sending.current || preparing.current) return;
+      if (draftStore.restoring) {
+        if (draftStore.error) onClose();
+        return;
+      }
+      try {
+        await draftStore.flush();
+      } catch (error) {
+        if (
+          !window.confirm(
+            'No se pudieron guardar estos cambios. Cópialos antes de cerrar. ¿Cerrar sin guardar?',
+          )
+        )
+          throw error;
+      }
+      onClose();
+    },
+    isPublished: !!confirmedId.current && !hasPostDraft(draftStore.peek()),
     title,
     setTitle,
     text,
@@ -439,6 +519,7 @@ export const useCreatePost = ({
     usedMediaSlots,
     totalAttachmentSize,
     isSubmitting,
+    isPreparingMedia,
     error,
     progress,
     canSubmit,

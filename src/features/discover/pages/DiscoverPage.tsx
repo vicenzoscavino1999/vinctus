@@ -1,3 +1,5 @@
+import { PostImage } from '@/features/posts/components/ProtectedPostMedia';
+import DiscoverPostActions from '@/features/discover/components/DiscoverPostActions';
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
@@ -9,7 +11,6 @@ import {
   Users,
   UserPlus,
   Heart,
-  MessageCircle,
   Bookmark,
   X,
 } from 'lucide-react';
@@ -41,6 +42,7 @@ import { getPersonaById, type Debate } from '@/features/arena/types';
 import { getGlobalFeed, type PostCursor, type PostRead } from '@/features/posts/api';
 import { appendToStream, type AppendOnlyStream } from '@/features/discover/model/appendOnlyStream';
 import { toDate } from '@/shared/lib/formatUtils';
+import { AppError } from '@/shared/lib/errors';
 import { getYouTubeThumbnailUrl } from '@/shared/lib/youtube';
 import { fetchYouTubeSearchVideos, type YouTubeSearchVideo } from '@/shared/lib/youtubeSearchApi';
 
@@ -97,6 +99,16 @@ const EDITORIAL_BODY_PATTERNS = [
   'Entrada recomendada para conectar tendencias y comunidad en {subgroup}.',
   'Punto de partida para seguir novedades de {subgroup} esta semana.',
 ];
+
+const isSafeHttpUrl = (value: string | null | undefined): value is string => {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
 
 const extractHostname = (url: string): string | null => {
   try {
@@ -404,7 +416,7 @@ const getTrendPreviewForCategory = async (
   }
 };
 
-const DiscoverPage = () => {
+const DiscoverSession = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchQuery = searchParams.get('q') || '';
@@ -428,10 +440,6 @@ const DiscoverPage = () => {
     followedCategories,
     toggleFollowCategory,
     isCategoryFollowed,
-    toggleLikePost,
-    isPostLiked,
-    toggleSavePost,
-    isPostSaved,
   } = useAppState();
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -443,25 +451,36 @@ const DiscoverPage = () => {
     sortBy: 'relevance',
   });
   const [allGroups, setAllGroups] = useState<FirestoreGroup[]>([]);
-  const [groups, setGroups] = useState<FirestoreGroup[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
+  const [groupsReloadToken, setGroupsReloadToken] = useState(0);
   const [groupJoinStatusMap, setGroupJoinStatusMap] = useState<Record<string, GroupJoinStatus>>({});
   const [groupActionLoading, setGroupActionLoading] = useState<string | null>(null);
   const [arenaDebates, setArenaDebates] = useState<Debate[]>([]);
   const [arenaDebatesLoading, setArenaDebatesLoading] = useState(false);
   const [arenaDebatesError, setArenaDebatesError] = useState<string | null>(null);
+  const [arenaReloadToken, setArenaReloadToken] = useState(0);
   const [activeTrendCategoryId, setActiveTrendCategoryId] = useState<string | null>(null);
   const [trendPreviewState, setTrendPreviewState] = useState<Record<string, TrendPreviewState>>({});
   const previewRequestedRef = useRef<Set<string>>(new Set());
+  const isMountedRef = useRef(true);
+  const communityRequestSeqRef = useRef(0);
+  const youtubeRequestSeqRef = useRef(0);
   const publicationLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const publicationObserverLockedRef = useRef(false);
   const [visiblePublicationCount, setVisiblePublicationCount] = useState(PUBLICATION_BATCH_SIZE);
   const [communityPublications, setCommunityPublications] = useState<PublicationStreamItem[]>([]);
+  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
+  const handleLikeCount = useCallback((postId: string, count: number) => {
+    setLikeCounts((previous) =>
+      previous[postId] === count ? previous : { ...previous, [postId]: count },
+    );
+  }, []);
   const [communityCursor, setCommunityCursor] = useState<PostCursor>(null);
   const [communityHasMore, setCommunityHasMore] = useState(true);
   const [communityLoading, setCommunityLoading] = useState(false);
   const [communityReady, setCommunityReady] = useState(false);
+  const [communityReader, setCommunityReader] = useState<string | null | undefined>(undefined);
   const [youtubeQueryInput, setYoutubeQueryInput] = useState(YOUTUBE_FALLBACK_QUERY);
   const [youtubeQuery, setYoutubeQuery] = useState(YOUTUBE_FALLBACK_QUERY);
   const [youtubePublications, setYoutubePublications] = useState<PublicationStreamItem[]>([]);
@@ -494,31 +513,76 @@ const DiscoverPage = () => {
       result = result.filter((cat) => cat.id === filters.category);
     }
 
-    // Apply search query
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    // Apply search query (accent-insensitive across category labels, descriptions, IDs, and subgroups)
+    const normalizedQuery = normalizeKeyword(searchQuery.trim());
+    if (normalizedQuery) {
       result = result.filter(
         (cat) =>
-          cat.label.toLowerCase().includes(query) ||
-          cat.description.toLowerCase().includes(query) ||
-          cat.subgroups.some((sub) => sub.name.toLowerCase().includes(query)),
+          normalizeKeyword(cat.id).includes(normalizedQuery) ||
+          normalizeKeyword(cat.label).includes(normalizedQuery) ||
+          normalizeKeyword(cat.description).includes(normalizedQuery) ||
+          cat.subgroups.some((sub) => normalizeKeyword(sub.name).includes(normalizedQuery)),
       );
     }
 
     // Apply sorting
     if (filters.sortBy === 'alphabetical') {
-      result = [...result].sort((a, b) => a.label.localeCompare(b.label));
+      result = [...result].sort((a, b) => a.label.localeCompare(b.label, 'es'));
     } else if (filters.sortBy === 'popular') {
-      // Sort by number of subgroups as proxy for popularity
+      // Sort by active group/member activity first, falling back to subgroup count
       result = [...result].sort((a, b) => b.subgroups.length - a.subgroups.length);
     } else if (filters.sortBy === 'recent') {
       // For now, reverse the default order to simulate "recent"
-      // In production, this would sort by a real timestamp
       result = [...result].reverse();
     }
 
     return result;
   }, [searchQuery, filters, userInterests]);
+
+  const groups = useMemo(() => {
+    let result = [...allGroups];
+    const normalizedQuery = normalizeKeyword(searchQuery.trim());
+
+    if (filters.category) {
+      result = result.filter((group) => group.categoryId === filters.category);
+    }
+
+    if (normalizedQuery) {
+      result = result.filter((group) => {
+        const categoryLabel = group.categoryId
+          ? (CATEGORIES.find((cat) => cat.id === group.categoryId)?.label ?? '')
+          : '';
+        return (
+          normalizeKeyword(group.name || '').includes(normalizedQuery) ||
+          normalizeKeyword(group.description || '').includes(normalizedQuery) ||
+          normalizeKeyword(group.categoryId || '').includes(normalizedQuery) ||
+          normalizeKeyword(categoryLabel).includes(normalizedQuery)
+        );
+      });
+    }
+
+    if (filters.sortBy === 'alphabetical') {
+      result.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
+    } else if (filters.sortBy === 'recent') {
+      result.sort((a, b) => {
+        const aTime = a.createdAt?.getTime() ?? 0;
+        const bTime = b.createdAt?.getTime() ?? 0;
+        return bTime - aTime;
+      });
+    } else {
+      result.sort((a, b) => {
+        const aMembers = a.memberCount ?? 0;
+        const bMembers = b.memberCount ?? 0;
+        if (aMembers !== bMembers) return bMembers - aMembers;
+        const aTime = a.createdAt?.getTime() ?? 0;
+        const bTime = b.createdAt?.getTime() ?? 0;
+        return bTime - aTime;
+      });
+    }
+
+    const maxVisible = normalizedQuery || filters.category ? 8 : 4;
+    return result.slice(0, maxVisible);
+  }, [allGroups, filters.category, filters.sortBy, searchQuery]);
 
   const curatedArenaDebates = useMemo(() => {
     return [...arenaDebates]
@@ -604,12 +668,17 @@ const DiscoverPage = () => {
 
   // Grow the rendered feed only once pending loads settle, and only by appending: items the user
   // already scrolled past never move, so scrolling back up shows the same feed.
+  const publicationScope = JSON.stringify([user?.uid ?? null, youtubeQuery]);
   const publicationSourcesSettled =
-    communityReady && !communityLoading && youtubeResultsQuery === youtubeQuery && !youtubeLoading;
+    communityReader === (user?.uid ?? null) &&
+    communityReady &&
+    !communityLoading &&
+    youtubeResultsQuery === youtubeQuery &&
+    !youtubeLoading;
   if (publicationSourcesSettled) {
     const nextShownPublications = appendToStream(
       shownPublications,
-      youtubeQuery,
+      publicationScope,
       candidatePublicationStream,
       publicationTargetCount,
       getPublicationDedupeKey,
@@ -618,31 +687,46 @@ const DiscoverPage = () => {
       setShownPublications(nextShownPublications);
     }
   }
-  const publicationStream = shownPublications.scope === youtubeQuery ? shownPublications.items : [];
+  const publicationStream =
+    shownPublications.scope === publicationScope ? shownPublications.items : [];
 
   const hasMoreEditorial = visiblePublicationCount < PUBLICATION_MAX_ITEMS;
   const hasMorePublications = communityHasMore || youtubeHasMore || hasMoreEditorial;
 
   useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     let active = true;
+    const seq = ++communityRequestSeqRef.current;
 
     const loadInitialCommunityPublications = async () => {
+      setCommunityReader(undefined);
       setCommunityLoading(true);
+      setCommunityPublications([]);
+      setCommunityCursor(null);
+      setCommunityHasMore(false);
       try {
         const result = await getGlobalFeed(PUBLICATION_BATCH_SIZE);
-        if (!active) return;
+        if (!active || communityRequestSeqRef.current !== seq) return;
         const mapped = result.items.map((post, index) => buildCommunityPublication(post, index));
         setCommunityPublications(mapped);
+        setCommunityReader(user?.uid ?? null);
         setCommunityCursor(result.lastDoc ?? null);
         setCommunityHasMore(result.hasMore);
       } catch (error) {
         console.error('Error loading community publications for Discover:', error);
-        if (!active) return;
+        if (!active || communityRequestSeqRef.current !== seq) return;
         setCommunityPublications([]);
+        setCommunityReader(user?.uid ?? null);
         setCommunityCursor(null);
         setCommunityHasMore(false);
       } finally {
-        if (active) {
+        if (active && communityRequestSeqRef.current === seq) {
           setCommunityLoading(false);
           setCommunityReady(true);
         }
@@ -653,7 +737,7 @@ const DiscoverPage = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [user?.uid]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -666,6 +750,7 @@ const DiscoverPage = () => {
 
   useEffect(() => {
     let active = true;
+    const seq = ++youtubeRequestSeqRef.current;
 
     const loadInitialYouTubePublications = async () => {
       setYoutubeLoading(true);
@@ -675,7 +760,7 @@ const DiscoverPage = () => {
           query: youtubeQuery,
           limit: YOUTUBE_BATCH_SIZE,
         });
-        if (!active) return;
+        if (!active || youtubeRequestSeqRef.current !== seq) return;
 
         const mapped = result.items.map((item, index) =>
           buildYouTubePublication(item, index, youtubeQuery),
@@ -686,12 +771,12 @@ const DiscoverPage = () => {
         setYoutubeHasMore(Boolean(result.nextPageToken));
       } catch (error) {
         console.error('Error loading YouTube publications for Discover:', error);
-        if (!active) return;
+        if (!active || youtubeRequestSeqRef.current !== seq) return;
         setYoutubePublications([]);
         setYoutubeNextPageToken(null);
         setYoutubeHasMore(false);
       } finally {
-        if (active) {
+        if (active && youtubeRequestSeqRef.current === seq) {
           setYoutubeLoading(false);
           setYoutubeReady(true);
           setYoutubeResultsQuery(youtubeQuery);
@@ -887,6 +972,30 @@ const DiscoverPage = () => {
   ]);
 
   const rankedTrendCategories = useMemo(() => {
+    if (filters.sortBy === 'alphabetical') {
+      return [...filteredCategories].sort((a, b) => a.label.localeCompare(b.label, 'es'));
+    }
+    if (filters.sortBy === 'popular') {
+      return [...filteredCategories].sort((a, b) => {
+        const memberDiff =
+          (groupSocialByCategory[b.id]?.members ?? 0) - (groupSocialByCategory[a.id]?.members ?? 0);
+        if (memberDiff !== 0) return memberDiff;
+        const groupDiff = (groupCountByCategory[b.id] ?? 0) - (groupCountByCategory[a.id] ?? 0);
+        if (groupDiff !== 0) return groupDiff;
+        return b.subgroups.length - a.subgroups.length;
+      });
+    }
+    if (filters.sortBy === 'recent') {
+      return [...filteredCategories].sort((a, b) => {
+        const weeklyDiff = (weeklyDeltaByCategory[b.id] ?? 0) - (weeklyDeltaByCategory[a.id] ?? 0);
+        if (weeklyDiff !== 0) return weeklyDiff;
+        const liveDiff =
+          (trendPreviewState[b.id]?.liveCount ?? 0) - (trendPreviewState[a.id]?.liveCount ?? 0);
+        if (liveDiff !== 0) return liveDiff;
+        return a.label.localeCompare(b.label, 'es');
+      });
+    }
+
     return [...filteredCategories].sort((a, b) => {
       const scoreDiff =
         (trendScoresByCategory[b.id]?.score ?? 0) - (trendScoresByCategory[a.id]?.score ?? 0);
@@ -901,7 +1010,15 @@ const DiscoverPage = () => {
 
       return a.label.localeCompare(b.label, 'es');
     });
-  }, [filteredCategories, trendScoresByCategory, weeklyDeltaByCategory, trendPreviewState]);
+  }, [
+    filteredCategories,
+    filters.sortBy,
+    groupCountByCategory,
+    groupSocialByCategory,
+    trendScoresByCategory,
+    weeklyDeltaByCategory,
+    trendPreviewState,
+  ]);
 
   const trendRankPositionByCategory = useMemo(() => {
     return rankedTrendCategories.reduce<Record<string, number>>((acc, category, index) => {
@@ -945,9 +1062,11 @@ const DiscoverPage = () => {
 
   const loadMoreCommunityPublications = useCallback(async () => {
     if (communityLoading || !communityHasMore) return;
+    const seq = communityRequestSeqRef.current;
     setCommunityLoading(true);
     try {
       const result = await getGlobalFeed(PUBLICATION_BATCH_SIZE, communityCursor ?? undefined);
+      if (!isMountedRef.current || communityRequestSeqRef.current !== seq) return;
       setCommunityPublications((prev) => {
         const offset = prev.length;
         const mapped = result.items.map((post, index) =>
@@ -959,26 +1078,32 @@ const DiscoverPage = () => {
       setCommunityHasMore(result.hasMore);
     } catch (error) {
       console.error('Error loading more community publications for Discover:', error);
+      if (!isMountedRef.current || communityRequestSeqRef.current !== seq) return;
       setCommunityHasMore(false);
       showToast('No se pudieron cargar más publicaciones de la comunidad.', 'error');
     } finally {
-      setCommunityLoading(false);
+      if (isMountedRef.current && communityRequestSeqRef.current === seq) {
+        setCommunityLoading(false);
+      }
     }
   }, [communityLoading, communityHasMore, communityCursor, showToast]);
 
   const loadMoreYouTubePublications = useCallback(async () => {
     if (youtubeLoading || !youtubeHasMore || !youtubeNextPageToken) return;
+    const seq = youtubeRequestSeqRef.current;
+    const querySnapshot = youtubeQuery;
     setYoutubeLoading(true);
     try {
       const result = await fetchYouTubeSearchVideos({
-        query: youtubeQuery,
+        query: querySnapshot,
         limit: YOUTUBE_BATCH_SIZE,
         pageToken: youtubeNextPageToken,
       });
+      if (!isMountedRef.current || youtubeRequestSeqRef.current !== seq) return;
       setYoutubePublications((prev) => {
         const offset = prev.length;
         const mapped = result.items.map((item, index) =>
-          buildYouTubePublication(item, offset + index, youtubeQuery),
+          buildYouTubePublication(item, offset + index, querySnapshot),
         );
         return Array.from(new Map([...prev, ...mapped].map((item) => [item.id, item])).values());
       });
@@ -986,16 +1111,19 @@ const DiscoverPage = () => {
       setYoutubeHasMore(Boolean(result.nextPageToken));
     } catch (error) {
       console.error('Error loading more YouTube publications for Discover:', error);
+      if (!isMountedRef.current || youtubeRequestSeqRef.current !== seq) return;
       setYoutubeHasMore(false);
       showToast('No se pudieron cargar mas videos de YouTube.', 'error');
     } finally {
-      setYoutubeLoading(false);
+      if (isMountedRef.current && youtubeRequestSeqRef.current === seq) {
+        setYoutubeLoading(false);
+      }
     }
   }, [youtubeHasMore, youtubeLoading, youtubeNextPageToken, youtubeQuery, showToast]);
 
-  const loadTrendPreview = useCallback(async (category: Category) => {
+  const loadTrendPreview = useCallback(async (category: Category, force = false) => {
     const categoryId = category.id;
-    if (previewRequestedRef.current.has(categoryId)) return;
+    if (!force && previewRequestedRef.current.has(categoryId)) return;
 
     previewRequestedRef.current.add(categoryId);
     setTrendPreviewState((prev) => ({
@@ -1010,6 +1138,7 @@ const DiscoverPage = () => {
 
     try {
       const preview = await getTrendPreviewForCategory(category);
+      if (!isMountedRef.current) return;
       setTrendPreviewState((prev) => ({
         ...prev,
         [categoryId]: {
@@ -1022,6 +1151,7 @@ const DiscoverPage = () => {
     } catch (previewError) {
       console.error('Error loading trend preview:', previewError);
       previewRequestedRef.current.delete(categoryId);
+      if (!isMountedRef.current) return;
       setTrendPreviewState((prev) => ({
         ...prev,
         [categoryId]: {
@@ -1118,7 +1248,6 @@ const DiscoverPage = () => {
         });
         if (isActive) {
           setAllGroups(sorted);
-          setGroups(sorted.slice(0, 4));
         }
       } catch (loadError) {
         console.error('Error loading groups:', loadError);
@@ -1137,7 +1266,7 @@ const DiscoverPage = () => {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [groupsReloadToken]);
 
   useEffect(() => {
     let isActive = true;
@@ -1167,11 +1296,10 @@ const DiscoverPage = () => {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [arenaReloadToken]);
 
   useEffect(() => {
     if (!user || groups.length === 0) {
-      if (!user) setGroupJoinStatusMap({});
       return;
     }
     let isActive = true;
@@ -1179,23 +1307,26 @@ const DiscoverPage = () => {
     if (pending.length === 0) return;
 
     const loadStatuses = async () => {
-      try {
-        const updates: Record<string, GroupJoinStatus> = {};
-        await Promise.all(
-          pending.map(async (group) => {
-            const status = await getGroupJoinStatus(group.id, user.uid);
-            updates[group.id] = status;
-          }),
-        );
-        if (isActive) {
-          setGroupJoinStatusMap((prev) => ({ ...prev, ...updates }));
+      const updates: Record<string, GroupJoinStatus> = {};
+      const settled = await Promise.allSettled(
+        pending.map(async (group) => {
+          const status = await getGroupJoinStatus(group.id, user.uid);
+          return { groupId: group.id, status };
+        }),
+      );
+      for (const result of settled) {
+        if (result.status === 'fulfilled') {
+          updates[result.value.groupId] = result.value.status;
+        } else {
+          console.error('Error loading group status:', result.reason);
         }
-      } catch (statusError) {
-        console.error('Error loading group status:', statusError);
+      }
+      if (isActive && Object.keys(updates).length > 0) {
+        setGroupJoinStatusMap((prev) => ({ ...prev, ...updates }));
       }
     };
 
-    loadStatuses();
+    void loadStatuses();
 
     return () => {
       isActive = false;
@@ -1208,7 +1339,9 @@ const DiscoverPage = () => {
       return;
     }
 
-    const status = groupJoinStatusMap[group.id] ?? 'none';
+    const rawStatus = groupJoinStatusMap[group.id] ?? 'none';
+    const visibility = group.visibility ?? 'public';
+    const status = visibility === 'public' && rawStatus === 'pending' ? 'none' : rawStatus;
     const isOwner = group.ownerId && group.ownerId === user.uid;
     if (isOwner || status === 'member') {
       navigate(`/group/${group.id}`);
@@ -1221,7 +1354,6 @@ const DiscoverPage = () => {
 
     setGroupActionLoading(group.id);
     try {
-      const visibility = group.visibility ?? 'public';
       if (visibility === 'public') {
         await joinPublicGroup(group.id, user.uid);
         setGroupJoinStatusMap((prev) => ({ ...prev, [group.id]: 'member' }));
@@ -1244,7 +1376,11 @@ const DiscoverPage = () => {
       }
     } catch (actionError) {
       console.error('Error joining group:', actionError);
-      showToast('No se pudo procesar la solicitud', 'error');
+      if (actionError instanceof AppError && actionError.code === 'PERMISSION_DENIED') {
+        showToast('No puedes unirte directamente a este grupo.', 'error');
+      } else {
+        showToast('No se pudo procesar la solicitud', 'error');
+      }
     } finally {
       setGroupActionLoading(null);
     }
@@ -1252,10 +1388,12 @@ const DiscoverPage = () => {
 
   const getGroupActionLabel = (group: FirestoreGroup): string => {
     if (user && group.ownerId === user.uid) return 'Tu grupo';
-    const status = groupJoinStatusMap[group.id] ?? 'none';
+    const rawStatus = groupJoinStatusMap[group.id] ?? 'none';
+    const visibility = group.visibility ?? 'public';
+    const status = visibility === 'public' && rawStatus === 'pending' ? 'none' : rawStatus;
     if (status === 'member') return 'Unido';
     if (status === 'pending') return 'Pendiente';
-    return (group.visibility ?? 'public') === 'public' ? 'Unirme' : 'Solicitar';
+    return visibility === 'public' ? 'Unirme' : 'Solicitar';
   };
 
   const getGroupStats = (group: FirestoreGroup): { members: number; postsWeek: number } => {
@@ -1267,7 +1405,18 @@ const DiscoverPage = () => {
 
   const handleSearch = (e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    setSearchParams(value ? { q: value } : {}, { replace: true });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) {
+          next.set('q', value);
+        } else {
+          next.delete('q');
+        }
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   const activateTrendCategory = (category: Category) => {
@@ -1322,9 +1471,6 @@ const DiscoverPage = () => {
     const category = CATEGORIES.find((item) => item.id === publication.categoryId);
     const supportsCommunityActions =
       publication.source === 'community' && Boolean(publication.postId);
-    const liked = supportsCommunityActions ? isPostLiked(publication.id) : false;
-    const saved = supportsCommunityActions ? isPostSaved(publication.id) : false;
-    const displayLikes = publication.likes + (liked ? 1 : 0);
     const bodyText = (publication.body || category?.description || '').replace(/\s+/g, ' ').trim();
     const youtubeDateLabel = publication.youtubePublishedAt
       ? toDate(publication.youtubePublishedAt)?.toLocaleDateString('es-ES', {
@@ -1337,6 +1483,7 @@ const DiscoverPage = () => {
     return (
       <article
         key={publication.streamKey}
+        aria-label={`Publicación: ${publication.title}`}
         style={{ animationDelay: `${Math.min(index, 8) * 70}ms` }}
         className="overflow-hidden rounded-card border border-neutral-800/70 bg-surface-overlay/85 card-premium animate-in fade-in slide-in-from-bottom-2 duration-500"
       >
@@ -1376,7 +1523,7 @@ const DiscoverPage = () => {
           onClick={() => openPublicationFromDiscover(publication)}
           className="group relative block w-full text-left"
         >
-          <img
+          <PostImage
             src={publication.image}
             alt={publication.title}
             className="h-[280px] w-full object-cover md:h-[360px] transition-transform duration-700 group-hover:scale-[1.02]"
@@ -1398,30 +1545,13 @@ const DiscoverPage = () => {
 
         <div className="px-4 pb-4 pt-3 md:px-5">
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                if (!supportsCommunityActions) return;
-                toggleLikePost(publication.id);
-              }}
-              disabled={!supportsCommunityActions}
-              aria-label={`Me gusta: ${displayLikes}`}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                !supportsCommunityActions
-                  ? 'cursor-not-allowed border-neutral-800 bg-neutral-900/40 text-neutral-500'
-                  : liked
-                    ? 'border-red-400/60 bg-red-500/15 text-red-300'
-                    : 'border-neutral-700 bg-neutral-900/70 text-neutral-200 hover:border-neutral-500'
-              }`}
-            >
-              <Heart size={13} fill={liked ? 'currentColor' : 'none'} />
-              {displayLikes}
-            </button>
-
-            {publication.postId && (
-              <button
-                type="button"
-                onClick={() => {
+            {supportsCommunityActions && publication.postId ? (
+              <DiscoverPostActions
+                postId={publication.postId}
+                initialCount={likeCounts[publication.postId] ?? publication.likes}
+                commentCount={publication.comments}
+                onLikeCount={handleLikeCount}
+                onComments={() =>
                   navigate(`/post/${publication.postId}`, {
                     state: {
                       fromDiscover: true,
@@ -1429,35 +1559,31 @@ const DiscoverPage = () => {
                       enteredAt: Date.now(),
                       openComments: true,
                     },
-                  });
-                }}
-                aria-label={`Comentarios: ${publication.comments}`}
-                className="inline-flex items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-900/70 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500"
-              >
-                <MessageCircle size={13} />
-                {publication.comments}
-              </button>
+                  })
+                }
+              />
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled
+                  aria-label={`Me gusta: ${publication.likes}`}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-neutral-800 bg-neutral-900/40 px-3 py-1.5 text-xs text-neutral-500 cursor-not-allowed"
+                >
+                  <Heart size={13} />
+                  {publication.likes}
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  aria-label="Guardar publicacion"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-neutral-800 bg-neutral-900/40 px-3 py-1.5 text-xs text-neutral-500 cursor-not-allowed"
+                >
+                  <Bookmark size={13} />
+                  Guardar
+                </button>
+              </>
             )}
-
-            <button
-              type="button"
-              onClick={() => {
-                if (!supportsCommunityActions) return;
-                toggleSavePost(publication.id);
-              }}
-              disabled={!supportsCommunityActions}
-              aria-label="Guardar publicacion"
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                !supportsCommunityActions
-                  ? 'cursor-not-allowed border-neutral-800 bg-neutral-900/40 text-neutral-500'
-                  : saved
-                    ? 'border-brand-gold/50 bg-brand-gold/15 text-brand-gold'
-                    : 'border-neutral-700 bg-neutral-900/70 text-neutral-200 hover:border-neutral-500'
-              }`}
-            >
-              <Bookmark size={13} fill={saved ? 'currentColor' : 'none'} />
-              {saved ? 'Guardado' : 'Guardar'}
-            </button>
 
             <span className="ml-auto text-[10px] uppercase tracking-[0.2em] text-neutral-500">
               {publication.source === 'community'
@@ -1661,7 +1787,16 @@ const DiscoverPage = () => {
           {activeTrendPreview.loading ? (
             <div className="text-sm text-neutral-500">Cargando vista previa...</div>
           ) : activeTrendPreview.error ? (
-            <div className="text-sm text-red-400">{activeTrendPreview.error}</div>
+            <div className="flex flex-wrap items-center gap-3 text-sm text-red-400">
+              <span>{activeTrendPreview.error}</span>
+              <button
+                type="button"
+                onClick={() => void loadTrendPreview(activeTrendCategory, true)}
+                className="rounded-full border border-neutral-700 px-3 py-1 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+              >
+                Reintentar
+              </button>
+            </div>
           ) : activeTrendPreview.items.length === 0 ? (
             <div className="text-sm text-neutral-500">
               No hay resultados disponibles para esta categoria ahora.
@@ -1669,7 +1804,7 @@ const DiscoverPage = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {activeTrendPreview.items.map((item, index) => {
-                if (item.href) {
+                if (isSafeHttpUrl(item.href)) {
                   return (
                     <a
                       key={`${activeTrendCategory.id}-${item.id}`}
@@ -1740,6 +1875,25 @@ const DiscoverPage = () => {
               onChange={handleSearch}
               className="flex-1 bg-transparent text-white text-center focus:outline-none placeholder:text-neutral-600 font-light text-sm"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() =>
+                  setSearchParams(
+                    (prev) => {
+                      const next = new URLSearchParams(prev);
+                      next.delete('q');
+                      return next;
+                    },
+                    { replace: true },
+                  )
+                }
+                aria-label="Limpiar búsqueda"
+                className="p-1 text-neutral-500 hover:text-white transition-colors"
+              >
+                <X size={16} />
+              </button>
+            )}
             <Search className="text-neutral-600" size={18} />
           </div>
         </div>
@@ -1798,7 +1952,16 @@ const DiscoverPage = () => {
         {arenaDebatesLoading ? (
           <div className="text-center text-neutral-500 py-6">Cargando debates de Arena IA...</div>
         ) : arenaDebatesError ? (
-          <div className="text-center text-red-400 py-6">{arenaDebatesError}</div>
+          <div className="text-center py-6 space-y-3">
+            <p className="text-red-400">{arenaDebatesError}</p>
+            <button
+              type="button"
+              onClick={() => setArenaReloadToken((prev) => prev + 1)}
+              className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+            >
+              Reintentar
+            </button>
+          </div>
         ) : curatedArenaDebates.length === 0 ? (
           <div className="text-center text-neutral-500 py-6">
             Aun no hay debates con fuentes detectadas. Cuando aparezcan referencias, se mostraran
@@ -1812,7 +1975,7 @@ const DiscoverPage = () => {
               const sourceCount = getDebateSourceCount(debate);
               const likesCount = getDebateLikesCount(debate);
               const sourceLinks = Array.isArray(debate.sourceLinks)
-                ? debate.sourceLinks.slice(0, 2)
+                ? debate.sourceLinks.filter((url) => isSafeHttpUrl(url)).slice(0, 2)
                 : [];
               const sourceMentions = Array.isArray(debate.sourceMentions)
                 ? debate.sourceMentions.slice(0, 2)
@@ -1905,9 +2068,22 @@ const DiscoverPage = () => {
         {groupsLoading ? (
           <div className="text-center text-neutral-500 py-6">Cargando grupos...</div>
         ) : groupsError ? (
-          <div className="text-center text-red-400 py-6">{groupsError}</div>
+          <div className="text-center py-6 space-y-3">
+            <p className="text-red-400">{groupsError}</p>
+            <button
+              type="button"
+              onClick={() => setGroupsReloadToken((prev) => prev + 1)}
+              className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+            >
+              Reintentar
+            </button>
+          </div>
         ) : groups.length === 0 ? (
-          <div className="text-center text-neutral-500 py-6">Aun no hay grupos disponibles.</div>
+          <div className="text-center text-neutral-500 py-6">
+            {searchQuery.trim() || filters.category
+              ? 'No hay grupos que coincidan con tu búsqueda o filtros.'
+              : 'Aun no hay grupos disponibles.'}
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {groups.map((group) => {
@@ -2002,11 +2178,22 @@ const DiscoverPage = () => {
             />
             <input
               type="text"
+              aria-label="Buscar videos en YouTube"
               value={youtubeQueryInput}
               onChange={(event) => setYoutubeQueryInput(event.target.value)}
               placeholder="Buscar videos en YouTube dentro de Vinctus..."
-              className="w-full rounded-full border border-neutral-700 bg-neutral-900/70 py-2 pl-9 pr-4 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none"
+              className="w-full rounded-full border border-neutral-700 bg-neutral-900/70 py-2 pl-9 pr-9 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none"
             />
+            {youtubeQueryInput.trim() && youtubeQueryInput !== YOUTUBE_FALLBACK_QUERY && (
+              <button
+                type="button"
+                onClick={() => setYoutubeQueryInput(YOUTUBE_FALLBACK_QUERY)}
+                aria-label="Restablecer búsqueda de YouTube"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors"
+              >
+                <X size={14} />
+              </button>
+            )}
           </label>
           <span className="text-[10px] uppercase tracking-[0.22em] text-neutral-500">
             {youtubeLoading
@@ -2073,6 +2260,9 @@ const DiscoverPage = () => {
         typeof document !== 'undefined' &&
         createPortal(
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={activeYouTubePublication.title}
             className="fixed inset-0 z-[320] overflow-y-auto safe-area-inset bg-black/80 backdrop-blur-sm p-4 md:p-8"
             onClick={() => setActiveYouTubePublication(null)}
           >
@@ -2116,7 +2306,7 @@ const DiscoverPage = () => {
                         activeYouTubePublication.group}
                     </p>
                   </div>
-                  {activeYouTubePublication.youtubeUrl && (
+                  {isSafeHttpUrl(activeYouTubePublication.youtubeUrl) && (
                     <a
                       href={activeYouTubePublication.youtubeUrl}
                       target="_blank"
@@ -2137,4 +2327,8 @@ const DiscoverPage = () => {
   );
 };
 
+const DiscoverPage = () => {
+  const { user } = useAuth();
+  return <DiscoverSession key={user?.uid ?? 'anonymous'} />;
+};
 export default DiscoverPage;

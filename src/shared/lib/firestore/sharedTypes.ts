@@ -77,10 +77,10 @@ export interface UserProfileRead {
 export interface UserProfileUpdate {
   displayName?: string;
   photoURL?: string | null;
-  bio?: string;
-  role?: string;
-  location?: string;
-  username?: string;
+  bio?: string | null;
+  role?: string | null;
+  location?: string | null;
+  username?: string | null;
 }
 
 export interface NotificationSettings {

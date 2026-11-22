@@ -9,6 +9,11 @@ service cloud.firestore {
     function isAuthenticated() {
       return request.auth != null;
     }
+
+    function hasPostReadSession() {
+      return isAuthenticated()
+        && request.auth.token.get('firebase', {}).get('sign_in_provider', 'custom') != 'anonymous';
+    }
     
     // Check if user is the owner of the resource
     function isOwner(uid) {
@@ -35,21 +40,31 @@ service cloud.firestore {
     }
 
     function canViewFollowLists(viewerUid, ownerUid) {
-      return isAccountPublic(ownerUid)
-        || viewerUid == ownerUid
-        || isFriend(viewerUid, ownerUid)
-        || isFollower(viewerUid, ownerUid);
+      return viewerUid == ownerUid
+        || (
+          !isConversationBlocked(viewerUid, ownerUid)
+          && (
+            isAccountPublic(ownerUid)
+            || isFriend(viewerUid, ownerUid)
+            || isFollower(viewerUid, ownerUid)
+          )
+        );
     }
 
     function isAccountPrivate(uid) {
       let publicDoc = get(/databases/$(database)/documents/users_public/$(uid));
       return publicDoc != null
         && publicDoc.data != null
-        && publicDoc.data.accountVisibility == 'private';
+        && publicDoc.data.get('accountVisibility', 'public') == 'private';
     }
 
     function isAccountPublic(uid) {
       return !isAccountPrivate(uid);
+    }
+
+    function canFollowPublicUser(uid) {
+      return exists(/databases/$(database)/documents/users_public/$(uid))
+        && isAccountPublic(uid);
     }
 
     function isValidFollowDoc(uid) {
@@ -60,14 +75,17 @@ service cloud.firestore {
     
     // Validate membership structure against path and auth
     function isValidMembershipCreate(groupId) {
-      return request.resource.data.keys().hasAll(['groupId', 'joinedAt'])
-        && request.resource.data.groupId == groupId;  // Must match path
+      return request.resource.data.keys().hasOnly(['groupId', 'joinedAt'])
+        && request.resource.data.keys().hasAll(['groupId', 'joinedAt'])
+        && request.resource.data.groupId == groupId  // Must match path
+        && request.resource.data.joinedAt == request.time;
     }
     
     // Validate like structure against path
-    function isValidUserLikeCreate(postId) {
-      return request.resource.data.keys().hasAll(['postId', 'createdAt'])
-        && request.resource.data.postId == postId;  // Must match path
+    function isValidPostIndexCreate(postId) {
+      return request.resource.data.keys().hasOnly(['postId', 'createdAt'])
+        && request.resource.data.postId == postId
+        && request.resource.data.createdAt == request.time;
     }
 
     // Validate arena like structure against path
@@ -88,9 +106,10 @@ service cloud.firestore {
     
     // Validate post like structure against path and auth
     function isValidPostLikeCreate(postId, uid) {
-      return request.resource.data.keys().hasAll(['uid', 'postId', 'createdAt'])
+      return request.resource.data.keys().hasOnly(['uid', 'postId', 'createdAt'])
         && request.resource.data.uid == uid  // Must match path
-        && request.resource.data.postId == postId;  // Must match path
+        && request.resource.data.postId == postId
+        && request.resource.data.createdAt == request.time;
     }
 
     // Validate arena debate like structure against path and auth
@@ -103,10 +122,12 @@ service cloud.firestore {
     
     // Validate group member structure against path and auth
     function isValidGroupMemberCreate(groupId, uid) {
-      return request.resource.data.keys().hasAll(['uid', 'groupId', 'role', 'joinedAt'])
+      return request.resource.data.keys().hasOnly(['uid', 'groupId', 'role', 'joinedAt'])
+        && request.resource.data.keys().hasAll(['uid', 'groupId', 'role', 'joinedAt'])
         && request.resource.data.uid == uid  // Must match path AND auth
         && request.resource.data.groupId == groupId  // Must match path
-        && request.resource.data.role in ['member', 'moderator', 'admin'];
+        && request.resource.data.role in ['member', 'moderator', 'admin']
+        && request.resource.data.joinedAt == request.time;
     }
     
     function getGroupDoc(groupId) {
@@ -141,6 +162,35 @@ service cloud.firestore {
           && request.resource.data.karmaByInterest == resource.data.karmaByInterest
         );
     }
+
+    function isUserCountersValidOnCreate() {
+      let data = request.resource.data;
+      return (!('followersCount' in data) || data.followersCount == null || data.followersCount == 0)
+        && (!('followingCount' in data) || data.followingCount == null || data.followingCount == 0)
+        && (!('postsCount' in data) || data.postsCount == null || data.postsCount == 0);
+    }
+
+    function isUserCountersUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['followersCount', 'followingCount', 'postsCount']);
+    }
+
+    function isValidProfileTextFieldsOnCreate() {
+      let data = request.resource.data;
+      return (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 120))
+        && (!('role' in data) || data.role == null || (data.role is string && data.role.size() <= 120))
+        && (!('bio' in data) || data.bio == null || (data.bio is string && data.bio.size() <= 500))
+        && (!('location' in data) || data.location == null || (data.location is string && data.location.size() <= 120));
+    }
+
+    function isValidProfileTextUpdate() {
+      let data = request.resource.data;
+      let changed = data.diff(resource.data).affectedKeys();
+      return (!changed.hasAny(['displayName']) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 120))
+        && (!changed.hasAny(['role']) || data.role == null || (data.role is string && data.role.size() <= 120))
+        && (!changed.hasAny(['bio']) || data.bio == null || (data.bio is string && data.bio.size() <= 500))
+        && (!changed.hasAny(['location']) || data.location == null || (data.location is string && data.location.size() <= 120));
+    }
     
     // ==================== User Data Collections ====================
 
@@ -148,8 +198,14 @@ service cloud.firestore {
     // User profile document
     match /users/{uid} {
       allow read: if isOwner(uid);
-      allow create: if isOwner(uid) && isKarmaFieldsValidOnCreate();
-      allow update: if isOwner(uid) && isKarmaFieldsUnchanged();
+      allow create: if isOwner(uid)
+        && isKarmaFieldsValidOnCreate()
+        && isUserCountersValidOnCreate()
+        && isValidProfileTextFieldsOnCreate();
+      allow update: if isOwner(uid)
+        && isKarmaFieldsUnchanged()
+        && isUserCountersUnchanged()
+        && isValidProfileTextUpdate();
       allow delete: if isOwner(uid);
     }
 
@@ -157,8 +213,14 @@ service cloud.firestore {
     // Public user profile for search
     match /users_public/{uid} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(uid) && isKarmaFieldsValidOnCreate();
-      allow update: if isOwner(uid) && isKarmaFieldsUnchanged();
+      allow create: if isOwner(uid)
+        && isKarmaFieldsValidOnCreate()
+        && isUserCountersValidOnCreate()
+        && isValidProfileTextFieldsOnCreate();
+      allow update: if isOwner(uid)
+        && isKarmaFieldsUnchanged()
+        && isUserCountersUnchanged()
+        && isValidProfileTextUpdate();
       allow delete: if isOwner(uid);
     }
 
@@ -172,6 +234,7 @@ service cloud.firestore {
         && data.toUid is string
         && data.toUid.size() > 0
         && data.toUid != request.auth.uid
+        && !isConversationBlocked(request.auth.uid, data.toUid)
         && data.status == 'pending'
         && (data.fromUserName == null || (data.fromUserName is string && data.fromUserName.size() > 0 && data.fromUserName.size() <= 120))
         && (data.fromUserPhoto == null || (data.fromUserPhoto is string && data.fromUserPhoto.size() <= 600))
@@ -194,6 +257,7 @@ service cloud.firestore {
         && request.resource.data.toUserName == resource.data.toUserName
         && request.resource.data.toUserPhoto == resource.data.toUserPhoto
         && request.resource.data.updatedAt == request.time
+        && !isConversationBlocked(resource.data.fromUid, resource.data.toUid)
         && (
           (resource.data.toUid == request.auth.uid
             && prevStatus == 'pending'
@@ -243,9 +307,11 @@ service cloud.firestore {
 
       allow create: if isAuthenticated()
         && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUid is string
         && request.resource.data.toUid != request.auth.uid
         && requestId == request.resource.data.fromUid + '_' + request.resource.data.toUid
         && isAccountPrivate(request.resource.data.toUid)
+        && !isConversationBlocked(request.auth.uid, request.resource.data.toUid)
         && request.resource.data.keys().hasOnly(['fromUid', 'toUid', 'status', 'createdAt', 'updatedAt'])
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt == request.time
@@ -258,9 +324,21 @@ service cloud.firestore {
         && request.resource.data.toUid == resource.data.toUid
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.updatedAt == request.time
+        && !isConversationBlocked(resource.data.fromUid, resource.data.toUid)
         && (
-          (resource.data.toUid == request.auth.uid && request.resource.data.status in ['accepted', 'declined'])
-          || (resource.data.fromUid == request.auth.uid && request.resource.data.status == 'pending')
+          (
+            resource.data.toUid == request.auth.uid
+            && resource.data.status == 'pending'
+            && request.resource.data.status in ['accepted', 'declined']
+          )
+          || (
+            resource.data.fromUid == request.auth.uid
+            && request.resource.data.status == 'pending'
+            && (
+              resource.data.status == 'declined'
+              || (resource.data.status == 'accepted' && !isFollower(resource.data.fromUid, resource.data.toUid))
+            )
+          )
         );
 
       allow delete: if isAuthenticated()
@@ -269,25 +347,33 @@ service cloud.firestore {
 
     // users/{uid}/followers/{followerUid}
     match /users/{uid}/followers/{followerUid} {
-      // Allow followers to read their own follower doc even for private accounts.
+      // Allow followers to read their own follower doc even for private accounts unless blocked.
       allow get: if isAuthenticated()
-        && (canViewFollowLists(request.auth.uid, uid) || request.auth.uid == followerUid);
+        && (
+          canViewFollowLists(request.auth.uid, uid)
+          || (request.auth.uid == followerUid && !isConversationBlocked(request.auth.uid, uid))
+        );
       allow list: if isAuthenticated() && canViewFollowLists(request.auth.uid, uid);
 
-      // Only allow direct follows to public accounts (private handled by server)
+      // Only allow direct follows to existing public accounts (private handled by server).
       allow create: if isAuthenticated()
         && request.auth.uid == followerUid
-        && isAccountPublic(uid)
+        && followerUid != uid
+        && canFollowPublicUser(uid)
+        && !isConversationBlocked(uid, followerUid)
         && isValidFollowDoc(followerUid);
 
       allow delete: if isAuthenticated()
         && (request.auth.uid == followerUid || request.auth.uid == uid);
 
-      // Allow idempotent updates (e.g. duplicate follow attempts) without opening extra fields.
+      // Allow strict no-op idempotent writes only; never overwrite createdAt or bypass blocks.
       allow update: if isAuthenticated()
         && request.auth.uid == followerUid
+        && followerUid != uid
+        && !isConversationBlocked(uid, followerUid)
         && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
-        && request.resource.data.uid == followerUid;
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.createdAt == resource.data.createdAt;
     }
 
     // users/{uid}/following/{targetUid}
@@ -297,22 +383,35 @@ service cloud.firestore {
 
       allow create: if isAuthenticated()
         && request.auth.uid == uid
-        && isAccountPublic(targetUid)
+        && targetUid != uid
+        && canFollowPublicUser(targetUid)
+        && !isConversationBlocked(uid, targetUid)
         && isValidFollowDoc(targetUid);
 
       // Either side can end the relationship: the follower unfollows, or the followed user
       // removes the follower (e.g. when blocking them). Mirrors the followers rule above.
       allow delete: if isAuthenticated()
         && (request.auth.uid == uid || request.auth.uid == targetUid);
-      // Allow idempotent updates (e.g. duplicate follow attempts) without opening extra fields.
+      // Allow strict no-op idempotent writes only; never overwrite createdAt or bypass blocks.
       allow update: if isAuthenticated()
         && request.auth.uid == uid
+        && targetUid != uid
+        && !isConversationBlocked(uid, targetUid)
         && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
-        && request.resource.data.uid == targetUid;
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.createdAt == resource.data.createdAt;
     }
 
     // notifications/{notificationId}
     // Activity feed notifications
+    function isValidNotificationPostTarget(postId, toUid) {
+      let post = get(/databases/$(database)/documents/posts/$(postId));
+      return post != null
+        && post.data != null
+        && post.data.authorId == toUid
+        && canViewPublishedPost(post.data);
+    }
+
     function isValidNotificationCreate() {
       let data = request.resource.data;
       return data.keys().hasOnly([
@@ -324,23 +423,35 @@ service cloud.firestore {
         && data.toUid.size() > 0
         && data.fromUid == request.auth.uid
         && data.toUid != request.auth.uid
+        && !isConversationBlocked(request.auth.uid, data.toUid)
+        && (data.fromUserName == null || (data.fromUserName is string && data.fromUserName.size() <= 120))
+        && (data.fromUserPhoto == null || (data.fromUserPhoto is string && data.fromUserPhoto.size() <= 600))
         && data.postId is string
         && data.postId.size() > 0
-        && (data.postSnippet == null || (data.postSnippet is string && data.postSnippet.size() <= 220))
-        && (data.commentText == null || (data.commentText is string && data.commentText.size() <= 300))
+        && isValidNotificationPostTarget(data.postId, data.toUid)
+        && data.postSnippet == null
+        && data.commentText == null
         && data.read == false
         && data.createdAt == request.time;
     }
 
     function isValidNotificationSenderUpdate() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['createdAt', 'fromUserName', 'fromUserPhoto', 'postSnippet'])
-        && request.resource.data.fromUid == resource.data.fromUid
-        && request.resource.data.toUid == resource.data.toUid
-        && request.resource.data.type == resource.data.type
-        && request.resource.data.postId == resource.data.postId
-        && request.resource.data.read == resource.data.read
-        && request.resource.data.createdAt == request.time;
+      let data = request.resource.data;
+      return resource.data.type == 'post_like'
+        && changed.hasOnly(['createdAt', 'fromUserName', 'fromUserPhoto', 'postSnippet', 'read'])
+        && data.fromUid == resource.data.fromUid
+        && data.toUid == resource.data.toUid
+        && !isConversationBlocked(resource.data.fromUid, resource.data.toUid)
+        && data.type == resource.data.type
+        && data.postId == resource.data.postId
+        && (data.fromUserName == null || (data.fromUserName is string && data.fromUserName.size() <= 120))
+        && (data.fromUserPhoto == null || (data.fromUserPhoto is string && data.fromUserPhoto.size() <= 600))
+        && isValidNotificationPostTarget(resource.data.postId, resource.data.toUid)
+        && data.postSnippet == null
+        && data.commentText == null
+        && (data.read == resource.data.read || data.read == false)
+        && data.createdAt == request.time;
     }
 
     function isValidNotificationRecipientUpdate() {
@@ -380,9 +491,11 @@ service cloud.firestore {
         && data.reporterUid == request.auth.uid
         && data.reportedUid is string
         && data.reportedUid.size() > 0
+        && data.reportedUid.size() <= 128
+        && data.reportedUid != request.auth.uid
         && data.reason in ['spam', 'harassment', 'abuse', 'fake', 'other']
         && (data.details == null || (data.details is string && data.details.size() <= 2000))
-        && (data.conversationId == null || (data.conversationId is string && data.conversationId.size() > 0))
+        && (data.conversationId == null || (data.conversationId is string && data.conversationId.size() > 0 && data.conversationId.size() <= 240))
         && data.status == 'open'
         && data.createdAt == request.time;
     }
@@ -456,10 +569,10 @@ service cloud.firestore {
       return snapshot is map
         && snapshot.keys().hasOnly(['displayName', 'photoURL'])
         && (snapshot.displayName == null || (snapshot.displayName is string && snapshot.displayName.size() <= 80))
-        && (snapshot.photoURL == null || snapshot.photoURL is string);
+        && (snapshot.photoURL == null || (snapshot.photoURL is string && snapshot.photoURL.size() <= 600));
     }
 
-    function isValidStoryCreate() {
+    function isValidStoryCreate(storyId) {
       let data = request.resource.data;
       return data.keys().hasOnly([
           'ownerId', 'ownerSnapshot', 'mediaType', 'mediaUrl', 'mediaPath',
@@ -470,10 +583,18 @@ service cloud.firestore {
         && data.mediaType in ['image', 'video']
         && data.mediaUrl is string
         && data.mediaUrl.size() > 0
+        && data.mediaUrl.size() <= 1000
         && data.mediaPath is string
         && data.mediaPath.size() > 0
-        && (data.thumbUrl == null || (data.thumbUrl is string && data.thumbUrl.size() > 0))
-        && (data.thumbPath == null || (data.thumbPath is string && data.thumbPath.size() > 0))
+        && data.mediaPath.size() <= 600
+        && data.mediaPath.matches('stories/' + request.auth.uid + '/' + storyId + '/original/[^/]+')
+        && (data.thumbUrl == null || (data.thumbUrl is string && data.thumbUrl.size() > 0 && data.thumbUrl.size() <= 1000))
+        && (data.thumbPath == null || (
+          data.thumbPath is string
+          && data.thumbPath.size() > 0
+          && data.thumbPath.size() <= 600
+          && data.thumbPath.matches('stories/' + request.auth.uid + '/' + storyId + '/thumb/[^/]+')
+        ))
         && data.visibility in ['friends']
         && data.createdAt == request.time
         && data.expiresAt is timestamp
@@ -525,19 +646,24 @@ service cloud.firestore {
     }
 
     // stories/{storyId}
-      // Stories (friends-only)
+      // Stories (friends and followers, excluding blocked users)
       // Note: Simplified for Safari mobile compatibility - frontend filters appropriately
       match /stories/{storyId} {
         allow read: if isAuthenticated()
           && resource.data.visibility == 'friends'
           && (
             resource.data.ownerId == request.auth.uid
-            || isFriend(request.auth.uid, resource.data.ownerId)
-            || isFriendByIndex(request.auth.uid, resource.data.ownerId)
-            || isFollower(request.auth.uid, resource.data.ownerId)
+            || (
+              !isConversationBlocked(request.auth.uid, resource.data.ownerId)
+              && (
+                isFriend(request.auth.uid, resource.data.ownerId)
+                || isFriendByIndex(request.auth.uid, resource.data.ownerId)
+                || isFollower(request.auth.uid, resource.data.ownerId)
+              )
+            )
           );
 
-      allow create: if isAuthenticated() && isValidStoryCreate();
+      allow create: if isAuthenticated() && isValidStoryCreate(storyId);
       allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
       allow update: if false;
     }
@@ -553,9 +679,11 @@ service cloud.firestore {
         && isValidMembershipCreate(groupId);
       allow delete: if isOwner(uid) || canCreateMembershipForUser(uid, groupId);
       
-      // Update only if data doesn't change (idempotent writes)
-      allow update: if isOwner(uid) 
-        && request.resource.data.groupId == groupId;  // Prevent spoofing
+      // Owner can update timestamp metadata on their own membership without spoofing groupId or adding extra keys.
+      allow update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['groupId', 'joinedAt'])
+        && request.resource.data.groupId == groupId  // Prevent spoofing
+        && request.resource.data.joinedAt is timestamp;
     }
 
     function isValidDirectConversationIndexWrite(conversationId) {
@@ -583,7 +711,13 @@ service cloud.firestore {
     // User's blocked list (private)
     match /users/{uid}/blockedUsers/{blockedUid} {
       allow read: if isOwner(uid);
-      allow create, delete: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && blockedUid != uid
+        && request.resource.data.keys().hasOnly(['blockedUid', 'status', 'blockedAt'])
+        && request.resource.data.blockedUid == blockedUid
+        && request.resource.data.status == 'active'
+        && request.resource.data.blockedAt == request.time;
+      allow delete: if isOwner(uid);
       allow update: if false;
     }
 
@@ -601,12 +735,13 @@ service cloud.firestore {
       allow read: if isOwner(uid);
       
       // Only the user can write to their own likes
-      allow create: if isOwner(uid) && isValidUserLikeCreate(postId);
+      allow create: if isOwner(uid) && isValidPostIndexCreate(postId)
+        && canInteractWithPost(postId);
       allow delete: if isOwner(uid);
       
       // Update only if data doesn't change (idempotent writes)
-      allow update: if isOwner(uid)
-        && request.resource.data.postId == postId;  // Prevent spoofing
+      allow update: if isOwner(uid) && canInteractWithPost(postId)
+        && request.resource.data == resource.data;
     }
 
     // users/{uid}/likedArenaDebates/{debateId}
@@ -640,12 +775,13 @@ service cloud.firestore {
       allow read: if isOwner(uid);
       
       // Only the user can write to their own saved posts
-      allow create: if isOwner(uid);
+      allow create: if isOwner(uid) && isValidPostIndexCreate(postId)
+        && canInteractWithPost(postId);
       allow delete: if isOwner(uid);
       
-      // Update only if postId doesn't change
-      allow update: if isOwner(uid)
-        && request.resource.data.postId == postId;
+      // Replays preserve all original fields, including createdAt.
+      allow update: if isOwner(uid) && canInteractWithPost(postId)
+        && request.resource.data == resource.data;
     }
     
     // users/{uid}/savedCategories/{categoryId}
@@ -653,14 +789,16 @@ service cloud.firestore {
     match /users/{uid}/savedCategories/{categoryId} {
       // Only the user can read their own saved categories
       allow read: if isOwner(uid);
-      
-      // Only the user can write to their own saved categories
-      allow create: if isOwner(uid);
+
+      // Only the user can write to their own saved categories with strict index shape
+      allow create: if isOwner(uid) && isValidFollowedCategoryCreate(categoryId);
       allow delete: if isOwner(uid);
-      
-      // Update only if categoryId doesn't change
+
+      // Update only if categoryId and createdAt remain unchanged
       allow update: if isOwner(uid)
-        && request.resource.data.categoryId == categoryId;
+        && request.resource.data.keys().hasOnly(['categoryId', 'createdAt'])
+        && request.resource.data.categoryId == categoryId
+        && request.resource.data.createdAt == resource.data.createdAt;
     }
 
     // users/{uid}/followedCategories/{categoryId}
@@ -806,6 +944,7 @@ service cloud.firestore {
         && data.title.size() <= 160
         && (isLink
           ? (data.url is string && data.url.size() > 0 && data.url.size() <= 600
+            && data.url.matches('^https?://.+')
             && data.text == null
             && data.fileName == null
             && data.fileSize == null
@@ -822,10 +961,12 @@ service cloud.firestore {
           : true)
         && (isFile
           ? (data.url is string && data.url.size() > 0 && data.url.size() <= 600
+            && data.url.matches('^https?://.+')
             && data.fileName is string && data.fileName.size() > 0 && data.fileName.size() <= 200
             && data.fileSize is int && data.fileSize > 0 && data.fileSize < 26214400
             && data.contentType is string && data.contentType.size() > 0 && data.contentType.size() <= 120
             && data.storagePath is string && data.storagePath.size() > 0 && data.storagePath.size() <= 600
+            && data.storagePath.matches('^collections/' + request.auth.uid + '/' + collectionId + '/[^/]+/[^/]+$')
             && data.text == null)
           : true)
         && data.createdAt == request.time;
@@ -857,6 +998,11 @@ service cloud.firestore {
       return group != null && group.data != null && group.data.visibility == 'public';
     }
 
+    function isGroupMember(groupId) {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+    }
+
     function isValidGroupCreate() {
       let data = request.resource.data;
       let hasIcon = data.keys().hasAny(['iconUrl']);
@@ -877,7 +1023,7 @@ service cloud.firestore {
         && data.ownerId == request.auth.uid
         && (!hasCategory || data.categoryId == null || (data.categoryId is string && data.categoryId.size() > 0 && data.categoryId.size() <= 80))
         && (!hasIcon || data.iconUrl == null || (data.iconUrl is string && data.iconUrl.size() > 0 && data.iconUrl.size() <= 500))
-        && (!hasMemberCount || (data.memberCount is int && data.memberCount >= 1))
+        && (!hasMemberCount || (data.memberCount is int && data.memberCount == 1))
         && data.createdAt == request.time
         && data.updatedAt == request.time;
     }
@@ -887,10 +1033,9 @@ service cloud.firestore {
       let changed = data.diff(resource.data).affectedKeys();
       let hasIcon = data.keys().hasAny(['iconUrl']);
       let hasCategory = data.keys().hasAny(['categoryId']);
-      let hasMemberCount = data.keys().hasAny(['memberCount']);
 
       return changed.hasOnly([
-          'name', 'description', 'categoryId', 'visibility', 'iconUrl', 'memberCount', 'updatedAt'
+          'name', 'description', 'categoryId', 'visibility', 'iconUrl', 'updatedAt'
         ])
         && data.ownerId == resource.data.ownerId
         && data.createdAt == resource.data.createdAt
@@ -903,21 +1048,24 @@ service cloud.firestore {
         && data.visibility in ['public', 'private']
         && (!hasCategory || data.categoryId == null || (data.categoryId is string && data.categoryId.size() > 0 && data.categoryId.size() <= 80))
         && (!hasIcon || data.iconUrl == null || (data.iconUrl is string && data.iconUrl.size() > 0 && data.iconUrl.size() <= 500))
-        && (!hasMemberCount || (data.memberCount is int && data.memberCount >= 1))
         && data.updatedAt == request.time;
     }
 
     function isValidGroupMemberSelfCreate(groupId, uid) {
+      let group = getGroupDoc(groupId);
+      let ownerId = (group != null && group.data != null) ? group.data.get('ownerId', null) : null;
       return isValidGroupMemberCreate(groupId, uid)
         && request.auth.uid == uid
         && request.resource.data.role == 'member'
-        && isGroupPublic(groupId);
+        && isGroupPublic(groupId)
+        && (ownerId == uid || !(ownerId is string) || !isConversationBlocked(uid, ownerId));
     }
 
     function isValidGroupMemberOwnerCreate(groupId, uid) {
       return isValidGroupMemberCreate(groupId, uid)
         && isGroupOwner(groupId)
-        && request.resource.data.role in ['member', 'moderator', 'admin'];
+        && request.resource.data.role in ['member', 'moderator', 'admin']
+        && (uid == request.auth.uid || !isConversationBlocked(request.auth.uid, uid));
     }
 
     function isValidGroupMemberRoleUpdate(groupId, uid) {
@@ -944,27 +1092,39 @@ service cloud.firestore {
         && data.toUid is string
         && data.toUid.size() > 0
         && data.toUid != request.auth.uid
+        && !isConversationBlocked(request.auth.uid, data.toUid)
         && data.status == 'pending'
         && (data.message == null || (data.message is string && data.message.size() > 0 && data.message.size() <= 1000))
         && (data.fromUserName == null || (data.fromUserName is string && data.fromUserName.size() > 0 && data.fromUserName.size() <= 80))
-        && (data.fromUserPhoto == null || data.fromUserPhoto is string)
+        && (data.fromUserPhoto == null || (data.fromUserPhoto is string && data.fromUserPhoto.size() <= 600))
         && data.createdAt == request.time
         && data.updatedAt == request.time
         && group != null
         && group.data != null
         && group.data.ownerId == data.toUid
-        && group.data.visibility == 'private';
+        && group.data.visibility == 'private'
+        && !exists(/databases/$(database)/documents/groups/$(data.groupId)/members/$(request.auth.uid));
     }
 
     function isValidGroupJoinRequestUpdate() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['status', 'updatedAt'])
+      let group = getGroupDoc(resource.data.groupId);
+      return resource.data.status == 'pending'
+        && changed.hasOnly(['status', 'updatedAt'])
         && request.resource.data.status in ['accepted', 'rejected']
         && request.resource.data.updatedAt == request.time
         && request.resource.data.fromUid == resource.data.fromUid
         && request.resource.data.toUid == resource.data.toUid
         && request.resource.data.groupId == resource.data.groupId
-        && request.resource.data.groupName == resource.data.groupName;
+        && request.resource.data.groupName == resource.data.groupName
+        && (
+          request.resource.data.status != 'accepted'
+          || (
+            !isConversationBlocked(resource.data.fromUid, resource.data.toUid)
+            && group != null
+            && group.data != null
+          )
+        );
     }
     
     // groups/{groupId}
@@ -982,17 +1142,23 @@ service cloud.firestore {
     // groups/{groupId}/members/{uid}
     // Group members (source of truth for counting)
     match /groups/{groupId}/members/{uid} {
-      // Allow authenticated reads for member display
-      allow read: if isAuthenticated();
+      // Allow self status check or member list on public groups; private group member lists are for members/owner only.
+      allow get: if isAuthenticated()
+        && (isOwner(uid) || isGroupPublic(groupId) || isGroupOwner(groupId) || isGroupMember(groupId));
+      allow list: if isAuthenticated()
+        && (isGroupPublic(groupId) || isGroupOwner(groupId) || isGroupMember(groupId));
       
       // Self-join for public groups OR owner adds member (private/public)
       allow create: if isAuthenticated()
         && (isValidGroupMemberSelfCreate(groupId, uid) || isValidGroupMemberOwnerCreate(groupId, uid));
       
-      allow delete: if isOwner(uid) || isGroupOwner(groupId);
+      // Members can leave, owners can remove others (owner cannot leave/remove self cleanly while owning).
+      allow delete: if (isOwner(uid) && !isGroupOwner(groupId))
+        || (isGroupOwner(groupId) && !isOwner(uid));
       
-      // Owner can adjust roles
+      // Owner can adjust roles of other members
       allow update: if isGroupOwner(groupId)
+        && !isOwner(uid)
         && isValidGroupMemberRoleUpdate(groupId, uid);
     }
 
@@ -1041,7 +1207,7 @@ service cloud.firestore {
         && (data.capacity == null || (data.capacity is int && data.capacity >= 0 && data.capacity <= 100000))
         && data.visibility in ['public', 'private']
         && data.createdBy == request.auth.uid
-        && (data.coverUrl == null || data.coverUrl is string)
+        && (data.coverUrl == null || (data.coverUrl is string && data.coverUrl.size() <= 600))
         && data.createdAt == request.time
         && data.updatedAt == request.time;
     }
@@ -1067,7 +1233,7 @@ service cloud.firestore {
         && (data.venue == null || (data.venue is string && data.venue.size() <= 120))
         && (data.capacity == null || (data.capacity is int && data.capacity >= 0 && data.capacity <= 100000))
         && data.visibility in ['public', 'private']
-        && (data.coverUrl == null || data.coverUrl is string)
+        && (data.coverUrl == null || (data.coverUrl is string && data.coverUrl.size() <= 600))
         && data.updatedAt == request.time;
     }
 
@@ -1158,6 +1324,8 @@ service cloud.firestore {
         && item.url is string
         && item.url.size() > 0
         && item.url.size() <= 500
+        && (item.url == 'post-media:' + item.path
+          || (isVideo && item.url.matches('https://www[.]youtube[.]com/embed/[A-Za-z0-9_-]{11}')))
         && item.path is string
         && item.path.size() <= 300
         && item.type in ['image', 'video', 'file']
@@ -1235,7 +1403,8 @@ service cloud.firestore {
     // Validate post update (only content and media can change)
     function isValidPostUpdate(postId) {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['content', 'media', 'updatedAt', 'title'])
+      return resource.data.get('status', null) in [null, 'ready']
+        && changed.hasOnly(['content', 'media', 'updatedAt', 'title'])
         && request.resource.data.content is string
         && request.resource.data.content.size() <= 5000
         && (!request.resource.data.keys().hasAny(['title']) || request.resource.data.title == null || (request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 120))
@@ -1248,7 +1417,8 @@ service cloud.firestore {
     // Validate post update (uploading workflow)
     function isValidPostUpdateUploading(postId) {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['status', 'media', 'updatedAt'])
+      return resource.data.get('status', null) in ['uploading', 'failed']
+        && changed.hasOnly(['status', 'media', 'updatedAt'])
         && request.resource.data.status in ['ready', 'failed']
         && request.resource.data.media is list
         && isValidMediaArray(request.resource.data.media, postId)
@@ -1271,50 +1441,108 @@ service cloud.firestore {
     function isPostAuthor() {
       return resource.data.authorId == request.auth.uid;
     }
+
+    // The group's member document authorizes access; the user-owned membership
+    // index cannot grant permission to publish or interact in a private group.
+    function canUsePostGroup(data, membersOnly) {
+      let groupId = data.get('groupId', null);
+      return groupId == null
+        || (groupId is string && groupId.size() > 0 && groupId.size() <= 100
+          && exists(/databases/$(database)/documents/groups/$(groupId))
+          && (isGroupOwner(groupId)
+            || exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid))
+            || (!membersOnly && isGroupPublic(groupId))));
+    }
+
+    function canInteractWithPost(postId) {
+      let post = get(/databases/$(database)/documents/posts/$(postId));
+      return isAuthenticated()
+        && post != null && post.data != null
+        && canViewPublishedPost(post.data);
+    }
+
+    function canViewPublishedPost(data) {
+      let authorId = data.get('authorId', null);
+      return hasPostReadSession() && authorId is string && authorId.size() > 0
+        && data.get('status', null) in [null, 'ready']
+        && exists(/databases/$(database)/documents/users_public/$(authorId))
+        && !isConversationBlocked(request.auth.uid, authorId)
+        && (data.get('groupId', null) == null
+          || (isGroupPublic(data.groupId)
+            || (exists(/databases/$(database)/documents/users_public/$(request.auth.uid)) && canUsePostGroup(data, false))))
+        && (isAccountPublic(authorId)
+          || (isAuthenticated() && (request.auth.uid == authorId
+            || (exists(/databases/$(database)/documents/users_public/$(request.auth.uid)) && isFollower(request.auth.uid, authorId)))));
+    }
+
+    function canViewPostById(postId) {
+      let post = get(/databases/$(database)/documents/posts/$(postId));
+      return post != null && post.data != null && canViewPublishedPost(post.data);
+    }
+
+    // Revoked members can clean up unfinished uploads, but cannot publish them
+    // or use the failure path to alter an already published post.
+    function isUnfinishedPostFailure() {
+      return resource.data.get('status', null) in ['uploading', 'failed']
+        && request.resource.data.status == 'failed';
+    }
     
     // posts/{postId}
-    // Post metadata (PUBLIC READ, author write)
+    // Post metadata (authenticated, authorized reads; author writes)
     match /posts/{postId} {
-      // Anyone can read posts (even anonymous for discovery)
-      allow read: if true;
+      // Lists use the server-authorized read API. Owners still read their own
+      // documents for idempotent publishing and cleanup after group revocation.
+      allow get: if hasPostReadSession() && (resource == null
+        || resource.data.authorId == request.auth.uid
+        || canViewPublishedPost(resource.data));
+      allow list: if false;
       
       // Only authenticated users can create posts with valid author info
       allow create: if isAuthenticated()
+        && canUsePostGroup(request.resource.data, true)
         && (isValidPostCreate(postId) || isValidPostCreateUploading(postId));
       
       // Only the author can update their posts
       allow update: if isAuthenticated() && isPostAuthor()
-        && (isValidPostUpdate(postId) || isValidPostUpdateUploading(postId));
+        && ((canUsePostGroup(resource.data, true)
+              && (isValidPostUpdate(postId) || isValidPostUpdateUploading(postId)))
+          || (isUnfinishedPostFailure() && isValidPostUpdateUploading(postId)));
       
-      // Only the author can delete their posts
-      allow delete: if isAuthenticated() && isPostAuthor();
+      // Only the author can delete their posts; server-retired tombstones stay until Storage is purged.
+      allow delete: if isAuthenticated()
+        && isPostAuthor()
+        && resource.data.get('status', null) != 'abandoned';
     }
     
     // posts/{postId}/likes/{uid}
     // Post likes (source of truth for counting)
     match /posts/{postId}/likes/{uid} {
-      // Likes are public for counts
-      allow read: if true;
+      // Counts come from the readable post. A user's reaction remains readable
+      // to that user for removal, even after losing access to the parent.
+      allow get: if isOwner(uid);
+      allow list: if false;
       
       // Only the user can like/unlike
       // Critical: Validate against BOTH path and auth
       allow create: if isOwner(uid) 
         && isValidPostLikeCreate(postId, uid)
-        && request.resource.data.uid == request.auth.uid;  // Triple check
+        && canInteractWithPost(postId);
       
       allow delete: if isOwner(uid);
       
       // Update ONLY if critical fields don't change
-      allow update: if isOwner(uid)
-        && request.resource.data.uid == uid  // Must match path
-        && request.resource.data.uid == request.auth.uid  // Must match auth
-        && request.resource.data.postId == postId;  // Must match path
+      allow update: if isOwner(uid) && canInteractWithPost(postId)
+        && request.resource.data == resource.data;
     }
 
     // posts/{postId}/comments/{commentId}
     match /posts/{postId}/comments/{commentId} {
-      allow read: if true;
-      allow create: if isAuthenticated() && isValidPostCommentCreate(postId);
+      allow get: if hasPostReadSession() && ((resource == null || resource.data.authorId == request.auth.uid)
+        || (canViewPostById(postId)
+          && !isConversationBlocked(request.auth.uid, resource.data.authorId)));
+      allow list: if false;
+      allow create: if isAuthenticated() && canInteractWithPost(postId)
+        && isValidPostCommentCreate(postId);
       allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
       allow update: if false;
     }
@@ -1391,10 +1619,11 @@ service cloud.firestore {
         && data.toUid is string
         && data.toUid.size() > 0
         && data.toUid != request.auth.uid
+        && !isConversationBlocked(request.auth.uid, data.toUid)
         && data.status == 'pending'
         && (data.message == null || (data.message is string && data.message.size() > 0 && data.message.size() <= 1000))
         && (data.fromUserName == null || (data.fromUserName is string && data.fromUserName.size() > 0 && data.fromUserName.size() <= 80))
-        && (data.fromUserPhoto == null || data.fromUserPhoto is string)
+        && (data.fromUserPhoto == null || (data.fromUserPhoto is string && data.fromUserPhoto.size() <= 600))
         && data.createdAt == request.time
         && data.updatedAt == request.time
         && collab != null
@@ -1405,9 +1634,14 @@ service cloud.firestore {
 
     function isValidCollaborationRequestUpdate() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['status', 'updatedAt'])
+      return resource.data.status == 'pending'
+        && changed.hasOnly(['status', 'updatedAt'])
         && request.resource.data.status in ['accepted', 'rejected']
         && request.resource.data.updatedAt == request.time
+        && (
+          request.resource.data.status != 'accepted'
+          || !isConversationBlocked(resource.data.fromUid, resource.data.toUid)
+        )
         && request.resource.data.fromUid == resource.data.fromUid
         && request.resource.data.toUid == resource.data.toUid
         && request.resource.data.collaborationId == resource.data.collaborationId
@@ -1556,6 +1790,7 @@ service cloud.firestore {
         && memberIds[0] is string
         && memberIds[1] is string
         && memberIds.hasAny([request.auth.uid])
+        && !isConversationBlocked(memberIds[0], memberIds[1])
         && (
           conversationId == 'dm_' + memberIds[0] + '_' + memberIds[1]
           || conversationId == 'dm_' + memberIds[1] + '_' + memberIds[0]
@@ -1586,13 +1821,19 @@ service cloud.firestore {
         || exists(/databases/$(database)/documents/users/$(uidB)/blockedUsers/$(uidA));
     }
 
-    // A block (in either direction) stops new messages in an existing direct conversation.
+    // A block (in either direction) stops new messages, preview updates and typing in a direct conversation.
+    function isDirectConversationDataBlocked(convData) {
+      return convData != null
+        && convData.get('type', '') == 'direct'
+        && convData.get('memberIds', []) is list
+        && convData.get('memberIds', []).size() == 2
+        && isConversationBlocked(convData.memberIds[0], convData.memberIds[1]);
+    }
+
     function isDirectConversationBlocked(conversationId) {
-      let conv = get(/databases/$(database)/documents/conversations/$(conversationId)).data;
-      return conv.get('type', '') == 'direct'
-        && conv.get('memberIds', []) is list
-        && conv.get('memberIds', []).size() == 2
-        && isConversationBlocked(conv.memberIds[0], conv.memberIds[1]);
+      return isDirectConversationDataBlocked(
+        get(/databases/$(database)/documents/conversations/$(conversationId)).data
+      );
     }
 
     function canStartDirectConversation(uidA, uidB) {
@@ -1691,6 +1932,7 @@ service cloud.firestore {
           || isValidGroupConversationCreate(conversationId));
       
       allow update: if (canAccessConversationData(resource.data)
+        && !isDirectConversationDataBlocked(resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'updatedAt']))
         || isValidDirectConversationRepair(conversationId);
       
@@ -1727,7 +1969,8 @@ service cloud.firestore {
         allow read: if isAuthenticated() && canAccessConversation(conversationId);
         allow write: if isAuthenticated() 
           && request.auth.uid == uid
-          && canAccessConversation(conversationId);
+          && canAccessConversation(conversationId)
+          && !isDirectConversationBlocked(conversationId);
       }
     }
     

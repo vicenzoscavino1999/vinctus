@@ -4,7 +4,8 @@ import SwiftUI
 
 @MainActor
 final class ArenaViewModel: ObservableObject {
-  /// `MAX_TOPIC_CHARS` of the createDebate Cloud Function (functions/src/arena/createDebate.ts).
+  /// Matches `MIN_TOPIC_CHARS` and `MAX_TOPIC_CHARS` of `createDebate` (functions/src/arena/createDebate.ts).
+  static let minTopicLength = 5
   static let maxTopicLength = Limits.Arena.topicMaxLength
 
   @Published private(set) var personas: [ArenaPersona] = []
@@ -24,14 +25,19 @@ final class ArenaViewModel: ObservableObject {
   @Published var errorMessage: String?
 
   private let repo: AIRepo
+  private var sessionGeneration = 0
 
   init(repo: AIRepo) {
     self.repo = repo
   }
 
+  var trimmedTopicLength: Int {
+    topic.trimmingCharacters(in: .whitespacesAndNewlines).count
+  }
+
   var canCreate: Bool {
-    let text = topic.trimmingCharacters(in: .whitespacesAndNewlines)
-    return !isCreating && !text.isEmpty && text.count <= Self.maxTopicLength
+    !isCreating && trimmedTopicLength >= Self.minTopicLength
+      && trimmedTopicLength <= Self.maxTopicLength
       && !personaA.isEmpty && !personaB.isEmpty && personaA != personaB
       && (usage?.remaining ?? 1) > 0
   }
@@ -40,67 +46,116 @@ final class ArenaViewModel: ObservableObject {
     personas.first { $0.id == id }
   }
 
+  func reset() {
+    sessionGeneration += 1
+    topic = ""
+    usage = nil
+    isLoading = false
+    isCreating = false
+    result = nil
+    resultNames = [:]
+    resultDebate = nil
+    isResultSaved = false
+    isSavingResult = false
+    errorMessage = nil
+  }
+
   func load() async {
+    let generation = sessionGeneration
     isLoading = true
-    defer { isLoading = false }
+    errorMessage = nil
     do {
-      personas = try await repo.fetchArenaPersonas()
+      let loadedPersonas = try await repo.fetchArenaPersonas()
+      guard !Task.isCancelled, generation == sessionGeneration else { return }
+      personas = loadedPersonas
       if personaA.isEmpty, let first = personas.first { personaA = first.id }
       if personaB.isEmpty, personas.count > 1 { personaB = personas[1].id }
-      usage = try? await repo.fetchArenaUsage()
+      let loadedUsage = try? await repo.fetchArenaUsage()
+      guard !Task.isCancelled, generation == sessionGeneration else { return }
+      usage = loadedUsage
       errorMessage = nil
     } catch {
+      guard !Task.isCancelled, generation == sessionGeneration else { return }
       errorMessage = error.localizedDescription
+    }
+    if generation == sessionGeneration {
+      isLoading = false
     }
   }
 
   /// Saves the last debate to the profile, like "Guardar debate" on the web.
   func saveResult(repo: ProfileContentRepo = AppRepos.profileContent()) {
+    guard resultDebate != nil, !isResultSaved, !isSavingResult else { return }
+    Task { await saveResultNow(repo: repo) }
+  }
+
+  func saveResultNow(repo: ProfileContentRepo = AppRepos.profileContent()) async {
     guard let resultDebate, !isResultSaved, !isSavingResult else { return }
+    let generation = sessionGeneration
     isSavingResult = true
-    Task {
-      do {
-        try await repo.saveDebate(resultDebate)
-        isResultSaved = true
-      } catch {
-        errorMessage = "No se pudo guardar el debate."
-      }
+    errorMessage = nil
+    do {
+      try await repo.saveDebate(resultDebate)
+      guard generation == sessionGeneration else { return }
+      isResultSaved = true
+    } catch {
+      guard generation == sessionGeneration else { return }
+      errorMessage = "No se pudo guardar el debate."
+    }
+    if generation == sessionGeneration {
       isSavingResult = false
     }
   }
 
   func create() {
     guard canCreate else { return }
+    Task { await createNow() }
+  }
+
+  func createNow() async {
+    guard canCreate else { return }
     let text = topic.trimmingCharacters(in: .whitespacesAndNewlines)
+    let selectedA = personaA
+    let selectedB = personaB
+    let generation = sessionGeneration
     isCreating = true
     errorMessage = nil
     result = nil
+    resultDebate = nil
+    isResultSaved = false
 
-    Task {
-      do {
-        let debate = try await repo.createDebate(topic: text, personaA: personaA, personaB: personaB)
-        result = debate
-        resultDebate = SavedDebate(
-          id: debate.debateID, topic: text, personaA: personaA, personaB: personaB,
-          summary: debate.summary.isEmpty ? nil : debate.summary, winner: debate.winner, createdAt: nil
+    do {
+      let debate = try await repo.createDebate(topic: text, personaA: selectedA, personaB: selectedB)
+      guard generation == sessionGeneration else { return }
+      result = debate
+      resultDebate = SavedDebate(
+        id: debate.debateID, topic: text, personaA: selectedA, personaB: selectedB,
+        summary: debate.summary.isEmpty ? nil : debate.summary, winner: debate.winner, createdAt: nil
+      )
+      isResultSaved = false
+      resultNames = [
+        "A": persona(selectedA)?.name ?? "Participante A",
+        "B": persona(selectedB)?.name ?? "Participante B",
+      ]
+      if let usage, let remaining = debate.remaining {
+        self.usage = ArenaUsage(
+          used: max(0, usage.limit - remaining),
+          limit: usage.limit,
+          remaining: remaining
         )
-        isResultSaved = false
-        resultNames = [
-          "A": persona(personaA)?.name ?? "Participante A",
-          "B": persona(personaB)?.name ?? "Participante B",
-        ]
-        if let usage, let remaining = debate.remaining {
-          self.usage = ArenaUsage(used: usage.limit - remaining, limit: usage.limit, remaining: remaining)
-        }
-      } catch {
-        errorMessage = error.localizedDescription
       }
+    } catch {
+      guard generation == sessionGeneration else { return }
+      errorMessage = error.localizedDescription
+    }
+    if generation == sessionGeneration {
       isCreating = false
     }
   }
 }
 
 struct ArenaView: View {
+  @EnvironmentObject private var authVM: AuthViewModel
   @StateObject private var vm: ArenaViewModel
 
   init(repo: AIRepo) {
@@ -113,20 +168,36 @@ struct ArenaView: View {
         Section {
           TextField("Tema del debate", text: $vm.topic, axis: .vertical)
             .lineLimit(2...4)
+            .disabled(vm.isCreating)
           Picker("A favor", selection: $vm.personaA) {
             ForEach(vm.personas) { persona in
               Text(persona.name).tag(persona.id)
             }
           }
+          .disabled(vm.isCreating)
           Picker("En contra", selection: $vm.personaB) {
             ForEach(vm.personas) { persona in
               Text(persona.name).tag(persona.id)
             }
           }
+          .disabled(vm.isCreating)
         } header: {
           Text("Nuevo debate")
         } footer: {
           VStack(alignment: .leading, spacing: 4) {
+            HStack {
+              if vm.trimmedTopicLength > 0 && vm.trimmedTopicLength < ArenaViewModel.minTopicLength {
+                Text("Mínimo \(ArenaViewModel.minTopicLength) caracteres.")
+                  .foregroundStyle(.red)
+              }
+              Spacer()
+              Text("\(vm.trimmedTopicLength)/\(ArenaViewModel.maxTopicLength)")
+                .foregroundStyle(
+                  vm.trimmedTopicLength > ArenaViewModel.maxTopicLength
+                    ? .red
+                    : VinctusTokens.Color.textMuted
+                )
+            }
             if vm.personaA == vm.personaB && !vm.personaA.isEmpty {
               Text("Elige dos personalidades distintas.")
                 .foregroundStyle(.red)
@@ -159,6 +230,11 @@ struct ArenaView: View {
             Text(error)
               .font(.footnote)
               .foregroundStyle(.red)
+            if vm.personas.isEmpty {
+              Button("Reintentar") {
+                Task { await vm.load() }
+              }
+            }
           }
         }
 
@@ -211,8 +287,9 @@ struct ArenaView: View {
           }
         }
       }
-      .task {
-        if vm.personas.isEmpty {
+      .task(id: authVM.currentUserID) {
+        vm.reset()
+        if authVM.currentUserID != nil {
           await vm.load()
         }
       }

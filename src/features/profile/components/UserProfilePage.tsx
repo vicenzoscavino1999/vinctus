@@ -1,5 +1,7 @@
 import {
+  Ban,
   ChevronLeft,
+  Flag,
   MapPin,
   UserPlus,
   UserCheck,
@@ -10,7 +12,8 @@ import {
   X,
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { AppError } from '@/shared/lib/errors';
 import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
 import {
@@ -23,14 +26,25 @@ import {
   cancelFollowRequest,
   followPublicUser,
   unfollowUser,
+  blockUser,
+  unblockUser,
+  reportUserProfile,
   getOrCreateDirectConversation,
   isUserBlocked,
   type FollowStatus,
   type UserProfileRead,
+  type UserReportReason,
 } from '@/features/profile/api';
+import ContentReportModal from '@/features/posts/components/ContentReportModal';
 import ProfilePostsGrid from '@/features/posts/components/ProfilePostsGrid';
 import ContributionsSection from '@/features/profile/components/ContributionsSection';
 import { CATEGORIES } from '@/shared/constants/mockData';
+
+const isPermissionDeniedError = (err: unknown): boolean => {
+  if (err instanceof AppError) return err.code === 'PERMISSION_DENIED';
+  const code = (err as { code?: unknown })?.code;
+  return code === 'permission-denied' || code === 'PERMISSION_DENIED';
+};
 
 const UserProfilePage = () => {
   const { userId } = useParams<{ userId: string }>();
@@ -41,8 +55,50 @@ const UserProfilePage = () => {
   const [profile, setProfile] = useState<UserProfileRead | null>(null);
   const [loading, setLoading] = useState(true);
   const [followStatus, setFollowStatus] = useState<FollowStatus>('none');
+  const [hasIncomingRequest, setHasIncomingRequest] = useState(false);
   const [isMutual, setIsMutual] = useState(false);
+  const [blockedByMe, setBlockedByMe] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState<UserReportReason>('spam');
+  const [reportDetails, setReportDetails] = useState('');
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const refreshTimerRef = useRef<number | null>(null);
+  const activeUserIdRef = useRef<string | undefined>(userId);
+
+  useEffect(() => {
+    activeUserIdRef.current = userId;
+    setShowBlockModal(false);
+    setShowReportModal(false);
+    setReportReason('spam');
+    setReportDetails('');
+    setReportError(null);
+    return () => {
+      if (refreshTimerRef.current !== null) {
+        window.clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    };
+  }, [userId]);
+
+  const scheduleProfileRefresh = (targetUid: string) => {
+    if (refreshTimerRef.current !== null) {
+      window.clearTimeout(refreshTimerRef.current);
+    }
+    refreshTimerRef.current = window.setTimeout(() => {
+      refreshTimerRef.current = null;
+      if (activeUserIdRef.current !== targetUid) return;
+      void getUserProfile(targetUid)
+        .then((fresh) => {
+          if (activeUserIdRef.current === targetUid && fresh) {
+            setProfile(fresh);
+          }
+        })
+        .catch(() => undefined);
+    }, 1200);
+  };
 
   // Load user profile
   useEffect(() => {
@@ -51,40 +107,58 @@ const UserProfilePage = () => {
       return;
     }
 
+    let isMounted = true;
     const loadProfile = async () => {
       setLoading(true);
       try {
-        const userProfile = await getUserProfile(userId);
-        setProfile(userProfile);
+        const shouldCheckBlock = Boolean(currentUser && currentUser.uid !== userId);
+        const [userProfile, blocked] = await Promise.all([
+          getUserProfile(userId),
+          shouldCheckBlock && currentUser
+            ? isUserBlocked(currentUser.uid, userId).catch(() => false)
+            : Promise.resolve(false),
+        ]);
+        if (!isMounted || activeUserIdRef.current !== userId) return;
 
-        // Get follow status if logged in
-        if (currentUser && userProfile) {
+        setProfile(userProfile);
+        setBlockedByMe(blocked);
+
+        // Get follow status if logged in and not blocked
+        if (currentUser && userProfile && currentUser.uid !== userId && !blocked) {
           const status = await getFollowStatus(
             currentUser.uid,
             userId,
             userProfile.accountVisibility,
           );
-          let nextStatus = status.status;
-          if (
-            userProfile.accountVisibility !== 'private' &&
-            (nextStatus === 'pending_sent' || nextStatus === 'pending_received')
-          ) {
-            nextStatus = 'none';
-          }
-          setFollowStatus(nextStatus);
+          if (!isMounted || activeUserIdRef.current !== userId) return;
+
+          const outgoingStatus: FollowStatus =
+            status.status === 'pending_received'
+              ? 'none'
+              : userProfile.accountVisibility !== 'private' && status.status === 'pending_sent'
+                ? 'none'
+                : status.status;
+          setFollowStatus(outgoingStatus);
+          setHasIncomingRequest(Boolean(status.hasIncomingRequest));
           setIsMutual(!!status.isMutual);
         } else {
           setFollowStatus('none');
+          setHasIncomingRequest(false);
           setIsMutual(false);
         }
       } catch (error) {
         console.error('Error loading profile:', error);
       } finally {
-        setLoading(false);
+        if (isMounted && activeUserIdRef.current === userId) {
+          setLoading(false);
+        }
       }
     };
 
     void loadProfile();
+    return () => {
+      isMounted = false;
+    };
   }, [userId, currentUser]);
 
   const handleFollow = async () => {
@@ -93,6 +167,7 @@ const UserProfilePage = () => {
     try {
       const blocked = await isUserBlocked(currentUser.uid, userId);
       if (blocked) {
+        setBlockedByMe(true);
         showToast('Desbloquea a este usuario para poder seguirlo', 'info');
         return;
       }
@@ -112,13 +187,22 @@ const UserProfilePage = () => {
           setFollowStatus('pending_sent');
           showToast('Solicitud enviada', 'success');
         } catch (err) {
-          const code = (err as { code?: string })?.code;
-          if (code === 'permission-denied') {
-            await followPublicUser(currentUser.uid, userId);
-            const status = await getFollowStatus(currentUser.uid, userId, 'public');
-            setFollowStatus(status.status);
-            setIsMutual(!!status.isMutual);
-            showToast('Siguiendo', 'success');
+          if (isPermissionDeniedError(err)) {
+            const fallbackVisibility = await getAccountVisibilityServer(userId);
+            if (fallbackVisibility !== 'private') {
+              await followPublicUser(currentUser.uid, userId);
+              const status = await getFollowStatus(currentUser.uid, userId, fallbackVisibility);
+              setFollowStatus(status.status === 'pending_received' ? 'none' : status.status);
+              setHasIncomingRequest(Boolean(status.hasIncomingRequest));
+              setIsMutual(!!status.isMutual);
+              setProfile((prev) =>
+                prev ? { ...prev, followersCount: (prev.followersCount ?? 0) + 1 } : prev,
+              );
+              scheduleProfileRefresh(userId);
+              showToast('Siguiendo', 'success');
+            } else {
+              throw err;
+            }
           } else {
             throw err;
           }
@@ -128,15 +212,20 @@ const UserProfilePage = () => {
           await Promise.allSettled([cancelFollowRequest(currentUser.uid, userId)]);
           await followPublicUser(currentUser.uid, userId);
           const status = await getFollowStatus(currentUser.uid, userId, visibility);
-          setFollowStatus(status.status);
+          setFollowStatus(status.status === 'pending_received' ? 'none' : status.status);
+          setHasIncomingRequest(Boolean(status.hasIncomingRequest));
           setIsMutual(!!status.isMutual);
+          setProfile((prev) =>
+            prev ? { ...prev, followersCount: (prev.followersCount ?? 0) + 1 } : prev,
+          );
+          scheduleProfileRefresh(userId);
           showToast('Siguiendo', 'success');
         } catch (err) {
-          const code = (err as { code?: string })?.code;
-          if (code === 'permission-denied') {
+          if (isPermissionDeniedError(err)) {
             const fallbackVisibility = await getAccountVisibilityServer(userId);
             if (fallbackVisibility === 'private') {
               await sendFollowRequest(currentUser.uid, userId);
+              setProfile((prev) => (prev ? { ...prev, accountVisibility: 'private' } : prev));
               setFollowStatus('pending_sent');
               setIsMutual(false);
               showToast('Solicitud enviada', 'success');
@@ -149,7 +238,11 @@ const UserProfilePage = () => {
         }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al seguir usuario';
+      const message = isPermissionDeniedError(err)
+        ? 'No se pudo seguir a este usuario en este momento.'
+        : err instanceof Error
+          ? err.message
+          : 'Error al seguir usuario';
       showToast(message, 'error');
     } finally {
       setActionLoading(false);
@@ -162,8 +255,12 @@ const UserProfilePage = () => {
     setActionLoading(true);
     try {
       await acceptFollowRequest(userId, currentUser.uid);
-      setFollowStatus('none');
-      setIsMutual(false);
+      setHasIncomingRequest(false);
+      setIsMutual(followStatus === 'following');
+      setProfile((prev) =>
+        prev ? { ...prev, followingCount: (prev.followingCount ?? 0) + 1 } : prev,
+      );
+      scheduleProfileRefresh(userId);
       showToast('Solicitud aceptada', 'success');
     } catch {
       showToast('Error al aceptar solicitud', 'error');
@@ -178,7 +275,7 @@ const UserProfilePage = () => {
     setActionLoading(true);
     try {
       await declineFollowRequest(userId, currentUser.uid);
-      setFollowStatus('none');
+      setHasIncomingRequest(false);
       showToast('Solicitud rechazada', 'info');
     } catch {
       showToast('Error al rechazar solicitud', 'error');
@@ -211,11 +308,81 @@ const UserProfilePage = () => {
       await unfollowUser(currentUser.uid, userId);
       setFollowStatus('none');
       setIsMutual(false);
+      setProfile((prev) =>
+        prev ? { ...prev, followersCount: Math.max(0, (prev.followersCount ?? 0) - 1) } : prev,
+      );
+      scheduleProfileRefresh(userId);
       showToast('Dejaste de seguir', 'info');
     } catch {
       showToast('Error al dejar de seguir', 'error');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleBlock = async () => {
+    if (!currentUser || !userId || currentUser.uid === userId || actionLoading) return;
+
+    setActionLoading(true);
+    try {
+      await blockUser(currentUser.uid, userId);
+      setBlockedByMe(true);
+      setFollowStatus('none');
+      setHasIncomingRequest(false);
+      setIsMutual(false);
+      setShowBlockModal(false);
+      showToast('Usuario bloqueado', 'success');
+    } catch {
+      showToast('No se pudo bloquear al usuario', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleUnblock = async () => {
+    if (!currentUser || !userId || !profile || actionLoading) return;
+
+    setActionLoading(true);
+    try {
+      await unblockUser(currentUser.uid, userId);
+      setBlockedByMe(false);
+      const status = await getFollowStatus(currentUser.uid, userId, profile.accountVisibility);
+      setFollowStatus(status.status === 'pending_received' ? 'none' : status.status);
+      setHasIncomingRequest(Boolean(status.hasIncomingRequest));
+      setIsMutual(!!status.isMutual);
+      showToast('Usuario desbloqueado', 'info');
+    } catch {
+      showToast('No se pudo desbloquear al usuario', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const resetReportForm = () => {
+    setReportReason('spam');
+    setReportDetails('');
+    setReportError(null);
+  };
+
+  const handleSubmitReport = async () => {
+    if (!currentUser || !userId || currentUser.uid === userId || isSubmittingReport) return;
+
+    setIsSubmittingReport(true);
+    setReportError(null);
+    try {
+      await reportUserProfile({
+        reporterUid: currentUser.uid,
+        reportedUid: userId,
+        reason: reportReason,
+        details: reportDetails.trim() || null,
+      });
+      setShowReportModal(false);
+      resetReportForm();
+      showToast('Reporte enviado', 'success');
+    } catch {
+      setReportError('No se pudo enviar el reporte. Intenta de nuevo.');
+    } finally {
+      setIsSubmittingReport(false);
     }
   };
 
@@ -226,6 +393,7 @@ const UserProfilePage = () => {
     try {
       const blocked = await isUserBlocked(currentUser.uid, userId);
       if (blocked) {
+        setBlockedByMe(true);
         showToast('Desbloquea a este usuario para enviarle mensajes', 'info');
         return;
       }
@@ -241,6 +409,31 @@ const UserProfilePage = () => {
   const renderFollowActions = () => {
     if (!currentUser || currentUser.uid === userId) return null;
 
+    if (blockedByMe) {
+      return (
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleUnblock}
+            disabled={actionLoading}
+            className="flex items-center gap-2 px-5 py-2.5 border border-red-500/40 text-red-300 hover:bg-red-500/10 transition-colors text-sm disabled:opacity-50 rounded-lg"
+          >
+            {actionLoading ? <Loader2 size={16} className="animate-spin" /> : 'Desbloquear usuario'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowReportModal(true)}
+            disabled={actionLoading}
+            aria-label="Reportar usuario"
+            className="flex items-center gap-2 px-3.5 py-2.5 border border-neutral-800 text-neutral-400 hover:text-red-300 hover:border-red-500/40 transition-colors text-sm disabled:opacity-50 rounded-lg"
+          >
+            <Flag size={16} />
+            Reportar
+          </button>
+        </div>
+      );
+    }
+
     const isPrivate = profile?.accountVisibility === 'private';
     const canMessage = !isPrivate || isMutual || followStatus === 'following';
     const messageButton = canMessage ? (
@@ -254,11 +447,10 @@ const UserProfilePage = () => {
       </button>
     ) : null;
 
-    switch (followStatus) {
-      case 'following':
-        return (
-          <>
-            {messageButton}
+    const outgoingButton = (() => {
+      switch (followStatus) {
+        case 'following':
+          return (
             <button
               onClick={handleUnfollow}
               disabled={actionLoading}
@@ -273,12 +465,9 @@ const UserProfilePage = () => {
                 </>
               )}
             </button>
-          </>
-        );
-      case 'pending_sent':
-        return (
-          <>
-            {messageButton}
+          );
+        case 'pending_sent':
+          return (
             <button
               onClick={handleCancelRequest}
               disabled={actionLoading}
@@ -293,12 +482,31 @@ const UserProfilePage = () => {
                 </>
               )}
             </button>
-          </>
-        );
-      case 'pending_received':
-        return (
+          );
+        default:
+          return (
+            <button
+              onClick={handleFollow}
+              disabled={actionLoading}
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-medium hover:from-amber-400 hover:to-amber-500 transition-all text-sm disabled:opacity-50 rounded-lg"
+            >
+              {actionLoading ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <>
+                  <UserPlus size={16} />
+                  Seguir
+                </>
+              )}
+            </button>
+          );
+      }
+    })();
+
+    return (
+      <div className="flex flex-wrap items-center gap-3">
+        {hasIncomingRequest && (
           <>
-            {messageButton}
             <button
               onClick={handleAcceptRequest}
               disabled={actionLoading}
@@ -328,28 +536,31 @@ const UserProfilePage = () => {
               )}
             </button>
           </>
-        );
-      default:
-        return (
-          <>
-            {messageButton}
-            <button
-              onClick={handleFollow}
-              disabled={actionLoading}
-              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-medium hover:from-amber-400 hover:to-amber-500 transition-all text-sm disabled:opacity-50 rounded-lg"
-            >
-              {actionLoading ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <>
-                  <UserPlus size={16} />
-                  Seguir
-                </>
-              )}
-            </button>
-          </>
-        );
-    }
+        )}
+        {messageButton}
+        {outgoingButton}
+        <button
+          type="button"
+          onClick={() => setShowBlockModal(true)}
+          disabled={actionLoading}
+          aria-label="Bloquear usuario"
+          className="flex items-center gap-1.5 px-3.5 py-2.5 border border-neutral-800 text-neutral-400 hover:text-red-300 hover:border-red-500/40 transition-colors text-sm disabled:opacity-50 rounded-lg"
+        >
+          <Ban size={15} />
+          Bloquear
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowReportModal(true)}
+          disabled={actionLoading}
+          aria-label="Reportar usuario"
+          className="flex items-center gap-1.5 px-3.5 py-2.5 border border-neutral-800 text-neutral-400 hover:text-red-300 hover:border-red-500/40 transition-colors text-sm disabled:opacity-50 rounded-lg"
+        >
+          <Flag size={15} />
+          Reportar
+        </button>
+      </div>
+    );
   };
 
   if (loading) {
@@ -374,8 +585,10 @@ const UserProfilePage = () => {
   const initial = profile.displayName?.charAt(0).toUpperCase() || '?';
   const isOwner = currentUser?.uid === userId;
   const isPrivate = profile.accountVisibility === 'private';
-  const canViewPrivateContent = !isPrivate || isOwner || isMutual || followStatus === 'following';
-  const canViewFollowLists = !isPrivate || isOwner || isMutual || followStatus === 'following';
+  const canViewPrivateContent =
+    !blockedByMe && (!isPrivate || isOwner || isMutual || followStatus === 'following');
+  const canViewFollowLists =
+    !blockedByMe && (!isPrivate || isOwner || isMutual || followStatus === 'following');
   const postsCount = typeof profile.postsCount === 'number' ? profile.postsCount : 0;
   const followersCount = typeof profile.followersCount === 'number' ? profile.followersCount : 0;
   const followingCount = typeof profile.followingCount === 'number' ? profile.followingCount : 0;
@@ -432,11 +645,15 @@ const UserProfilePage = () => {
             <h1 className="text-3xl md:text-4xl font-serif font-light text-white mb-2">
               {profile.displayName || 'Usuario'}
             </h1>
-            <p className="text-neutral-400 mb-1">{profile.role || 'Nuevo miembro'}</p>
-            <p className="text-neutral-600 text-sm flex items-center">
-              <MapPin size={12} className="mr-1" />
-              {profile.location || 'Sin ubicación'}
-            </p>
+            {(profile.role || isOwner) && (
+              <p className="text-neutral-400 mb-1">{profile.role || 'Nuevo miembro'}</p>
+            )}
+            {(profile.location || isOwner) && (
+              <p className="text-neutral-600 text-sm flex items-center">
+                <MapPin size={12} className="mr-1" />
+                {profile.location || 'Sin ubicación'}
+              </p>
+            )}
           </div>
         </div>
 
@@ -480,14 +697,16 @@ const UserProfilePage = () => {
         {/* Left column - About */}
         <div className="md:col-span-1 space-y-8">
           {/* About me */}
-          <section>
-            <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">Sobre Mí</h2>
-            {profile.bio ? (
-              <p className="text-neutral-400 font-light leading-relaxed">{profile.bio}</p>
-            ) : (
-              <p className="text-neutral-600 font-light italic">Sin biografía aún.</p>
-            )}
-          </section>
+          {(profile.bio || isOwner) && (
+            <section>
+              <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">Sobre Mí</h2>
+              {profile.bio ? (
+                <p className="text-neutral-400 font-light leading-relaxed">{profile.bio}</p>
+              ) : (
+                <p className="text-neutral-600 font-light italic">Sin biografía aún.</p>
+              )}
+            </section>
+          )}
 
           {/* Reputation */}
           <section>
@@ -537,6 +756,13 @@ const UserProfilePage = () => {
 
               <ContributionsSection userId={profile.uid} canEdit={false} />
             </div>
+          ) : blockedByMe ? (
+            <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
+              <p className="text-white text-lg font-light mb-2">Has bloqueado a este usuario</p>
+              <p className="text-neutral-500 text-sm">
+                Desbloquéalo para volver a ver sus publicaciones y enviarle mensajes.
+              </p>
+            </div>
           ) : (
             <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
               <p className="text-white text-lg font-light mb-2">Cuenta privada</p>
@@ -547,6 +773,77 @@ const UserProfilePage = () => {
           )}
         </div>
       </div>
+
+      {showBlockModal && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center safe-area-inset"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="profile-block-modal-title"
+        >
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={() => !actionLoading && setShowBlockModal(false)}
+          />
+          <div className="relative w-full max-w-md mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+              <h3 id="profile-block-modal-title" className="text-lg font-medium text-white">
+                Bloquear usuario
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowBlockModal(false)}
+                disabled={actionLoading}
+                className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
+                aria-label="Cerrar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-neutral-400">
+                No podrán enviarse mensajes ni ver sus publicaciones, y se eliminará el seguimiento
+                entre ambos. Puedes desbloquearlo desde Ajustes &gt; Privacidad y seguridad.
+              </p>
+              <div className="flex items-center justify-end gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowBlockModal(false)}
+                  disabled={actionLoading}
+                  className="px-4 py-2 rounded-lg text-neutral-300 hover:text-white transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleBlock()}
+                  disabled={actionLoading}
+                  className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium transition-colors disabled:opacity-50"
+                >
+                  {actionLoading ? 'Bloqueando...' : 'Confirmar bloqueo'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ContentReportModal
+        open={showReportModal}
+        targetLabel="usuario"
+        reason={reportReason}
+        details={reportDetails}
+        error={reportError}
+        isSubmitting={isSubmittingReport}
+        onClose={() => {
+          if (isSubmittingReport) return;
+          setShowReportModal(false);
+          resetReportForm();
+        }}
+        onReasonChange={setReportReason}
+        onDetailsChange={setReportDetails}
+        onSubmit={() => void handleSubmitReport()}
+      />
     </div>
   );
 };

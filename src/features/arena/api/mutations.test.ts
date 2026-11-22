@@ -59,6 +59,19 @@ describe('arena api mutations', () => {
     expect(firebaseFunctions.httpsCallable).toHaveBeenCalledWith(
       { app: 'test-app' },
       'createDebate',
+      { timeout: 300_000 },
+    );
+  });
+
+  it('maps deadline-exceeded callable errors to a clear Spanish timeout message', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const callable = vi.fn().mockRejectedValueOnce({
+      code: 'functions/deadline-exceeded',
+    });
+    vi.mocked(firebaseFunctions.httpsCallable).mockReturnValueOnce(callable as never);
+
+    await expect(createDebate({ topic: 'Tema', personaA: 'a', personaB: 'b' })).rejects.toThrow(
+      /tardó demasiado/i,
     );
   });
 

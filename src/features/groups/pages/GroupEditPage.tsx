@@ -41,13 +41,14 @@ const GroupEditPage = () => {
 
   useEffect(() => {
     let isActive = true;
+    const currentUid = user?.uid ?? null;
     const loadGroup = async () => {
       if (!groupId) {
         setError('Grupo no encontrado.');
         setLoading(false);
         return;
       }
-      if (!user?.uid) {
+      if (!currentUid) {
         showToast('Inicia sesion para editar el grupo.', 'info');
         navigate(`/group/${groupId}`, { replace: true });
         return;
@@ -64,7 +65,7 @@ const GroupEditPage = () => {
           return;
         }
 
-        if (!group.ownerId || group.ownerId !== user.uid) {
+        if (!group.ownerId || group.ownerId !== currentUid) {
           showToast('No tienes permisos para editar este grupo.', 'info');
           navigate(`/group/${groupId}`, { replace: true });
           return;
@@ -91,7 +92,7 @@ const GroupEditPage = () => {
     return () => {
       isActive = false;
     };
-  }, [groupId, user, navigate, showToast]);
+  }, [groupId, user?.uid, navigate, showToast]);
 
   const openImagePicker = () => imageInputRef.current?.click();
 
@@ -208,14 +209,28 @@ const GroupEditPage = () => {
               className="hidden"
               onChange={handleIconSelect}
             />
-            <button
-              type="button"
-              onClick={openImagePicker}
-              className="px-4 py-2 rounded-lg bg-neutral-800 text-neutral-300 hover:bg-neutral-700 transition-colors flex items-center gap-2"
-            >
-              <ImageIcon size={16} />
-              Cambiar icono
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={openImagePicker}
+                className="px-4 py-2 rounded-lg bg-neutral-800 text-neutral-300 hover:bg-neutral-700 transition-colors flex items-center gap-2"
+              >
+                <ImageIcon size={16} />
+                Cambiar icono
+              </button>
+              {iconPreview && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIcon(null);
+                    setCurrentIconUrl(null);
+                  }}
+                  className="px-3 py-2 rounded-lg bg-neutral-900 border border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-500 transition-colors text-xs"
+                >
+                  Quitar icono
+                </button>
+              )}
+            </div>
             <p className="text-xs text-neutral-500 mt-2">Formato recomendado: cuadrado, max 2MB.</p>
           </div>
         </div>

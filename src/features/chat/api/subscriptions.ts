@@ -1,3 +1,4 @@
+import type { MessageSubscriptionOptions } from '@/shared/lib/firestore/messaging';
 import type { Unsubscribe } from 'firebase/firestore';
 import {
   subscribeToConversations as subscribeToConversationsRaw,
@@ -60,6 +61,7 @@ export const subscribeToConversations = (
 export const subscribeToMessages = (
   conversationId: string,
   callback: (messages: MessageRead[]) => void,
+  options: MessageSubscriptionOptions = {},
 ): Unsubscribe => {
   const safeConversationId = validate(conversationIdSchema, conversationId, {
     field: 'conversationId',
@@ -67,10 +69,22 @@ export const subscribeToMessages = (
   let active = true;
 
   try {
-    const unsubscribe = subscribeToMessagesRaw(safeConversationId, (messages) => {
-      if (!active) return;
-      callback(messages);
-    });
+    const unsubscribe = subscribeToMessagesRaw(
+      safeConversationId,
+      (messages) => {
+        if (!active) return;
+        callback(messages);
+      },
+      {
+        ...options,
+        onPage: (page) => {
+          if (active) options.onPage?.(page);
+        },
+        onError: (error) => {
+          if (active) options.onError?.(error);
+        },
+      },
+    );
 
     return wrapUnsubscribe('chat.subscribeToMessages', () => {
       active = false;
@@ -84,10 +98,10 @@ export const subscribeToMessages = (
 export const subscribeToUserMemberships = (
   uid: string,
   onUpdate: (groupIds: string[]) => void,
-  limitCount: number = 50,
+  limitCount: number | null = 50,
 ): Unsubscribe => {
   const safeUid = validate(uidSchema, uid, { field: 'uid' });
-  const safeLimitCount = safeMembershipLimit(limitCount);
+  const safeLimitCount = limitCount === null ? null : safeMembershipLimit(limitCount);
   let active = true;
 
   try {

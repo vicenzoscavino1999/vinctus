@@ -9,6 +9,7 @@ configs:
   DebugDev: debug
   DebugStaging: debug
   DebugProd: debug
+  ReleaseStaging: release
   ReleaseProd: release
 
 settings:
@@ -58,6 +59,8 @@ targets:
           VINCTUS_ENV: staging
         DebugProd:
           VINCTUS_ENV: prod
+        ReleaseStaging:
+          VINCTUS_ENV: staging
         ReleaseProd:
           VINCTUS_ENV: prod
     # GOOGLE_REVERSED_CLIENT_ID lives here (and in the uncommitted *.local.xcconfig overrides),
@@ -66,8 +69,11 @@ targets:
       DebugDev: Config/Dev.xcconfig
       DebugStaging: Config/Staging.xcconfig
       DebugProd: Config/Prod.xcconfig
+      ReleaseStaging: Config/Staging.xcconfig
       ReleaseProd: Config/Prod.xcconfig
     dependencies:
+      - package: Firebase
+        product: FirebaseAppCheck
       - package: Firebase
         product: FirebaseAuth
       - package: Firebase
@@ -84,6 +90,22 @@ targets:
     platform: iOS
     sources:
       - path: Tests
+        excludes:
+          - Fixtures
+      - path: Tests/Fixtures
+        buildPhase: resources
+    dependencies:
+      - target: VinctusNative
+
+  VinctusNativeChatUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: VinctusNative
     dependencies:
       - target: VinctusNative
 
@@ -102,6 +124,15 @@ targets:
       - target: VinctusNative
 
 schemes:
+  VinctusNative-ChatUI:
+    build:
+      targets:
+        VinctusNative: all
+    test:
+      config: ReleaseProd
+      targets:
+        - VinctusNativeChatUITests
+
   VinctusNative-Dev:
     build:
       targets:
@@ -119,6 +150,8 @@ schemes:
         VinctusNative: all
     run:
       config: DebugStaging
+    archive:
+      config: ReleaseStaging
     test:
       config: DebugStaging
       targets:
@@ -130,6 +163,8 @@ schemes:
         VinctusNative: all
     run:
       config: DebugProd
+    archive:
+      config: ReleaseProd
     test:
       config: DebugProd
       targets:

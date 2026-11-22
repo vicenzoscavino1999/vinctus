@@ -33,16 +33,39 @@ Referencia de índices compuestos de `firestore.indexes.json` usados por la app.
 
 ## Otros módulos
 
-| Collection Group | Campos                             | Uso principal                                                      |
-| ---------------- | ---------------------------------- | ------------------------------------------------------------------ |
-| `groups`         | `categoryId ASC`                   | Descubrir grupos por categoría (`where('categoryId', '==', ...)`). |
-| `users_public`   | `displayNameLowercase ASC`         | Búsqueda de usuarios por prefijo (`startAt/endAt`).                |
-| `users_public`   | `updatedAt DESC`                   | Listado de usuarios recientes/sugeridos.                           |
-| `events`         | `visibility ASC`, `startAt ASC`    | Agenda de eventos futura.                                          |
-| `events`         | `visibility ASC`, `startAt DESC`   | Agenda en orden inverso / historial.                               |
-| `contributions`  | `categoryId ASC`, `createdAt DESC` | Filtrado de contribuciones por categoría.                          |
-| `items`          | `ownerId ASC`, `createdAt DESC`    | Colecciones/items de usuario.                                      |
-| `messages`       | `senderId ASC`, `createdAt DESC`   | Búsqueda de mensajes por emisor.                                   |
+| Collection Group                | Campos                             | Uso principal                                                                         |
+| ------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------- |
+| `groups`                        | `categoryId ASC`                   | Descubrir grupos por categoría (`where('categoryId', '==', ...)`).                    |
+| `users_public`                  | `displayNameLowercase ASC`         | Búsqueda de usuarios por prefijo (`startAt/endAt`).                                   |
+| `users_public`                  | `updatedAt DESC`                   | Listado de usuarios recientes/sugeridos.                                              |
+| `events`                        | `visibility ASC`, `startAt ASC`    | Agenda de eventos futura.                                                             |
+| `events`                        | `visibility ASC`, `startAt DESC`   | Agenda en orden inverso / historial.                                                  |
+| `contributions`                 | `categoryId ASC`, `createdAt DESC` | Filtrado de contribuciones por categoría.                                             |
+| `items`                         | `ownerId ASC`, `createdAt DESC`    | Colecciones/items de usuario.                                                         |
+| `messages` (`COLLECTION_GROUP`) | `senderId ASC`, `createdAt DESC`   | Actualización de metadatos de emisor al editar perfil (`onUserPublicProfileUpdated`). |
+
+## Field Overrides (`COLLECTION_GROUP` y TTL)
+
+Los siguientes índices de campo único en `fieldOverrides` son obligatorios en producción para la eliminación de cuenta (`functions/src/deleteAccount.ts`) y expiración TTL:
+
+| Collection Group     | Campo         | Scope / TTL              | Uso principal                                                   |
+| -------------------- | ------------- | ------------------------ | --------------------------------------------------------------- |
+| `_dedup_events`      | `processedAt` | TTL                      | Limpieza automática de deduplicación de triggers.               |
+| `stories`            | `expiresAt`   | TTL                      | Expiración automática de historias a las 24 h.                  |
+| `_post_read_cursors` | `expiresAt`   | TTL                      | Expiración de cursores opacos de `readPosts`.                   |
+| `followers`          | `uid`         | `COLLECTION_GROUP` `ASC` | Borrado de aristas de seguidores al eliminar cuenta.            |
+| `following`          | `uid`         | `COLLECTION_GROUP` `ASC` | Borrado de aristas de seguidos al eliminar cuenta.              |
+| `friends`            | `uid`         | `COLLECTION_GROUP` `ASC` | Borrado de índices de amistad al eliminar cuenta.               |
+| `blockedUsers`       | `blockedUid`  | `COLLECTION_GROUP` `ASC` | Limpieza de bloqueos recibidos al eliminar cuenta.              |
+| `members`            | `uid`         | `COLLECTION_GROUP` `ASC` | Salida de grupos y chats al eliminar cuenta.                    |
+| `attendees`          | `uid`         | `COLLECTION_GROUP` `ASC` | Limpieza de asistencia a eventos al eliminar cuenta.            |
+| `likes`              | `uid`         | `COLLECTION_GROUP` `ASC` | Limpieza de likes emitidos al eliminar cuenta.                  |
+| `likes`              | `postId`      | `COLLECTION_GROUP` `ASC` | Limpieza de likes ajenos sobre posts del usuario eliminado.     |
+| `savedPosts`         | `postId`      | `COLLECTION_GROUP` `ASC` | Limpieza de guardados ajenos sobre posts del usuario eliminado. |
+| `comments`           | `authorId`    | `COLLECTION_GROUP` `ASC` | Borrado de comentarios propios al eliminar cuenta.              |
+| `messages`           | `senderId`    | `COLLECTION_GROUP` `ASC` | Borrado de mensajes propios en grupos al eliminar cuenta.       |
+| `savedArenaDebates`  | `debateId`    | `COLLECTION_GROUP` `ASC` | Limpieza de debates guardados ajenos al eliminar cuenta.        |
+| `likedArenaDebates`  | `debateId`    | `COLLECTION_GROUP` `ASC` | Limpieza de likes ajenos a debates propios al eliminar cuenta.  |
 
 ## Cómo actualizar
 

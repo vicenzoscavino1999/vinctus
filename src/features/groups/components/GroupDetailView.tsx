@@ -13,6 +13,7 @@ export interface RecentPost {
 export interface TopMember {
   id: string;
   name: string;
+  photoURL?: string | null;
   role: string;
   posts: number;
 }
@@ -50,12 +51,14 @@ export interface GroupDetailViewProps {
   canCreatePost: boolean;
   canEditGroup: boolean;
   canLeaveGroup: boolean;
+  isPrivateLocked?: boolean;
 
   // Callbacks
   onJoinGroup: () => void;
   onGoBack: () => void;
   onNavigateToCategory: () => void;
   onOpenPost?: (postId: string) => void;
+  onOpenMember?: (uid: string) => void;
   onOpenGroupChat: () => void;
   onOpenCreatePost: () => void;
   onEditGroup: () => void;
@@ -79,10 +82,12 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
   canCreatePost,
   canEditGroup,
   canLeaveGroup,
+  isPrivateLocked = false,
   onJoinGroup,
   onGoBack,
   onNavigateToCategory,
   onOpenPost,
+  onOpenMember,
   onOpenGroupChat,
   onOpenCreatePost,
   onEditGroup,
@@ -248,7 +253,11 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
           )}
         </div>
         <div className="space-y-3 stagger-premium">
-          {group.recentPosts.length === 0 ? (
+          {isPrivateLocked ? (
+            <div className="text-center text-neutral-500 py-6">
+              Este grupo es privado. Solicita acceso para ver las publicaciones.
+            </div>
+          ) : group.recentPosts.length === 0 ? (
             <div className="text-center text-neutral-500 py-6">
               Aun no hay publicaciones en este grupo.
             </div>
@@ -286,14 +295,20 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-heading-lg font-display text-white">Miembros destacados</h2>
-          <button
-            onClick={onOpenMembers}
-            className="text-xs uppercase tracking-wider text-amber-400 hover:text-amber-300 transition-colors"
-          >
-            Ver miembros
-          </button>
+          {!isPrivateLocked && (
+            <button
+              onClick={onOpenMembers}
+              className="text-xs uppercase tracking-wider text-amber-400 hover:text-amber-300 transition-colors"
+            >
+              Ver miembros
+            </button>
+          )}
         </div>
-        {group.topMembers.length === 0 ? (
+        {isPrivateLocked ? (
+          <div className="text-center text-neutral-500 py-6">
+            Solo los miembros pueden ver la lista de participantes.
+          </div>
+        ) : group.topMembers.length === 0 ? (
           <div className="text-center text-neutral-500 py-6">
             No hay miembros destacados por ahora.
           </div>
@@ -302,10 +317,31 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
             {group.topMembers.map((member) => (
               <div
                 key={member.id}
-                className="bg-surface-overlay border border-neutral-800/50 rounded-card p-4 text-center"
+                onClick={() => onOpenMember?.(member.id)}
+                onKeyDown={(event) => {
+                  if (!onOpenMember) return;
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onOpenMember(member.id);
+                  }
+                }}
+                role={onOpenMember ? 'button' : undefined}
+                tabIndex={onOpenMember ? 0 : undefined}
+                aria-label={onOpenMember ? `Abrir perfil de ${member.name}` : undefined}
+                className={`bg-surface-overlay border border-neutral-800/50 rounded-card p-4 text-center ${
+                  onOpenMember ? 'cursor-pointer hover:border-neutral-700 transition-colors' : ''
+                }`}
               >
-                <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center mx-auto mb-3">
-                  <span className="text-lg">{member.name.charAt(0)}</span>
+                <div className="w-12 h-12 rounded-full bg-neutral-800 overflow-hidden flex items-center justify-center mx-auto mb-3">
+                  {member.photoURL ? (
+                    <img
+                      src={member.photoURL}
+                      alt={member.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-lg">{member.name.charAt(0)}</span>
+                  )}
                 </div>
                 <p className="text-white font-medium">{member.name}</p>
                 <p className="text-brand-gold text-xs uppercase tracking-wider">{member.role}</p>

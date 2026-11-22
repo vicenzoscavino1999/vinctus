@@ -2,11 +2,18 @@ import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import {
+  NON_USER_REPORT_IDS,
   parseReportedContentTarget,
   parseReportedMessageTarget,
   parseReportedStoryTarget,
 } from './moderation';
-import { COLLECTIONS, LIMITS, SERVER_COLLECTIONS, SUBCOLLECTIONS } from './firestoreContract';
+import {
+  COLLECTIONS,
+  LIMITS,
+  SERVER_COLLECTIONS,
+  SUBCOLLECTIONS,
+  storagePrefix,
+} from './firestoreContract';
 
 export type ModerationEnforcementAction = 'remove_content' | 'suspend_user' | 'restore_user';
 
@@ -21,11 +28,6 @@ const ACTIONS: readonly ModerationEnforcementAction[] = [
   'restore_user',
 ];
 
-// reportedUid values that are not real accounts: auto-moderation (upsertAutoModerationReport in
-// index.ts) and reports on AI replies from the iOS app (ReportTarget.aiReportedUID).
-// The web's moderation queue (ModerationQueuePage.tsx) hides "suspend" for the same list.
-const NON_USER_IDS = new Set(['system_moderation', 'unknown_user', 'ai_assistant']);
-
 const fail = (code: functions.https.FunctionsErrorCode, message: string): never => {
   throw new functions.https.HttpsError(code, message);
 };
@@ -34,7 +36,7 @@ export const REMOVED_MESSAGE_PREVIEW = 'Mensaje eliminado';
 
 /**
  * Conversation lists show `lastMessage.text`, so a removed message must not live on there.
- * `lastMessage` carries no message id, so it is matched by sender and text.
+ * Matches by sender and either `clientCreatedAt` (covers media-only messages too) or text.
  */
 export async function clearLastMessagePreview(
   db: admin.firestore.Firestore,
@@ -42,21 +44,86 @@ export async function clearLastMessagePreview(
   message: Record<string, unknown> | undefined,
 ): Promise<void> {
   const senderId = message?.senderId;
-  const text = typeof message?.text === 'string' ? message.text.trim() : '';
-  if (typeof senderId !== 'string' || !text) {
+  if (typeof senderId !== 'string' || !senderId) {
+    return;
+  }
+  const rawText = typeof message?.text === 'string' ? message.text : '';
+  const trimmedText = rawText.trim();
+  const messageClientCreatedAt =
+    typeof message?.clientCreatedAt === 'number' ? message.clientCreatedAt : null;
+  const hasAttachments = Array.isArray(message?.attachments) && message.attachments.length > 0;
+  if (!trimmedText && !hasAttachments && messageClientCreatedAt === null) {
     return;
   }
   const conversationRef = db.doc(`${COLLECTIONS.conversations}/${conversationId}`);
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(conversationRef);
     const lastMessage = snap.data()?.lastMessage as Record<string, unknown> | null | undefined;
-    if (!lastMessage || lastMessage.senderId !== senderId || lastMessage.text !== text) {
+    if (!lastMessage || lastMessage.senderId !== senderId) {
+      return;
+    }
+    const lastText = typeof lastMessage.text === 'string' ? lastMessage.text : '';
+    const lastClientCreatedAt =
+      typeof lastMessage.clientCreatedAt === 'number' ? lastMessage.clientCreatedAt : null;
+    const matchesClientTimestamp =
+      messageClientCreatedAt !== null &&
+      lastClientCreatedAt !== null &&
+      lastClientCreatedAt === messageClientCreatedAt;
+    const matchesText =
+      trimmedText.length > 0 && (lastText === rawText || lastText.trim() === trimmedText);
+    if (!matchesClientTimestamp && !matchesText) {
       return;
     }
     tx.update(conversationRef, {
       'lastMessage.text': REMOVED_MESSAGE_PREVIEW,
     });
   });
+}
+
+/**
+ * Deletes Storage attachments and thumbnails belonging to a removed chat message.
+ * Only touches paths strictly inside `conversations/{conversationId}/`.
+ */
+export async function deleteMessageMedia(
+  bucket: ReturnType<admin.storage.Storage['bucket']>,
+  conversationId: string,
+  messageId: string,
+  message: Record<string, unknown> | undefined,
+): Promise<void> {
+  if (!conversationId || conversationId.includes('/') || !messageId || messageId.includes('/')) {
+    return;
+  }
+  const allowedPrefix = `conversations/${conversationId}/`;
+  const paths = new Set<string>();
+  const attachments = Array.isArray(message?.attachments) ? message.attachments : [];
+  for (const attachment of attachments) {
+    if (typeof attachment !== 'object' || attachment === null) continue;
+    const item = attachment as { path?: unknown; thumbPath?: unknown };
+    if (typeof item.path === 'string' && item.path.startsWith(allowedPrefix)) {
+      paths.add(item.path);
+    }
+    if (typeof item.thumbPath === 'string' && item.thumbPath.startsWith(allowedPrefix)) {
+      paths.add(item.thumbPath);
+    }
+  }
+
+  await Promise.all(
+    Array.from(paths).map((path) =>
+      bucket
+        .file(path)
+        .delete()
+        .catch(() => undefined),
+    ),
+  );
+
+  const senderId = typeof message?.senderId === 'string' ? message.senderId : '';
+  if (senderId && !senderId.includes('/')) {
+    const thumbPrefix = `${storagePrefix('conversationThumbnail', {
+      conversationId,
+      userId: senderId,
+    })}${messageId}/`;
+    await bucket.deleteFiles({ prefix: thumbPrefix, force: true }).catch(() => undefined);
+  }
 }
 
 /**
@@ -117,7 +184,8 @@ export const moderationTakeAction = functions.https.onCall(
         reviewAction = 'story_removed';
         const story = (await db.doc(target).get()).data();
         const mediaPaths = [story?.mediaPath, story?.thumbPath].filter(
-          (path): path is string => typeof path === 'string' && path.length > 0,
+          (path): path is string =>
+            typeof path === 'string' && path.length > 0 && path.startsWith('stories/'),
         );
         // The files go too; a missing file must not stop the removal.
         await Promise.all(
@@ -137,6 +205,14 @@ export const moderationTakeAction = functions.https.onCall(
         );
       }
       const messageData = message ? (await db.doc(target).get()).data() : undefined;
+      if (message && messageData) {
+        await deleteMessageMedia(
+          admin.storage().bucket(),
+          message.conversationId,
+          message.messageId,
+          messageData,
+        );
+      }
       // Deleting a document that is already gone is a no-op, so repeating the action is safe.
       await db.doc(target).delete();
       if (message) {
@@ -144,7 +220,7 @@ export const moderationTakeAction = functions.https.onCall(
       }
     } else {
       const reportedUid = typeof item.reportedUid === 'string' ? item.reportedUid : '';
-      if (!reportedUid || NON_USER_IDS.has(reportedUid) || reportedUid === adminUid) {
+      if (!reportedUid || NON_USER_REPORT_IDS.has(reportedUid) || reportedUid === adminUid) {
         return fail('failed-precondition', 'Este caso no tiene un usuario que se pueda suspender.');
       }
       if (action === 'suspend_user') {

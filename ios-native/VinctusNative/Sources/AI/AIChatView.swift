@@ -10,39 +10,67 @@ final class AIChatViewModel: ObservableObject {
   @Published var errorMessage: String?
 
   private let repo: AIRepo
+  private var sessionGeneration = 0
 
   init(repo: AIRepo) {
     self.repo = repo
   }
 
+  var trimmedDraftLength: Int {
+    draft.trimmingCharacters(in: .whitespacesAndNewlines).count
+  }
+
+  var isDraftTooLong: Bool {
+    trimmedDraftLength > FirebaseAIRepo.maxMessageLength
+  }
+
   var canSend: Bool {
-    let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-    return !isSending && !text.isEmpty && text.count <= FirebaseAIRepo.maxMessageLength
+    !isSending && trimmedDraftLength > 0 && !isDraftTooLong
+  }
+
+  func reset() {
+    sessionGeneration += 1
+    messages = []
+    draft = ""
+    errorMessage = nil
+    isSending = false
   }
 
   func send() {
+    guard canSend else { return }
+    Task { await sendNow() }
+  }
+
+  func sendNow() async {
     let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard canSend else { return }
+    let generation = sessionGeneration
     let previous = messages
     messages.append(AIChatMessage(role: "user", parts: [.init(text: text)]))
     draft = ""
     errorMessage = nil
     isSending = true
 
-    Task {
-      do {
-        messages = try await repo.sendChatMessage(text, history: previous)
-      } catch {
-        messages = previous
+    do {
+      let updated = try await repo.sendChatMessage(text, history: previous)
+      guard generation == sessionGeneration else { return }
+      messages = updated
+    } catch {
+      guard generation == sessionGeneration else { return }
+      messages = previous
+      if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
         draft = text
-        errorMessage = error.localizedDescription
       }
+      errorMessage = error.localizedDescription
+    }
+    if generation == sessionGeneration {
       isSending = false
     }
   }
 }
 
 struct AIChatView: View {
+  @EnvironmentObject private var authVM: AuthViewModel
   @StateObject private var vm: AIChatViewModel
 
   init(repo: AIRepo) {
@@ -98,6 +126,17 @@ struct AIChatView: View {
             .padding(.top, VinctusTokens.Spacing.xs)
         }
 
+        if vm.trimmedDraftLength > FirebaseAIRepo.maxMessageLength - 200 {
+          HStack {
+            Spacer()
+            Text("\(vm.trimmedDraftLength)/\(FirebaseAIRepo.maxMessageLength)")
+              .font(.caption2)
+              .foregroundStyle(vm.isDraftTooLong ? .red : VinctusTokens.Color.textMuted)
+          }
+          .padding(.horizontal, VinctusTokens.Spacing.lg)
+          .padding(.top, VinctusTokens.Spacing.xs)
+        }
+
         HStack(alignment: .bottom, spacing: VinctusTokens.Spacing.sm) {
           TextField("Escribe un mensaje", text: $vm.draft, axis: .vertical)
             .lineLimit(1...5)
@@ -120,6 +159,21 @@ struct AIChatView: View {
     }
     .navigationTitle("Chat con IA")
     .navigationBarTitleDisplayMode(.inline)
+    .toolbar {
+      if !vm.messages.isEmpty {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button {
+            vm.reset()
+          } label: {
+            Label("Nueva conversación", systemImage: "arrow.counterclockwise")
+          }
+          .disabled(vm.isSending)
+        }
+      }
+    }
+    .onChange(of: authVM.currentUserID) { _, _ in
+      vm.reset()
+    }
   }
 }
 
@@ -137,7 +191,18 @@ private struct AIChatBubble: View {
           .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.md, style: .continuous))
 
         if !message.isUser {
-          AIReportButton(target: .aiResponse(contextID: "chat", excerpt: message.text))
+          HStack(spacing: VinctusTokens.Spacing.md) {
+            if let groupID = message.groupID {
+              NavigationLink {
+                GroupView(repo: AppRepos.groups(), groupID: groupID)
+              } label: {
+                Label("Ver grupo", systemImage: "person.3")
+                  .font(.caption.weight(.semibold))
+                  .foregroundStyle(VinctusTokens.Color.accent)
+              }
+            }
+            AIReportButton(target: .aiResponse(contextID: "chat", excerpt: message.text))
+          }
         }
       }
       if !message.isUser { Spacer(minLength: 40) }

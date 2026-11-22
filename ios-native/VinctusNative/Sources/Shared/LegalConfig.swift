@@ -27,7 +27,10 @@ enum LegalConfig {
 
   /// Host of the web API routes (`api/chat`).
   static var apiBaseURL: URL {
-    urlValue(for: "VINCTUS_API_BASE_URL", fallback: "https://vinctus.vercel.app")
+    if AppEnvironment.current == .staging {
+      return URL(string: "https://vinctus-staging.vercel.app")!
+    }
+    return urlValue(for: "VINCTUS_API_BASE_URL", fallback: "https://vinctus.vercel.app")
   }
 
   static var aiConsentDescription: String {

@@ -8,6 +8,7 @@ final class EditGroupViewModel: ObservableObject {
   @Published var description: String
   @Published var categoryID: String?
   @Published var visibility: ProfileAccountVisibility
+  @Published var iconURL: String?
   @Published var newIcon: UIImage?
   @Published private(set) var isSaving = false
   @Published private(set) var errorMessage: String?
@@ -24,12 +25,20 @@ final class EditGroupViewModel: ObservableObject {
     description = detail.description
     categoryID = detail.categoryID
     visibility = detail.visibility
+    iconURL = detail.iconURL
   }
 
   private var update: GroupUpdate {
     GroupUpdate(name: name, description: description, categoryID: categoryID,
-                visibility: visibility, iconURL: detail.iconURL)
+                visibility: visibility, iconURL: iconURL)
   }
+
+  func removeIcon() {
+    newIcon = nil
+    iconURL = nil
+  }
+
+  var hasIcon: Bool { newIcon != nil || iconURL != nil }
 
   var canSave: Bool { !isSaving && update.validated() != nil }
 
@@ -85,13 +94,27 @@ struct EditGroupSheet: View {
         Section("Ícono") {
           HStack(spacing: VinctusTokens.Spacing.md) {
             iconPreview
-            PhotosPicker(selection: $photoItem, matching: .images) {
-              Label("Cambiar ícono", systemImage: "photo")
+            VStack(alignment: .leading, spacing: 8) {
+              PhotosPicker(selection: $photoItem, matching: .images) {
+                Label("Cambiar ícono", systemImage: "photo")
+              }
+              if vm.hasIcon {
+                Button("Quitar ícono", role: .destructive) {
+                  photoItem = nil
+                  vm.removeIcon()
+                }
+                .font(.caption)
+              }
             }
           }
         }
-        Section("Nombre") {
+        Section {
           TextField("Nombre del grupo", text: $vm.name)
+        } header: {
+          Text("Nombre")
+        } footer: {
+          Text("\(GroupUpdate.nameLimit - vm.name.count) caracteres restantes")
+            .foregroundStyle(vm.name.count > GroupUpdate.nameLimit ? .red : .secondary)
         }
         Section {
           TextField("¿De qué trata el grupo?", text: $vm.description, axis: .vertical)
@@ -170,7 +193,7 @@ struct EditGroupSheet: View {
         .frame(width: 64, height: 64)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     } else {
-      GroupSquareIcon(name: vm.name.isEmpty ? vm.detail.name : vm.name, iconURL: vm.detail.iconURL, size: 64)
+      GroupSquareIcon(name: vm.name.isEmpty ? vm.detail.name : vm.name, iconURL: vm.iconURL, size: 64)
     }
   }
 }

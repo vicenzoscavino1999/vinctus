@@ -33,7 +33,7 @@ const SettingsPage = () => {
   const [theme, setTheme] = useState<ThemeMode>(() => getStoredTheme());
   const [isSupportOpen, setIsSupportOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const [aiConsentGranted, setAiConsentGranted] = useState(() => getAIConsent().granted);
+  const [aiConsentGranted, setAiConsentGranted] = useState(() => getAIConsent(user?.uid).granted);
   const [aiConsentSyncLoading, setAiConsentSyncLoading] = useState(false);
   const [isModerationAdmin, setIsModerationAdmin] = useState(false);
 
@@ -72,25 +72,32 @@ const SettingsPage = () => {
 
   useEffect(() => {
     let active = true;
-    const localConsent = getAIConsent();
+    const uid = user?.uid ?? null;
+    if (!uid) {
+      setAiConsentGranted(false);
+      setAiConsentSyncLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    const localConsent = getAIConsent(uid);
     setAiConsentGranted(localConsent.granted);
 
     const syncAiConsent = async () => {
-      if (!user?.uid) return;
-
       setAiConsentSyncLoading(true);
       try {
-        const serverConsent = await getServerAIConsent(user.uid);
+        const serverConsent = await getServerAIConsent(uid);
         if (!active) return;
 
         if (serverConsent.recorded) {
-          setAIConsent(serverConsent.granted);
+          setAIConsent(serverConsent.granted, uid);
           setAiConsentGranted(serverConsent.granted);
           return;
         }
 
         if (localConsent.granted) {
-          await updateServerAIConsent(user.uid, true, 'migration');
+          await updateServerAIConsent(uid, true, 'migration');
         }
       } catch (error) {
         console.error('Error syncing AI consent:', error);
@@ -113,14 +120,18 @@ const SettingsPage = () => {
   };
 
   const handleToggleAiConsent = async () => {
+    if (aiConsentSyncLoading) return;
+    const uid = user?.uid ?? null;
     const next = !aiConsentGranted;
     setAiConsentSyncLoading(true);
-    setAIConsent(next);
     setAiConsentGranted(next);
 
     try {
-      if (user?.uid) {
-        await updateServerAIConsent(user.uid, next, 'settings');
+      if (uid) {
+        await updateServerAIConsent(uid, next, 'settings');
+        setAIConsent(next, uid);
+      } else {
+        setAIConsent(next);
       }
 
       showToast(
@@ -129,7 +140,6 @@ const SettingsPage = () => {
       );
     } catch (error) {
       console.error('Error updating AI consent:', error);
-      setAIConsent(!next);
       setAiConsentGranted(!next);
       showToast('No se pudo guardar el consentimiento de IA.', 'error');
     } finally {
@@ -404,6 +414,7 @@ const SettingsPage = () => {
                 await signOut();
               } catch (error) {
                 console.error(error);
+                showToast('No se pudo cerrar sesión.', 'error');
               }
             }}
             className="w-full flex items-center justify-between p-4 bg-red-500/5 border border-red-500/20 rounded-2xl hover:bg-red-500/10 transition-colors text-red-400 group"
@@ -416,7 +427,11 @@ const SettingsPage = () => {
         </div>
       </div>
       <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
-      <DeleteAccountModal isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} />
+      <DeleteAccountModal
+        key={user?.uid ?? 'anon'}
+        isOpen={isDeleteOpen}
+        onClose={() => setIsDeleteOpen(false)}
+      />
     </>
   );
 };

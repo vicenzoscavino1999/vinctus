@@ -19,9 +19,20 @@ final class ReportViewModel: ObservableObject {
     self.repo = repo
   }
 
-  var detailsCharactersLeft: Int { Self.detailsLimit - details.count }
+  var maxUserDetailsLength: Int {
+    ReportFields.maxUserDetailsLength(for: target)
+  }
 
-  var canSubmit: Bool { !isSubmitting && !didSubmit && details.count <= Self.detailsLimit }
+  var detailsCharactersLeft: Int {
+    maxUserDetailsLength - details.utf8.count
+  }
+
+  var canSubmit: Bool {
+    !isSubmitting &&
+      !didSubmit &&
+      detailsCharactersLeft >= 0 &&
+      ReportFields(target: target, details: details).fitsRules
+  }
 
   func submit() async {
     guard canSubmit else { return }
@@ -42,10 +53,13 @@ final class ReportViewModel: ObservableObject {
 @MainActor
 final class BlockedUsersViewModel: ObservableObject {
   @Published private(set) var displayNames: [String: String] = [:]
+  @Published private(set) var isLoading = false
+  @Published private(set) var loadError: String?
   @Published private(set) var pendingUserID: String?
   @Published private(set) var errorMessage: String?
 
   private let profileRepo: ProfileRepo
+  private var loadGeneration = 0
 
   init(profileRepo: ProfileRepo) {
     self.profileRepo = profileRepo
@@ -57,9 +71,28 @@ final class BlockedUsersViewModel: ObservableObject {
 
   /// Reloads the blocked IDs, then the names not loaded yet.
   func reload(_ store: BlockedUsersStore) async {
+    loadGeneration += 1
+    let generation = loadGeneration
+    isLoading = true
+    loadError = nil
+    defer {
+      if generation == loadGeneration {
+        isLoading = false
+      }
+    }
+
     await store.refresh()
+    guard !Task.isCancelled, generation == loadGeneration else { return }
+
+    if let storeError = store.lastLoadError {
+      loadError = storeError
+      return
+    }
+
     for userID in store.blockedUserIDs.sorted() where displayNames[userID] == nil {
+      guard !Task.isCancelled, generation == loadGeneration else { return }
       if let profile = try? await profileRepo.fetchUserProfile(uid: userID) {
+        guard !Task.isCancelled, generation == loadGeneration else { return }
         displayNames[userID] = profile.displayName
       }
     }

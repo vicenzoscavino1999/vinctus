@@ -47,6 +47,17 @@ final class CollectionEditorViewModelTests: XCTestCase {
     XCTAssertFalse(saved)
     XCTAssertEqual(vm.errorMessage, "Falló la prueba")
   }
+
+  func testCanSaveEnforcesMaxNameLength() {
+    let repo = RecordingCollectionsRepo()
+    let vm = CollectionEditorViewModel(target: .new, repo: repo)
+
+    vm.name = String(repeating: "a", count: Limits.Collections.nameMaxLength)
+    XCTAssertTrue(vm.canSave)
+
+    vm.name = String(repeating: "a", count: Limits.Collections.nameMaxLength + 1)
+    XCTAssertFalse(vm.canSave)
+  }
 }
 
 @MainActor
@@ -106,5 +117,27 @@ final class NewCollectionItemViewModelTests: XCTestCase {
 
     XCTAssertFalse(saved)
     XCTAssertEqual(vm.errorMessage, "Falló la prueba")
+  }
+
+  func testImportsFileAutoFillsTitleAndCanClearFile() async throws {
+    let repo = RecordingCollectionsRepo()
+    let vm = NewCollectionItemViewModel(collection: RecordingCollectionsRepo.collection, repo: repo)
+    vm.draft.kind = .file
+
+    let tempURL = FileManager.default.temporaryDirectory
+      .appendingPathComponent("guia-coleccion-\(UUID().uuidString).pdf")
+    let payload = Data("%PDF-1.4\nhello".utf8)
+    try payload.write(to: tempURL)
+    defer { try? FileManager.default.removeItem(at: tempURL) }
+
+    await vm.importFile(from: tempURL)
+
+    XCTAssertNil(vm.errorMessage)
+    XCTAssertEqual(vm.draft.file?.contentType, "application/pdf")
+    XCTAssertEqual(vm.draft.file?.data, payload)
+    XCTAssertEqual(vm.draft.title, tempURL.lastPathComponent)
+
+    vm.clearFile()
+    XCTAssertNil(vm.draft.file)
   }
 }
