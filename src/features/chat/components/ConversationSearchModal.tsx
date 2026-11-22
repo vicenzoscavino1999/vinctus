@@ -30,7 +30,7 @@ const ConversationSearchModal = ({
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
-          <h3 className="text-lg font-medium text-white">Buscar en la conversacion</h3>
+          <h3 className="text-lg font-medium text-white">Buscar en la conversación</h3>
           <button
             onClick={onClose}
             className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
@@ -49,7 +49,7 @@ const ConversationSearchModal = ({
           <div className="max-h-[45vh] overflow-y-auto space-y-2">
             {trimmed === '' ? (
               <div className="text-sm text-neutral-500 text-center py-8">
-                Escribe un termino para buscar.
+                Escribe un término para buscar.
               </div>
             ) : (
               messages
@@ -63,7 +63,7 @@ const ConversationSearchModal = ({
                   >
                     <p className="text-sm text-white truncate">{msg.text}</p>
                     <p className="text-xs text-neutral-500 mt-1">
-                      {msg.senderId === currentUserId ? 'Tu' : 'Miembro'} Â·{' '}
+                      {msg.senderId === currentUserId ? 'Tú' : 'Miembro'} ·{' '}
                       {new Date(msg.createdAt).toLocaleTimeString('es-ES', {
                         hour: '2-digit',
                         minute: '2-digit',
