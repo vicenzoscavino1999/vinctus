@@ -49,9 +49,10 @@ View  →  ViewModel (screen state, @MainActor)  →  Repo protocol  →  Fireba
   uploads come from `shared/firestore-contract.json` at the repository root.
   `npm run contract:generate` turns it into `Shared/FirestoreContract.swift`
   (`FirestoreCollections`, `FirestoreSubcollections`, `Limits`, `StoragePaths`, `StorageMaxBytes`,
-  `StorageContentTypes`), the web's `src/shared/lib/firestore/firestoreContract.ts` and a copy for
-  the Cloud Functions, so use those constants instead of literals. To add or change a name, a limit
-  or a path, edit the JSON and regenerate: CI fails when a generated file is out of date, and a web
+  `StorageContentTypes`), the web's `src/shared/lib/firestore/firestoreContract.ts` and copies for
+  the Cloud Functions and the Vercel APIs, so use those constants instead of literals. To add or
+  change a name, a limit or a path, edit the JSON and regenerate: CI fails when a generated file is
+  out of date, and a web
   test checks the JSON against `firestore.rules` and `storage.rules`.
   Each repo still mirrors a file in `src/shared/lib/firestore/` and says which one in a comment:
   keep field names and document ids identical, and check `firestore.rules` when writing a new
@@ -65,26 +66,32 @@ View  →  ViewModel (screen state, @MainActor)  →  Repo protocol  →  Fireba
 rules (conversation ids, report fields, contribution checks) are plain functions tested directly.
 When a screen gets new logic, put it in its view model or a `static func` so it can be tested.
 
-`IntegrationTests/` runs the real `Firebase…Repo` classes against the Auth, Firestore and Storage
-emulators, which load the repo's `firestore.rules` and `storage.rules`. A write the web accepts
-but the app shapes differently fails here. Each test signs up its own emulator users (the profile
+`IntegrationTests/` runs the real `Firebase…Repo` classes against the Auth, Firestore, Storage and
+Functions emulators, which load the repo's `firestore.rules` and `storage.rules` and run its Cloud
+Functions. A write the web accepts but the app shapes differently fails here. Each test signs up its own emulator users (the profile
 documents come from `FirebaseUserProfileBootstrapRepo`, as in the app) and creates its own groups,
 so tests don't share data. When a repo gets a new write, add a test that makes it. On a Mac, from
-the repository root:
+the repository root (build the Functions first with `npm run functions:build`):
 
 ```bash
-firebase emulators:exec --project vinctus-dev --only auth,firestore,storage \
+firebase emulators:exec --project vinctus-dev --only auth,firestore,storage,functions \
   "xcodebuild test -project ios-native/VinctusNative/VinctusNative.xcodeproj \
     -scheme VinctusNative-Integration -destination 'platform=iOS Simulator,name=iPhone 17'"
 ```
 
-Cloud Functions don't run in these tests, so they check that a write is allowed, not what the
-triggers do next (counters, accepted follow requests).
+A few tests depend on Cloud Functions: the Arena callables (`getArenaPersonas`, `getArenaUsage`)
+and the account-deletion trigger. The rest check that a write is allowed, not what the triggers do
+next (counters, accepted follow requests).
 
 ## Checks
 
-`.github/workflows/ios-native.yml` builds the app and runs the unit tests (`Tests/`) on every push,
-and its `integration` job runs `IntegrationTests/` against the emulators. It also runs when
-`firestore.rules`, `storage.rules` or `firebase.json` change.
+`.github/workflows/ios-native.yml` builds the app and runs the unit tests (`Tests/`) on every push
+or pull request that changes `ios-native/`, and its `integration` job runs `IntegrationTests/`
+against the emulators. It also runs when `firestore.rules`, `storage.rules`, `firebase.json`,
+`functions/`, `shared/firestore-contract.json` or `scripts/release-ios-testflight.sh` change.
+A manual run with `upload_to_testflight` signs the app and uploads it to TestFlight after approval
+in the `ios-release` environment: `release_target=staging` only from `testflight/vinctus-staging`
+(app **Vinctus QA**, Firebase `vinctus-staging`), `release_target=production` from any other
+allowed branch (Firebase `vinctus-daf32`). Steps and secrets: `docs/testflight-sin-mac.md`.
 `.github/workflows/ios-screenshots.yml` takes screenshots of the demo mode and pushes them to the
 `ios-screenshots` branch.

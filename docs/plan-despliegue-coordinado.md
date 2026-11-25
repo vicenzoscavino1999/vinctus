@@ -3,9 +3,30 @@
 Guía operativa única para integrar, desplegar con orden seguro y validar físicamente en iPhone los cambios acumulados en los **10 módulos** revisados ([índice de revisión](revision-app-nativa.md)).
 
 > [!IMPORTANT]
-> No fusionar los PRs a `main` antes de aprobar `staging`: la integración con `main` dispara despliegue automático en Vercel. Mantener la secuencia de despliegue indicada abajo para evitar cortar lecturas/escrituras a clientes activos.
+> La pila `#119 → #128` ya está en `main` (ver la sección 0). Para lanzamientos futuros se mantiene la regla: no fusionar a `main` antes de aprobar `staging`, porque la integración con `main` dispara el despliegue automático de producción en Vercel. Mantener la secuencia de despliegue indicada abajo para evitar cortar lecturas/escrituras a clientes activos.
+
+## 0. Estado del lanzamiento (comprobado el 25 de noviembre de 2026)
+
+Comprobado en GitHub y en los despliegues de Vercel registrados en GitHub:
+
+| Hecho                                                                                                                                                                                | Evidencia                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| La pila se integró con la opción alternativa: `#128` con base `main` y merge commit `2563d5f`. `#119`–`#127` quedaron marcados como fusionados porque su código ya estaba en `main`. | PRs `MERGED` el 22 nov entre 01:31:32 y 01:31:45 UTC                           |
+| CI de `main` en verde para `2563d5f`.                                                                                                                                                | Ejecución `44971868007` del workflow `CI`                                      |
+| Web de producción publicada por Vercel desde `main` (`2563d5f`).                                                                                                                     | Deployment `Production` en estado `success`, 22 nov, 01:32 UTC                 |
+| TestFlight staging: builds 3 y 4 desde `testflight/vinctus-staging`.                                                                                                                 | 21 nov, 14:29 y 22:47 UTC (ver [testflight-sin-mac.md](testflight-sin-mac.md)) |
+| TestFlight producción: build 5 desde `main` (`2563d5f`).                                                                                                                             | Ejecución `44972111232`, subida el 25 nov, 11:55 UTC                           |
+
+Pendiente de confirmar fuera del repositorio (Firebase Console, `firebase` CLI con acceso a `vinctus-daf32` y App Store Connect):
+
+- Si la Fase A en `vinctus-staging` se completó, incluida la observación de 24–48 h. El merge a `main` ocurrió unas 3 horas después de subir el build 4 de staging.
+- Si la Fase B, puntos 1 y 2 (secreto `GEMINI_API_KEY` y Pasos 1–3: índices, Functions y dry-run de la migración), se ejecutaron en `vinctus-daf32` antes del merge. Si no, hacerlo primero: la web publicada en producción ya llama a funciones nuevas como `readPosts`.
+- Si ya se aplicaron los Pasos 5 y 6 (reglas estrictas y migración con `--apply`) en `vinctus-daf32`.
+- El estado de los builds 3–5 en App Store Connect y el checklist físico de la sección 4.
 
 ## 1. Estado de la pila de PRs apilados (`#119 → #128`)
+
+Registro histórico: así estaba la pila antes de integrarla. Todos estos PRs están `MERGED` (sección 0).
 
 | Orden | PR                                                             | Rama (`head` -> `base`)                            | Módulo                     | Detalle                                                                    |
 | ----- | -------------------------------------------------------------- | -------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------- |
@@ -20,9 +41,11 @@ Guía operativa única para integrar, desplegar con orden seguro y validar físi
 | 9     | [#127](https://github.com/vicenzoscavino1999/vinctus/pull/127) | `fix/account-security` -> `fix/ai-arena`           | Cuenta y seguridad         | [revision-cuenta-seguridad.md](revision-cuenta-seguridad.md)               |
 | 10    | [#128](https://github.com/vicenzoscavino1999/vinctus/pull/128) | `fix/pre-prod-hardening` -> `fix/account-security` | Hardening pre-producción   | [revision-pre-produccion.md](revision-pre-produccion.md)                   |
 
-### Cómo integrar sin conflictos cuando se apruebe el lanzamiento
+### Cómo integrar sin conflictos cuando se apruebe el lanzamiento (histórico)
 
-`fix/pre-prod-hardening` (`#128`) contiene el código acumulado de toda la pila `#119 → #128` (los 10 PRs están verificados como `MERGEABLE` / `CLEAN` y `0` checks fallidos). Al momento de pasar a `main` tras aprobar `staging`:
+> Se usó la **opción alternativa** el 22 de noviembre de 2026. `#118` sigue abierto.
+
+`fix/pre-prod-hardening` (`#128`) contiene el código acumulado de toda la pila `#119 → #128` (los 10 PRs estaban verificados como `MERGEABLE` / `CLEAN` y `0` checks fallidos). Al momento de pasar a `main` tras aprobar `staging`:
 
 - **Opción recomendada (merge ordenado de abajo hacia arriba)**: quitar estado `draft` y hacer **Merge commit** (**no** squash, para no reescribir SHAs base) en orden estricto `#119 → #120 → #121 → #122 → #123 → #124 → #125 → #126 → #127 → #128` — GitHub re-apunta automáticamente la base del siguiente PR al fusionar el anterior.
 - **Opción alternativa (rama única a `main`)**: cambiar la base de `#128` a `main`, validar CI completa contra `main`, fusionar `#128` con merge commit y cerrar `#119..#127` como absorbidos.
