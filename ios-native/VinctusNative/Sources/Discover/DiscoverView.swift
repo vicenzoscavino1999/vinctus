@@ -23,6 +23,8 @@ struct DiscoverView: View {
   @State private var discoverQuery = ""
   @State private var openedGroupID: String?
   @State private var isShowingFeed = false
+  @State private var openedPost: FeedItem?
+  @State private var isShowingAllGroups = false
 
   private let discoverRepo: DiscoverRepo
   private let profileRepo: ProfileRepo
@@ -77,7 +79,11 @@ struct DiscoverView: View {
       .listRowBackground(SwiftUI.Color.clear)
 
       Section {
-        DiscoverPostsSection(vm: postsPreview, feedRepo: feedRepo, profileRepo: profileRepo)
+        DiscoverPostsSection(
+          vm: postsPreview,
+          onSeeAll: { isShowingFeed = true },
+          onOpenPost: { openedPost = $0 }
+        )
       }
       .listRowSeparator(.hidden)
       .listRowBackground(SwiftUI.Color.clear)
@@ -158,12 +164,14 @@ struct DiscoverView: View {
             + Text("recomendados").foregroundStyle(VinctusTokens.Color.textPrimary))
             .font(VinctusTokens.Typography.serif(22))
           Spacer()
-          NavigationLink(destination: GroupsListView(repo: groupsRepo)) {
+          Button {
+            isShowingAllGroups = true
+          } label: {
             Text("Ver todos")
               .font(.subheadline.weight(.semibold))
               .foregroundStyle(VinctusTokens.Color.accent)
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.borderless)
         }
 
         if suggestedGroups.isShowingCachedData {
@@ -244,6 +252,17 @@ struct DiscoverView: View {
     }
     .navigationDestination(isPresented: $isShowingFeed) {
       FeedView(repo: feedRepo, profileRepo: profileRepo)
+    }
+    .navigationDestination(isPresented: $isShowingAllGroups) {
+      GroupsListView(repo: groupsRepo)
+    }
+    .navigationDestination(item: $openedPost) { item in
+      PostDetailView(
+        item: item,
+        profileRepo: profileRepo,
+        commentsRepo: AppRepos.postComments(),
+        onCommentCountChange: { count in postsPreview.updateCommentCount(postID: item.id, newCount: count) }
+      )
     }
     .onAppear {
       // Screenshot builds open a group with `-VinctusOpenGroup <id>` and the full feed with

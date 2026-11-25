@@ -269,7 +269,7 @@ private struct FeedCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
 
-        // Same order as the web's post card: like, comments, save; the arrow opens the post.
+        // Same order as the web's post card: like, comments, save. The whole card opens the post.
         HStack(spacing: 16) {
           PostReactionButton(postID: item.id, initialCount: item.likeCount)
             .font(.subheadline)
@@ -285,26 +285,27 @@ private struct FeedCard: View {
 
           Spacer()
 
-          NavigationLink(
-            destination: PostDetailView(
-              item: item,
-              profileRepo: profileRepo,
-              commentsRepo: commentsRepo,
-              onCommentCountChange: onCommentCountChanged
-            )
-          ) {
-            Image(systemName: "chevron.right")
-              .font(.subheadline.weight(.semibold))
-              .foregroundStyle(VinctusTokens.Color.textSecondary)
-              .frame(width: 36, height: 36)
-              .contentShape(Rectangle())
-          }
-          .buttonStyle(.plain)
-          .accessibilityLabel("Ver publicación")
+          Image(systemName: "chevron.right")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(VinctusTokens.Color.textMuted)
+            .accessibilityHidden(true)
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
     }
+    // A hidden link makes the card open the post without List adding a second disclosure arrow
+    // (same trick as Descubrir's AI card). The like and save buttons keep their own taps.
+    .background(
+      NavigationLink(
+        destination: PostDetailView(
+          item: item,
+          profileRepo: profileRepo,
+          commentsRepo: commentsRepo,
+          onCommentCountChange: onCommentCountChanged
+        )
+      ) { EmptyView() }
+        .opacity(0)
+    )
   }
 }
 

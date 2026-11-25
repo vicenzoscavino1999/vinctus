@@ -2,12 +2,13 @@ import SwiftUI
 
 /// Descubrir's "Publicaciones": the latest posts in a carousel and "Ver todo" for the full feed,
 /// like the web's Discover page. The feed has no tab of its own since the bottom bar matches the web.
+/// It uses buttons, not NavigationLinks: a link inside a List row makes List add its own arrow.
+/// DiscoverView declares the destinations.
 struct DiscoverPostsSection: View {
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
   @ObservedObject var vm: FeedViewModel
-  let feedRepo: FeedRepo
-  let profileRepo: ProfileRepo
-  let commentsRepo: any PostCommentsRepo = AppRepos.postComments()
+  let onSeeAll: () -> Void
+  let onOpenPost: (FeedItem) -> Void
 
   private var visibleItems: [FeedItem] {
     Array(vm.items.filter { !blockedUsers.isBlocked($0.authorID) }.prefix(8))
@@ -18,12 +19,12 @@ struct DiscoverPostsSection: View {
       HStack(alignment: .firstTextBaseline) {
         DiscoverSectionHeader(title: "Publicaciones")
         Spacer()
-        NavigationLink(destination: FeedView(repo: feedRepo, profileRepo: profileRepo)) {
+        Button(action: onSeeAll) {
           Text("Ver todo")
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(VinctusTokens.Color.accent)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
       }
 
       if vm.items.isEmpty, vm.isInitialLoading {
@@ -45,14 +46,9 @@ struct DiscoverPostsSection: View {
         ScrollView(.horizontal, showsIndicators: false) {
           HStack(alignment: .top, spacing: VinctusTokens.Spacing.md) {
             ForEach(visibleItems) { item in
-              NavigationLink(
-                destination: PostDetailView(
-                  item: item,
-                  profileRepo: profileRepo,
-                  commentsRepo: commentsRepo,
-                  onCommentCountChange: { count in vm.updateCommentCount(postID: item.id, newCount: count) }
-                )
-              ) {
+              Button {
+                onOpenPost(item)
+              } label: {
                 DiscoverPostCard(item: item)
               }
               .buttonStyle(.plain)
