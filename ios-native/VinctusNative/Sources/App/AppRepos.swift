@@ -86,6 +86,13 @@ enum AppRepos {
     return FirebaseCollectionsRepo()
   }
 
+  static func connections() -> ConnectionsRepo {
+    #if SCREENSHOTS
+    if isDemo { return SampleConnectionsRepo() }
+    #endif
+    return FirebaseConnectionsRepo()
+  }
+
   // MARK: Repos without sample data
 
   static func auth() -> AuthRepo { FirebaseAuthRepo() }

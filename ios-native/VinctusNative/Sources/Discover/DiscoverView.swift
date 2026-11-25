@@ -18,34 +18,47 @@ struct DiscoverView: View {
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
   @StateObject private var vm: DiscoverViewModel
   @StateObject private var suggestedGroups: GroupSuggestionsViewModel
+  @StateObject private var postsPreview: FeedViewModel
 
   @State private var discoverQuery = ""
   @State private var openedGroupID: String?
+  @State private var isShowingFeed = false
 
   private let discoverRepo: DiscoverRepo
   private let profileRepo: ProfileRepo
   private let groupsRepo: any GroupsRepo
   private let aiRepo: AIRepo
   private let profileContentRepo: ProfileContentRepo
+  private let feedRepo: FeedRepo
 
   init(
     repo: DiscoverRepo,
     profileRepo: ProfileRepo,
     groupsRepo: any GroupsRepo,
     aiRepo: AIRepo,
-    profileContentRepo: ProfileContentRepo = AppRepos.profileContent()
+    profileContentRepo: ProfileContentRepo = AppRepos.profileContent(),
+    feedRepo: FeedRepo = AppRepos.feed()
   ) {
     self.discoverRepo = repo
     self.profileRepo = profileRepo
     self.groupsRepo = groupsRepo
     self.aiRepo = aiRepo
     self.profileContentRepo = profileContentRepo
+    self.feedRepo = feedRepo
     _vm = StateObject(wrappedValue: DiscoverViewModel(repo: repo))
     _suggestedGroups = StateObject(wrappedValue: GroupSuggestionsViewModel(repo: groupsRepo, limit: 50))
+    _postsPreview = StateObject(wrappedValue: FeedViewModel(repo: feedRepo))
   }
 
   var body: some View {
     List {
+      // Stories first, as on the web's Discover page.
+      Section {
+        StoriesBar()
+      }
+      .listRowSeparator(.hidden)
+      .listRowBackground(SwiftUI.Color.clear)
+
       Section {
         DiscoverCurationHero(searchText: $discoverQuery)
       }
@@ -59,6 +72,12 @@ struct DiscoverView: View {
             NavigationLink(destination: AIHubView(repo: aiRepo)) { EmptyView() }
               .opacity(0)
           )
+      }
+      .listRowSeparator(.hidden)
+      .listRowBackground(SwiftUI.Color.clear)
+
+      Section {
+        DiscoverPostsSection(vm: postsPreview, feedRepo: feedRepo, profileRepo: profileRepo)
       }
       .listRowSeparator(.hidden)
       .listRowBackground(SwiftUI.Color.clear)
@@ -223,11 +242,21 @@ struct DiscoverView: View {
     .navigationDestination(item: $openedGroupID) { groupID in
       GroupView(repo: groupsRepo, groupID: groupID)
     }
+    .navigationDestination(isPresented: $isShowingFeed) {
+      FeedView(repo: feedRepo, profileRepo: profileRepo)
+    }
     .onAppear {
-      // Screenshot builds open a group with `-VinctusOpenGroup <id>`.
+      // Screenshot builds open a group with `-VinctusOpenGroup <id>` and the full feed with
+      // `-VinctusOpenFeed 1`.
       if openedGroupID == nil, let groupID = AppRepos.demoArgument("-VinctusOpenGroup") {
         openedGroupID = groupID
       }
+      if !isShowingFeed, AppRepos.demoArgument("-VinctusOpenFeed") != nil {
+        isShowingFeed = true
+      }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .vinctusPostPublished)) { _ in
+      Task { await postsPreview.refresh() }
     }
     .task(id: authVM.currentUserID) {
       if authVM.currentUserID == nil && !AppRepos.isDemo {
@@ -303,6 +332,7 @@ struct DiscoverView: View {
   private func refreshDiscoverData() async {
     vm.currentUserID = authVM.currentUserID
     await vm.refreshSuggestedUsers()
+    await postsPreview.refresh()
     await suggestedGroups.refresh()
   }
 }

@@ -147,6 +147,8 @@ struct DiscoverAIPromoCard: View {
   }
 }
 
+/// A suggested person. The ring is neutral: the gold ring means "unseen story" (StoriesBar), so
+/// it isn't used for people who are only suggestions.
 struct DiscoverStoryChip: View {
   let user: DiscoverUser
 
@@ -154,14 +156,7 @@ struct DiscoverStoryChip: View {
     VStack(spacing: 8) {
       ZStack {
         Circle()
-          .stroke(
-            LinearGradient(
-              colors: [VinctusTokens.Color.accent, VinctusTokens.Color.accentBright],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            ),
-            lineWidth: 2
-          )
+          .stroke(VinctusTokens.Color.border, lineWidth: 1.5)
           .frame(width: 64, height: 64)
         DiscoverAvatarView(name: user.displayName, photoURLString: user.photoURL, size: 56)
       }

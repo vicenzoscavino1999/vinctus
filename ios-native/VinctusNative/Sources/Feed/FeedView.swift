@@ -1,24 +1,41 @@
 import SwiftUI
 
+/// The full feed. Since the bottom bar matches the web's, it opens from "Ver todo" in Descubrir's
+/// "Publicaciones", pushed with a back button; Descubrir already shows the stories above it.
 struct FeedView: View {
   @StateObject private var vm: FeedViewModel
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
   private let profileRepo: ProfileRepo
   private let commentsRepo: any PostCommentsRepo
+  private let isPushed: Bool
 
-  init(repo: FeedRepo, profileRepo: ProfileRepo) {
+  init(repo: FeedRepo, profileRepo: ProfileRepo, isPushed: Bool = true) {
     self.profileRepo = profileRepo
     self.commentsRepo = AppRepos.postComments()
+    self.isPushed = isPushed
     _vm = StateObject(wrappedValue: FeedViewModel(repo: repo))
   }
 
   var body: some View {
+    if isPushed {
+      feedList
+        .navigationTitle("Publicaciones")
+        .navigationBarTitleDisplayMode(.inline)
+    } else {
+      feedList
+        .vinctusTopBar()
+    }
+  }
+
+  private var feedList: some View {
     List {
-      Section {
-        StoriesBar()
+      if !isPushed {
+        Section {
+          StoriesBar()
+        }
+        .listRowSeparator(.hidden)
+        .listRowBackground(SwiftUI.Color.clear)
       }
-      .listRowSeparator(.hidden)
-      .listRowBackground(SwiftUI.Color.clear)
 
       if vm.isShowingCachedData {
         VCard {
@@ -147,7 +164,6 @@ struct FeedView: View {
       }
     }
     .listStyle(.plain)
-    .vinctusTopBar()
     .scrollContentBackground(.hidden)
     .background(VinctusTokens.Color.background)
     .task {
@@ -253,15 +269,19 @@ private struct FeedCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
 
-        HStack(spacing: 12) {
+        // Same order as the web's post card: like, comments, save; the arrow opens the post.
+        HStack(spacing: 16) {
           PostReactionButton(postID: item.id, initialCount: item.likeCount)
-            .font(.caption)
-          PostReactionButton(postID: item.id, kind: .save)
-            .font(.caption)
+            .font(.subheadline)
 
-          Label("\(item.commentCount)", systemImage: "text.bubble")
-            .font(.caption)
+          Label("\(item.commentCount)", systemImage: "bubble.left")
+            .font(.subheadline)
             .foregroundStyle(VinctusTokens.Color.textMuted)
+            .accessibilityLabel(item.commentCount == 1 ? "1 comentario" : "\(item.commentCount) comentarios")
+
+          PostReactionButton(postID: item.id, kind: .save)
+            .font(.subheadline)
+            .labelStyle(.iconOnly)
 
           Spacer()
 
@@ -273,11 +293,14 @@ private struct FeedCard: View {
               onCommentCountChange: onCommentCountChanged
             )
           ) {
-            Text("Ver post")
-              .font(.caption.weight(.semibold))
-              .foregroundStyle(VinctusTokens.Color.accent)
+            Image(systemName: "chevron.right")
+              .font(.subheadline.weight(.semibold))
+              .foregroundStyle(VinctusTokens.Color.textSecondary)
+              .frame(width: 36, height: 36)
+              .contentShape(Rectangle())
           }
           .buttonStyle(.plain)
+          .accessibilityLabel("Ver publicación")
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)

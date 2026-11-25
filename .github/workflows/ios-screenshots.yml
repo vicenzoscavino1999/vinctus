@@ -109,7 +109,8 @@ jobs:
           sleep 8
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/07-profile.png"
           xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
-          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab feed
+          # The feed has no tab (same bottom bar as the web): it opens from Descubrir.
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab discover -VinctusOpenFeed 1
           sleep 8
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/09-feed-stories.png"
           for section in collections categories posts; do
@@ -127,13 +128,17 @@ jobs:
           sleep 9
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/11-search-groups.png"
           xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
-          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab feed -VinctusOpenStory shorts
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab discover -VinctusOpenStory shorts
           sleep 14
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/12-story-short.png"
           xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenGroup g1 -VinctusEditGroup 1
           sleep 10
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/13-group-edit.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab connections
+          sleep 9
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/14-connections.png"
 
       - name: Export chat UI evidence
         if: always()
