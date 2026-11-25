@@ -35,7 +35,8 @@ La migración deja sin tocar, a propósito, 1 adjunto de YouTube guardado como `
 ### Pendiente
 
 - Checklist físico de la sección 4 en iPhone real, con el build 5.
-- App Check web: faltan `VITE_ENABLE_FIREBASE_APP_CHECK` y `VITE_FIREBASE_APP_CHECK_SITE_KEY` en el proyecto de Vercel `vinctus` (producción).
+- App Check web: la app web está registrada en App Check con la clave de reCAPTCHA Enterprise `vinctus-web` (25 nov), y `VITE_ENABLE_FIREBASE_APP_CHECK` y `VITE_FIREBASE_APP_CHECK_SITE_KEY` ya están en Vercel `vinctus` (producción). Se activa al fusionar el PR #130, que cambia la web a `ReCaptchaEnterpriseProvider`. Enforcement desactivado.
+- App Check iOS: falta registrar en App Check la clave DeviceCheck (`.p8` de Apple Developer) de la app **VinctusNative**.
 - En el proyecto de Vercel `vinctus-staging` faltan `OPENAI_API_KEY`, `NVIDIA_API_KEY` y `YOUTUBE_API_KEY`: en staging el Chat IA solo usa Gemini y no funcionan las partes de YouTube.
 
 ## 1. Estado de la pila de PRs apilados (`#119 → #128`)

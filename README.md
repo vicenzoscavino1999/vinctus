@@ -230,7 +230,7 @@ Copia `.env.example` a `.env.local` y completa lo necesario:
 ### App Check y acceso (opcional)
 
 - `VITE_ENABLE_FIREBASE_APP_CHECK` — `true` para activar App Check en web (desactivado por defecto)
-- `VITE_FIREBASE_APP_CHECK_SITE_KEY` — Clave de sitio reCAPTCHA v3
+- `VITE_FIREBASE_APP_CHECK_SITE_KEY` — Clave de sitio de reCAPTCHA Enterprise (tipo puntuación) registrada en App Check; App Check ya no admite registros nuevos con reCAPTCHA v3
 - `VITE_FIREBASE_APP_CHECK_DEBUG_TOKEN` — Token de depuración para local/staging; nunca en producción
 - `VITE_FIREBASE_APP_CHECK_TOKEN_AUTO_REFRESH` — `true` por defecto
 - `VITE_ENABLE_APPLE_SIGN_IN` — Muestra el botón de Sign in with Apple
