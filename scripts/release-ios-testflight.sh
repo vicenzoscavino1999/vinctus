@@ -228,6 +228,15 @@ app = apps[0]
 with (app / 'Info.plist').open('rb') as file:
     info = plistlib.load(file)
 
+privacy_manifest_name = 'PrivacyInfo.xcprivacy'
+source_manifest = pathlib.Path(os.environ['APP_DIR']) / 'Resources' / privacy_manifest_name
+app_manifest = app / privacy_manifest_name
+if not app_manifest.is_file():
+    raise SystemExit(f'The {target} archive must include the app privacy manifest.')
+with source_manifest.open('rb') as source_file, app_manifest.open('rb') as app_file:
+    if plistlib.load(source_file) != plistlib.load(app_file):
+        raise SystemExit(f'The {target} archive privacy manifest does not match the source.')
+
 if info.get('VINCTUS_ENABLE_APP_CHECK') is not True:
     raise SystemExit(f'The {target} archive must keep VINCTUS_ENABLE_APP_CHECK enabled.')
 provider = str(info.get('VINCTUS_APP_CHECK_PROVIDER', '')).strip().lower()

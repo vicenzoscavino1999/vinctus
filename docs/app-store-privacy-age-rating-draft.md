@@ -1,59 +1,29 @@
-# App Store Privacy Labels + Age Rating Draft - Vinctus
+# Borrador de privacidad y clasificación por edad para Vinctus
 
-Fecha: 2026-02-11  
-Estado: borrador operativo (debe validarse en App Store Connect antes de enviar)
+Actualizado el 23 de noviembre de 2026. Las respuestas definitivas se confirman en App Store Connect con el binario de producción.
 
-## 1) Privacy Labels (borrador)
+## Datos de la app iOS
 
-## Datos vinculados al usuario (probables)
+El [manifiesto de la app](../ios-native/VinctusNative/Resources/PrivacyInfo.xcprivacy) declara los datos siguientes, vinculados a la cuenta y usados para ofrecer las funciones de Vinctus.
 
-1. Informacion de contacto
-   - Dato: email de cuenta
-   - Uso: autenticacion, soporte y seguridad
-   - Fuente tecnica: Firebase Auth
-2. Identificadores
-   - Dato: UID de Firebase, identificador de dispositivo push (token)
-   - Uso: sesion, seguridad y entrega de notificaciones
-   - Fuente tecnica: Firebase Auth + Push Notifications
-3. Contenido del usuario
-   - Dato: posts, comentarios, historias, mensajes, reportes, perfil
-   - Uso: funcionalidad principal de red social y moderacion UGC
-   - Fuente tecnica: Firestore + Storage + Functions
-4. Diagnosticos (si se activa Crashlytics)
-   - Dato: reportes de crash y errores
-   - Uso: estabilidad y correccion de fallos
-   - Fuente tecnica: Firebase Crashlytics (iOS)
+| Datos                                    | Uso en Vinctus                                                                     |
+| ---------------------------------------- | ---------------------------------------------------------------------------------- |
+| Nombre, correo e ID de usuario           | Autenticación y perfil                                                             |
+| Ubicación aproximada                     | Ciudad y país opcionales que la persona escribe en su perfil                       |
+| Contactos del grafo social               | Relaciones de seguimiento, amistades y conexiones dentro de Vinctus                |
+| Mensajes de texto, fotos, videos y audio | Conversaciones, publicaciones, historias y notas de voz                            |
+| Otro contenido del usuario               | Biografía, comentarios, archivos, colecciones, reportes y contenido de IA guardado |
+| Interacción con el producto              | Reacciones y otros estados de uso asociados a la cuenta                            |
 
-## Datos NO usados para tracking publicitario (baseline actual)
+No se identificó seguimiento publicitario en el código de la app iOS. Antes de completar las etiquetas, generar el informe de privacidad del archivo firmado en Xcode y contrastarlo con los SDK efectivamente incluidos, Firebase, el backend y los proveedores de IA activos. Revisar si algún proveedor conserva datos después de procesar la solicitud y declarar los datos que corresponda. Este inventario debe reflejar la versión final.
 
-1. Tracking entre apps/sitios de terceros: no implementado en baseline actual.
-2. SDK de ads/attribution: no detectado en baseline actual.
+El manifiesto declara el uso de preferencias locales para recordar la aceptación de términos y de metadatos de archivos para validar adjuntos elegidos por la persona o guardados en el contenedor de la app. El flujo de distribución comprueba que el archivo firmado contenga el manifiesto. [Etiquetas de Apple](https://developer.apple.com/app-store/app-privacy-details/) · [Manifiestos de Apple](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files)
 
-Nota: si en el futuro se activa tracking publicitario o attribution SDK, se debe:
+## Clasificación por edad
 
-1. Actualizar inmediatamente Privacy Labels.
-2. Implementar ATT (`NSUserTrackingUsageDescription` + prompt en iOS).
+- Declarar la capacidad de red social, el contenido generado por usuarios y la mensajería. Responder sobre las funciones y el contenido disponibles en la compilación que se envía.
+- Registrar los controles de seguridad que realmente funcionan. Para declarar que la red social está deshabilitada para menores de 13 años, validar antes el comportamiento del control de edad. En el código actual, la consulta de rango depende de iOS 26.2 o posterior y de la elegibilidad indicada por Apple. La espera de elegibilidad también tiene un límite de tiempo.
+- Evaluar ubicación compartida según las capacidades reales. El campo opcional de ciudad y país del perfil debe considerarse al responder.
+- Dejar que el cuestionario determine la clasificación y revisar el resultado de cada territorio seleccionado.
 
-## 2) Age Rating (borrador)
-
-Recomendacion operativa para el cuestionario de App Store Connect:
-
-1. Marcar que existe contenido generado por usuarios (UGC).
-2. Marcar que hay moderacion (report, block, filtros, enforcement).
-3. Responder con base en capacidades reales activas al momento del submit (chat, UGC, IA).
-4. No fijar valor manual sin cuestionario; usar resultado oficial que entregue ASC.
-
-## 3) Evidencia tecnica para justificar respuestas
-
-1. Moderacion UGC: `functions/src/moderation.ts`, `functions/src/index.ts`, `src/features/moderation/pages/ModerationQueuePage.tsx`
-2. Reportes y bloqueo: `src/shared/lib/firestore/reports.ts`, `src/features/chat/components/GroupReportModal.tsx`, `src/features/posts/components/ContentReportModal.tsx`
-3. Delete account: `functions/src/deleteAccount.ts`, `src/features/settings/components/DeleteAccountModal.tsx`
-4. AI disclosure + consentimiento: `src/features/ai/pages/AIChatPage.tsx`, `src/features/arena/pages/ArenaPage.tsx`, `src/features/settings/api/aiConsent.ts`
-
-## 4) Checklist manual antes de completar ASC
-
-1. Revisar data mapping final con implementacion real (no asumir).
-2. Confirmar si Crashlytics/Analytics estan activos en build de release.
-3. Confirmar si se guarda token push por usuario en produccion.
-4. Completar Privacy Labels y Age Rating en ASC con capturas para evidencia interna.
-5. Guardar snapshot final en `docs/app-store-metadata-draft.md` y `docs/app-review-notes.generated.md`.
+[Definiciones de edad de Apple](https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions)

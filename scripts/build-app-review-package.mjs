@@ -12,10 +12,10 @@ const outputReviewNotesPath = path.resolve(rootDir, outputReviewNotesRelativePat
 const reviewNotesDraftPath = path.resolve(rootDir, 'docs/app-review-notes-draft.md');
 
 const defaultValues = {
-  privacyUrl: 'https://vinctus.app/privacy',
-  termsUrl: 'https://vinctus.app/terms',
-  communityUrl: 'https://vinctus.app/community-guidelines',
-  supportUrl: 'https://vinctus.app/support',
+  privacyUrl: 'https://vinctus.vercel.app/privacy.html',
+  termsUrl: 'https://vinctus.vercel.app/terms.html',
+  communityUrl: 'https://vinctus.vercel.app/community-guidelines.html',
+  supportUrl: 'https://vinctus.vercel.app/support.html',
   supportEmail: 'support@vinctus.app',
   securityEmail: 'security@vinctus.app',
   demoUid: 'reviewer_demo',

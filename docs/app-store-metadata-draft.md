@@ -39,24 +39,24 @@ Secondary: Utilities (opcional)
 
 ## Support URL
 
-https://vinctus.app/support
+https://vinctus.vercel.app/support.html
 
 ## Privacy Policy URL
 
-https://vinctus.app/privacy
+https://vinctus.vercel.app/privacy.html
 
 ## Terms URL (for review notes/reference)
 
-https://vinctus.app/terms
+https://vinctus.vercel.app/terms.html
 
 ## Community Guidelines URL
 
-https://vinctus.app/community-guidelines
+https://vinctus.vercel.app/community-guidelines.html
 
 ## Contact
 
-- Support: support@vinctus.app
-- Security/abuse: security@vinctus.app
+- Soporte: [REPLACE_BEFORE_SUBMIT]
+- Seguridad y abuso: [REPLACE_BEFORE_SUBMIT]
 
 ## Age rating notes (draft)
 
@@ -71,8 +71,9 @@ Completar privacy nutrition labels con base en implementacion real:
 2. Contenido UGC (posts, mensajes, reportes).
 3. Uso de proveedores externos de IA (solo cuando usuario acepta consentimiento).
 
-## Pending before submission
+## Pendiente antes del envío
 
-1. Confirmar URLs publicas productivas.
-2. Ajustar copy final en ingles/espanol.
-3. Revisar coherencia entre metadata y privacy labels.
+1. Usar las URLs verificadas de esta ficha. Sustituir los contactos de correo actuales por un canal público operativo y probar su recepción.
+2. Confirmar el texto final, la categoría, el titular de los derechos, los territorios y la disponibilidad en App Store Connect.
+3. Revisar las etiquetas de privacidad, la clasificación por edad y los derechos de contenido de terceros.
+4. Seleccionar las capturas de iPhone que representen la compilación de producción. El repositorio ya tiene capturas de 1206 × 2622 px.

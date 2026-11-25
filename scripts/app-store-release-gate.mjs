@@ -17,10 +17,10 @@ const LEVEL = {
 
 const results = [];
 const defaults = {
-  privacyUrl: 'https://vinctus.app/privacy',
-  termsUrl: 'https://vinctus.app/terms',
-  communityUrl: 'https://vinctus.app/community-guidelines',
-  supportUrl: 'https://vinctus.app/support',
+  privacyUrl: 'https://vinctus.vercel.app/privacy.html',
+  termsUrl: 'https://vinctus.vercel.app/terms.html',
+  communityUrl: 'https://vinctus.vercel.app/community-guidelines.html',
+  supportUrl: 'https://vinctus.vercel.app/support.html',
   supportEmail: 'support@vinctus.app',
   securityEmail: 'security@vinctus.app',
 };
@@ -135,16 +135,18 @@ const main = async () => {
     pass('Review package generation passed', 'npm run review:package');
   }
 
+  const preflightOption = submitMode ? '--strict' : '--skip-url-checks';
+  const preflightCommand = 'npm run preflight:appstore -- ' + preflightOption;
   const preflightExitCode = runCommand(npmCmd, [
     'run',
     'preflight:appstore',
     '--',
-    '--skip-url-checks',
+    preflightOption,
   ]);
   if (preflightExitCode !== 0) {
-    fail('Preflight command failed', 'npm run preflight:appstore -- --skip-url-checks');
+    fail('Preflight command failed', preflightCommand);
   } else {
-    pass('Preflight command passed', 'npm run preflight:appstore -- --skip-url-checks');
+    pass('Preflight command passed', preflightCommand);
   }
 
   const reviewPackageContent = await checkFilePresent(

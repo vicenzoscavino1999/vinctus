@@ -1,3 +1,4 @@
+import { Resolver } from 'node:dns/promises';
 import { existsSync } from 'node:fs';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -129,6 +130,37 @@ const checkUrlReachable = async (label, rawUrl) => {
   }
 };
 
+const checkContactDomain = async (domain) => {
+  const resolver = new Resolver({ timeout: 3000, tries: 1 });
+  try {
+    const exchanges = await resolver.resolveMx(domain);
+    if (exchanges.some(({ exchange }) => exchange && exchange !== '.')) {
+      pass('Contact email domain has mail routing', domain);
+      return;
+    }
+    if (exchanges.length > 0) {
+      warn('Contact email domain does not accept mail', domain);
+      return;
+    }
+  } catch (error) {
+    if (error.code !== 'ENODATA') {
+      warn('Contact email domain could not be verified', domain + ' -> ' + error.code);
+      return;
+    }
+  }
+
+  // SMTP may fall back to address records when there is no MX record.
+  const addresses = await Promise.allSettled([
+    resolver.resolve4(domain),
+    resolver.resolve6(domain),
+  ]);
+  if (addresses.some((result) => result.status === 'fulfilled' && result.value.length > 0)) {
+    pass('Contact email domain has address records for mail fallback', domain);
+  } else {
+    warn('Contact email domain has no verified mail routing', domain);
+  }
+};
+
 const getEnvValue = (envMap, key, fallback = '') => {
   const value = (envMap.get(key) ?? '').trim();
   return value.length > 0 ? value : fallback;
@@ -158,6 +190,10 @@ const run = async () => {
   await Promise.all([
     ...requiredDocs.map((file) => checkFileExists(file, 'Required doc')),
     ...requiredPublicPages.map((file) => checkFileExists(file, 'Required public page')),
+    checkFileExists(
+      'ios-native/VinctusNative/Resources/PrivacyInfo.xcprivacy',
+      'iOS privacy manifest',
+    ),
   ]);
 
   await checkContains(
@@ -250,27 +286,36 @@ const run = async () => {
   }
 
   const legalUrls = {
-    privacy: getEnvValue(envMap, 'VITE_PRIVACY_POLICY_URL', 'https://vinctus.app/privacy'),
-    terms: getEnvValue(envMap, 'VITE_TERMS_OF_SERVICE_URL', 'https://vinctus.app/terms'),
+    privacy: getEnvValue(
+      envMap,
+      'VITE_PRIVACY_POLICY_URL',
+      'https://vinctus.vercel.app/privacy.html',
+    ),
+    terms: getEnvValue(
+      envMap,
+      'VITE_TERMS_OF_SERVICE_URL',
+      'https://vinctus.vercel.app/terms.html',
+    ),
     community: getEnvValue(
       envMap,
       'VITE_COMMUNITY_GUIDELINES_URL',
-      'https://vinctus.app/community-guidelines',
+      'https://vinctus.vercel.app/community-guidelines.html',
     ),
-    support: getEnvValue(envMap, 'VITE_SUPPORT_URL', 'https://vinctus.app/support'),
+    support: getEnvValue(envMap, 'VITE_SUPPORT_URL', 'https://vinctus.vercel.app/support.html'),
   };
 
   const supportEmail = getEnvValue(envMap, 'VITE_SUPPORT_EMAIL', 'support@vinctus.app');
   const securityEmail = getEnvValue(envMap, 'VITE_SECURITY_EMAIL', 'security@vinctus.app');
   const appleFlag = getEnvValue(envMap, 'VITE_ENABLE_APPLE_SIGN_IN', '');
 
-  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(supportEmail)) {
+  const emailPattern = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  if (emailPattern.test(supportEmail)) {
     pass('Support email format looks valid', supportEmail);
   } else {
     fail('Support email format invalid', supportEmail);
   }
 
-  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(securityEmail)) {
+  if (emailPattern.test(securityEmail)) {
     pass('Security email format looks valid', securityEmail);
   } else {
     fail('Security email format invalid', securityEmail);
@@ -289,6 +334,14 @@ const run = async () => {
   await checkUrlReachable('Terms of Service', legalUrls.terms);
   await checkUrlReachable('Community Guidelines', legalUrls.community);
   await checkUrlReachable('Support', legalUrls.support);
+  if (!skipUrlChecks) {
+    const contactDomains = new Set(
+      [supportEmail, securityEmail]
+        .filter((email) => emailPattern.test(email))
+        .map((email) => email.split('@')[1].toLowerCase()),
+    );
+    await Promise.all([...contactDomains].map(checkContactDomain));
+  }
 
   const reviewNotesRaw = await readFileIfExists('docs/app-review-notes.generated.md');
   if (reviewNotesRaw != null) {

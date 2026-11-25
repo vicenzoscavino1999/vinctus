@@ -5,20 +5,11 @@ Estado: borrador para App Store Connect
 
 ## Reviewer quick path
 
-1. Login screen:
-   - Email/password available
-   - Google Sign-In available
-   - Apple Sign-In visible cuando configuracion Apple/Firebase esta activa
-2. Open Settings:
-   - Legal links (privacy/terms)
-   - Delete account flow
-   - AI consent toggle
-3. Open Help:
-   - Community Guidelines link
-   - Support/security contact
-4. UGC controls:
-   - Report user/group
-   - Block user
+1. En la compilación de producción, iniciar sesión con la cuenta de demostración. La pantalla de acceso también ofrece Google y Apple.
+2. Desde Perfil, abrir el engranaje de Ajustes. Allí se encuentran los enlaces legales, la opción de eliminar la cuenta y el consentimiento de IA.
+3. Desde el menú de una publicación, historia o perfil de prueba, enviar un reporte o bloquear al usuario. En Ajustes se puede abrir la lista de usuarios bloqueados.
+4. En Descubrir, abrir Chat con IA o Arena IA. Antes del primer uso, la app pide permiso para enviar el texto al proveedor. El permiso se puede retirar desde Ajustes.
+5. Para comprobar el borrado, usar una segunda cuenta de prueba destinada a ese flujo. La cuenta principal de revisión debe seguir disponible.
 
 ## Test credentials
 
