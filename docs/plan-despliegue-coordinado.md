@@ -3,9 +3,45 @@
 Guía operativa única para integrar, desplegar con orden seguro y validar físicamente en iPhone los cambios acumulados en los **10 módulos** revisados ([índice de revisión](revision-app-nativa.md)).
 
 > [!IMPORTANT]
-> No fusionar los PRs a `main` antes de aprobar `staging`: la integración con `main` dispara despliegue automático en Vercel. Mantener la secuencia de despliegue indicada abajo para evitar cortar lecturas/escrituras a clientes activos.
+> La pila `#119 → #128` ya está en `main` (ver la sección 0). Para lanzamientos futuros se mantiene la regla: no fusionar a `main` antes de aprobar `staging`, porque la integración con `main` dispara el despliegue automático de producción en Vercel. Mantener la secuencia de despliegue indicada abajo para evitar cortar lecturas/escrituras a clientes activos.
+
+## 0. Estado del lanzamiento (comprobado el 25 de noviembre de 2026)
+
+Comprobado en GitHub, Vercel, Firebase (CLI, API de Firebase Rules y Cloud Logging) y App Store Connect.
+
+### Producción (`vinctus-daf32`)
+
+| Momento (UTC)    | Hecho                                                                                                                                                                                                                                                                                                                                              | Paso del plan   |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| Antes del 22 nov | Están desplegados los 21 índices y los 16 `fieldOverrides` de `firestore.indexes.json`, incluidos los TTL. Hay además 1 índice antiguo que ya no está en el repo.                                                                                                                                                                                  | Paso 1          |
+| 22 nov, 01:27    | Cloud Functions desplegadas: las 49 del repo, todas `ACTIVE` (Node 22, `us-central1`). `onDeletionJobCreated` y `onDeletionJobUpdated` tienen 540 s y 1 GB; `createDebate` usa el secreto `GEMINI_API_KEY` (versión 1, `ENABLED`). Un primer intento de configurar el trigger de `onPostMediaMetadataUpdated` falló, pero la función quedó activa. | Paso 2          |
+| 22 nov, 01:31    | Merge de la pila a `main` (`2563d5f`) con la opción alternativa: `#128` con base `main`; `#119`–`#127` quedaron marcados como fusionados porque su código ya estaba en `main`. CI verde (ejecución `44971868007`).                                                                                                                                 | Fase B, punto 3 |
+| 22 nov, 01:32    | Vercel publica la web de producción desde `2563d5f`.                                                                                                                                                                                                                                                                                               | Paso 4 (web)    |
+| 22 nov, 01:34    | Reglas de Firestore y Storage publicadas, idénticas a las de `main`.                                                                                                                                                                                                                                                                               | Paso 5          |
+| 25 nov, 11:56    | Build 5 de TestFlight desde `main` (ejecución `44972111232`): `VALID`, `READY_FOR_BETA_TESTING`. Asignado a **Vinctus QA** el mismo día.                                                                                                                                                                                                           | Paso 4 (iOS)    |
+| 25 nov, ~20:00   | `migrate-post-read-privacy.mjs --apply`: 4 publicaciones reescritas, tokens públicos revocados en 4 archivos y 2 notificaciones limpiadas. Un dry-run posterior da 0 en todo.                                                                                                                                                                      | Paso 6          |
+
+El orden siguió el plan (índices y Functions antes del merge, reglas después), con una salvedad: las reglas estrictas se publicaron 3 minutos después de la web, cuando los testers de iOS aún no tenían un build con `readPosts` (el build 2 no lo incluye).
+
+La migración deja sin tocar, a propósito, 1 adjunto de YouTube guardado como `www.youtube-nocookie.com/embed/<id>`; por eso el script termina con código 2. `readPosts` lo sirve normalizado (`youtubeURL` en `functions/src/postReadAccess.ts`).
+
+### Staging (`vinctus-staging`)
+
+- Las mismas 49 funciones, los mismos índices y reglas idénticas a `main` (publicadas el 21 nov, 21:58 UTC). Sin errores de funciones en los logs desde el 21 nov.
+- La web vive en un proyecto de Vercel aparte, `vinctus-staging`.
+- Builds 3 y 4 de TestFlight (21 nov): `VALID`.
+- **No hay publicaciones ni notificaciones**, así que la observación de 24–48 h no ejercitó esos flujos. El merge a `main` ocurrió unas 3 horas después de subir el build 4.
+
+### Pendiente
+
+- Checklist físico de la sección 4 en iPhone real, con el build 5.
+- App Check web: la app web está registrada en App Check con la clave de reCAPTCHA Enterprise `vinctus-web` (25 nov), y `VITE_ENABLE_FIREBASE_APP_CHECK` y `VITE_FIREBASE_APP_CHECK_SITE_KEY` ya están en Vercel `vinctus` (producción). Se activa al fusionar el PR #130, que cambia la web a `ReCaptchaEnterpriseProvider`. Enforcement desactivado.
+- App Check iOS: falta registrar en App Check la clave DeviceCheck (`.p8` de Apple Developer) de la app **VinctusNative**.
+- En el proyecto de Vercel `vinctus-staging` faltan `OPENAI_API_KEY`, `NVIDIA_API_KEY` y `YOUTUBE_API_KEY`: en staging el Chat IA solo usa Gemini y no funcionan las partes de YouTube.
 
 ## 1. Estado de la pila de PRs apilados (`#119 → #128`)
+
+Registro histórico: así estaba la pila antes de integrarla. Todos estos PRs están `MERGED` (sección 0).
 
 | Orden | PR                                                             | Rama (`head` -> `base`)                            | Módulo                     | Detalle                                                                    |
 | ----- | -------------------------------------------------------------- | -------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------- |
@@ -20,9 +56,11 @@ Guía operativa única para integrar, desplegar con orden seguro y validar físi
 | 9     | [#127](https://github.com/vicenzoscavino1999/vinctus/pull/127) | `fix/account-security` -> `fix/ai-arena`           | Cuenta y seguridad         | [revision-cuenta-seguridad.md](revision-cuenta-seguridad.md)               |
 | 10    | [#128](https://github.com/vicenzoscavino1999/vinctus/pull/128) | `fix/pre-prod-hardening` -> `fix/account-security` | Hardening pre-producción   | [revision-pre-produccion.md](revision-pre-produccion.md)                   |
 
-### Cómo integrar sin conflictos cuando se apruebe el lanzamiento
+### Cómo integrar sin conflictos cuando se apruebe el lanzamiento (histórico)
 
-`fix/pre-prod-hardening` (`#128`) contiene el código acumulado de toda la pila `#119 → #128` (los 10 PRs están verificados como `MERGEABLE` / `CLEAN` y `0` checks fallidos). Al momento de pasar a `main` tras aprobar `staging`:
+> Se usó la **opción alternativa** el 22 de noviembre de 2026. `#118` sigue abierto.
+
+`fix/pre-prod-hardening` (`#128`) contiene el código acumulado de toda la pila `#119 → #128` (los 10 PRs estaban verificados como `MERGEABLE` / `CLEAN` y `0` checks fallidos). Al momento de pasar a `main` tras aprobar `staging`:
 
 - **Opción recomendada (merge ordenado de abajo hacia arriba)**: quitar estado `draft` y hacer **Merge commit** (**no** squash, para no reescribir SHAs base) en orden estricto `#119 → #120 → #121 → #122 → #123 → #124 → #125 → #126 → #127 → #128` — GitHub re-apunta automáticamente la base del siguiente PR al fusionar el anterior.
 - **Opción alternativa (rama única a `main`)**: cambiar la base de `#128` a `main`, validar CI completa contra `main`, fusionar `#128` con merge commit y cerrar `#119..#127` como absorbidos.

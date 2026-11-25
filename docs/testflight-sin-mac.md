@@ -5,10 +5,23 @@ una Mac temporal de GitHub. La subida es manual y requiere pruebas nativas
 aprobadas para el mismo código de la app. No envía la app a
 revisión de App Store ni la publica para todos los usuarios.
 
-Estado verificado el 13 de noviembre de 2026: **Vinctus 1.0.0 (2)** archivada,
-firmada y subida desde GitHub. Apple terminó el procesamiento (`VALID`) y la
-marcó `READY_FOR_BETA_TESTING`. Está asignada al grupo interno **Vinctus QA**,
-con notas de prueba en español. La instalación y prueba física siguen pendientes.
+## Builds subidos (versión 1.0.0)
+
+Comprobado en GitHub Actions y en la API de App Store Connect el 25 de noviembre
+de 2026. Todos los builds están `VALID` y sin caducar.
+
+| Build | Firebase                     | Rama y commit                            | Subida a App Store Connect (UTC)        | Estado de prueba interna                                      |
+| ----- | ---------------------------- | ---------------------------------------- | --------------------------------------- | ------------------------------------------------------------- |
+| 2     | Producción (`vinctus-daf32`) | `fix/ios-conversations` (`cd39dbf`)      | 13 nov, 10:51 (ejecución `43411018403`) | `IN_BETA_TESTING`, asignado a **Vinctus QA**                  |
+| 3     | Staging (`vinctus-staging`)  | `testflight/vinctus-staging` (`52d59bb`) | 21 nov, 14:30 (ejecución `44835639380`) | `READY_FOR_BETA_TESTING`, sin grupo                           |
+| 4     | Staging (`vinctus-staging`)  | `testflight/vinctus-staging` (`d70b99e`) | 21 nov, 22:55 (ejecución `44954288561`) | `READY_FOR_BETA_TESTING`, sin grupo                           |
+| 5     | Producción (`vinctus-daf32`) | `main` (`2563d5f`)                       | 25 nov, 11:56 (ejecución `44972111232`) | `READY_FOR_BETA_TESTING`, asignado a **Vinctus QA** el 25 nov |
+
+El grupo interno **Vinctus QA** no recibe builds nuevos automáticamente
+(`hasAccessToAllBuilds: false`): asigna cada build en App Store Connect
+(TestFlight > Vinctus QA > Builds). El build 2 no incluye `readPosts`, así que
+probablemente no puede cargar publicaciones con las reglas actuales de
+producción; prueba con el build 5. El siguiente build debe ser el 6 o mayor.
 
 ## Configuración en Apple (desde Windows)
 
@@ -29,25 +42,29 @@ distribución, no hace falta registrar el UDID de un iPhone para archivar la app
 El intento inicial con firma automática buscó un perfil de desarrollo y falló
 porque la cuenta no tenía dispositivos registrados.
 La configuración de firma se aplica únicamente al target `VinctusNative`, en
-`ReleaseProd`, mediante un spec temporal de XcodeGen.
+`ReleaseProd` (producción) o `ReleaseStaging` (staging), mediante un spec temporal
+de XcodeGen.
 
 ## Configuración en GitHub
 
 El entorno **ios-release** ya se creó en **Settings > Environments**, con revisión
-del propietario y ramas limitadas a `main` y `fix/ios-conversations`. La
-configuración Firebase, los cuatro valores de Apple y los tres secretos de firma
-de distribución ya están cargados:
+del propietario y ramas limitadas a `main`, `testflight/vinctus-staging` y
+`fix/ios-conversations` (esta última ya está fusionada en `main` y su rama remota
+se eliminó). Las dos configuraciones de Firebase (producción y staging), los
+cuatro valores de Apple y los tres secretos de firma de distribución ya están
+cargados:
 
-| Secreto                           | Valor                                                                |
-| --------------------------------- | -------------------------------------------------------------------- |
-| `APPLE_TEAM_ID`                   | Team ID de Apple Developer                                           |
-| `ASC_KEY_ID`                      | Key ID de la clave de equipo                                         |
-| `ASC_ISSUER_ID`                   | Issuer ID de App Store Connect                                       |
-| `ASC_PRIVATE_KEY`                 | Contenido completo del archivo `.p8`                                 |
-| `IOS_FIREBASE_PLIST_BASE64`       | Configuración Firebase Prod codificada en base64                     |
-| `IOS_DISTRIBUTION_P12_BASE64`     | Certificado y clave de distribución en PKCS12, codificados en base64 |
-| `IOS_DISTRIBUTION_P12_PASSWORD`   | Contraseña del contenedor PKCS12                                     |
-| `IOS_PROVISIONING_PROFILE_BASE64` | Perfil de App Store de Vinctus, codificado en base64                 |
+| Secreto                             | Valor                                                                   |
+| ----------------------------------- | ----------------------------------------------------------------------- |
+| `APPLE_TEAM_ID`                     | Team ID de Apple Developer                                              |
+| `ASC_KEY_ID`                        | Key ID de la clave de equipo                                            |
+| `ASC_ISSUER_ID`                     | Issuer ID de App Store Connect                                          |
+| `ASC_PRIVATE_KEY`                   | Contenido completo del archivo `.p8`                                    |
+| `IOS_FIREBASE_PLIST_BASE64`         | Configuración Firebase Prod codificada en base64                        |
+| `IOS_FIREBASE_STAGING_PLIST_BASE64` | Configuración Firebase Staging (`vinctus-staging`) codificada en base64 |
+| `IOS_DISTRIBUTION_P12_BASE64`       | Certificado y clave de distribución en PKCS12, codificados en base64    |
+| `IOS_DISTRIBUTION_P12_PASSWORD`     | Contraseña del contenedor PKCS12                                        |
+| `IOS_PROVISIONING_PROFILE_BASE64`   | Perfil de App Store de Vinctus, codificado en base64                    |
 
 Los archivos de firma se conservan fuera del repositorio, en
 `C:\Users\ASROCK\AppleKeys\Vinctus`. La Mac temporal importa el certificado a
@@ -74,6 +91,13 @@ El build muestra el nombre **Vinctus QA**, usa `vinctus-staging` y llama a las A
 de `https://vinctus-staging.vercel.app`. En este entorno el acceso es por correo; Google y
 Apple requieren su propia configuración de staging.
 
+```powershell
+gh workflow run ios-native.yml --repo vicenzoscavino1999/vinctus --ref testflight/vinctus-staging -f upload_to_testflight=true -f release_target=staging -f build_number=<N>
+```
+
+El workflow solo acepta `release_target=staging` desde `testflight/vinctus-staging`
+y `release_target=production` desde cualquier otra rama permitida.
+
 La subida de staging queda restringida a pruebas internas y conserva la revisión
 manual en GitHub. Una vez disponible en TestFlight, asígnala a **Vinctus QA** si el
 grupo no la recibe automáticamente. Registra el inicio de la observación de **48 horas**
@@ -82,17 +106,19 @@ prueba de staging y registra por separado el resultado en iPhone real.
 
 ### Subida con Firebase de producción
 
-Ejemplo desde Windows, una vez subido el workflow y configurado el entorno:
+Ejemplo desde Windows, desde `main`:
 
 ```powershell
-gh workflow run ios-native.yml --repo vicenzoscavino1999/vinctus --ref fix/ios-conversations -f upload_to_testflight=true -f build_number=2
+gh workflow run ios-native.yml --repo vicenzoscavino1999/vinctus --ref main -f upload_to_testflight=true -f release_target=production -f build_number=6
 ```
 
-Sustituye `2` por un build nuevo mayor que los existentes para la versión
-`1.0.0`. Revisa y aprueba el commit exacto en el entorno `ios-release`.
+Sustituye `6` por un build nuevo mayor que los existentes para la versión
+`1.0.0` (el último subido es el 5). Revisa y aprueba el commit exacto en el
+entorno `ios-release`.
 
 Para una corrección exclusiva del script de publicación, se puede añadir
-`-f validated_test_run=43407892324`. El workflow verifica por API que compilación
+`-f validated_test_run=<id de una ejecución anterior>` (el 13 de noviembre se usó
+`43407892324`). El workflow verifica por API que compilación
 y pruebas nativas de esa ejecución pasaron, que el commit es un ancestro y que
 los archivos nativos, contrato compartido, reglas, configuración de Firebase y
 definiciones de pruebas siguen idénticos. Si algo cambió, rechaza esa evidencia
@@ -101,6 +127,8 @@ siempre se ejecutan de nuevo sobre el commit solicitado.
 
 Las claves privadas se escriben solo en la Mac temporal y se eliminan al terminar;
 el workflow no sube archivos de configuración ni credenciales como artefactos.
+
+### Instalación en iPhone (registro del 13 de noviembre)
 
 El build 2 ya está procesado y asignado al grupo **Vinctus QA**, y la cuenta
 autorizada por el propietario ya está agregada como probador interno. Apple
@@ -114,6 +142,9 @@ TestFlight. Apple aceptó un reenvío y se retiró/volvió a añadir el tester a
 pero el estado continúa `INVITED`, sin instalación registrada. Se preparó un
 reporte para soporte; no se ha enviado desde el agente. Una Mac compatible con
 Xcode permitiría instalar una build de desarrollo directamente en el iPhone.
+
+Actualización del 25 de noviembre: App Store Connect muestra al tester del grupo
+**Vinctus QA** como `INSTALLED`, así que la instalación se completó.
 
 Valida los cuatro puntos de
 `docs/revision-app-nativa.md`: voz audible y grabación, videos de la fototeca,

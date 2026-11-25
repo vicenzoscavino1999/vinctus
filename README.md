@@ -10,6 +10,21 @@ Red social basada en intereses. Conecta con comunidades de ciencia, música, his
 
 Aplicación en producción desplegada en **Vercel** con backend completo en **Firebase** (Auth, Firestore, Storage, Cloud Functions). Incluye autenticación real, datos persistentes, mensajería en tiempo real y capacidades de IA.
 
+## Clientes y entornos
+
+Vinctus tiene dos clientes que leen y escriben los mismos datos de Firebase:
+
+- **Web** (React + Vite) en `src/`, con endpoints serverless de Vercel en `api/`.
+- **App nativa de iPhone** (SwiftUI) en `ios-native/VinctusNative/` ([arquitectura](ios-native/VinctusNative/ARCHITECTURE.md)). Se compila y se sube a TestFlight desde GitHub Actions, sin Mac propia ([docs/testflight-sin-mac.md](docs/testflight-sin-mac.md)).
+
+| Entorno               | Web                          | Proyecto Firebase               | Publicación                                                                                                                                                                                                                                                                                                   |
+| --------------------- | ---------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Producción            | `vinctus.vercel.app`         | `vinctus-daf32`                 | Vercel despliega `main` automáticamente. Reglas, índices y Functions se despliegan a mano con `firebase deploy --project vinctus-daf32`.                                                                                                                                                                      |
+| Staging               | `vinctus-staging.vercel.app` | `vinctus-staging`               | Proyecto de Vercel aparte (`vinctus-staging`). Ramas `testflight/vinctus-staging` y `deploy/vinctus-staging`, con los rewrites de `/__/auth/*` y `/__/firebase/*` apuntando a `vinctus-staging`. Vercel no despliega `testflight/vinctus-staging` automáticamente (`git.deploymentEnabled` en `vercel.json`). |
+| CI y desarrollo local | `localhost:5173`             | `vinctus-dev` (solo emuladores) | —                                                                                                                                                                                                                                                                                                             |
+
+El repositorio no tiene `.firebaserc`, así que todo `firebase deploy` debe indicar `--project`. El orden seguro de despliegue (índices → Functions → clientes → reglas) está en [docs/plan-despliegue-coordinado.md](docs/plan-despliegue-coordinado.md).
+
 ## Características
 
 - **Descubrimiento** — Exploración por categorías (ciencia, música, historia, tecnología, etc.) con contenido de APIs públicas y publicaciones de la comunidad.
@@ -19,7 +34,7 @@ Aplicación en producción desplegada en **Vercel** con backend completo en **Fi
 - **Chat en tiempo real** — Conversaciones privadas y grupales con actualizaciones en tiempo real vía Firestore.
 - **Perfil y red social** — Perfiles editables, seguidores, seguidos, amigos con solicitudes de amistad, cuentas privadas.
 - **Arena IA** — Debates generados por inteligencia artificial (Gemini / NVIDIA) entre dos personajes sobre temas personalizados.
-- **Chat IA** — Conversación directa con modelos de IA (Gemini, NVIDIA Llama 3.3).
+- **Chat IA** — Conversación directa con modelos de IA (Gemini, OpenAI y NVIDIA Llama 3.3).
 - **Búsqueda de usuarios** — Búsqueda global de usuarios registrados con vista de perfil.
 - **Notificaciones** — Feed de actividad (likes, comentarios, solicitudes de amistad).
 - **Colecciones** — Biblioteca personal para guardar enlaces, notas y archivos organizados en carpetas.
@@ -113,8 +128,9 @@ flowchart LR
 
 ## Requisitos
 
-- Node.js >= 20
+- Node.js 22 (`.nvmrc`; `engines` en `package.json` exige `22.x`)
 - npm
+- Java 21 para los emuladores de Firebase (la versión que usa CI)
 
 ## Instalación y uso
 
@@ -149,40 +165,49 @@ Usuarios seed (email / password):
 
 ## Scripts útiles
 
-| Script                         | Descripción                                                        |
-| ------------------------------ | ------------------------------------------------------------------ |
-| `npm run dev`                  | Desarrollo con Vite                                                |
-| `npm run dev:local`            | Emuladores + seed + Vite                                           |
-| `npm run build`                | Build de producción (typecheck + vite build)                       |
-| `npm run preview`              | Preview del build                                                  |
-| `npm run lint`                 | ESLint                                                             |
-| `npm run typecheck`            | TypeScript sin emitir                                              |
-| `npm run check:cycles`         | Detecta ciclos de dependencias en `src`                            |
-| `npm run check:stubs`          | Valida fecha de caducidad + ticket en stubs                        |
-| `npm run check:raw-onsnapshot` | Detecta usos directos de `onSnapshot`                              |
-| `npm run guardrails`           | lint + ciclos + stubs + onSnapshot                                 |
-| `npm run test`                 | Vitest en modo watch                                               |
-| `npm run test:run`             | Vitest en modo CI                                                  |
-| `npm run test:api`             | Tests de endpoints serverless en `api/` (`chat`, `discover`)       |
-| `npm run test:coverage`        | Tests con reporte de cobertura                                     |
-| `npm run test:rules`           | Tests de Firestore rules (requiere emuladores)                     |
-| `npm run test:e2e`             | Playwright E2E                                                     |
-| `npm run test:e2e:smoke`       | Playwright smoke tests                                             |
-| `npm run lhci`                 | Lighthouse CI (build + collect + assert)                           |
-| `npm run validate`             | Pipeline completo: typecheck + lint + coverage + api tests + build |
-| `npm run ci`                   | Alias de validate                                                  |
-| `npm run emulators`            | Firebase emuladores                                                |
-| `npm run seed`                 | Seed de datos en emuladores                                        |
-| `npm run functions:install`    | Instala deps de Cloud Functions                                    |
-| `npm run functions:build`      | Build de Cloud Functions                                           |
+| Script                         | Descripción                                                                                   |
+| ------------------------------ | --------------------------------------------------------------------------------------------- |
+| `npm run dev`                  | Desarrollo con Vite                                                                           |
+| `npm run dev:local`            | Emuladores + seed + Vite                                                                      |
+| `npm run build`                | Build de producción (typecheck + vite build)                                                  |
+| `npm run preview`              | Preview del build                                                                             |
+| `npm run lint`                 | ESLint                                                                                        |
+| `npm run typecheck`            | TypeScript sin emitir                                                                         |
+| `npm run check:cycles`         | Detecta ciclos de dependencias en `src`                                                       |
+| `npm run check:stubs`          | Valida fecha de caducidad + ticket en stubs                                                   |
+| `npm run check:raw-onsnapshot` | Detecta usos directos de `onSnapshot`                                                         |
+| `npm run guardrails`           | lint + ciclos + stubs + onSnapshot                                                            |
+| `npm run contract:generate`    | Regenera los archivos derivados de `shared/firestore-contract.json` (web, Functions, iOS)     |
+| `npm run contract:check`       | Falla si esos archivos generados están desactualizados (se ejecuta en CI)                     |
+| `npm run test`                 | Vitest en modo watch                                                                          |
+| `npm run test:run`             | Vitest en modo CI                                                                             |
+| `npm run test:api`             | Tests de `api/` y tests unitarios de `functions/src`                                          |
+| `npm run test:coverage`        | Tests con reporte de cobertura                                                                |
+| `npm run test:rules`           | Tests de reglas de Firestore y Storage (levanta los emuladores)                               |
+| `npm run test:post-counts`     | Integración de contadores y limpiezas de Cloud Functions (emuladores con Functions)           |
+| `npm run test:post-reads`      | Integración de `readPosts` / `readPostMedia` y limpieza de subidas (emuladores con Functions) |
+| `npm run test:e2e`             | Playwright E2E                                                                                |
+| `npm run test:e2e:smoke`       | Playwright smoke tests                                                                        |
+| `npm run test:e2e:local-ci`    | E2E como en CI: emuladores + seed + Playwright                                                |
+| `npm run lhci`                 | Lighthouse CI (build + collect + assert)                                                      |
+| `npm run validate`             | Pipeline completo: typecheck + lint + coverage + api tests + build                            |
+| `npm run ci`                   | Alias de validate                                                                             |
+| `npm run emulators`            | Firebase emuladores                                                                           |
+| `npm run seed`                 | Seed de datos en emuladores                                                                   |
+| `npm run functions:install`    | Instala deps de Cloud Functions                                                               |
+| `npm run functions:build`      | Build de Cloud Functions                                                                      |
 
 ## Testing
 
-- **Unit tests**: Vitest con meta de cobertura ≥ 85% (statements/functions/lines)
-- **API tests**: `npm run test:api` — endpoints `api/chat.ts` y `api/discover.ts`
-- **Firestore rules tests**: `npm run test:rules` — con emuladores Firebase
-- **E2E**: Playwright — flujos críticos (login, feed, chat, grupos)
+- **Unit tests**: Vitest (`src/**/*.test.ts(x)`) con meta de cobertura ≥ 85% (statements/functions/lines)
+- **API y Functions**: `npm run test:api` — `api/**/*.test.ts` y tests unitarios de `functions/src/**/*.test.ts`
+- **Reglas**: `npm run test:rules` — casos de `src/tests/firestore-rules/` y `src/tests/storage-rules/` contra emuladores Firebase
+- **Integración de Cloud Functions**: `npm run test:post-counts` y `npm run test:post-reads` — `scripts/*.integration.test.mjs` contra emuladores con Functions
+- **E2E**: Playwright — `e2e/*.spec.ts`, una spec por módulo (perfiles, grupos, historias, publicaciones, chat, IA, cuenta…) más `smoke` y `critical-flows`
 - **Lighthouse CI**: Home/Feed/Chat/Groups con umbral ≥ 0.90
+- **iOS**: `Tests/` (sin Firebase) e `IntegrationTests/` (contra emuladores); ver [ios-native/VinctusNative/ARCHITECTURE.md](ios-native/VinctusNative/ARCHITECTURE.md)
+
+En GitHub Actions, `.github/workflows/ci.yml` ejecuta todo lo web en cada PR y en cada push a `main`. `.github/workflows/ios-native.yml` compila y prueba la app nativa cuando cambian la app, las reglas, `firebase.json`, las Functions o el contrato compartido.
 
 ## Variables de entorno
 
@@ -201,6 +226,14 @@ Copia `.env.example` a `.env.local` y completa lo necesario:
 
 - `VITE_USE_FIREBASE_EMULATOR` — `true` para usar emuladores en local
 - `VITE_FIREBASE_EMULATOR_HOST` — Host para emuladores (default `127.0.0.1`)
+
+### App Check y acceso (opcional)
+
+- `VITE_ENABLE_FIREBASE_APP_CHECK` — `true` para activar App Check en web (desactivado por defecto)
+- `VITE_FIREBASE_APP_CHECK_SITE_KEY` — Clave de sitio de reCAPTCHA Enterprise (tipo puntuación) registrada en App Check; App Check ya no admite registros nuevos con reCAPTCHA v3
+- `VITE_FIREBASE_APP_CHECK_DEBUG_TOKEN` — Token de depuración para local/staging; nunca en producción
+- `VITE_FIREBASE_APP_CHECK_TOKEN_AUTO_REFRESH` — `true` por defecto
+- `VITE_ENABLE_APPLE_SIGN_IN` — Muestra el botón de Sign in with Apple
 
 ### Discover APIs (opcional)
 
@@ -227,6 +260,13 @@ Copia `.env.example` a `.env.local` y completa lo necesario:
 - `CHAT_IP_MINUTE_LIMIT` / `CHAT_IP_DAY_LIMIT` — Rate limits por IP
 - `FIREBASE_SERVICE_ACCOUNT` — JSON de la cuenta de servicio de Firebase Admin (en una línea). `api/chat.ts` lo usa para verificar el consentimiento de IA y para acciones que escriben datos (crear grupo). Si falta, el consentimiento se verifica con Firestore REST y el token del usuario, pero esas acciones fallan.
 
+### YouTube (variables de servidor, opcional)
+
+- `YOUTUBE_API_KEY` — Usada por `api/youtube.ts` (metadatos de vídeos), `api/youtube-search.ts` (vídeos en Descubrir) y `api/youtube-shorts.ts` (Shorts en Historias)
+- Límites, caché y región de cada endpoint: `YOUTUBE_*_IP_MINUTE_LIMIT`, `YOUTUBE_*_IP_DAY_LIMIT`, `YOUTUBE_*_CACHE_TTL_SECONDS`, `YOUTUBE_SEARCH_REGION_CODE` y `YOUTUBE_SHORTS_REGION_CODE`
+
+La lista completa, con las URLs legales (`VITE_PRIVACY_POLICY_URL`…) y la cuenta demo de App Review (`REVIEW_*`), está en `.env.example`.
+
 ## APIs externas
 
 Se consumen APIs públicas (sin API key) para contenido en vivo:
@@ -241,14 +281,16 @@ Se consumen APIs públicas (sin API key) para contenido en vivo:
 Estas fuentes se consumen por `api/discover` (server-side proxy con caché) para evitar CORS en el cliente y reducir latencia/costos.
 En local, existe fallback directo en cliente y proxy CORS configurable.
 
+Además, con `YOUTUBE_API_KEY`, los endpoints `api/youtube*.ts` consultan la **YouTube Data API** para vídeos de publicaciones, Descubrir e Historias.
+
 ## Estructura del proyecto
 
 ```
 vinctus/
 ├── src/
 │   ├── app/                    # Capa de aplicación
-│   │   ├── providers/          # AuthContext, AppState, Toast
-│   │   ├── routes/             # AppLayout, Header, AuthenticatedAppShell
+│   │   ├── providers/          # AuthContext, AppState
+│   │   ├── routes/             # AuthenticatedAppShell (router), AppLayout (rutas y navegación), Header
 │   │   └── services/           # Servicios compartidos de aplicación
 │   ├── features/               # Módulos de dominio (Feature-Sliced)
 │   │   ├── ai/                 # Chat IA
@@ -257,34 +299,42 @@ vinctus/
 │   │   ├── chat/               # Mensajería en tiempo real
 │   │   ├── collaborations/     # Colaboraciones
 │   │   ├── collections/        # Colecciones / Biblioteca
-│   │   ├── discover/           # Descubrimiento y categorías
+│   │   ├── discover/           # Descubrimiento, categorías y búsqueda de usuarios
 │   │   ├── events/             # Eventos
 │   │   ├── groups/             # Grupos
 │   │   ├── help/               # Centro de ayuda
+│   │   ├── legal/              # Privacidad, términos y normas de la comunidad
+│   │   ├── moderation/         # Cola de moderación
 │   │   ├── notifications/      # Notificaciones
 │   │   ├── posts/              # Publicaciones, feed, historias
 │   │   ├── profile/            # Perfil, seguidores, amigos
 │   │   ├── projects/           # Conexiones / Portafolio
-│   │   └── settings/           # Configuración y privacidad
+│   │   └── settings/           # Configuración, privacidad y eliminación de cuenta
 │   ├── shared/                 # Código compartido (no importa features ni app)
 │   │   ├── constants/          # Constantes globales
 │   │   ├── hooks/              # Hooks reutilizables (useApiContent)
-│   │   ├── lib/                # Firebase, errores, validación, storage, helpers
+│   │   ├── lib/                # Firebase, acceso a Firestore (lib/firestore), errores, validación, storage
 │   │   ├── types/              # Tipos compartidos
 │   │   └── ui/                 # Componentes UI (Toast, ErrorBoundary, Skeleton)
+│   ├── tests/                  # Casos de reglas de Firestore y Storage (npm run test:rules)
 │   ├── context/                # Contextos legacy
-│   ├── App.tsx                 # Componente raíz
+│   ├── App.tsx                 # Componente raíz (auth, onboarding)
 │   ├── main.tsx                # Punto de entrada
 │   └── index.css               # Estilos globales
 ├── api/                        # Serverless functions (Vercel)
-│   ├── chat.ts                 # Endpoint IA (Gemini + NVIDIA)
-│   └── discover.ts             # Proxy/caché de APIs públicas para Discover
+│   ├── chat.ts                 # Chat IA (Gemini, OpenAI, NVIDIA) y acciones con Firebase Admin
+│   ├── discover.ts             # Proxy/caché de APIs públicas para Discover
+│   ├── youtube*.ts             # Metadatos, búsqueda y Shorts de YouTube
+│   └── lib/                    # Firebase Admin, rate limit, contrato y acciones de IA
 ├── functions/                  # Cloud Functions (Firebase)
-│   └── src/index.ts            # Triggers, contadores atómicos, karma, cleanup
+│   └── src/index.ts            # Punto de entrada: triggers, callables y endpoints HTTP
+├── shared/
+│   └── firestore-contract.json # Contrato de colecciones, límites y rutas de Storage (web, iOS y Functions)
+├── ios-native/VinctusNative/   # App nativa de iPhone (SwiftUI + XcodeGen)
 ├── e2e/                        # Tests E2E (Playwright)
-├── scripts/                    # Scripts de CI, seed, métricas, Lighthouse
+├── scripts/                    # Scripts de CI, seed, métricas, Lighthouse, migraciones y publicación iOS
 ├── docs/                       # Documentación y screenshots
-├── firestore.rules             # Reglas de seguridad de Firestore (1685 líneas)
+├── firestore.rules             # Reglas de seguridad de Firestore
 ├── storage.rules               # Reglas de seguridad de Storage
 ├── firestore.indexes.json      # Índices compuestos de Firestore
 ├── firebase.json               # Configuración de Firebase
@@ -308,19 +358,31 @@ features/<dominio>/
 
 ## Cloud Functions
 
-Triggers de Firestore para operaciones server-side:
+Punto de entrada: `functions/src/index.ts` (Node 22).
+
+Triggers de Firestore y Storage:
 
 - **Contadores atómicos** — `memberCount`, `likesCount`, `attendeesCount` con deduplicación
 - **Sistema de karma** — Reputación calculada por likes recibidos
 - **Contadores de follow** — `followersCount`, `followingCount`
-- **Cascade cleanup** — Limpieza de subcolecciones al eliminar grupos, eventos o usuarios
+- **Solicitudes de seguimiento** — Al aceptar una solicitud a una cuenta privada, `onFollowRequestUpdated` crea `followers` y `following` en una transacción (las reglas no dejan que el cliente los escriba)
+- **Cascade cleanup** — Limpieza de subcolecciones al eliminar grupos, eventos, historias, colecciones o usuarios
 - **Friend index** — Índice de amigos al aceptar solicitudes
 - **Group conversations** — Auto-creación de conversaciones grupales
+- **Moderación** — Revisión automática de publicaciones, comentarios, perfiles, grupos y mensajes, y cola de reportes (`onReportCreatedQueue`)
+
+Funciones que llaman los clientes directamente:
+
+- `readPosts` (callable) y `readPostMedia` (HTTP) — Lectura de publicaciones y adjuntos respetando la privacidad
+- `createDebate`, `getArenaUsage`, `getArenaPersonas` — Arena IA
+- `requestAccountDeletion`, `getAccountDeletionStatus`, `deleteUserAccount`, `revokeUserSessions` — Cuenta y seguridad
+- `moderationTakeAction` — Acciones de moderación
 
 ## Calidad y CI
 
 - **TypeScript strict** — `strictNullChecks`, `noImplicitAny`, `noUnusedLocals`
 - **ESLint boundary enforcement** — `shared` no importa `features`/`app`, `features` no importa `app`
+- **Contrato compartido** — `npm run contract:check` falla en CI si los archivos generados desde `shared/firestore-contract.json` no están al día
 - **Validación con Zod** — Schemas de validación en todas las API de dominio
 - **Clase AppError** — Manejo de errores con mapeo Firebase → códigos de app
 - **Retry + Timeout** — Helpers de resiliencia para operaciones de red
@@ -330,11 +392,11 @@ Triggers de Firestore para operaciones server-side:
 
 ## Headers de seguridad (Vercel)
 
-- `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: SAMEORIGIN` (el iframe de Firebase Auth en `/__/auth/iframe` se sirve desde el mismo dominio)
-- `X-XSS-Protection: 1; mode=block`
-- `Referrer-Policy: strict-origin-when-cross-origin`
-- `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`
+Definidos en `vercel.json`:
+
+- **Todas las rutas**: `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload` y `Permissions-Policy` (cámara, geolocalización, pagos, USB y `browsing-topics` desactivados; micrófono solo para el propio sitio, por las notas de voz).
+- **SPA** (todo salvo `/__/auth/`, `/__/firebase/` y `/api/`): `X-Frame-Options: SAMEORIGIN` y `Content-Security-Policy` con la lista de orígenes permitidos (Firebase, Google, Apple, reCAPTCHA, YouTube y las APIs de Descubrir). El iframe de Firebase Auth en `/__/auth/iframe` se sirve desde el mismo dominio.
+- **`/api/*`**: `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` y `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. `/api/chat` además envía `Cache-Control: private, no-store, max-age=0`.
 
 ## Stack tecnológico
 
@@ -342,12 +404,13 @@ Triggers de Firestore para operaciones server-side:
 - **Estilos**: Tailwind CSS 3 + tailwindcss-animate
 - **Routing**: React Router DOM 7
 - **Backend**: Firebase (Auth, Firestore, Storage, Cloud Functions)
-- **IA**: Google Gemini API + NVIDIA API (Kimi K2)
+- **IA**: Google Gemini, OpenAI (solo Chat IA) y NVIDIA (`meta/llama-3.3-70b-instruct` por defecto); la Arena usa Gemini y NVIDIA
 - **Hosting**: Vercel (SPA + serverless functions)
+- **App iOS**: SwiftUI + Firebase iOS SDK, proyecto generado con XcodeGen
 - **Iconos**: Lucide React
 - **Validación**: Zod 4
 - **PWA**: vite-plugin-pwa
-- **Testing**: Vitest + Playwright + Lighthouse CI
+- **Testing**: Vitest + Playwright + Lighthouse CI + XCTest (iOS)
 - **Tipografía**: Inter + Playfair Display (Google Fonts)
 
 ## Licencia
