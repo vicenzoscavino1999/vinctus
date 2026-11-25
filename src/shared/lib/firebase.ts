@@ -2,7 +2,7 @@
 // Credentials loaded from environment variables (.env.local)
 
 import { initializeApp } from 'firebase/app';
-import { initializeAppCheck, ReCaptchaV3Provider, type AppCheck } from 'firebase/app-check';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider, type AppCheck } from 'firebase/app-check';
 import { getAuth, GoogleAuthProvider, OAuthProvider, connectAuthEmulator } from 'firebase/auth';
 import {
   connectFirestoreEmulator,
@@ -44,7 +44,7 @@ const setupAppCheck = (): AppCheck | null => {
     return null;
   }
 
-  // Never hit live Google reCAPTCHA v3 during local emulator runs unless an explicit debug token is set.
+  // Never hit live Google reCAPTCHA during local emulator runs unless an explicit debug token is set.
   if (useEmulators && !APP_CHECK_DEBUG_TOKEN) {
     return null;
   }
@@ -61,8 +61,10 @@ const setupAppCheck = (): AppCheck | null => {
   }
 
   try {
+    // App Check no longer accepts new reCAPTCHA v3 registrations; the web app is registered with
+    // reCAPTCHA Enterprise, so the site key must be an Enterprise (score-based) key.
     return initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
+      provider: new ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY),
       isTokenAutoRefreshEnabled: APP_CHECK_AUTO_REFRESH,
     });
   } catch (error) {
