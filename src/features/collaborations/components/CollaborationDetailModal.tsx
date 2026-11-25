@@ -201,7 +201,7 @@ const CollaborationDetailModal = ({
             {collaboration.location && (
               <div>
                 <span className="text-neutral-500 uppercase tracking-widest text-xs block mb-1">
-                  Ubicacion
+                  Ubicación
                 </span>
                 <span className="text-white">{collaboration.location}</span>
               </div>

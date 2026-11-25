@@ -292,7 +292,7 @@ const translateError = (code: string): string => {
     'auth/invalid-phone-number': 'Numero de telefono invalido',
     'auth/missing-phone-number': 'Ingresa un numero de telefono',
     'auth/quota-exceeded': 'Limite de SMS excedido. Intenta mas tarde',
-    'auth/invalid-verification-code': 'Codigo de verificacion incorrecto',
+    'auth/invalid-verification-code': 'Código de verificación incorrecto',
     'auth/code-expired': 'El codigo ha expirado. Solicita uno nuevo',
     'auth/account-exists-with-different-credential':
       'Este correo ya esta asociado a otro metodo de acceso',

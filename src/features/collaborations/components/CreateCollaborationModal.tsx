@@ -250,7 +250,7 @@ const CreateCollaborationModal = ({
             {mode === 'presencial' && (
               <div>
                 <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
-                  Ubicacion *
+                  Ubicación *
                 </label>
                 <input
                   type="text"

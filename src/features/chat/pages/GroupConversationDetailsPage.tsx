@@ -441,7 +441,7 @@ export default function GroupConversationDetailsPage() {
           </div>
           <div className="flex-1">
             <p className="text-red-200 font-medium">Reportar grupo</p>
-            <p className="text-xs text-red-300">Incumplimiento de Community Guidelines</p>
+            <p className="text-xs text-red-300">Incumplimiento de las normas de la comunidad</p>
           </div>
         </button>
 
@@ -599,7 +599,7 @@ export default function GroupConversationDetailsPage() {
                     rel="noreferrer"
                     className="text-amber-300 hover:text-amber-200 underline"
                   >
-                    Ver Community Guidelines
+                    Ver normas de la comunidad
                   </a>
                   <a
                     href={`mailto:${LEGAL_LINKS.securityEmail}`}
