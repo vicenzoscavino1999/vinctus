@@ -21,11 +21,11 @@ on 2026-11-25. The first version of this file was the Phase 6 Day 15 snapshot.
 
 ## Environments
 
-| Environment | Web                          | Firebase project          | How it ships                                                                     |
-| ----------- | ---------------------------- | ------------------------- | -------------------------------------------------------------------------------- |
-| Production  | `vinctus.vercel.app`         | `vinctus-daf32`           | Vercel deploys `main` automatically; Firebase is deployed manually (`--project`) |
-| Staging     | `vinctus-staging.vercel.app` | `vinctus-staging`         | Branches `testflight/vinctus-staging` and `deploy/vinctus-staging`               |
-| CI / local  | `localhost:5173`             | `vinctus-dev` (emulators) | GitHub Actions                                                                   |
+| Environment | Web                          | Firebase project          | How it ships                                                                                                  |
+| ----------- | ---------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Production  | `vinctus.vercel.app`         | `vinctus-daf32`           | Vercel deploys `main` automatically; Firebase is deployed manually (`--project`)                              |
+| Staging     | `vinctus-staging.vercel.app` | `vinctus-staging`         | Separate Vercel project `vinctus-staging`; branches `testflight/vinctus-staging` and `deploy/vinctus-staging` |
+| CI / local  | `localhost:5173`             | `vinctus-dev` (emulators) | GitHub Actions                                                                                                |
 
 There is no `.firebaserc`; every `firebase deploy` must pass `--project`. Deployment order:
 `docs/plan-despliegue-coordinado.md`. iOS builds: `docs/testflight-sin-mac.md`.

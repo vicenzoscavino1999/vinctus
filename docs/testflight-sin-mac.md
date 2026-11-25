@@ -7,20 +7,21 @@ revisión de App Store ni la publica para todos los usuarios.
 
 ## Builds subidos (versión 1.0.0)
 
-Comprobado en GitHub Actions el 25 de noviembre de 2026:
+Comprobado en GitHub Actions y en la API de App Store Connect el 25 de noviembre
+de 2026. Todos los builds están `VALID` y sin caducar.
 
-| Build | Firebase                     | Rama y commit                            | Subida                                                                                                     |
-| ----- | ---------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| 2     | Producción (`vinctus-daf32`) | `fix/ios-conversations`                  | 13 nov. Apple la marcó `VALID` y `READY_FOR_BETA_TESTING`; asignada a **Vinctus QA** con notas en español. |
-| 3     | Staging (`vinctus-staging`)  | `testflight/vinctus-staging` (`52d59bb`) | 21 nov, 14:29 UTC (ejecución `44835639380`)                                                                |
-| 4     | Staging (`vinctus-staging`)  | `testflight/vinctus-staging` (`d70b99e`) | 21 nov, 22:47 UTC (ejecución `44954288561`)                                                                |
-| 5     | Producción (`vinctus-daf32`) | `main` (`2563d5f`)                       | 25 nov, 11:55 UTC (ejecución `44972111232`)                                                                |
+| Build | Firebase                     | Rama y commit                            | Subida a App Store Connect (UTC)        | Estado de prueba interna                                      |
+| ----- | ---------------------------- | ---------------------------------------- | --------------------------------------- | ------------------------------------------------------------- |
+| 2     | Producción (`vinctus-daf32`) | `fix/ios-conversations` (`cd39dbf`)      | 13 nov, 10:51 (ejecución `43411018403`) | `IN_BETA_TESTING`, asignado a **Vinctus QA**                  |
+| 3     | Staging (`vinctus-staging`)  | `testflight/vinctus-staging` (`52d59bb`) | 21 nov, 14:30 (ejecución `44835639380`) | `READY_FOR_BETA_TESTING`, sin grupo                           |
+| 4     | Staging (`vinctus-staging`)  | `testflight/vinctus-staging` (`d70b99e`) | 21 nov, 22:55 (ejecución `44954288561`) | `READY_FOR_BETA_TESTING`, sin grupo                           |
+| 5     | Producción (`vinctus-daf32`) | `main` (`2563d5f`)                       | 25 nov, 11:56 (ejecución `44972111232`) | `READY_FOR_BETA_TESTING`, asignado a **Vinctus QA** el 25 nov |
 
-En los builds 3 a 5 el job terminó con el paquete todavía en procesamiento en
-Apple. Su estado final (`VALID`, `READY_FOR_BETA_TESTING`) y su asignación a
-testers no se ven desde GitHub: compruébalos en App Store Connect. El siguiente
-build debe ser el 6 o mayor. El último registro de la prueba en iPhone real es
-del 13 de noviembre (ver más abajo), cuando seguía pendiente.
+El grupo interno **Vinctus QA** no recibe builds nuevos automáticamente
+(`hasAccessToAllBuilds: false`): asigna cada build en App Store Connect
+(TestFlight > Vinctus QA > Builds). El build 2 no incluye `readPosts`, así que
+probablemente no puede cargar publicaciones con las reglas actuales de
+producción; prueba con el build 5. El siguiente build debe ser el 6 o mayor.
 
 ## Configuración en Apple (desde Windows)
 
@@ -141,6 +142,9 @@ TestFlight. Apple aceptó un reenvío y se retiró/volvió a añadir el tester a
 pero el estado continúa `INVITED`, sin instalación registrada. Se preparó un
 reporte para soporte; no se ha enviado desde el agente. Una Mac compatible con
 Xcode permitiría instalar una build de desarrollo directamente en el iPhone.
+
+Actualización del 25 de noviembre: App Store Connect muestra al tester del grupo
+**Vinctus QA** como `INSTALLED`, así que la instalación se completó.
 
 Valida los cuatro puntos de
 `docs/revision-app-nativa.md`: voz audible y grabación, videos de la fototeca,

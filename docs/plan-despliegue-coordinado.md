@@ -7,22 +7,36 @@ Guía operativa única para integrar, desplegar con orden seguro y validar físi
 
 ## 0. Estado del lanzamiento (comprobado el 25 de noviembre de 2026)
 
-Comprobado en GitHub y en los despliegues de Vercel registrados en GitHub:
+Comprobado en GitHub, Vercel, Firebase (CLI, API de Firebase Rules y Cloud Logging) y App Store Connect.
 
-| Hecho                                                                                                                                                                                | Evidencia                                                                      |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| La pila se integró con la opción alternativa: `#128` con base `main` y merge commit `2563d5f`. `#119`–`#127` quedaron marcados como fusionados porque su código ya estaba en `main`. | PRs `MERGED` el 22 nov entre 01:31:32 y 01:31:45 UTC                           |
-| CI de `main` en verde para `2563d5f`.                                                                                                                                                | Ejecución `44971868007` del workflow `CI`                                      |
-| Web de producción publicada por Vercel desde `main` (`2563d5f`).                                                                                                                     | Deployment `Production` en estado `success`, 22 nov, 01:32 UTC                 |
-| TestFlight staging: builds 3 y 4 desde `testflight/vinctus-staging`.                                                                                                                 | 21 nov, 14:29 y 22:47 UTC (ver [testflight-sin-mac.md](testflight-sin-mac.md)) |
-| TestFlight producción: build 5 desde `main` (`2563d5f`).                                                                                                                             | Ejecución `44972111232`, subida el 25 nov, 11:55 UTC                           |
+### Producción (`vinctus-daf32`)
 
-Pendiente de confirmar fuera del repositorio (Firebase Console, `firebase` CLI con acceso a `vinctus-daf32` y App Store Connect):
+| Momento (UTC)    | Hecho                                                                                                                                                                                                                                                                                                                                              | Paso del plan   |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| Antes del 22 nov | Están desplegados los 21 índices y los 16 `fieldOverrides` de `firestore.indexes.json`, incluidos los TTL. Hay además 1 índice antiguo que ya no está en el repo.                                                                                                                                                                                  | Paso 1          |
+| 22 nov, 01:27    | Cloud Functions desplegadas: las 49 del repo, todas `ACTIVE` (Node 22, `us-central1`). `onDeletionJobCreated` y `onDeletionJobUpdated` tienen 540 s y 1 GB; `createDebate` usa el secreto `GEMINI_API_KEY` (versión 1, `ENABLED`). Un primer intento de configurar el trigger de `onPostMediaMetadataUpdated` falló, pero la función quedó activa. | Paso 2          |
+| 22 nov, 01:31    | Merge de la pila a `main` (`2563d5f`) con la opción alternativa: `#128` con base `main`; `#119`–`#127` quedaron marcados como fusionados porque su código ya estaba en `main`. CI verde (ejecución `44971868007`).                                                                                                                                 | Fase B, punto 3 |
+| 22 nov, 01:32    | Vercel publica la web de producción desde `2563d5f`.                                                                                                                                                                                                                                                                                               | Paso 4 (web)    |
+| 22 nov, 01:34    | Reglas de Firestore y Storage publicadas, idénticas a las de `main`.                                                                                                                                                                                                                                                                               | Paso 5          |
+| 25 nov, 11:56    | Build 5 de TestFlight desde `main` (ejecución `44972111232`): `VALID`, `READY_FOR_BETA_TESTING`. Asignado a **Vinctus QA** el mismo día.                                                                                                                                                                                                           | Paso 4 (iOS)    |
+| 25 nov, ~20:00   | `migrate-post-read-privacy.mjs --apply`: 4 publicaciones reescritas, tokens públicos revocados en 4 archivos y 2 notificaciones limpiadas. Un dry-run posterior da 0 en todo.                                                                                                                                                                      | Paso 6          |
 
-- Si la Fase A en `vinctus-staging` se completó, incluida la observación de 24–48 h. El merge a `main` ocurrió unas 3 horas después de subir el build 4 de staging.
-- Si la Fase B, puntos 1 y 2 (secreto `GEMINI_API_KEY` y Pasos 1–3: índices, Functions y dry-run de la migración), se ejecutaron en `vinctus-daf32` antes del merge. Si no, hacerlo primero: la web publicada en producción ya llama a funciones nuevas como `readPosts`.
-- Si ya se aplicaron los Pasos 5 y 6 (reglas estrictas y migración con `--apply`) en `vinctus-daf32`.
-- El estado de los builds 3–5 en App Store Connect y el checklist físico de la sección 4.
+El orden siguió el plan (índices y Functions antes del merge, reglas después), con una salvedad: las reglas estrictas se publicaron 3 minutos después de la web, cuando los testers de iOS aún no tenían un build con `readPosts` (el build 2 no lo incluye).
+
+La migración deja sin tocar, a propósito, 1 adjunto de YouTube guardado como `www.youtube-nocookie.com/embed/<id>`; por eso el script termina con código 2. `readPosts` lo sirve normalizado (`youtubeURL` en `functions/src/postReadAccess.ts`).
+
+### Staging (`vinctus-staging`)
+
+- Las mismas 49 funciones, los mismos índices y reglas idénticas a `main` (publicadas el 21 nov, 21:58 UTC). Sin errores de funciones en los logs desde el 21 nov.
+- La web vive en un proyecto de Vercel aparte, `vinctus-staging`.
+- Builds 3 y 4 de TestFlight (21 nov): `VALID`.
+- **No hay publicaciones ni notificaciones**, así que la observación de 24–48 h no ejercitó esos flujos. El merge a `main` ocurrió unas 3 horas después de subir el build 4.
+
+### Pendiente
+
+- Checklist físico de la sección 4 en iPhone real, con el build 5.
+- App Check web: faltan `VITE_ENABLE_FIREBASE_APP_CHECK` y `VITE_FIREBASE_APP_CHECK_SITE_KEY` en el proyecto de Vercel `vinctus` (producción).
+- En el proyecto de Vercel `vinctus-staging` faltan `OPENAI_API_KEY`, `NVIDIA_API_KEY` y `YOUTUBE_API_KEY`: en staging el Chat IA solo usa Gemini y no funcionan las partes de YouTube.
 
 ## 1. Estado de la pila de PRs apilados (`#119 → #128`)
 
