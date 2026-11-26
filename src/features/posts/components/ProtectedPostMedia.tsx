@@ -8,6 +8,11 @@ import {
 } from 'react';
 import { useAuth } from '@/context/auth';
 import { downloadPostMedia, isProtectedPostMedia } from '@/shared/lib/protected-post-media';
+import {
+  cachedPostImageUrl,
+  loadPostImageUrl,
+  retainPostImage,
+} from '@/shared/lib/post-image-cache';
 
 function useMedia(source: string, enabled = true) {
   const { user } = useAuth();
@@ -54,15 +59,80 @@ function useMedia(source: string, enabled = true) {
   };
 }
 
-function ProtectedImage({ src = '', ...props }: ImgHTMLAttributes<HTMLImageElement>) {
-  const media = useMedia(src);
-  if (media.error)
-    return <span role="img" aria-label="Imagen no disponible" className={props.className} />;
-  return <img {...props} src={media.url || undefined} aria-busy={media.loading} />;
+/** How far outside the screen a photo starts downloading. */
+const PREFETCH_MARGIN = '400px 300px';
+
+/**
+ * A protected photo: downloaded only when it gets close to the screen, once per session (see
+ * post-image-cache), with a shimmer while it loads and a short fade when it appears.
+ */
+function ProtectedImage({
+  src = '',
+  className = '',
+  ...props
+}: ImgHTMLAttributes<HTMLImageElement>) {
+  const { user } = useAuth();
+  const uid = user?.uid ?? null;
+  const node = useRef<HTMLImageElement>(null);
+  const key = `${uid}\n${src}`;
+  const [nearKey, setNearKey] = useState<string | null>(null);
+  const [result, setResult] = useState({ key: '', url: '', error: false });
+  const cached = uid ? cachedPostImageUrl(src, uid) : null;
+  const url = cached || (result.key === key ? result.url : '');
+  const error = !url && (!uid || (result.key === key && result.error));
+  const near = nearKey === key || typeof IntersectionObserver === 'undefined';
+
+  useEffect(() => {
+    if (url || near || !node.current) return;
+    const observer = new IntersectionObserver(
+      (observed) => {
+        if (observed.some((entry) => entry.isIntersecting)) {
+          observer.disconnect();
+          setNearKey(key);
+        }
+      },
+      { rootMargin: PREFETCH_MARGIN },
+    );
+    observer.observe(node.current);
+    return () => observer.disconnect();
+  }, [key, near, url]);
+
+  useEffect(() => {
+    if (url || !near || !uid) return;
+    let active = true;
+    loadPostImageUrl(src, uid).then(
+      (loaded) => {
+        if (active) setResult({ key, url: loaded, error: false });
+      },
+      () => {
+        if (active) setResult({ key, url: '', error: true });
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [key, near, src, uid, url]);
+
+  useEffect(() => (url ? retainPostImage(src) : undefined), [src, url]);
+
+  if (error) return <span role="img" aria-label="Imagen no disponible" className={className} />;
+  return (
+    <img
+      ref={node}
+      {...props}
+      src={url || undefined}
+      aria-busy={!url}
+      className={`${className} ${url ? 'post-media-ready' : 'post-media-loading'}`}
+    />
+  );
 }
 
-export function PostImage(props: ImgHTMLAttributes<HTMLImageElement>) {
-  return isProtectedPostMedia(props.src) ? <ProtectedImage {...props} /> : <img {...props} />;
+export function PostImage({ loading = 'lazy', ...props }: ImgHTMLAttributes<HTMLImageElement>) {
+  return isProtectedPostMedia(props.src) ? (
+    <ProtectedImage {...props} />
+  ) : (
+    <img loading={loading} decoding="async" {...props} />
+  );
 }
 
 function ProtectedVideo({ src = '', ...props }: VideoHTMLAttributes<HTMLVideoElement>) {

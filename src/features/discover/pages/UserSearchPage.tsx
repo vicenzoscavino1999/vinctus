@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Search, UserPlus, UserCheck, Check, Clock, X, MessageCircle, Users } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AppError } from '@/shared/lib/errors';
 import { CATEGORIES } from '@/shared/constants';
 import { useAuth } from '@/context/auth';
@@ -52,7 +52,9 @@ export default function UserSearchPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { showToast } = useToast();
-  const [queryText, setQueryText] = useState('');
+  // Discover links here with ?q= when a search there may be about people.
+  const [searchParams] = useSearchParams();
+  const [queryText, setQueryText] = useState(() => searchParams.get('q') ?? '');
   const [results, setResults] = useState<UserWithStatus[]>([]);
   const [suggestedUsers, setSuggestedUsers] = useState<UserWithStatus[]>([]);
   const [allGroups, setAllGroups] = useState<FirestoreGroup[]>([]);
