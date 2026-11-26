@@ -201,3 +201,84 @@ it('attaches X-Firebase-AppCheck header once per download and falls back gracefu
     vi.useRealTimers();
   }
 });
+
+const photo = 'post-media:posts/author/post/images/photo.jpg';
+const whole = (bytes: Uint8Array, headers: Record<string, string> = {}) =>
+  new Response(new Uint8Array(bytes).buffer, {
+    status: 200,
+    headers: {
+      'Content-Length': String(bytes.length),
+      ETag: etag,
+      'Content-Type': 'image/jpeg',
+      ...headers,
+    },
+  });
+
+it('downloads a photo with a single GET, without HEAD or Range', async () => {
+  const fetcher = vi.fn().mockResolvedValueOnce(whole(new Uint8Array([1, 2, 3, 4])));
+  vi.stubGlobal('fetch', fetcher);
+  const progress = vi.fn();
+  const blob = await downloadPostMedia(photo, new AbortController().signal, progress);
+  expect(blob.size).toBe(4);
+  expect(blob.type).toBe('image/jpeg');
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  const [url, options] = fetcher.mock.calls[0];
+  expect(url).not.toContain('private-token');
+  expect(options.method).toBeUndefined();
+  expect(options).toMatchObject({
+    cache: 'no-store',
+    credentials: 'omit',
+    headers: { Authorization: 'Bearer private-token' },
+  });
+  expect(options.headers.Range).toBeUndefined();
+  expect(progress).toHaveBeenLastCalledWith(1);
+});
+
+it('falls back to HEAD and ranges when a photo is too large for one response', async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(new Response(null, { status: 416 }))
+    .mockResolvedValueOnce(metadata(2))
+    .mockResolvedValueOnce(part(new Uint8Array([1, 2]), 0, 2));
+  vi.stubGlobal('fetch', fetcher);
+  const blob = await downloadPostMedia(photo, new AbortController().signal);
+  expect(blob.size).toBe(2);
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  expect(fetcher.mock.calls[1][1].method).toBe('HEAD');
+  expect(fetcher.mock.calls[2][1].headers).toMatchObject({ Range: 'bytes=0-1', 'If-Match': etag });
+});
+
+it('falls back to ranges when the whole response cannot be length-checked', async () => {
+  const unchecked = new Response(new Uint8Array([1, 2]).buffer, {
+    status: 200,
+    headers: { ETag: etag },
+  });
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(unchecked)
+    .mockResolvedValueOnce(metadata(2))
+    .mockResolvedValueOnce(part(new Uint8Array([1, 2]), 0, 2));
+  vi.stubGlobal('fetch', fetcher);
+  // happy-dom may compute Content-Length for a buffered body; drop it to model a chunked reply.
+  unchecked.headers.delete('Content-Length');
+  const blob = await downloadPostMedia(photo, new AbortController().signal);
+  expect(blob.size).toBe(2);
+  expect(fetcher).toHaveBeenCalledTimes(3);
+});
+
+it.each(['short-body', 'not-found', 'session-change'] as const)(
+  'fails closed on a single-GET photo with %s',
+  async (failure) => {
+    const fetcher = vi.fn().mockImplementationOnce(async () => {
+      if (failure === 'not-found') return new Response(null, { status: 404 });
+      if (failure === 'session-change') session.currentUser = null;
+      return whole(
+        new Uint8Array([1, 2]),
+        failure === 'short-body' ? { 'Content-Length': '3' } : {},
+      );
+    });
+    vi.stubGlobal('fetch', fetcher);
+    await expect(downloadPostMedia(photo, new AbortController().signal)).rejects.toThrow();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  },
+);

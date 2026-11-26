@@ -58,6 +58,41 @@ export function postMediaEndpoint(source: string): string {
   return `${base}/readPostMedia?${new URLSearchParams({ postId, path })}`;
 }
 
+/**
+ * One GET without Range. The function answers 200 with the whole file when it fits in one chunk
+ * and 416 when it does not; then (or when the length cannot be checked) this returns null and the
+ * caller downloads it by ranges.
+ */
+async function downloadWhole(
+  endpoint: string,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+): Promise<Blob | null> {
+  const response = await fetch(endpoint, {
+    headers,
+    signal,
+    cache: 'no-store',
+    credentials: 'omit',
+  });
+  if (response.status === 416) return null;
+  if (response.status !== 200) throw new Error('El adjunto ya no está disponible.');
+  const size = Number(response.headers.get('Content-Length'));
+  if (
+    !response.headers.has('Content-Length') ||
+    !response.headers.get('ETag') ||
+    !Number.isSafeInteger(size)
+  ) {
+    await response.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  if (size < 0 || size > POST_MEDIA_CHUNK_BYTES) throw new Error('El adjunto no es válido.');
+  const bytes = await response.arrayBuffer();
+  if (bytes.byteLength !== size) throw new Error('No se pudo completar la descarga.');
+  return new Blob([bytes], {
+    type: response.headers.get('Content-Type') || 'application/octet-stream',
+  });
+}
+
 export async function downloadPostMedia(
   source: string,
   signal: AbortSignal,
@@ -83,6 +118,17 @@ export async function downloadPostMedia(
     }
     return result;
   };
+  // A photo almost always fits in one response: ask for it whole, which saves the HEAD round
+  // trip (each request to the function verifies the session and the access again).
+  if (postMediaLocation(source).path.split('/')[3] === 'images') {
+    const whole = await downloadWhole(endpoint, await headers(), signal);
+    if (whole) {
+      if ((auth.currentUser?.uid ?? null) !== uid || signal.aborted)
+        throw new Error('La descarga se canceló.');
+      onProgress?.(1);
+      return whole;
+    }
+  }
   const metadata = await fetch(endpoint, {
     method: 'HEAD',
     headers: await headers(),
