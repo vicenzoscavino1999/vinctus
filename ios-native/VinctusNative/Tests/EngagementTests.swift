@@ -14,6 +14,30 @@ final class PostReactionViewModelTests: XCTestCase {
     XCTAssertEqual(vm.displayedCount(initialCount: 4), 4)
   }
 
+  func testDoubleTapOnlyLikesNeverUnlikes() async {
+    let repo = FakeEngagementRepo()
+    let vm = PostReactionViewModel(postID: "p1", repo: repo)
+    await vm.load()
+
+    await vm.selectIfNeeded(initialCount: 4)
+    XCTAssertTrue(vm.isSelected)
+    XCTAssertEqual(vm.displayedCount(initialCount: 4), 5)
+
+    await vm.selectIfNeeded(initialCount: 4)
+    XCTAssertTrue(vm.isSelected, "A second double tap keeps the like")
+    XCTAssertEqual(repo.likeWrites, [true])
+  }
+
+  func testDoubleTapWaitsUntilTheStateIsKnown() async {
+    let repo = FakeEngagementRepo()
+    let vm = PostReactionViewModel(postID: "p1", repo: repo)
+
+    await vm.selectIfNeeded(initialCount: 4)
+
+    XCTAssertFalse(vm.isSelected)
+    XCTAssertTrue(repo.likeWrites.isEmpty)
+  }
+
   func testLikeAndUnlikeUpdateTheCount() async {
     let repo = FakeEngagementRepo()
     let vm = PostReactionViewModel(postID: "p1", repo: repo)
