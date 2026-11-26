@@ -5,6 +5,30 @@ import XCTest
 @testable import VinctusNative
 
 final class StoriesIntegrationTests: EmulatorTestCase {
+  /// Regression: with an `in` query of several owners the read rule touched too many documents
+  /// and Firestore rejected the whole query, so people following 4+ users saw no stories at all.
+  func testStoriesShowWhenFollowingManyPeople() async throws {
+    let repo = FirebaseStoriesRepo()
+    let ana = try await makeUser("Ana Historias")
+    try await repo.publishImageStory(jpegData: Self.jpegData())
+
+    var others: [TestUser] = []
+    for index in 1...4 {
+      others.append(try await makeUser("Persona \(index)"))
+    }
+    _ = try await makeUser("Bruno Seguidor")
+    let engagement = FirebaseEngagementRepo()
+    for user in others + [ana] {
+      _ = try await engagement.follow(targetUID: user.uid, isPrivate: false)
+    }
+
+    let groups = try await repo.fetchStoryGroups()
+    XCTAssertTrue(
+      groups.contains(where: { $0.ownerID == ana.uid }),
+      "A follower of 5 people must still see the story of one of them"
+    )
+  }
+
   func testPublishStoryVisibleToFollowerHiddenAfterBlockAndDeletedByOwner() async throws {
     let ana = try await makeUser("Ana")
     let repo = FirebaseStoriesRepo()
