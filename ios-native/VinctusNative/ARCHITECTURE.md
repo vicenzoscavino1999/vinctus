@@ -4,21 +4,26 @@ SwiftUI app that reads and writes the same Firebase data as the web app (`src/`)
 
 ## Folders (`Sources/`)
 
-| Folder         | Contents                                                                 |
-| -------------- | ------------------------------------------------------------------------ |
-| `App/`         | Entry point, root and tab views, `AppRepos` (data sources), demo data    |
-| `Shared/`      | Design system, avatar, `FirestoreValue` helpers, connectivity, legal     |
-| `Auth/`        | Sign-in screen, auth repo and view model, age checks, profile bootstrap  |
-| `Discover/`    | Discover tab and people search                                           |
-| `Feed/`        | Community feed, post detail, comments, creating posts, likes and follows |
-| `Chat/`        | Messages tab: direct and group conversations                             |
-| `Groups/`      | Group list and detail, join and leave                                    |
-| `Stories/`     | Stories bar, viewer and photo stories (24 hours)                         |
-| `Collections/` | Private collections of links and notes                                   |
-| `Profile/`     | Profile screen, its sections, followers lists, profile editing           |
-| `Moderation/`  | Reports, blocking, blocked users                                         |
-| `AI/`          | Chat con IA, Arena IA, AI consent                                        |
-| `Settings/`    | Settings, account deletion                                               |
+| Folder         | Contents                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| `App/`         | Entry point, root and tab views, `AppRepos` (data sources), demo data                      |
+| `Shared/`      | Design system, avatar, `FirestoreValue` helpers, connectivity, legal                       |
+| `Auth/`        | Sign-in screen, auth repo and view model, age checks, profile bootstrap                    |
+| `Discover/`    | Discover tab (stories, latest posts, people, trends, groups), search                       |
+| `Feed/`        | Full feed (opened from Discover), post detail, comments, creating posts, likes and follows |
+| `Chat/`        | Messages tab: direct and group conversations                                               |
+| `Connections/` | Conexiones tab: collaborations (publish, request) and encounters (attend)                  |
+| `Groups/`      | Group list and detail, join and leave                                                      |
+| `Stories/`     | Stories bar, viewer and photo stories (24 hours)                                           |
+| `Collections/` | Private collections of links and notes                                                     |
+| `Profile/`     | Profile screen, its sections, followers lists, profile editing                             |
+| `Moderation/`  | Reports, blocking, blocked users                                                           |
+| `AI/`          | Chat con IA, Arena IA, AI consent                                                          |
+| `Settings/`    | Settings, account deletion                                                                 |
+
+The bottom bar (`App/MainTabView.swift`) has the same five tabs, order and icons as the web's
+mobile bar (`src/app/routes/AppLayout.tsx`): Descubrir, Buscar, Mensajes (#), Conexiones and
+Perfil. Change both together.
 
 XcodeGen (`project.yml`) turns each folder into an Xcode group, so a new file only has to be
 placed in the right folder. The generated `VinctusNative.xcodeproj` is not committed (only its

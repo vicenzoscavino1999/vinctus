@@ -31,17 +31,29 @@ enum VinctusTokens {
   }
 
   /// Playfair Display (bundled, like the web's `--font-serif`) for titles; the system font elsewhere.
+  /// Playfair titles scale with the user's text size (Dynamic Type), like the system text styles.
   enum Typography {
     static func brandTitle(size: CGFloat = 42) -> Font {
-      .custom("PlayfairDisplay-Regular", size: size)
+      .custom("PlayfairDisplay-Regular", size: size, relativeTo: textStyle(for: size))
     }
 
     static func sectionTitle(size: CGFloat = 18) -> Font {
-      .custom("PlayfairDisplay-Medium", size: size)
+      .custom("PlayfairDisplay-Medium", size: size, relativeTo: textStyle(for: size))
     }
 
     static func serif(_ size: CGFloat, weight: SerifWeight = .regular) -> Font {
-      .custom(weight.fontName, size: size)
+      .custom(weight.fontName, size: size, relativeTo: textStyle(for: size))
+    }
+
+    /// The system style whose scaling curve fits a title of this size.
+    static func textStyle(for size: CGFloat) -> Font.TextStyle {
+      switch size {
+      case 30...: return .largeTitle
+      case 24..<30: return .title
+      case 20..<24: return .title2
+      case 17..<20: return .title3
+      default: return .body
+      }
     }
 
     enum SerifWeight {

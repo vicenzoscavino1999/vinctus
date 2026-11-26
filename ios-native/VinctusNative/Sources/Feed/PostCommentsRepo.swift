@@ -136,7 +136,8 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
     ]
 
     let uid = currentUser.uid
-    _ = try await db.runTransaction { transaction, errorPointer in
+    // True when this call created the comment (a retry of an accepted write returns false).
+    let created = try await db.runTransaction { transaction, errorPointer -> Any? in
       do {
         let existing = try transaction.getDocument(commentRef)
         if let data = existing.data() {
@@ -144,12 +145,29 @@ final class FirebasePostCommentsRepo: PostCommentsRepo {
             data["postId"] as? String == normalizedPostID,
             data["text"] as? String == normalizedText
           else { throw PostCommentsRepoError.draftMismatchForRetry }
+          return NSNumber(value: false)
         } else {
           transaction.setData(payload, forDocument: commentRef)
+          return NSNumber(value: true)
         }
       } catch { errorPointer?.pointee = error as NSError }
       return nil
     }
+
+    // Like the web (`addPostComment`): the post's author is told, best effort.
+    guard (created as? NSNumber)?.boolValue == true,
+      let post = try? await db.collection(FirestoreCollections.posts).document(normalizedPostID).getDocument(),
+      let authorID = FirestoreValue.string(post.data()?["authorId"])
+    else { return }
+    await ActivityNotificationWriter.comment(
+      postID: normalizedPostID,
+      commentID: commentID,
+      authorID: authorID,
+      fromUID: uid,
+      senderName: authorSnapshot.displayName,
+      senderPhotoURL: authorSnapshot.photoURL,
+      db: db
+    )
   }
 
   private func resolveAuthorSnapshot(

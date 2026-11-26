@@ -6,30 +6,37 @@ struct PostReactionButton: View {
   let initialCount: Int
   let repo: EngagementRepo
   let kind: PostReactionKind
+  /// Each change turns the reaction on if it is off (a double tap on the post's photo).
+  let selectTrigger: Int
   @EnvironmentObject private var authVM: AuthViewModel
 
-  init(postID: String, initialCount: Int = 0, repo: EngagementRepo = AppRepos.engagement(), kind: PostReactionKind = .like) {
+  init(postID: String, initialCount: Int = 0, repo: EngagementRepo = AppRepos.engagement(), kind: PostReactionKind = .like,
+       selectTrigger: Int = 0) {
     self.postID = postID
     self.initialCount = initialCount
     self.repo = repo
     self.kind = kind
+    self.selectTrigger = selectTrigger
   }
 
   var body: some View {
-    PostReactionButtonSession(postID: postID, initialCount: initialCount, repo: repo, kind: kind)
+    PostReactionButtonSession(postID: postID, initialCount: initialCount, repo: repo, kind: kind, selectTrigger: selectTrigger)
       .id("\(authVM.currentUserID ?? "anonymous")|\(postID)|\(kind)")
   }
 }
 
 private struct PostReactionButtonSession: View {
   let initialCount: Int
+  let selectTrigger: Int
 
   @StateObject private var vm: PostReactionViewModel
 
   private let isSave: Bool
 
-  init(postID: String, initialCount: Int = 0, repo: EngagementRepo = AppRepos.engagement(), kind: PostReactionKind = .like) {
+  init(postID: String, initialCount: Int = 0, repo: EngagementRepo = AppRepos.engagement(), kind: PostReactionKind = .like,
+       selectTrigger: Int = 0) {
     self.initialCount = initialCount
+    self.selectTrigger = selectTrigger
     self.isSave = kind == .save
     _vm = StateObject(wrappedValue: PostReactionViewModel(postID: postID, repo: repo, kind: kind))
   }
@@ -46,6 +53,7 @@ private struct PostReactionButtonSession: View {
       }
         .foregroundStyle(vm.isSelected ? (isSave ? VinctusTokens.Color.accent : SwiftUI.Color.red) : VinctusTokens.Color.textMuted)
         .contentTransition(.symbolEffect(.replace))
+        .symbolEffect(.bounce, value: vm.isSelected)
     }
     .buttonStyle(.borderless)
     .disabled(vm.isSaving || vm.isLoading)
@@ -57,6 +65,9 @@ private struct PostReactionButtonSession: View {
     }
     .task { await vm.load() }
     .onChange(of: initialCount) { _, value in vm.syncCount(value) }
+    .onChange(of: selectTrigger) { _, _ in
+      Task { await vm.selectIfNeeded(initialCount: initialCount) }
+    }
   }
 
   private var actionLabel: String {
