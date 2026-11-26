@@ -93,6 +93,13 @@ enum AppRepos {
     return FirebaseConnectionsRepo()
   }
 
+  static func publicDebates() -> PublicDebatesRepo {
+    #if SCREENSHOTS
+    if isDemo { return SamplePublicDebatesRepo() }
+    #endif
+    return FirebasePublicDebatesRepo()
+  }
+
   // MARK: Repos without sample data
 
   static func auth() -> AuthRepo { FirebaseAuthRepo() }

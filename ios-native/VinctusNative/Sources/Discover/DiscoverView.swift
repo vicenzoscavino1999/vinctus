@@ -1,30 +1,25 @@
 import SwiftUI
 
-struct DiscoverTrend: Identifiable {
-  let id: String
-  let category: DiscoverCategory
-  let icon: String
-  let title: String
-  let subtitle: String
-  let rankLabel: String
-  let scoreLabel: String
-  let signalLabel: String
-  let groupsLabel: String
-  let tags: [String]
-}
-
 struct DiscoverView: View {
   @EnvironmentObject private var authVM: AuthViewModel
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
   @StateObject private var vm: DiscoverViewModel
   @StateObject private var suggestedGroups: GroupSuggestionsViewModel
   @StateObject private var postsPreview: FeedViewModel
+  @StateObject private var interests: DiscoverInterestsViewModel
+  @StateObject private var debates: DiscoverDebatesViewModel
 
   @State private var discoverQuery = ""
   @State private var openedGroupID: String?
   @State private var isShowingFeed = false
   @State private var openedPost: FeedItem?
   @State private var isShowingAllGroups = false
+  @State private var openedCategory: DiscoverCategory?
+  @State private var openedDebate: PublicDebate?
+  @State private var isShowingArena = false
+  /// Coming back to Discover within this time shows what is loaded instead of asking again.
+  @State private var lastRefresh: Date?
+  private static let refreshInterval: TimeInterval = 60
 
   private let discoverRepo: DiscoverRepo
   private let profileRepo: ProfileRepo
@@ -39,7 +34,8 @@ struct DiscoverView: View {
     groupsRepo: any GroupsRepo,
     aiRepo: AIRepo,
     profileContentRepo: ProfileContentRepo = AppRepos.profileContent(),
-    feedRepo: FeedRepo = AppRepos.feed()
+    feedRepo: FeedRepo = AppRepos.feed(),
+    publicDebatesRepo: PublicDebatesRepo = AppRepos.publicDebates()
   ) {
     self.discoverRepo = repo
     self.profileRepo = profileRepo
@@ -50,6 +46,10 @@ struct DiscoverView: View {
     _vm = StateObject(wrappedValue: DiscoverViewModel(repo: repo))
     _suggestedGroups = StateObject(wrappedValue: GroupSuggestionsViewModel(repo: groupsRepo, limit: 50))
     _postsPreview = StateObject(wrappedValue: FeedViewModel(repo: feedRepo))
+    _interests = StateObject(
+      wrappedValue: DiscoverInterestsViewModel(discoverRepo: repo, profileContentRepo: profileContentRepo)
+    )
+    _debates = StateObject(wrappedValue: DiscoverDebatesViewModel(repo: publicDebatesRepo))
   }
 
   var body: some View {
@@ -67,92 +67,33 @@ struct DiscoverView: View {
       .listRowSeparator(.hidden)
       .listRowBackground(SwiftUI.Color.clear)
 
-      Section {
-        // A hidden link keeps List from adding its own disclosure arrow next to the card's.
-        DiscoverAIPromoCard()
-          .background(
-            NavigationLink(destination: AIHubView(repo: aiRepo)) { EmptyView() }
-              .opacity(0)
+      // While searching only the results show: interests, groups and people.
+      if !isSearching {
+        Section {
+          // A hidden link keeps List from adding its own disclosure arrow next to the card's.
+          DiscoverAIPromoCard()
+            .background(
+              NavigationLink(destination: AIHubView(repo: aiRepo)) { EmptyView() }
+                .opacity(0)
+            )
+        }
+        .listRowSeparator(.hidden)
+        .listRowBackground(SwiftUI.Color.clear)
+
+        Section {
+          DiscoverPostsSection(
+            vm: postsPreview,
+            onSeeAll: { isShowingFeed = true },
+            onOpenPost: { openedPost = $0 }
           )
-      }
-      .listRowSeparator(.hidden)
-      .listRowBackground(SwiftUI.Color.clear)
-
-      Section {
-        DiscoverPostsSection(
-          vm: postsPreview,
-          onSeeAll: { isShowingFeed = true },
-          onOpenPost: { openedPost = $0 }
-        )
-      }
-      .listRowSeparator(.hidden)
-      .listRowBackground(SwiftUI.Color.clear)
-
-      if let peopleError = vm.errorMessage, visibleSuggestedUsers.isEmpty {
-        Section {
-          DiscoverSectionHeader(title: "Personas para conocer")
-          VCard {
-            VStack(alignment: .leading, spacing: 10) {
-              Text(peopleError)
-                .font(.footnote)
-                .foregroundStyle(.red)
-              VButton("Reintentar", variant: .secondary) {
-                Task { await vm.refreshSuggestedUsers() }
-              }
-            }
-          }
-        }
-        .listRowSeparator(.hidden)
-        .listRowBackground(SwiftUI.Color.clear)
-      } else if !visibleSuggestedUsers.isEmpty {
-        Section {
-          DiscoverSectionHeader(title: "Personas para conocer")
-          ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: VinctusTokens.Spacing.md) {
-              ForEach(Array(visibleSuggestedUsers.prefix(12))) { user in
-                NavigationLink(destination: ProfileView(repo: profileRepo, userID: user.uid)) {
-                  DiscoverStoryChip(user: user)
-                }
-                .buttonStyle(.plain)
-              }
-            }
-            .padding(.vertical, 4)
-          }
         }
         .listRowSeparator(.hidden)
         .listRowBackground(SwiftUI.Color.clear)
       }
 
       Section {
-        VStack(alignment: .leading, spacing: VinctusTokens.Spacing.md) {
-          DiscoverSectionHeader(title: "Tendencias esta semana")
-
-          if filteredTrends.isEmpty {
-            VCard {
-              Text("No hay tendencias para ese término. Prueba otro filtro.")
-                .font(.footnote)
-                .foregroundStyle(VinctusTokens.Color.textMuted)
-            }
-          } else {
-            ScrollView(.horizontal, showsIndicators: false) {
-              HStack(spacing: VinctusTokens.Spacing.md) {
-                ForEach(filteredTrends) { trend in
-                  NavigationLink(
-                    destination: DiscoverCategoryView(
-                      category: trend.category,
-                      discoverRepo: discoverRepo,
-                      groupsRepo: groupsRepo,
-                      profileContentRepo: profileContentRepo
-                    )
-                  ) {
-                    DiscoverTrendCard(trend: trend)
-                  }
-                  .buttonStyle(.plain)
-                }
-              }
-              .padding(.vertical, 4)
-            }
-          }
+        DiscoverInterestsSection(vm: interests, query: discoverQuery) { category in
+          openedCategory = category
         }
       }
       .listRowSeparator(.hidden)
@@ -160,9 +101,7 @@ struct DiscoverView: View {
 
       Section {
         HStack(alignment: .firstTextBaseline) {
-          (Text("Grupos ").foregroundStyle(VinctusTokens.Color.textSecondary)
-            + Text("recomendados").foregroundStyle(VinctusTokens.Color.textPrimary))
-            .font(VinctusTokens.Typography.serif(22))
+          DiscoverSectionHeader(title: "Grupos para ti")
           Spacer()
           Button {
             isShowingAllGroups = true
@@ -231,7 +170,8 @@ struct DiscoverView: View {
           .padding(.top, 2)
         } else {
           VStack(spacing: VinctusTokens.Spacing.sm) {
-            ForEach(filteredGroups.prefix(6)) { group in
+            // Four at a glance, eight while searching (like the web); "Ver todos" lists the rest.
+            ForEach(filteredGroups.prefix(isSearching ? 8 : 4)) { group in
               GroupCard(group: group, repo: groupsRepo) {
                 openedGroupID = group.id
               }
@@ -242,6 +182,52 @@ struct DiscoverView: View {
       }
       .listRowSeparator(.hidden)
       .listRowBackground(SwiftUI.Color.clear)
+      if let peopleError = vm.errorMessage, visibleSuggestedUsers.isEmpty {
+        Section {
+          DiscoverSectionHeader(title: "Personas para conocer")
+          VCard {
+            VStack(alignment: .leading, spacing: 10) {
+              Text(peopleError)
+                .font(.footnote)
+                .foregroundStyle(.red)
+              VButton("Reintentar", variant: .secondary) {
+                Task { await vm.refreshSuggestedUsers() }
+              }
+            }
+          }
+        }
+        .listRowSeparator(.hidden)
+        .listRowBackground(SwiftUI.Color.clear)
+      } else if !visibleSuggestedUsers.isEmpty {
+        Section {
+          DiscoverSectionHeader(title: "Personas para conocer")
+          ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: VinctusTokens.Spacing.md) {
+              ForEach(Array(visibleSuggestedUsers.prefix(12))) { user in
+                NavigationLink(destination: ProfileView(repo: profileRepo, userID: user.uid)) {
+                  DiscoverStoryChip(user: user)
+                }
+                .buttonStyle(.plain)
+              }
+            }
+            .padding(.vertical, 4)
+          }
+        }
+        .listRowSeparator(.hidden)
+        .listRowBackground(SwiftUI.Color.clear)
+      }
+
+      if !isSearching {
+        Section {
+          DiscoverDebatesSection(
+            vm: debates,
+            onOpenArena: { isShowingArena = true },
+            onOpen: { openedDebate = $0 }
+          )
+        }
+        .listRowSeparator(.hidden)
+        .listRowBackground(SwiftUI.Color.clear)
+      }
     }
     .listStyle(.plain)
     .scrollContentBackground(.hidden)
@@ -255,6 +241,20 @@ struct DiscoverView: View {
     }
     .navigationDestination(isPresented: $isShowingAllGroups) {
       GroupsListView(repo: groupsRepo)
+    }
+    .navigationDestination(item: $openedCategory) { category in
+      DiscoverCategoryView(
+        category: category,
+        discoverRepo: discoverRepo,
+        groupsRepo: groupsRepo,
+        profileContentRepo: profileContentRepo
+      )
+    }
+    .navigationDestination(item: $openedDebate) { debate in
+      SavedDebateView(debate: debate.asSavedDebate, aiRepo: aiRepo)
+    }
+    .navigationDestination(isPresented: $isShowingArena) {
+      ArenaView(repo: aiRepo)
     }
     .navigationDestination(item: $openedPost) { item in
       PostDetailView(
@@ -280,14 +280,22 @@ struct DiscoverView: View {
     .task(id: authVM.currentUserID) {
       if authVM.currentUserID == nil && !AppRepos.isDemo {
         discoverQuery = ""
+        lastRefresh = nil
         vm.reset()
         suggestedGroups.reset()
+        interests.reset()
+        debates.reset()
         return
       }
-      await refreshDiscoverData()
+      if let lastRefresh, Date().timeIntervalSince(lastRefresh) < Self.refreshInterval,
+        vm.currentUserID == authVM.currentUserID
+      {
+        return
+      }
+      await refreshDiscoverData(force: false)
     }
     .refreshable {
-      await refreshDiscoverData()
+      await refreshDiscoverData(force: true)
     }
   }
 
@@ -295,44 +303,8 @@ struct DiscoverView: View {
     DiscoverCategory.normalizedSearch(discoverQuery)
   }
 
-  private var rankedTrends: [DiscoverTrend] {
-    let countsByCategory = Dictionary(grouping: suggestedGroups.groups) { $0.categoryID ?? "" }
-      .mapValues(\.count)
-    let membersByCategory = Dictionary(grouping: suggestedGroups.groups) { $0.categoryID ?? "" }
-      .mapValues { $0.reduce(0) { $0 + max(0, $1.memberCount) } }
-
-    let sorted = DiscoverCategory.all.sorted { lhs, rhs in
-      let lhsMembers = membersByCategory[lhs.id] ?? 0
-      let rhsMembers = membersByCategory[rhs.id] ?? 0
-      if lhsMembers != rhsMembers { return lhsMembers > rhsMembers }
-      let lhsGroups = countsByCategory[lhs.id] ?? 0
-      let rhsGroups = countsByCategory[rhs.id] ?? 0
-      if lhsGroups != rhsGroups { return lhsGroups > rhsGroups }
-      return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
-    }
-
-    return sorted.enumerated().map { index, category in
-      let count = countsByCategory[category.id] ?? 0
-      let groupsLabel = count == 1 ? "1 grupo activo" : "\(count) grupos activos"
-      let signalLabel = category.apiSource == "arxiv" ? "Papers en vivo" : "Novedades en vivo"
-      return DiscoverTrend(
-        id: category.id,
-        category: category,
-        icon: category.icon,
-        title: category.title,
-        subtitle: category.subtitle,
-        rankLabel: "TOP \(index + 1)",
-        scoreLabel: "",
-        signalLabel: signalLabel,
-        groupsLabel: groupsLabel,
-        tags: category.subgroups.map(\.name)
-      )
-    }
-  }
-
-  private var filteredTrends: [DiscoverTrend] {
-    guard !normalizedDiscoverQuery.isEmpty else { return rankedTrends }
-    return rankedTrends.filter { $0.category.matches(query: discoverQuery) }
+  private var isSearching: Bool {
+    !normalizedDiscoverQuery.isEmpty
   }
 
   private var filteredGroups: [GroupSummary] {
@@ -347,11 +319,17 @@ struct DiscoverView: View {
     }
   }
 
+  /// Every section asks at the same time, so a slow one (a sleeping function, a slow source)
+  /// never holds the others back.
   @MainActor
-  private func refreshDiscoverData() async {
+  private func refreshDiscoverData(force: Bool) async {
+    lastRefresh = Date()
     vm.currentUserID = authVM.currentUserID
-    await vm.refreshSuggestedUsers()
-    await postsPreview.refresh()
-    await suggestedGroups.refresh()
+    async let people: Void = vm.refreshSuggestedUsers()
+    async let posts: Void = postsPreview.refresh()
+    async let groups: Void = suggestedGroups.refresh()
+    async let topics: Void = interests.refresh(force: force)
+    async let arena: Void = debates.refresh(force: force)
+    _ = await (people, posts, groups, topics, arena)
   }
 }

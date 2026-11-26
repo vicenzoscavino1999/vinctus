@@ -2,6 +2,7 @@ import AVKit
 import FirebaseAuth
 import FirebaseCore
 import Foundation
+import ImageIO
 import QuickLook
 import SwiftUI
 
@@ -35,16 +36,51 @@ enum PostMediaDownload {
     return request
   }
 
+  private static func makeSession() -> URLSession {
+    let config = URLSessionConfiguration.ephemeral
+    config.urlCache = nil
+    config.httpCookieStorage = nil
+    config.timeoutIntervalForRequest = 60
+    return URLSession(configuration: config)
+  }
+
+  /// A photo in one GET without Range. The function answers 200 with the whole file when it fits
+  /// in one chunk and 416 when it does not; then (or when the length cannot be checked) it is
+  /// downloaded by ranges like any other attachment. Saves the HEAD round trip, and every request
+  /// to the function verifies the session and the access again.
+  static func imageData(_ source: String, uid: String?) async throws -> Data {
+    guard source.hasPrefix(prefix) else { throw PostReadError.invalidResponse }
+    let endpoint = try PostReadClient.mediaEndpoint(path: String(source.dropFirst(prefix.count)))
+    let appCheckToken = await AppCheckBootstrap.optionalTokenHeader()
+    let session = makeSession()
+    defer { session.invalidateAndCancel() }
+    let wholeRequest = try await request(endpoint, method: "GET", uid: uid, appCheckToken: appCheckToken)
+    let (data, rawResponse) = try await session.data(for: wholeRequest)
+    guard let response = rawResponse as? HTTPURLResponse else { throw PostReadError.invalidResponse }
+    switch response.statusCode {
+    case 200:
+      if let length = response.value(forHTTPHeaderField: "Content-Length"), Int(length) == data.count,
+        data.count <= chunkBytes, response.value(forHTTPHeaderField: "ETag") != nil
+      {
+        guard Auth.auth().currentUser?.uid == uid else { throw PostReadError.sessionChanged }
+        return data
+      }
+    case 416:
+      break
+    default:
+      throw PostReadError.invalidResponse
+    }
+    let file = try await download(source, uid: uid) { _ in }
+    defer { try? FileManager.default.removeItem(at: file.url) }
+    return try Data(contentsOf: file.url)
+  }
+
   fileprivate static func download(_ source: String, uid: String?, progress: @escaping @Sendable (Double) -> Void) async throws -> DownloadedPostMedia {
     guard source.hasPrefix(prefix) else { throw PostReadError.invalidResponse }
     let path = String(source.dropFirst(prefix.count))
     let endpoint = try PostReadClient.mediaEndpoint(path: path)
     let appCheckToken = await AppCheckBootstrap.optionalTokenHeader()
-    let config = URLSessionConfiguration.ephemeral
-    config.urlCache = nil
-    config.httpCookieStorage = nil
-    config.timeoutIntervalForRequest = 60
-    let session = URLSession(configuration: config)
+    let session = makeSession()
     defer { session.invalidateAndCancel() }
     let headRequest = try await request(endpoint, method: "HEAD", uid: uid, appCheckToken: appCheckToken)
     let (_, rawMetadata) = try await session.data(for: headRequest)
@@ -181,16 +217,180 @@ struct PostImageView: View {
   }
 }
 
+/// A protected photo: shown at once when this session already downloaded it, otherwise loaded
+/// through PostImageStore when the row appears, with a short fade.
 private struct ProtectedPostImage: View {
   let source: String
-  @StateObject private var loader = PostMediaLoader()
+  @State private var image: UIImage?
+  @State private var failed = false
+
+  init(source: String) {
+    self.source = source
+    _image = State(initialValue: PostImageStore.cached(source, uid: Self.currentUID))
+  }
+
+  private static var currentUID: String? {
+    FirebaseApp.app() == nil ? nil : Auth.auth().currentUser?.uid
+  }
+
   var body: some View {
     Group {
-      if let image = loader.image { Image(uiImage: image).resizable().scaledToFill() }
-      else { VinctusTokens.Color.surface2 }
+      if let image {
+        Image(uiImage: image).resizable().scaledToFill().transition(.opacity)
+      } else {
+        VinctusTokens.Color.surface2.overlay {
+          if failed {
+            Image(systemName: "photo")
+              .font(.title3)
+              .foregroundStyle(VinctusTokens.Color.textMuted)
+              .accessibilityLabel("Imagen no disponible")
+          }
+        }
+      }
     }
-    .task(id: source) { await loader.load(source) }
-    .onDisappear { loader.cancel() }
+    .animation(.easeOut(duration: 0.2), value: image == nil)
+    .task(id: source) {
+      let uid = Self.currentUID
+      if let cached = PostImageStore.cached(source, uid: uid) {
+        image = cached
+        return
+      }
+      image = nil
+      failed = false
+      do {
+        // Leaving the screen cancels only this wait; the download finishes into the cache.
+        image = try await PostImageStore.shared.image(source, uid: uid)
+      } catch {
+        if !Task.isCancelled { failed = true }
+      }
+    }
+  }
+}
+
+/// Decoded protected photos, kept in memory (never on disk). NSCache is thread-safe and also
+/// empties itself under memory pressure.
+final class PostImageMemory: @unchecked Sendable {
+  static let shared = PostImageMemory()
+  private let cache = NSCache<NSString, UIImage>()
+
+  init(costLimit: Int = 120 * 1024 * 1024) {
+    cache.totalCostLimit = costLimit
+  }
+
+  func image(forKey key: String) -> UIImage? { cache.object(forKey: key as NSString) }
+
+  func store(_ image: UIImage, forKey key: String) {
+    let pixels = image.size.width * image.scale * image.size.height * image.scale
+    cache.setObject(image, forKey: key as NSString, cost: Int(pixels * 4))
+  }
+
+  func removeAll() { cache.removeAllObjects() }
+}
+
+/// Protected post photos downloaded once per session and account, shared by Discover, the feed
+/// and the post. At most three downloads run at a time: every request wakes the media function,
+/// and a burst of parallel requests starts several cold instances at once.
+actor PostImageStore {
+  static let shared = PostImageStore()
+  static let maxParallelDownloads = 3
+  /// Long side of the decoded bitmap: sharp on any iPhone and far lighter than a full photo.
+  static let maxPixelSize: CGFloat = 1600
+
+  private let memory: PostImageMemory
+  private let fetch: @Sendable (String, String?) async throws -> Data
+  private var scopeUID: String?
+  private var inFlight: [String: Task<UIImage, Error>] = [:]
+  private var running = 0
+  private var waiting: [CheckedContinuation<Void, Never>] = []
+
+  init(
+    memory: PostImageMemory = .shared,
+    fetch: @escaping @Sendable (String, String?) async throws -> Data = { source, uid in
+      try await PostMediaDownload.imageData(source, uid: uid)
+    }
+  ) {
+    self.memory = memory
+    self.fetch = fetch
+  }
+
+  static func key(_ source: String, uid: String?) -> String { "\(uid ?? "")\n\(source)" }
+
+  /// The photo when this account already downloaded it in this session.
+  static func cached(_ source: String, uid: String?) -> UIImage? {
+    PostImageMemory.shared.image(forKey: key(source, uid: uid))
+  }
+
+  func image(_ source: String, uid: String?) async throws -> UIImage {
+    if scopeUID != uid {
+      memory.removeAll()
+      inFlight.removeAll()
+      scopeUID = uid
+    }
+    let key = Self.key(source, uid: uid)
+    if let hit = memory.image(forKey: key) { return hit }
+    if let pending = inFlight[key] { return try await pending.value }
+
+    let fetch = self.fetch
+    let task = Task<UIImage, Error> {
+      await acquire()
+      defer { release() }
+      return try await Self.load(source, uid: uid, fetch: fetch)
+    }
+    inFlight[key] = task
+    do {
+      let image = try await task.value
+      if inFlight[key] == task { inFlight[key] = nil }
+      if scopeUID == uid { memory.store(image, forKey: key) }
+      return image
+    } catch {
+      if inFlight[key] == task { inFlight[key] = nil }
+      throw error
+    }
+  }
+
+  /// Download and decode away from the actor, so other photos are not held up meanwhile.
+  private static func load(
+    _ source: String,
+    uid: String?,
+    fetch: @Sendable (String, String?) async throws -> Data
+  ) async throws -> UIImage {
+    let data = try await fetch(source, uid)
+    guard let image = decode(data) else { throw PostReadError.invalidResponse }
+    return image
+  }
+
+  /// Decodes at most `maxPixelSize` on the long side (never upscales), applying the EXIF
+  /// orientation, so a 12-megapixel photo does not take 48 MB of memory.
+  static func decode(_ data: Data, maxPixelSize: CGFloat = PostImageStore.maxPixelSize) -> UIImage? {
+    let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+    guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else { return nil }
+    let options: [CFString: Any] = [
+      kCGImageSourceCreateThumbnailFromImageAlways: true,
+      kCGImageSourceCreateThumbnailWithTransform: true,
+      kCGImageSourceShouldCacheImmediately: true,
+      kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+    ]
+    guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+      return nil
+    }
+    return UIImage(cgImage: cgImage)
+  }
+
+  private func acquire() async {
+    if running < Self.maxParallelDownloads {
+      running += 1
+      return
+    }
+    await withCheckedContinuation { waiting.append($0) }
+  }
+
+  /// Hands the slot to the next waiting download, if any.
+  private func release() {
+    if waiting.isEmpty {
+      running -= 1
+    } else {
+      waiting.removeFirst().resume()
+    }
   }
 }
 

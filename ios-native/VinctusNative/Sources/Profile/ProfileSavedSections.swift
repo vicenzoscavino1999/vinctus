@@ -130,7 +130,8 @@ struct ProfileSavedDebatesSection: View {
 }
 
 /// A saved debate with its turns, read from `arenaDebates/{id}/turns`.
-private struct SavedDebateView: View {
+/// A debate with its turns: saved debates on the profile and public debates from Discover.
+struct SavedDebateView: View {
   let debate: SavedDebate
 
   @StateObject private var vm: DebateTurnsViewModel
