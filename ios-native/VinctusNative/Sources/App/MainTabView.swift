@@ -15,60 +15,47 @@ struct MainTabView: View {
 
   /// Screenshot builds open a tab with `-VinctusTab <name>`.
   @State private var selectedTab = AppRepos.demoArgument("-VinctusTab") ?? "discover"
+  /// Tabs built so far. Each stays alive afterwards (its navigation and scroll position are
+  /// kept), like a tab bar controller.
+  @State private var loadedTabs: Set<String> = []
   @State private var isKeyboardVisible = false
   @State private var isBottomNavigationHidden = false
 
+  /// Same tabs, order and icons as the web's MobileNav: Descubrir, Buscar, Mensajes (#),
+  /// Conexiones and Perfil. The feed lives inside Descubrir, as on the web.
+  static let tabs = ["discover", "search", "messages", "connections", "profile"]
+  /// After launch, the other tabs are built in the background so the first switch is instant.
+  static let warmUpDelay: UInt64 = 2_000_000_000
+
+  /// A plain container instead of TabView. With TabView the system tab bar (hidden behind the
+  /// web-style bar) flashed the first time a tab opened, and the space of our bar did not reach
+  /// the screens, so their last part stayed under it and bounced back after scrolling.
   var body: some View {
-    TabView(selection: $selectedTab) {
-      // Same tabs, order and icons as the web's MobileNav: Descubrir, Buscar, Mensajes (#),
-      // Conexiones and Perfil. The feed lives inside Descubrir, as on the web.
-      NavigationStack {
-        DiscoverView(
-          repo: discoverRepo,
-          profileRepo: profileRepo,
-          groupsRepo: groupsRepo,
-          aiRepo: aiRepo,
-          profileContentRepo: profileContentRepo,
-          feedRepo: feedRepo
-        )
+    ZStack {
+      ForEach(Self.tabs, id: \.self) { tab in
+        if tab == selectedTab || loadedTabs.contains(tab) {
+          tabRoot(tab)
+            .environment(\.isActiveTab, tab == selectedTab)
+            .opacity(tab == selectedTab ? 1 : 0)
+            .allowsHitTesting(tab == selectedTab)
+            .accessibilityHidden(tab != selectedTab)
+            .zIndex(tab == selectedTab ? 1 : 0)
+        }
       }
-      .toolbar(.hidden, for: .tabBar)
-      .tag("discover")
-
-      NavigationStack {
-        ConnectionsSearchView(
-          repo: discoverRepo,
-          profileRepo: profileRepo,
-          groupsRepo: groupsRepo
-        )
-      }
-      .toolbar(.hidden, for: .tabBar)
-      .tag("search")
-
-      NavigationStack {
-        MessagesListView(repo: chatRepo, profileRepo: profileRepo)
-      }
-      .toolbar(.hidden, for: .tabBar)
-      .tag("messages")
-
-      NavigationStack {
-        ConnectionsView(repo: connectionsRepo)
-      }
-      .toolbar(.hidden, for: .tabBar)
-      .tag("connections")
-
-      NavigationStack {
-        ProfileRootView(repo: profileRepo)
-      }
-      .toolbar(.hidden, for: .tabBar)
-      .tag("profile")
     }
-    // The web's flat bottom bar instead of the system tab bar. It hides while typing, so it
-    // never sits above the keyboard (for example over the chat composer).
+    // The web's flat bottom bar. As a safe-area inset every screen ends above it. It hides
+    // while typing, so it never sits above the keyboard (for example over the chat composer).
     .safeAreaInset(edge: .bottom, spacing: 0) {
       if !isKeyboardVisible && !isBottomNavigationHidden {
         FlatTabBar(selection: $selectedTab)
       }
+    }
+    .onChange(of: selectedTab, initial: true) { _, tab in
+      loadedTabs.insert(tab)
+    }
+    .task {
+      try? await Task.sleep(nanoseconds: Self.warmUpDelay)
+      loadedTabs.formUnion(Self.tabs)
     }
     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
       isKeyboardVisible = true
@@ -84,6 +71,43 @@ struct MainTabView: View {
     }
     .task(id: authVM.currentUserID) {
       await blockedUsers.refresh(for: authVM.currentUserID)
+    }
+  }
+
+  @ViewBuilder
+  private func tabRoot(_ tab: String) -> some View {
+    switch tab {
+    case "discover":
+      NavigationStack {
+        DiscoverView(
+          repo: discoverRepo,
+          profileRepo: profileRepo,
+          groupsRepo: groupsRepo,
+          aiRepo: aiRepo,
+          profileContentRepo: profileContentRepo,
+          feedRepo: feedRepo
+        )
+      }
+    case "search":
+      NavigationStack {
+        ConnectionsSearchView(
+          repo: discoverRepo,
+          profileRepo: profileRepo,
+          groupsRepo: groupsRepo
+        )
+      }
+    case "messages":
+      NavigationStack {
+        MessagesListView(repo: chatRepo, profileRepo: profileRepo)
+      }
+    case "connections":
+      NavigationStack {
+        ConnectionsView(repo: connectionsRepo)
+      }
+    default:
+      NavigationStack {
+        ProfileRootView(repo: profileRepo)
+      }
     }
   }
 }
@@ -130,6 +154,7 @@ private struct FlatTabBar: View {
         .buttonStyle(.plain)
         .accessibilityLabel(item.title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier("tab-\(item.tag)")
       }
     }
     .padding(.horizontal, 12)

@@ -165,6 +165,10 @@ struct ConnectionsSearchView: View {
       }
       await refreshData()
     }
+    .refreshOnTabReturn {
+      guard authVM.currentUserID != nil || AppRepos.isDemo else { return }
+      await refreshData()
+    }
     .refreshable {
       if vm.isSearchActive {
         vm.currentUserID = authVM.currentUserID

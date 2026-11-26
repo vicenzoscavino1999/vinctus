@@ -52,6 +52,9 @@ struct ConnectionsView: View {
     .task(id: uid) {
       await vm.load(uid: uid)
     }
+    .refreshOnTabReturn {
+      await vm.load(uid: uid)
+    }
     .refreshable {
       await vm.load(uid: uid)
     }
