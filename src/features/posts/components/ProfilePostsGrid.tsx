@@ -192,7 +192,7 @@ const ProfilePostsSession = ({ userId, canView = true }: ProfilePostsGridProps) 
                 disabled={loadingMore}
                 className="px-5 py-2 rounded-full border border-neutral-700 text-neutral-200 hover:text-white hover:border-neutral-500 transition-colors text-sm disabled:opacity-50"
               >
-                {loadingMore ? 'Cargando...' : 'Ver mas'}
+                {loadingMore ? 'Cargando...' : 'Ver más'}
               </button>
             </div>
           )}
@@ -285,7 +285,7 @@ const ProfilePostsSession = ({ userId, canView = true }: ProfilePostsGridProps) 
                 disabled={loadingMore}
                 className="px-5 py-2 rounded-full border border-neutral-700 text-neutral-200 hover:text-white hover:border-neutral-500 transition-colors text-sm disabled:opacity-50"
               >
-                {loadingMore ? 'Cargando...' : 'Ver mas'}
+                {loadingMore ? 'Cargando...' : 'Ver más'}
               </button>
             </div>
           )}

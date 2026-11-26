@@ -183,7 +183,7 @@ const HelpPage = () => {
                 onClick={() => navigate('/legal/community-guidelines')}
                 className="px-3 py-2 rounded-full border border-neutral-700 hover:border-neutral-500 transition-colors"
               >
-                Community Guidelines
+                Normas de la comunidad
               </button>
               <a
                 href={`mailto:${LEGAL_LINKS.supportEmail}`}

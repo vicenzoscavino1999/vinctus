@@ -168,10 +168,11 @@ const ProfilePage = () => {
   return (
     <div className="page-profile pt-8 max-w-4xl mx-auto pb-32">
       {/* Profile Header */}
-      <header className="flex items-start justify-between mb-12 pb-8 border-b border-neutral-900">
-        <div className="flex items-center gap-6">
+      {/* On phones the buttons go under the name, so the name keeps the full width. */}
+      <header className="mb-10 flex flex-col gap-6 border-b border-neutral-900 pb-8 sm:mb-12 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-center gap-4 sm:gap-6">
           {/* Avatar */}
-          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-amber-500/20 to-amber-600/20 border border-amber-500/30 flex items-center justify-center text-3xl font-serif text-amber-500 overflow-hidden">
+          <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-amber-500/30 bg-gradient-to-br from-amber-500/20 to-amber-600/20 font-serif text-3xl text-amber-500 sm:h-24 sm:w-24">
             {photoURL ? (
               <img
                 src={photoURL}
@@ -184,31 +185,33 @@ const ProfilePage = () => {
           </div>
 
           {/* Name and info */}
-          <div>
-            <h1 className="text-4xl font-serif font-light text-white mb-2">{displayName}</h1>
+          <div className="min-w-0">
+            <h1 className="mb-1.5 break-words font-serif text-3xl font-light leading-tight text-white sm:mb-2 sm:text-4xl">
+              {displayName}
+            </h1>
             <p className="text-neutral-400 mb-1">{role}</p>
-            <p className="text-neutral-600 text-sm flex items-center">
-              <MapPin size={12} className="mr-1" />
-              {location}
+            <p className="flex items-center text-sm text-neutral-500">
+              <MapPin size={12} className="mr-1 shrink-0" />
+              <span className="truncate">{location}</span>
             </p>
           </div>
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 sm:shrink-0">
           <button
             onClick={() => navigate('/settings')}
-            className="p-2.5 border border-neutral-700 text-neutral-500 hover:text-white hover:bg-neutral-900 transition-colors rounded-lg"
+            className="p-2.5 border border-neutral-700 text-neutral-400 hover:text-white hover:bg-neutral-900 transition-colors rounded-lg"
             aria-label="Configuración"
           >
             <Settings size={18} />
           </button>
           <button
             onClick={handleEditProfile}
-            className="flex items-center gap-2 px-5 py-2.5 border border-neutral-700 text-white hover:bg-neutral-900 transition-colors text-sm rounded-lg"
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-neutral-700 px-5 py-2.5 text-sm text-white transition-colors hover:bg-neutral-900 sm:flex-none"
           >
             <Edit3 size={16} />
-            Editar Perfil
+            Editar perfil
           </button>
         </div>
       </header>

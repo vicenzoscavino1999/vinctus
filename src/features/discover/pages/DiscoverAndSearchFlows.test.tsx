@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@/shared/ui/Toast';
+import { clearSessionResources } from '@/shared/hooks/useSessionResource';
 
 const mockUser = {
   uid: 'user_1',
@@ -107,6 +108,8 @@ describe('Discover and Search flows', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    // Discover keeps its data for the session; every test starts from an empty cache.
+    clearSessionResources();
 
     mockGetGroups.mockResolvedValue([
       {
@@ -170,11 +173,17 @@ describe('Discover and Search flows', () => {
       expect(screen.getByText('Física Cuántica Hoy')).toBeInTheDocument();
       expect(screen.queryByText('Club de Jazz')).not.toBeInTheDocument();
     });
+    // While searching only the results show, plus a way to look for people.
+    expect(screen.queryByRole('heading', { name: 'Publicaciones' })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Buscar personas que coincidan con “fisica”/ }),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText('Limpiar búsqueda'));
     await waitFor(() => {
       expect(screen.getByText('Club de Jazz')).toBeInTheDocument();
     });
+    expect(screen.getByRole('heading', { name: 'Publicaciones' })).toBeInTheDocument();
 
     // Applying A-Z sort in SearchFilters orders categories alphabetically (Acústica & Arte first).
     fireEvent.click(screen.getByLabelText('Abrir filtros'));

@@ -352,7 +352,7 @@ const CreateGroupModal = ({
 
             <div>
               <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
-                Descripcion *
+                Descripción *
               </label>
               <textarea
                 value={description}

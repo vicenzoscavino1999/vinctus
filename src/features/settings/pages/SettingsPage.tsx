@@ -23,7 +23,13 @@ import { getServerAIConsent, updateServerAIConsent } from '@/features/settings/a
 import DeleteAccountModal from '@/features/settings/components/DeleteAccountModal';
 import { LEGAL_COPY } from '@/shared/constants';
 import { getAIConsent, setAIConsent } from '@/shared/lib/aiConsent';
-import { applyTheme, getStoredTheme, setStoredTheme, type ThemeMode } from '@/shared/lib/theme';
+import {
+  applyTheme,
+  getStoredTheme,
+  LIGHT_THEME_AVAILABLE,
+  setStoredTheme,
+  type ThemeMode,
+} from '@/shared/lib/theme';
 import { useToast } from '@/shared/ui/Toast';
 
 const SettingsPage = () => {
@@ -162,66 +168,68 @@ const SettingsPage = () => {
         </header>
 
         <div className="space-y-8">
-          {/* Appearance */}
-          <section>
-            <h2 className="text-sm font-medium text-neutral-400 mb-4 uppercase tracking-wider px-2">
-              Apariencia
-            </h2>
-            <div
-              className="bg-[#1A1A1A] border border-neutral-800 rounded-2xl overflow-hidden"
-              role="radiogroup"
-              aria-label="Apariencia"
-            >
-              <button
-                onClick={() => handleThemeChange('dark')}
-                className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-neutral-800 last:border-0"
-                role="radio"
-                aria-checked={theme === 'dark'}
+          {/* Appearance: hidden while only the dark theme works (see LIGHT_THEME_AVAILABLE). */}
+          {LIGHT_THEME_AVAILABLE && (
+            <section>
+              <h2 className="text-sm font-medium text-neutral-400 mb-4 uppercase tracking-wider px-2">
+                Apariencia
+              </h2>
+              <div
+                className="bg-[#1A1A1A] border border-neutral-800 rounded-2xl overflow-hidden"
+                role="radiogroup"
+                aria-label="Apariencia"
               >
-                <div className="flex items-center gap-3">
-                  <Moon size={20} className="text-purple-400" />
-                  <span>Modo oscuro</span>
-                </div>
-                <div
-                  className={`w-4 h-4 rounded-full border ${
-                    theme === 'dark' ? 'border-purple-400 bg-purple-500' : 'border-neutral-600'
-                  }`}
-                />
-              </button>
-              <button
-                onClick={() => handleThemeChange('light')}
-                className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-neutral-800 last:border-0"
-                role="radio"
-                aria-checked={theme === 'light'}
-              >
-                <div className="flex items-center gap-3">
-                  <Sun size={20} className="text-orange-400" />
-                  <span>Modo claro</span>
-                </div>
-                <div
-                  className={`w-4 h-4 rounded-full border ${
-                    theme === 'light' ? 'border-purple-400 bg-purple-500' : 'border-neutral-600'
-                  }`}
-                />
-              </button>
-              <button
-                onClick={() => handleThemeChange('system')}
-                className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
-                role="radio"
-                aria-checked={theme === 'system'}
-              >
-                <div className="flex items-center gap-3">
-                  <Monitor size={20} className="text-blue-400" />
-                  <span>Sistema</span>
-                </div>
-                <div
-                  className={`w-4 h-4 rounded-full border ${
-                    theme === 'system' ? 'border-purple-400 bg-purple-500' : 'border-neutral-600'
-                  }`}
-                />
-              </button>
-            </div>
-          </section>
+                <button
+                  onClick={() => handleThemeChange('dark')}
+                  className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-neutral-800 last:border-0"
+                  role="radio"
+                  aria-checked={theme === 'dark'}
+                >
+                  <div className="flex items-center gap-3">
+                    <Moon size={20} className="text-purple-400" />
+                    <span>Modo oscuro</span>
+                  </div>
+                  <div
+                    className={`w-4 h-4 rounded-full border ${
+                      theme === 'dark' ? 'border-purple-400 bg-purple-500' : 'border-neutral-600'
+                    }`}
+                  />
+                </button>
+                <button
+                  onClick={() => handleThemeChange('light')}
+                  className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-neutral-800 last:border-0"
+                  role="radio"
+                  aria-checked={theme === 'light'}
+                >
+                  <div className="flex items-center gap-3">
+                    <Sun size={20} className="text-orange-400" />
+                    <span>Modo claro</span>
+                  </div>
+                  <div
+                    className={`w-4 h-4 rounded-full border ${
+                      theme === 'light' ? 'border-purple-400 bg-purple-500' : 'border-neutral-600'
+                    }`}
+                  />
+                </button>
+                <button
+                  onClick={() => handleThemeChange('system')}
+                  className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+                  role="radio"
+                  aria-checked={theme === 'system'}
+                >
+                  <div className="flex items-center gap-3">
+                    <Monitor size={20} className="text-blue-400" />
+                    <span>Sistema</span>
+                  </div>
+                  <div
+                    className={`w-4 h-4 rounded-full border ${
+                      theme === 'system' ? 'border-purple-400 bg-purple-500' : 'border-neutral-600'
+                    }`}
+                  />
+                </button>
+              </div>
+            </section>
+          )}
 
           {/* Preferences */}
           <section>
@@ -331,7 +339,7 @@ const SettingsPage = () => {
                 <div className="flex items-center gap-3">
                   <Scale size={20} className="text-amber-300" />
                   <div className="text-left">
-                    <div className="font-medium">Terminos de servicio</div>
+                    <div className="font-medium">Términos de servicio</div>
                     <div className="text-xs text-neutral-500">{LEGAL_COPY.aiDisclosure}</div>
                   </div>
                 </div>
@@ -344,7 +352,7 @@ const SettingsPage = () => {
                 <div className="flex items-center gap-3">
                   <ShieldAlert size={20} className="text-rose-300" />
                   <div className="text-left">
-                    <div className="font-medium">Community Guidelines</div>
+                    <div className="font-medium">Normas de la comunidad</div>
                     <div className="text-xs text-neutral-500">
                       Normas de comunidad, reportes y enforcement
                     </div>

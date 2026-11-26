@@ -190,54 +190,44 @@ const Sidebar = ({ activeTab, onNavigate }: NavProps) => (
 );
 
 // Mobile navigation
-const MobileNav = ({ activeTab, onNavigate }: NavProps) => {
-  // For mobile we might want a different implementation of MoreMenu (e.g. drawer)
-  // For now, let's keep it simple or maybe just add the profile link as the last item
-  // and put settings inside the profile page or a dedicated settings tab if requested.
-  // The user specifically asked for "a button in the functions part", implying the sidebar.
-  // Let's add it to mobile too as a drawer trigger or similar if needed, but for now standard nav.
+// Same five tabs, order, icons and labels as the native app's bottom bar
+// (ios-native/VinctusNative/Sources/App/MainTabView.swift). Change both together.
+const MOBILE_NAV_ITEMS = [
+  { tab: 'discover', path: '/discover', label: 'Descubrir', Icon: Compass },
+  { tab: 'search', path: '/search', label: 'Buscar', Icon: Search },
+  { tab: 'messages', path: '/messages', label: 'Mensajes', Icon: Hash },
+  { tab: 'projects', path: '/projects', label: 'Conexiones', Icon: Briefcase },
+  { tab: 'profile', path: '/profile', label: 'Perfil', Icon: User },
+] as const;
 
-  // Changing the request to fit mobile: usually "More" is the last item.
-  return (
-    <div className="md:hidden fixed bottom-0 w-full bg-bg/95 backdrop-blur-md border-t border-neutral-900 flex justify-around px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] z-50">
-      <button
-        onClick={() => onNavigate('/discover')}
-        aria-label="Descubrir"
-        className={`p-2.5 ${activeTab === 'discover' ? 'text-white' : 'text-neutral-600'}`}
-      >
-        <Compass size={24} strokeWidth={1} />
-      </button>
-      <button
-        onClick={() => onNavigate('/search')}
-        aria-label="Buscar"
-        className={`p-2.5 ${activeTab === 'search' ? 'text-white' : 'text-neutral-600'}`}
-      >
-        <Search size={24} strokeWidth={1} />
-      </button>
-      <button
-        onClick={() => onNavigate('/messages')}
-        aria-label="Diálogos"
-        className={`p-2.5 ${activeTab === 'messages' ? 'text-white' : 'text-neutral-600'}`}
-      >
-        <Hash size={24} strokeWidth={1} />
-      </button>
-      <button
-        onClick={() => onNavigate('/projects')}
-        aria-label="Conexiones"
-        className={`p-2.5 ${activeTab === 'projects' ? 'text-white' : 'text-neutral-600'}`}
-      >
-        <Briefcase size={24} strokeWidth={1} />
-      </button>
-      <button
-        onClick={() => onNavigate('/profile')}
-        aria-label="Perfil"
-        className={`p-2.5 ${activeTab === 'profile' ? 'text-white' : 'text-neutral-600'}`}
-      >
-        <User size={24} strokeWidth={1} />
-      </button>
-    </div>
-  );
-};
+const MobileNav = ({ activeTab, onNavigate }: NavProps) => (
+  <nav
+    aria-label="Navegación principal"
+    className="md:hidden fixed bottom-0 w-full bg-bg/95 backdrop-blur-md border-t border-neutral-900 flex justify-around px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] z-50"
+  >
+    {MOBILE_NAV_ITEMS.map(({ tab, path, label, Icon }) => {
+      const isActive = activeTab === tab;
+      return (
+        <button
+          key={tab}
+          onClick={() => onNavigate(path)}
+          aria-label={label}
+          aria-current={isActive ? 'page' : undefined}
+          className={`flex min-w-[3.5rem] flex-col items-center gap-0.5 px-2 py-1.5 transition-colors ${
+            isActive ? 'text-white' : 'text-neutral-500'
+          }`}
+        >
+          <Icon size={23} strokeWidth={isActive ? 1.5 : 1} />
+          <span
+            className={`text-[10px] leading-none ${isActive ? 'font-semibold' : 'font-normal'}`}
+          >
+            {label}
+          </span>
+        </button>
+      );
+    })}
+  </nav>
+);
 
 // Main App Layout
 const AppLayout = () => {

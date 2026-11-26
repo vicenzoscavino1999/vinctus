@@ -14,8 +14,8 @@ type Props = {
 };
 
 const buttonClass =
-  'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors disabled:opacity-60';
-const idleClass = 'border-neutral-700 bg-neutral-900/70 text-neutral-200 hover:border-neutral-500';
+  'inline-flex h-9 min-w-9 items-center justify-center gap-1.5 rounded-full px-2 text-[13px] tabular-nums transition-colors hover:bg-white/[0.06] disabled:opacity-60';
+const idleClass = 'text-neutral-300 hover:text-white';
 
 export default function DiscoverPostActions({
   postId,
@@ -43,7 +43,7 @@ export default function DiscoverPostActions({
       <div
         role="group"
         aria-label="Acciones de la publicación"
-        className="flex flex-wrap items-center gap-2"
+        className="-mx-2 flex items-center gap-0.5"
       >
         <button
           type="button"
@@ -52,12 +52,12 @@ export default function DiscoverPostActions({
           aria-label={reactionLabel('like', like)}
           aria-pressed={like.value ?? undefined}
           aria-busy={like.loading}
-          className={`${buttonClass} ${like.value ? 'border-red-400/60 bg-red-500/15 text-red-300' : idleClass}`}
+          className={`${buttonClass} ${like.value ? 'text-red-400' : idleClass}`}
         >
           {like.loading ? (
-            <Loader2 size={13} className="animate-spin" />
+            <Loader2 size={18} className="animate-spin" />
           ) : (
-            <Heart size={13} fill={like.value ? 'currentColor' : 'none'} />
+            <Heart size={18} strokeWidth={1.8} fill={like.value ? 'currentColor' : 'none'} />
           )}
           <span>{like.loaded ? like.count : initialCount}</span>
         </button>
@@ -67,8 +67,8 @@ export default function DiscoverPostActions({
           aria-label={`Comentarios: ${commentCount}`}
           className={`${buttonClass} ${idleClass}`}
         >
-          <MessageCircle size={13} />
-          {commentCount}
+          <MessageCircle size={18} strokeWidth={1.8} />
+          <span>{commentCount}</span>
         </button>
         <button
           type="button"
@@ -77,18 +77,17 @@ export default function DiscoverPostActions({
           aria-label={reactionLabel('save', save)}
           aria-pressed={save.value ?? undefined}
           aria-busy={save.loading}
-          className={`${buttonClass} ${save.value ? 'border-brand-gold/50 bg-brand-gold/15 text-brand-gold' : idleClass}`}
+          className={`${buttonClass} ml-auto ${save.value ? 'text-brand-gold' : idleClass}`}
         >
           {save.loading ? (
-            <Loader2 size={13} className="animate-spin" />
+            <Loader2 size={18} className="animate-spin" />
           ) : (
-            <Bookmark size={13} fill={save.value ? 'currentColor' : 'none'} />
+            <Bookmark size={18} strokeWidth={1.8} fill={save.value ? 'currentColor' : 'none'} />
           )}
-          {save.value ? 'Guardado' : 'Guardar'}
         </button>
       </div>
       {error && (
-        <p role="alert" className="order-last w-full text-xs text-red-300">
+        <p role="alert" className="mt-1 text-xs text-red-300">
           {error}
         </p>
       )}

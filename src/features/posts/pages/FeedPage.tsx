@@ -1,12 +1,10 @@
-import { PostImage } from '@/features/posts/components/ProtectedPostMedia';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link2, MessageCircle, Film, FileText } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/auth';
 import { formatRelativeTime } from '@/shared/lib/formatUtils';
 import { useToast } from '@/shared/ui/Toast';
 import PostCommentsModal from '@/features/posts/components/PostCommentsModal';
-import FeedPostActions from '@/features/posts/components/FeedPostActions';
+import FeedPostCard from '@/features/posts/components/FeedPostCard';
 import StoriesWidget from '@/features/posts/components/StoriesWidget';
 import { FEED_CACHE_INVALIDATED_EVENT } from '@/features/posts/model/feedCache';
 import { type PostSummary, toPostSummary } from '@/features/posts/model/postSummary';
@@ -19,7 +17,6 @@ import {
 } from '@/features/posts/api';
 
 const FEED_PAGE_SIZE = 12;
-const FEED_BLOCK_SIZE = 6;
 
 const logPostError = (message: string, error: unknown) => {
   if (import.meta.env.DEV) {
@@ -253,42 +250,40 @@ const FeedSession = () => {
 
   return (
     <div className="p-4 md:p-8">
-      <div className="max-w-3xl mx-auto mb-8">
+      <div className="mx-auto mb-6 max-w-[540px] md:mb-8">
         <StoriesWidget />
       </div>
       {loadingInitial ? (
-        <div className="max-w-3xl mx-auto space-y-6">
+        <div className="mx-auto max-w-[540px] space-y-3 md:space-y-6">
           {Array.from({ length: 3 }).map((_, index) => (
+            // Same shape as FeedPostCard, so the page doesn't jump when posts arrive.
             <div
               key={`feed-skeleton-${index}`}
-              className="relative overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 min-h-[220px] animate-pulse"
+              className="animate-pulse overflow-hidden border-b border-neutral-900 bg-neutral-950 max-md:-mx-4 md:rounded-2xl md:border"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-neutral-800" />
-                  <div>
-                    <div className="h-3 w-28 bg-neutral-800 rounded mb-2" />
-                    <div className="h-2 w-16 bg-neutral-800 rounded" />
-                  </div>
+              <div className="flex items-center gap-3 px-4 py-3">
+                <div className="h-9 w-9 rounded-full bg-neutral-800" />
+                <div className="space-y-2">
+                  <div className="h-3 w-28 rounded bg-neutral-800" />
+                  <div className="h-2 w-16 rounded bg-neutral-800" />
                 </div>
-                <div className="w-8 h-8 rounded-full bg-neutral-800" />
               </div>
-              <div className="mt-8 space-y-3">
-                <div className="h-6 w-11/12 bg-neutral-800 rounded" />
-                <div className="h-6 w-8/12 bg-neutral-800 rounded" />
-                <div className="h-3 w-10/12 bg-neutral-800 rounded mt-4" />
+              <div className="aspect-square bg-neutral-900" />
+              <div className="space-y-2 px-4 py-4">
+                <div className="h-3 w-20 rounded bg-neutral-800" />
+                <div className="h-3 w-10/12 rounded bg-neutral-800" />
               </div>
             </div>
           ))}
           <div className="text-xs text-neutral-500 text-center py-2">Cargando publicaciones...</div>
         </div>
       ) : posts.length === 0 ? (
-        <div className="text-sm text-neutral-500 text-center py-8">No hay posts todavia.</div>
+        <div className="text-sm text-neutral-500 text-center py-8">Aún no hay publicaciones.</div>
       ) : (
-        <div className="space-y-6 max-w-3xl mx-auto">
+        <div className="mx-auto max-w-[540px] space-y-3 md:space-y-6">
           {posts
             .filter((post) => !post.authorId || !blockedUsers.has(post.authorId))
-            .map((post, index) => {
+            .map((post) => {
               const likeCount = likeCounts[post.postId] ?? Math.max(0, post.likeCount || 0);
               const commentCount =
                 commentCounts[post.postId] ?? Math.max(0, post.commentCount || 0);
@@ -296,126 +291,17 @@ const FeedSession = () => {
                 likeCount,
                 commentCount,
               });
-              const displayText = summary.text;
-              const titleText = summary.title?.trim() || '';
-              const bodyText = displayText.trim();
-              const headline = titleText || bodyText || 'Publicacion de la comunidad';
-              const showBody = !!titleText && !!bodyText;
-              const authorName = summary.authorName;
-              const authorPhoto = summary.authorPhoto;
-              const authorInitial = authorName.charAt(0).toUpperCase();
-              const imageUrl = summary.imageUrl;
-              const timeLabel = formatRelativeTime(post.createdAt);
-              const hasVideo = (summary.media ?? []).some((item) => item.type === 'video');
-              const fileCount = (summary.media ?? []).filter((item) => item.type === 'file').length;
-              const blockNumber = Math.floor(index / FEED_BLOCK_SIZE) + 1;
-              const isBlockStart = index % FEED_BLOCK_SIZE === 0;
 
               return (
-                <div key={post.postId} className="space-y-4">
-                  {isBlockStart && (
-                    <div className="flex items-center gap-4 pt-2">
-                      <p className="text-[11px] tracking-[0.28em] uppercase text-neutral-500">
-                        Comunidad activa · Bloque {blockNumber}
-                      </p>
-                      <div className="h-px flex-1 bg-neutral-800" />
-                    </div>
-                  )}
-                  <div
-                    onClick={() => setActivePost(summary)}
-                    className="relative overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900/50 cursor-pointer"
-                  >
-                    {imageUrl ? (
-                      <PostImage
-                        src={imageUrl}
-                        alt={headline}
-                        className="absolute inset-0 w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="absolute inset-0 bg-gradient-to-br from-neutral-900 via-neutral-800 to-black" />
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10" />
-
-                    <div className="relative z-10 p-6 pr-16 min-h-[220px] flex flex-col justify-between">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          {authorPhoto ? (
-                            <img
-                              src={authorPhoto}
-                              alt={authorName}
-                              className="w-10 h-10 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-black font-medium">
-                              {authorInitial}
-                            </div>
-                          )}
-                          <div>
-                            <p className="text-white text-sm font-medium">{authorName}</p>
-                            <p className="text-xs text-neutral-300">Comunidad - {timeLabel}</p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void handleCopyLink(post.postId);
-                          }}
-                          className="p-2 rounded-full bg-black/40 text-neutral-200 hover:text-white hover:bg-black/60 transition-colors"
-                          aria-label="Copiar enlace"
-                        >
-                          <Link2 size={18} />
-                        </button>
-                      </div>
-
-                      <div className="mt-6">
-                        <h3 className="text-xl md:text-2xl font-serif text-white leading-snug line-clamp-2">
-                          {headline}
-                        </h3>
-                        {showBody && (
-                          <p className="mt-2 text-sm text-neutral-300 leading-relaxed line-clamp-2">
-                            {bodyText}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between mt-6 text-xs text-neutral-300">
-                        <div className="flex items-center gap-3">
-                          <span>Desliza para ver mas -&gt;</span>
-                          {hasVideo && (
-                            <span className="flex items-center gap-1">
-                              <Film size={12} />
-                              Video
-                            </span>
-                          )}
-                          {fileCount > 0 && (
-                            <span className="flex items-center gap-1">
-                              <FileText size={12} />
-                              {fileCount} archivo{fileCount > 1 ? 's' : ''}
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setActivePost(summary);
-                          }}
-                          className="flex items-center gap-2 text-neutral-200 hover:text-white transition-colors"
-                        >
-                          <MessageCircle size={14} />
-                          Comentar
-                        </button>
-                      </div>
-                    </div>
-
-                    <FeedPostActions
-                      postId={post.postId}
-                      initialCount={Math.max(0, post.likeCount || 0)}
-                      commentCount={commentCount}
-                      onComments={() => setActivePost(summary)}
-                      onLikeCount={handleLikeCount}
-                    />
-                  </div>
-                </div>
+                <FeedPostCard
+                  key={post.postId}
+                  summary={summary}
+                  initialLikeCount={Math.max(0, post.likeCount || 0)}
+                  timeLabel={formatRelativeTime(post.createdAt)}
+                  onOpen={() => setActivePost(summary)}
+                  onCopyLink={() => void handleCopyLink(post.postId)}
+                  onLikeCount={handleLikeCount}
+                />
               );
             })}
         </div>
@@ -426,7 +312,7 @@ const FeedSession = () => {
           <div ref={loadMoreTriggerRef} className="h-1 w-full" />
           {supportsIntersectionObserver ? (
             <div className="py-4 text-center text-xs text-neutral-500">
-              {loadingMore ? 'Cargando mas publicaciones...' : 'Desliza para seguir viendo'}
+              {loadingMore ? 'Cargando más publicaciones…' : 'Desliza para seguir viendo'}
             </div>
           ) : (
             <div className="flex justify-center">

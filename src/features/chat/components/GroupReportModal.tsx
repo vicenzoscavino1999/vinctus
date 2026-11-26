@@ -60,7 +60,7 @@ const GroupReportModal = ({
                 rel="noreferrer"
                 className="text-amber-300 hover:text-amber-200 underline"
               >
-                Ver Community Guidelines
+                Ver normas de la comunidad
               </a>
               <a
                 href={`mailto:${LEGAL_LINKS.securityEmail}`}

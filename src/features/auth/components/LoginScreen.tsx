@@ -506,7 +506,7 @@ const LoginScreen = () => {
 
         {/* Footer note */}
         <p className="text-center pt-6 text-neutral-700 text-[10px] font-light uppercase tracking-wider">
-          Conecta con comunidades de tu interes
+          Conecta con comunidades de tu interés
         </p>
         <div className="mt-4 flex flex-wrap justify-center gap-3 text-[10px] text-neutral-500">
           <a
@@ -523,7 +523,7 @@ const LoginScreen = () => {
             rel="noreferrer"
             className="hover:text-neutral-300 transition-colors underline"
           >
-            Terminos
+            Términos
           </a>
           <a
             href={LEGAL_LINKS.communityGuidelinesPublicUrl}
@@ -531,7 +531,7 @@ const LoginScreen = () => {
             rel="noreferrer"
             className="hover:text-neutral-300 transition-colors underline"
           >
-            Community Guidelines
+            Normas de la comunidad
           </a>
           <a
             href={LEGAL_LINKS.supportPublicUrl}
