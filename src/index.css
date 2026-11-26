@@ -689,3 +689,54 @@
     transform: translateY(0);
   }
 }
+
+/* ===== POSTS ===== */
+/* Double tap on a post's media: the heart pops in and fades out (like Instagram). */
+@keyframes heartBurst {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  15% {
+    opacity: 0.95;
+    transform: scale(1.15);
+  }
+  30% {
+    transform: scale(0.95);
+  }
+  45% {
+    transform: scale(1);
+  }
+  80% {
+    opacity: 0.95;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+.animate-heart-burst {
+  animation: heartBurst 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Like and save buttons bounce once when they turn on. */
+@keyframes likePop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.28);
+  }
+  70% {
+    transform: scale(0.92);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-like-pop {
+  animation: likePop 360ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
