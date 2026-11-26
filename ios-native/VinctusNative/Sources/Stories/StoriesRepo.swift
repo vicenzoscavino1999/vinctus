@@ -91,8 +91,13 @@ enum StoriesRepoError: LocalizedError {
 final class FirebaseStoriesRepo: StoriesRepo {
   /// `STORY_DURATION_MS` in `src/shared/lib/storyConstants.ts`.
   static let storyDuration: TimeInterval = 24 * 60 * 60
-  /// Firestore allows at most 10 values in an `in` filter.
-  private static let ownersPerQuery = 10
+  /// One owner per query, like the web's `getStoriesForOwners`: the `stories` read rule checks
+  /// blocking and friendship/following for each owner (up to 6 documents), and a query may only
+  /// touch a few documents in its rules, so an `in` filter with 4+ owners is rejected as a whole
+  /// (that hid every story for people following 4 or more users). One owner always fits.
+  static let ownersPerQuery = 1
+  /// Single-owner queries running at the same time (`STORY_QUERY_CONCURRENCY` on the web).
+  static let queryConcurrency = 8
 
   private func context() throws -> (Firestore, String) {
     guard FirebaseApp.app() != nil else { throw StoriesRepoError.firebaseNotConfigured }
@@ -111,14 +116,21 @@ final class FirebaseStoriesRepo: StoriesRepo {
       .subtracting([uid])
       .subtracting(await blocked)
 
-    var owners = [uid] + Array(others)
+    let owners = [uid] + Array(others)
     var stories: [Story] = []
-    while !owners.isEmpty {
-      let chunk = Array(owners.prefix(Self.ownersPerQuery))
-      owners.removeFirst(chunk.count)
-      // One failing chunk (for example a permission change) shouldn't hide the others.
-      if let found = try? await storiesOf(chunk, db: db) {
-        stories += found
+    var start = 0
+    while start < owners.count {
+      let batch = owners[start..<min(start + Self.queryConcurrency, owners.count)]
+      start += batch.count
+      // One owner per query, a few at a time. A failing owner (for example a permission change)
+      // doesn't hide the others.
+      await withTaskGroup(of: [Story].self) { group in
+        for owner in batch {
+          group.addTask { (try? await self.storiesOf([owner], db: db)) ?? [] }
+        }
+        for await found in group {
+          stories += found
+        }
       }
     }
     let now = Date()

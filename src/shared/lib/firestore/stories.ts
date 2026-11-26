@@ -157,69 +157,48 @@ export async function getUserStories(uid: string): Promise<StoryRead[]> {
   return snapshot.docs.map((docSnap) => buildStoryRead(docSnap.id, docSnap.data()));
 }
 
+/** How many single-owner story queries run at the same time. */
+export const STORY_QUERY_CONCURRENCY = 8;
+
+/**
+ * Stories of several people, one query per owner.
+ *
+ * The `stories` read rule checks, for each owner, blocking (2 documents) and friendship or
+ * following (up to 4 more), and a query may only touch a few documents in its rules. A query
+ * with `ownerId in [...]` checks every owner in it, so with 4 or more owners Firestore rejects
+ * the whole query (permission-denied), which happened to anyone following 4+ people. One owner
+ * per query always fits. It throws only when every query failed; a failure for some owners just
+ * leaves their stories out.
+ */
 export async function getStoriesForOwners(ownerIds: string[]): Promise<StoryRead[]> {
   const uniqueIds = Array.from(new Set(ownerIds.filter(Boolean)));
   if (uniqueIds.length === 0) return [];
 
-  const now = TimestampLite.now();
-  const chunkSize = 10;
-  const chunks: string[][] = [];
-  for (let i = 0; i < uniqueIds.length; i += chunkSize) {
-    chunks.push(uniqueIds.slice(i, i + chunkSize));
-  }
-
-  const results = await Promise.allSettled(
-    chunks.map(async (chunk) => {
-      const q = queryLite(
-        collectionLite(dbLite, COLLECTIONS.stories),
-        whereLite('ownerId', 'in', chunk),
-        whereLite('visibility', '==', 'friends'),
-        whereLite('expiresAt', '>', now),
-        orderByLite('expiresAt', 'desc'),
-      );
-      const snapshot = await getDocsLite(q);
-      return snapshot.docs.map((docSnap) => buildStoryRead(docSnap.id, docSnap.data()));
-    }),
-  );
-
   const merged = new Map<string, StoryRead>();
-  let hadFailure = false;
+  let failures = 0;
   let firstError: unknown = null;
 
-  for (let index = 0; index < results.length; index += 1) {
-    const result = results[index];
-    if (result.status === 'fulfilled') {
-      result.value.forEach((story) => merged.set(story.id, story));
-      continue;
-    }
-
-    hadFailure = true;
-    if (!firstError) {
-      firstError = result.reason;
-    }
-    const chunk = chunks[index] ?? [];
-    for (const ownerId of chunk) {
-      try {
-        const fallbackStories = await getUserStories(ownerId);
-        fallbackStories.forEach((story) => merged.set(story.id, story));
-      } catch (fallbackError) {
-        if (!firstError) {
-          firstError = fallbackError;
-        }
-        console.warn('[getStoriesForOwners] fallback failed for owner', ownerId, fallbackError);
+  for (let start = 0; start < uniqueIds.length; start += STORY_QUERY_CONCURRENCY) {
+    const batch = uniqueIds.slice(start, start + STORY_QUERY_CONCURRENCY);
+    const results = await Promise.allSettled(batch.map((ownerId) => getUserStories(ownerId)));
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        result.value.forEach((story) => merged.set(story.id, story));
+        return;
       }
-    }
+      failures += 1;
+      firstError ??= result.reason;
+      console.warn('[getStoriesForOwners] could not read stories of', batch[index], result.reason);
+    });
   }
 
-  const stories = Array.from(merged.values()).sort((a, b) => {
+  if (failures === uniqueIds.length && firstError) {
+    throw firstError;
+  }
+
+  return Array.from(merged.values()).sort((a, b) => {
     const aTime = a.createdAt?.getTime?.() ?? 0;
     const bTime = b.createdAt?.getTime?.() ?? 0;
     return bTime - aTime;
   });
-
-  if (stories.length === 0 && hadFailure && firstError) {
-    throw firstError;
-  }
-
-  return stories;
 }
