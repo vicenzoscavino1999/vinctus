@@ -186,20 +186,34 @@ private struct ProfileBodyView: View {
         }
         if connection.incomingRequestCount > 0 {
           Button { followList = .followers } label: {
-            Label(
-              connection.incomingRequestCount == 1
-                ? "1 solicitud de seguimiento"
-                : "\(connection.incomingRequestCount) solicitudes de seguimiento",
-              systemImage: "person.badge.clock"
-            )
-            .font(.subheadline.weight(.semibold))
-            .frame(maxWidth: .infinity)
-            .frame(height: 40)
-            .foregroundStyle(SwiftUI.Color.black)
-            .background(VinctusTokens.Color.accent)
+            HStack(spacing: VinctusTokens.Spacing.sm) {
+              Image(systemName: "person.badge.clock")
+                .foregroundStyle(VinctusTokens.Color.textSecondary)
+              Text("Solicitudes de seguimiento")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(VinctusTokens.Color.textPrimary)
+              Spacer()
+              Text("\(connection.incomingRequestCount)")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.black)
+                .padding(.horizontal, 7)
+                .frame(minWidth: 22, minHeight: 22)
+                .background(Capsule().fill(VinctusTokens.Color.accent))
+              Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(VinctusTokens.Color.textMuted)
+            }
+            .padding(.horizontal, VinctusTokens.Spacing.md)
+            .frame(height: 44)
+            .background(VinctusTokens.Color.surface)
             .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.sm, style: .continuous))
           }
           .buttonStyle(.plain)
+          .accessibilityLabel(
+            connection.incomingRequestCount == 1
+              ? "1 solicitud de seguimiento"
+              : "\(connection.incomingRequestCount) solicitudes de seguimiento"
+          )
         }
       }
     } else if !blockedUsers.isBlocked(userID) {

@@ -42,11 +42,10 @@ struct ProfilePostsSection: View {
           } label: {
             Label("Publicar", systemImage: "plus")
               .font(.caption.weight(.semibold))
-              .foregroundStyle(.black)
+              .foregroundStyle(VinctusTokens.Color.accent)
               .padding(.horizontal, 12)
               .padding(.vertical, 6)
-              .background(VinctusTokens.Color.accent)
-              .clipShape(Capsule())
+              .overlay(Capsule().stroke(VinctusTokens.Color.accent.opacity(0.45), lineWidth: 1))
           }
           .buttonStyle(.plain)
         }
@@ -181,7 +180,7 @@ private struct PostGridTile: View {
     VStack(alignment: .leading, spacing: 8) {
       Image(systemName: "quote.opening")
         .font(.system(size: 13, weight: .semibold))
-        .foregroundStyle(VinctusTokens.Color.accent.opacity(0.75))
+        .foregroundStyle(VinctusTokens.Color.accent.opacity(0.5))
       Text(post.title ?? (post.text.isEmpty ? "Publicación" : post.text))
         .font(VinctusTokens.Typography.serif(16))
         .foregroundStyle(VinctusTokens.Color.textPrimary)
@@ -199,7 +198,7 @@ private struct PostGridTile: View {
         endPoint: .bottom
       )
       RadialGradient(
-        colors: [VinctusTokens.Color.accent.opacity(0.16), .clear],
+        colors: [VinctusTokens.Color.accent.opacity(0.08), .clear],
         center: .topLeading,
         startRadius: 0,
         endRadius: 170
@@ -240,7 +239,7 @@ struct ProfileContributionsSection: View {
         Button {
           isAdding = true
         } label: {
-          Image(systemName: "plus.circle.fill")
+          Image(systemName: "plus.circle")
             .foregroundStyle(VinctusTokens.Color.accent)
         }
         .accessibilityLabel("Añadir aporte")
@@ -274,7 +273,7 @@ struct ProfileContributionsSection: View {
   private func row(_ item: Contribution) -> some View {
     HStack(alignment: .top, spacing: VinctusTokens.Spacing.sm) {
       Image(systemName: item.type.icon)
-        .foregroundStyle(VinctusTokens.Color.accent)
+        .foregroundStyle(VinctusTokens.Color.textMuted)
         .frame(width: 22)
       VStack(alignment: .leading, spacing: 4) {
         Text(item.title)
@@ -289,24 +288,42 @@ struct ProfileContributionsSection: View {
             .foregroundStyle(VinctusTokens.Color.textMuted)
             .lineLimit(3)
         }
-        HStack(spacing: VinctusTokens.Spacing.md) {
-          if let url = Self.safeWebURL(item.link) {
-            Button("Abrir enlace") { openURL(url) }
-          }
-          if let url = Self.safeWebURL(item.fileURL) {
-            Button(item.fileName ?? "Ver archivo") { openURL(url) }
-              .lineLimit(1)
-          }
-          if canEdit {
-            Button("Eliminar", role: .destructive) {
-              Task { await vm.delete(item) }
-            }
-          }
-        }
-        .font(.caption.weight(.semibold))
       }
+      Spacer(minLength: 0)
+      rowMenu(item)
     }
     .padding(.vertical, 6)
+  }
+
+  /// Open the link or file and delete, in one quiet "..." instead of colored links on each row.
+  @ViewBuilder
+  private func rowMenu(_ item: Contribution) -> some View {
+    let link = Self.safeWebURL(item.link)
+    let file = Self.safeWebURL(item.fileURL)
+    if link != nil || file != nil || canEdit {
+      Menu {
+        if let link {
+          Button { openURL(link) } label: { Label("Abrir enlace", systemImage: "arrow.up.right") }
+        }
+        if let file {
+          Button { openURL(file) } label: { Label(item.fileName ?? "Ver archivo", systemImage: "doc") }
+        }
+        if canEdit {
+          Button(role: .destructive) {
+            Task { await vm.delete(item) }
+          } label: {
+            Label("Eliminar", systemImage: "trash")
+          }
+        }
+      } label: {
+        Image(systemName: "ellipsis")
+          .font(.footnote.weight(.semibold))
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+          .frame(width: 32, height: 32)
+          .contentShape(Rectangle())
+      }
+      .accessibilityLabel("Opciones de \(item.title)")
+    }
   }
 
   static func safeWebURL(_ rawValue: String?) -> URL? {
