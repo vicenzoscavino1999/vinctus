@@ -12,6 +12,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'happy-dom',
+    // Tests never load real pages: an <iframe src> would otherwise make a network request.
+    environmentOptions: { happyDOM: { settings: { disableIframePageLoading: true } } },
     setupFiles: './src/test/setup.ts',
     include: ['src/**/*.{test,spec}.{js,ts,jsx,tsx}'],
     coverage: {
