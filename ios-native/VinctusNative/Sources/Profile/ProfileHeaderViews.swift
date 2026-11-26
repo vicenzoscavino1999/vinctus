@@ -157,26 +157,43 @@ struct ProfileCollectionsLink: View {
     NavigationLink {
       CollectionsView()
     } label: {
-      HStack(spacing: VinctusTokens.Spacing.sm) {
-        Image(systemName: "books.vertical")
-          .foregroundStyle(VinctusTokens.Color.accent)
-        VStack(alignment: .leading, spacing: 2) {
-          Text("Colecciones")
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(VinctusTokens.Color.textPrimary)
-          Text("Tus enlaces y notas guardados, solo para ti")
-            .font(.caption)
-            .foregroundStyle(VinctusTokens.Color.textMuted)
-        }
-        Spacer()
-        Image(systemName: "chevron.right")
-          .foregroundStyle(VinctusTokens.Color.textMuted)
-      }
-      .padding(VinctusTokens.Spacing.md)
-      .background(VinctusTokens.Color.surface)
-      .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous))
+      ProfileLinkRow(
+        icon: "books.vertical",
+        title: "Colecciones",
+        subtitle: "Tus enlaces y notas guardados, solo para ti"
+      )
     }
     .buttonStyle(.plain)
+  }
+}
+
+/// A card row that opens another screen of the profile (Colecciones, Publicaciones guardadas).
+struct ProfileLinkRow: View {
+  let icon: String
+  let title: String
+  let subtitle: String
+
+  var body: some View {
+    HStack(spacing: VinctusTokens.Spacing.sm) {
+      Image(systemName: icon)
+        .foregroundStyle(VinctusTokens.Color.accent)
+        .frame(width: 24)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title)
+          .font(.subheadline.weight(.semibold))
+          .foregroundStyle(VinctusTokens.Color.textPrimary)
+        Text(subtitle)
+          .font(.caption)
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+      }
+      Spacer()
+      Image(systemName: "chevron.right")
+        .foregroundStyle(VinctusTokens.Color.textMuted)
+    }
+    .padding(VinctusTokens.Spacing.md)
+    .background(VinctusTokens.Color.surface)
+    .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous))
+    .contentShape(Rectangle())
   }
 }
 

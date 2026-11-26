@@ -104,27 +104,41 @@ struct ProfilePostsSection: View {
 private struct PostGridTile: View {
   let post: FeedItem
 
+  /// No photo, video or file: the words are the picture, like a quote (as on the web).
+  private var isTextOnly: Bool {
+    post.previewImageURL == nil && !post.hasVideo && post.fileName == nil
+  }
+
   var body: some View {
     SwiftUI.Color.clear
       .aspectRatio(1, contentMode: .fit)
       .overlay {
         if let preview = post.previewImageURL {
           PostImageView(source: preview)
+        } else if isTextOnly {
+          quoteBackground
         } else {
           emptyBackground
         }
       }
       .overlay {
-        LinearGradient(
-          colors: [.black.opacity(0.7), .black.opacity(0.2), .clear],
-          startPoint: .bottom,
-          endPoint: .top
-        )
-        .opacity(0.8)
+        if !isTextOnly {
+          LinearGradient(
+            colors: [.black.opacity(0.7), .black.opacity(0.2), .clear],
+            startPoint: .bottom,
+            endPoint: .top
+          )
+          .opacity(0.8)
+        }
       }
-      .overlay(alignment: .bottomLeading) {
-        caption
-          .padding(14)
+      .overlay(alignment: isTextOnly ? .leading : .bottomLeading) {
+        if isTextOnly {
+          quote
+            .padding(14)
+        } else {
+          caption
+            .padding(14)
+        }
       }
       .overlay(alignment: .topTrailing) {
         if post.hasVideo {
@@ -160,6 +174,36 @@ private struct PostGridTile: View {
         .foregroundStyle(post.text.isEmpty ? VinctusTokens.Color.textSecondary : SwiftUI.Color(white: 0.96))
         .lineLimit(3)
         .multilineTextAlignment(.leading)
+    }
+  }
+
+  private var quote: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Image(systemName: "quote.opening")
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(VinctusTokens.Color.accent.opacity(0.75))
+      Text(post.title ?? (post.text.isEmpty ? "Publicación" : post.text))
+        .font(VinctusTokens.Typography.serif(16))
+        .foregroundStyle(VinctusTokens.Color.textPrimary)
+        .lineLimit(5)
+        .multilineTextAlignment(.leading)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private var quoteBackground: some View {
+    ZStack {
+      LinearGradient(
+        colors: [SwiftUI.Color(white: 0.115), SwiftUI.Color(white: 0.08)],
+        startPoint: .top,
+        endPoint: .bottom
+      )
+      RadialGradient(
+        colors: [VinctusTokens.Color.accent.opacity(0.16), .clear],
+        center: .topLeading,
+        startRadius: 0,
+        endRadius: 170
+      )
     }
   }
 
