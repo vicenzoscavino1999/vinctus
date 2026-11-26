@@ -435,7 +435,7 @@ export default function ConversationDetailsPage() {
           </div>
           <div className="flex-1">
             <p className="text-white font-medium">Reportar</p>
-            <p className="text-xs text-neutral-500">Incumplimiento de Community Guidelines</p>
+            <p className="text-xs text-neutral-500">Incumplimiento de las normas de la comunidad</p>
           </div>
         </button>
       </div>
@@ -485,7 +485,7 @@ export default function ConversationDetailsPage() {
                     rel="noreferrer"
                     className="text-amber-300 hover:text-amber-200 underline"
                   >
-                    Ver Community Guidelines
+                    Ver normas de la comunidad
                   </a>
                   <a
                     href={`mailto:${LEGAL_LINKS.securityEmail}`}

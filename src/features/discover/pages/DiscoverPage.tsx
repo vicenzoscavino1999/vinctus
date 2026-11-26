@@ -92,7 +92,7 @@ const EDITORIAL_TITLE_PATTERNS = [
 ];
 
 const EDITORIAL_BODY_PATTERNS = [
-  'Curaduria editorial con foco en {subgroup} dentro de {category}.',
+  'Curaduría editorial con foco en {subgroup} dentro de {category}.',
   'Resumen rapido para explorar {subgroup} sin salir de Discover.',
   'Lectura base para entender el contexto actual de {subgroup}.',
   'Panorama de ideas recientes en {subgroup} para abrir debate.',
@@ -183,7 +183,7 @@ const buildEditorialPublication = (index: number): PublicationStreamItem => {
     .replace('{subgroup}', subgroupName)
     .replace('{category}', base.category);
   const groupVariant =
-    cycle === 0 ? base.group : `${base.group} · ${cycle % 2 === 0 ? 'Radar' : 'Curaduria'}`;
+    cycle === 0 ? base.group : `${base.group} · ${cycle % 2 === 0 ? 'Radar' : 'Curaduría'}`;
   const likesVariant = Math.max(0, base.likes + cycle * 11 + ((index % 7) - 3));
   const commentsVariant = Math.max(0, base.comments + cycle * 2 + ((index % 5) - 2));
 
@@ -392,7 +392,7 @@ const getTrendPreviewForCategory = async (
         items: observations.slice(0, 2).map((observation) => ({
           id: String(observation.id),
           title: observation.species,
-          subtitle: observation.location || observation.scientificName || 'Ubicacion no disponible',
+          subtitle: observation.location || observation.scientificName || 'Ubicación no disponible',
           meta: observation.observer || 'iNaturalist',
           href: observation.link || null,
         })),
@@ -406,7 +406,7 @@ const getTrendPreviewForCategory = async (
           id: String(track.id),
           title: track.title,
           subtitle: track.artist || 'Artista no disponible',
-          meta: track.listeners ? `${track.listeners} oyentes` : 'Musica en vivo',
+          meta: track.listeners ? `${track.listeners} oyentes` : 'Música en vivo',
           href: track.link || null,
         })),
       };
@@ -1608,7 +1608,6 @@ const DiscoverSession = () => {
     const isFollowed = isCategoryFollowed(category.id);
     const signals = getTrendSignals(category.id);
     const rankPosition = trendRankPositionByCategory[category.id] ?? rankIndex + 1;
-    const trendScore = Math.round((trendScoresByCategory[category.id]?.score ?? 0) * 100);
     const subgroupLimit = isFeatured ? 3 : 2;
     const titleClass = isFeatured ? 'text-[2.4rem]' : 'text-[1.85rem]';
 
@@ -1652,9 +1651,6 @@ const DiscoverSession = () => {
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   <span className="rounded-full border border-brand-gold/35 bg-brand-gold/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-brand-gold">
                     Top {rankPosition}
-                  </span>
-                  <span className="rounded-full border border-neutral-700 bg-neutral-900/70 px-2 py-0.5 text-[10px] uppercase tracking-wider text-neutral-300">
-                    {trendScore} score
                   </span>
                 </div>
                 <p className="text-sm text-neutral-400 mt-1 line-clamp-2">{category.description}</p>
@@ -1854,7 +1850,7 @@ const DiscoverSession = () => {
           DESCUBRIR
         </span>
         <h1 className="text-display-sm md:text-display-md font-display font-normal text-white mb-8 tracking-tight">
-          Curaduria de <span className="text-brand-gold italic">Intereses</span>
+          Curaduría de <span className="text-brand-gold italic">Intereses</span>
         </h1>
 
         <div className="w-full max-w-lg mt-4">
@@ -2150,8 +2146,12 @@ const DiscoverSession = () => {
 
                   <div className="flex items-center justify-between pt-3 border-t border-neutral-800/50 mt-4">
                     <div className="text-neutral-500 text-xs">
-                      {stats.members.toLocaleString('es-ES')} miembros - {stats.postsWeek}{' '}
-                      posts/semana
+                      {stats.members === 1
+                        ? '1 miembro'
+                        : `${stats.members.toLocaleString('es-ES')} miembros`}{' '}
+                      ·{' '}
+                      {stats.postsWeek === 1 ? '1 publicación' : `${stats.postsWeek} publicaciones`}
+                      /semana
                     </div>
                     <span className="text-[10px] uppercase tracking-wider text-neutral-500">
                       {visibilityLabel}
@@ -2165,9 +2165,19 @@ const DiscoverSession = () => {
       </section>
 
       <section>
-        <h2 className="text-heading-lg font-display font-normal text-white mb-3">Publicaciones</h2>
+        <div className="mb-3 flex items-baseline justify-between gap-4">
+          <h2 className="text-heading-lg font-display font-normal text-white">Publicaciones</h2>
+          {/* The feed has no tab of its own (same bottom bar as the native app). */}
+          <button
+            type="button"
+            onClick={() => navigate('/feed')}
+            className="shrink-0 text-sm font-semibold text-brand-gold transition-colors hover:text-brand-gold-light"
+          >
+            Ver todo
+          </button>
+        </div>
         <p className="text-neutral-400 text-sm mb-6 max-w-2xl">
-          Feed continuo de comunidad + YouTube para mantener Discover activo sin verse vacio.
+          Lo último de la comunidad y vídeos para descubrir.
         </p>
 
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -2250,7 +2260,7 @@ const DiscoverSession = () => {
             >
               {communityLoading || youtubeLoading
                 ? 'Cargando publicaciones...'
-                : 'Desliza para ver mas'}
+                : 'Desliza para ver más'}
             </div>
           </div>
         )}

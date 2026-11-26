@@ -180,7 +180,7 @@ const GroupOptionsOverlay = ({
             </div>
             <div className="flex-1">
               <p className="text-red-200 font-medium">Reportar grupo</p>
-              <p className="text-xs text-red-300">Incumplimiento de Community Guidelines</p>
+              <p className="text-xs text-red-300">Incumplimiento de las normas de la comunidad</p>
             </div>
           </button>
 

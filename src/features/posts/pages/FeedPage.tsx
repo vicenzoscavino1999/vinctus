@@ -1,6 +1,6 @@
 import { PostImage } from '@/features/posts/components/ProtectedPostMedia';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link2, MessageCircle, Film, FileText } from 'lucide-react';
+import { Link2, Film, FileText } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/auth';
 import { formatRelativeTime } from '@/shared/lib/formatUtils';
@@ -19,7 +19,6 @@ import {
 } from '@/features/posts/api';
 
 const FEED_PAGE_SIZE = 12;
-const FEED_BLOCK_SIZE = 6;
 
 const logPostError = (message: string, error: unknown) => {
   if (import.meta.env.DEV) {
@@ -283,12 +282,12 @@ const FeedSession = () => {
           <div className="text-xs text-neutral-500 text-center py-2">Cargando publicaciones...</div>
         </div>
       ) : posts.length === 0 ? (
-        <div className="text-sm text-neutral-500 text-center py-8">No hay posts todavia.</div>
+        <div className="text-sm text-neutral-500 text-center py-8">Aún no hay publicaciones.</div>
       ) : (
         <div className="space-y-6 max-w-3xl mx-auto">
           {posts
             .filter((post) => !post.authorId || !blockedUsers.has(post.authorId))
-            .map((post, index) => {
+            .map((post) => {
               const likeCount = likeCounts[post.postId] ?? Math.max(0, post.likeCount || 0);
               const commentCount =
                 commentCounts[post.postId] ?? Math.max(0, post.commentCount || 0);
@@ -299,7 +298,7 @@ const FeedSession = () => {
               const displayText = summary.text;
               const titleText = summary.title?.trim() || '';
               const bodyText = displayText.trim();
-              const headline = titleText || bodyText || 'Publicacion de la comunidad';
+              const headline = titleText || bodyText || 'Publicación de la comunidad';
               const showBody = !!titleText && !!bodyText;
               const authorName = summary.authorName;
               const authorPhoto = summary.authorPhoto;
@@ -308,19 +307,9 @@ const FeedSession = () => {
               const timeLabel = formatRelativeTime(post.createdAt);
               const hasVideo = (summary.media ?? []).some((item) => item.type === 'video');
               const fileCount = (summary.media ?? []).filter((item) => item.type === 'file').length;
-              const blockNumber = Math.floor(index / FEED_BLOCK_SIZE) + 1;
-              const isBlockStart = index % FEED_BLOCK_SIZE === 0;
 
               return (
-                <div key={post.postId} className="space-y-4">
-                  {isBlockStart && (
-                    <div className="flex items-center gap-4 pt-2">
-                      <p className="text-[11px] tracking-[0.28em] uppercase text-neutral-500">
-                        Comunidad activa · Bloque {blockNumber}
-                      </p>
-                      <div className="h-px flex-1 bg-neutral-800" />
-                    </div>
-                  )}
+                <div key={post.postId}>
                   <div
                     onClick={() => setActivePost(summary)}
                     className="relative overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900/50 cursor-pointer"
@@ -336,7 +325,7 @@ const FeedSession = () => {
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10" />
 
-                    <div className="relative z-10 p-6 pr-16 min-h-[220px] flex flex-col justify-between">
+                    <div className="relative z-10 p-5 md:p-6 min-h-[200px] flex flex-col justify-between gap-5">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           {authorPhoto ? (
@@ -352,7 +341,7 @@ const FeedSession = () => {
                           )}
                           <div>
                             <p className="text-white text-sm font-medium">{authorName}</p>
-                            <p className="text-xs text-neutral-300">Comunidad - {timeLabel}</p>
+                            <p className="text-xs text-neutral-300">{timeLabel}</p>
                           </div>
                         </div>
                         <button
@@ -367,10 +356,21 @@ const FeedSession = () => {
                         </button>
                       </div>
 
-                      <div className="mt-6">
-                        <h3 className="text-xl md:text-2xl font-serif text-white leading-snug line-clamp-2">
-                          {headline}
-                        </h3>
+                      {/* Titles keep the serif; the post's own text reads in the body font. */}
+                      <div>
+                        {titleText ? (
+                          <h3 className="text-xl md:text-2xl font-serif text-white leading-snug line-clamp-2">
+                            {headline}
+                          </h3>
+                        ) : (
+                          <p
+                            className={`text-base md:text-lg text-white leading-relaxed whitespace-pre-line ${
+                              imageUrl ? 'line-clamp-3' : 'line-clamp-5'
+                            }`}
+                          >
+                            {headline}
+                          </p>
+                        )}
                         {showBody && (
                           <p className="mt-2 text-sm text-neutral-300 leading-relaxed line-clamp-2">
                             {bodyText}
@@ -378,42 +378,32 @@ const FeedSession = () => {
                         )}
                       </div>
 
-                      <div className="flex items-center justify-between mt-6 text-xs text-neutral-300">
-                        <div className="flex items-center gap-3">
-                          <span>Desliza para ver mas -&gt;</span>
-                          {hasVideo && (
-                            <span className="flex items-center gap-1">
-                              <Film size={12} />
-                              Video
-                            </span>
-                          )}
-                          {fileCount > 0 && (
-                            <span className="flex items-center gap-1">
-                              <FileText size={12} />
-                              {fileCount} archivo{fileCount > 1 ? 's' : ''}
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setActivePost(summary);
-                          }}
-                          className="flex items-center gap-2 text-neutral-200 hover:text-white transition-colors"
-                        >
-                          <MessageCircle size={14} />
-                          Comentar
-                        </button>
+                      <div className="flex items-end justify-between gap-3">
+                        <FeedPostActions
+                          postId={post.postId}
+                          initialCount={Math.max(0, post.likeCount || 0)}
+                          commentCount={commentCount}
+                          onComments={() => setActivePost(summary)}
+                          onLikeCount={handleLikeCount}
+                        />
+                        {(hasVideo || fileCount > 0) && (
+                          <div className="flex items-center gap-3 pb-1 text-xs text-neutral-300">
+                            {hasVideo && (
+                              <span className="flex items-center gap-1">
+                                <Film size={12} />
+                                Video
+                              </span>
+                            )}
+                            {fileCount > 0 && (
+                              <span className="flex items-center gap-1">
+                                <FileText size={12} />
+                                {fileCount} archivo{fileCount > 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
-
-                    <FeedPostActions
-                      postId={post.postId}
-                      initialCount={Math.max(0, post.likeCount || 0)}
-                      commentCount={commentCount}
-                      onComments={() => setActivePost(summary)}
-                      onLikeCount={handleLikeCount}
-                    />
                   </div>
                 </div>
               );
