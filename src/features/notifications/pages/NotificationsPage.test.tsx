@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import NotificationsPage from '@/features/notifications/pages/NotificationsPage';
@@ -150,30 +150,39 @@ describe('NotificationsPage', () => {
     notificationsApiMock.deleteNotification.mockResolvedValue(undefined);
   });
 
-  it('filters blocked users across collaboration, follow, group requests, and activity', async () => {
+  const renderPage = () =>
     render(
-      <MemoryRouter>
-        <NotificationsPage />
+      <MemoryRouter initialEntries={['/notifications']}>
+        <Routes>
+          <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/user/:userId" element={<div>Perfil destino</div>} />
+          <Route path="/post/:postId" element={<div>Publicación destino</div>} />
+        </Routes>
       </MemoryRouter>,
     );
+  const row = (sentence: string) => screen.findByRole('article', { name: sentence });
+  const openRequests = () => fireEvent.click(screen.getByRole('tab', { name: /Solicitudes/ }));
+  const LIKE_CLARA = 'Clara le dio “Me gusta” a tu publicación';
 
-    expect(await screen.findByText('Clara')).toBeInTheDocument();
-    expect(screen.queryByText('Bloqueado')).not.toBeInTheDocument();
+  it('opens on activity, summarizes pending requests and hides blocked senders everywhere', async () => {
+    renderPage();
 
-    // Followers tab
-    fireEvent.click(screen.getAllByText('Seguidores')[0]);
-    expect(await screen.findByText('@clara')).toBeInTheDocument();
-    expect(screen.queryByText('Bloqueado')).not.toBeInTheDocument();
-
-    // Groups tab
-    fireEvent.click(screen.getAllByText('Grupos')[0]);
-    expect(await screen.findByText('Club Física')).toBeInTheDocument();
-    expect(screen.queryByText('Bloqueado')).not.toBeInTheDocument();
-
-    // Activity tab
-    fireEvent.click(screen.getByText('Actividad'));
-    expect(await screen.findByText('Clara le dio "Me gusta" a tu publicación')).toBeInTheDocument();
+    expect(await row(LIKE_CLARA)).toBeInTheDocument();
     expect(screen.queryByText(/Bloqueado/)).not.toBeInTheDocument();
+    expect(await screen.findByText('Solicitudes pendientes')).toBeInTheDocument();
+    expect(screen.getByText('Clara y 2 más esperan tu respuesta')).toBeInTheDocument();
+    // The blocked list is asked once for both activity and requests.
+    expect(groupsApiMock.getBlockedUsers).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByText('Solicitudes pendientes'));
+    expect(await screen.findAllByRole('article', { name: 'Solicitud de Clara' })).toHaveLength(3);
+    expect(screen.getByText('@clara')).toBeInTheDocument();
+    expect(screen.queryByText('Bloqueado')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Grupos/ }));
+    const [groupRequest] = screen.getAllByRole('article', { name: 'Solicitud de Clara' });
+    expect(screen.getAllByRole('article', { name: 'Solicitud de Clara' })).toHaveLength(1);
+    expect(within(groupRequest).getByText(/Club Física/)).toBeInTheDocument();
   });
 
   it('removes accepted collaboration request even if direct conversation creation is denied', async () => {
@@ -182,17 +191,14 @@ describe('NotificationsPage', () => {
       new Error('permission-denied'),
     );
 
-    render(
-      <MemoryRouter>
-        <NotificationsPage />
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByText('Clara')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Aceptar' }));
+    renderPage();
+    openRequests();
+    fireEvent.click(await screen.findByRole('button', { name: /^Colaboración/ }));
+    const request = await screen.findByRole('article', { name: 'Solicitud de Clara' });
+    fireEvent.click(within(request).getByRole('button', { name: 'Aceptar' }));
 
     await waitFor(() => {
-      expect(screen.queryByText('Clara')).not.toBeInTheDocument();
+      expect(screen.queryByRole('article', { name: 'Solicitud de Clara' })).not.toBeInTheDocument();
     });
     expect(collabApiMock.acceptCollaborationRequest).toHaveBeenCalledWith('cr-good');
     expect(notificationsApiMock.notifyNotificationsUpdated).toHaveBeenCalledTimes(1);
@@ -202,34 +208,35 @@ describe('NotificationsPage', () => {
     );
   });
 
-  it('renders a retry button on load error and recovers cleanly', async () => {
+  it('keeps the other requests when one source fails, and retries only that one', async () => {
     collabApiMock.getPendingCollaborationRequests
       .mockRejectedValueOnce(new Error('network'))
       .mockResolvedValueOnce([
         makeCollabRequest({ id: 'cr-recovered', fromUid: 'user-good', fromUserName: 'Clara' }),
       ]);
 
-    render(
-      <MemoryRouter>
-        <NotificationsPage />
-      </MemoryRouter>,
-    );
+    renderPage();
+    openRequests();
 
-    expect(await screen.findByText('No se pudieron cargar las solicitudes.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('No se pudieron cargar algunas solicitudes.'),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('article', { name: 'Solicitud de Clara' })).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
 
-    expect(await screen.findByText('Clara')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByRole('article', { name: 'Solicitud de Clara' })).toHaveLength(3);
+    });
+    expect(
+      screen.queryByText('No se pudieron cargar algunas solicitudes.'),
+    ).not.toBeInTheDocument();
+    expect(profileApiMock.getIncomingFollowRequests).toHaveBeenCalledTimes(1);
   });
 
   it('supports marking single/all activity items as read, deleting with rollback, and type filters', async () => {
     notificationsApiMock.getUserActivity.mockResolvedValueOnce({
       items: [
-        makeActivity({
-          id: 'act-like',
-          type: 'post_like',
-          fromUserName: 'Clara',
-          read: false,
-        }),
+        makeActivity({ id: 'act-like', type: 'post_like', fromUserName: 'Clara', read: false }),
         makeActivity({
           id: 'act-comment',
           type: 'post_comment',
@@ -249,21 +256,21 @@ describe('NotificationsPage', () => {
       hasMore: false,
     });
 
-    render(
-      <MemoryRouter>
-        <NotificationsPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
-    fireEvent.click(screen.getByText('Actividad'));
-    expect(await screen.findByText('Clara le dio "Me gusta" a tu publicación')).toBeInTheDocument();
-    expect(screen.getByText('Diego comentó en tu publicación')).toBeInTheDocument();
-    expect(screen.getByText('Elena empezó a seguirte')).toBeInTheDocument();
+    expect(await row(LIKE_CLARA)).toBeInTheDocument();
+    expect(
+      screen.getByRole('article', { name: 'Diego comentó en tu publicación' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Elena empezó a seguirte' })).toBeInTheDocument();
+    expect(screen.getByText('“Gran observación”')).toBeInTheDocument();
 
     // Filter to Comentarios
     fireEvent.click(screen.getByRole('button', { name: 'Comentarios' }));
-    expect(screen.getByText('Diego comentó en tu publicación')).toBeInTheDocument();
-    expect(screen.queryByText('Clara le dio "Me gusta" a tu publicación')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('article', { name: 'Diego comentó en tu publicación' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: LIKE_CLARA })).not.toBeInTheDocument();
 
     // Back to Todas and mark single item read
     fireEvent.click(screen.getByRole('button', { name: 'Todas' }));
@@ -292,8 +299,8 @@ describe('NotificationsPage', () => {
     // Return to Todas and verify delete rollback on error, then delete success
     fireEvent.click(screen.getByRole('button', { name: 'Todas' }));
     notificationsApiMock.deleteNotification.mockRejectedValueOnce(new Error('network'));
-    const deleteButtons = screen.getAllByRole('button', { name: 'Eliminar notificación' });
-    fireEvent.click(deleteButtons[0]);
+    const likeRow = screen.getByRole('article', { name: LIKE_CLARA });
+    fireEvent.click(within(likeRow).getByRole('button', { name: 'Eliminar notificación' }));
 
     await waitFor(() => {
       expect(toastMock.showToast).toHaveBeenCalledWith(
@@ -301,15 +308,49 @@ describe('NotificationsPage', () => {
         'error',
       );
     });
-    expect(screen.getByText('Clara le dio "Me gusta" a tu publicación')).toBeInTheDocument();
+    const restored = await row(LIKE_CLARA);
 
     notificationsApiMock.deleteNotification.mockResolvedValueOnce(undefined);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Eliminar notificación' })[0]);
+    fireEvent.click(within(restored).getByRole('button', { name: 'Eliminar notificación' }));
     await waitFor(() => {
-      expect(
-        screen.queryByText('Clara le dio "Me gusta" a tu publicación'),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByRole('article', { name: LIKE_CLARA })).not.toBeInTheDocument();
     });
+  });
+
+  it('shows repeated follows from one person once, and marking it read marks them all', async () => {
+    notificationsApiMock.getUserActivity.mockResolvedValueOnce({
+      items: ['f1', 'f2', 'f3'].map((id, index) =>
+        makeActivity({
+          id,
+          type: 'follow',
+          fromUid: 'user-good',
+          fromUserName: 'Vicenzo_prueba',
+          postId: null,
+          createdAt: new Date(Date.UTC(2026, 0, 10 - index)),
+        }),
+      ),
+      lastDoc: null,
+      hasMore: false,
+    });
+
+    renderPage();
+
+    const follow = await row('Vicenzo_prueba empezó a seguirte');
+    expect(
+      screen.getAllByRole('article', { name: 'Vicenzo_prueba empezó a seguirte' }),
+    ).toHaveLength(1);
+    fireEvent.click(within(follow).getByRole('button', { name: 'Marcar como leída' }));
+    await waitFor(() => {
+      expect(notificationsApiMock.markAllNotificationsRead).toHaveBeenCalledWith([
+        'f1',
+        'f2',
+        'f3',
+      ]);
+    });
+
+    // The row opens the profile.
+    fireEvent.click(within(follow).getByRole('button', { name: 'Ver perfil' }));
+    expect(await screen.findByText('Perfil destino')).toBeInTheDocument();
   });
 
   it('auto-skips blocked-only activity pages and deduplicates overlapping pagination items', async () => {
@@ -331,25 +372,25 @@ describe('NotificationsPage', () => {
       .mockResolvedValueOnce({
         items: [
           makeActivity({ id: 'act-page-2', fromUid: 'user-good', fromUserName: 'Clara' }),
-          makeActivity({ id: 'act-page-3', fromUid: 'user-good', fromUserName: 'Sofía' }),
+          makeActivity({
+            id: 'act-page-3',
+            fromUid: 'user-sofia',
+            fromUserName: 'Sofía',
+            postId: 'post-2',
+          }),
         ],
         lastDoc: null,
         hasMore: false,
       });
 
-    render(
-      <MemoryRouter>
-        <NotificationsPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
-    fireEvent.click(screen.getByText('Actividad'));
-    expect(await screen.findByText('Clara le dio "Me gusta" a tu publicación')).toBeInTheDocument();
+    expect(await row(LIKE_CLARA)).toBeInTheDocument();
     expect(notificationsApiMock.getUserActivity).toHaveBeenCalledTimes(2);
 
     fireEvent.click(screen.getByRole('button', { name: 'Cargar más' }));
-    expect(await screen.findByText('Sofía le dio "Me gusta" a tu publicación')).toBeInTheDocument();
-    expect(screen.getAllByText('Clara le dio "Me gusta" a tu publicación')).toHaveLength(1);
+    expect(await row('Sofía le dio “Me gusta” a tu publicación')).toBeInTheDocument();
+    expect(screen.getAllByRole('article', { name: LIKE_CLARA })).toHaveLength(1);
   });
 
   it('resets previous account activity cleanly when switching directly from userA to userB', async () => {
@@ -371,10 +412,7 @@ describe('NotificationsPage', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByText('Actividad'));
-    expect(
-      await screen.findByText('SoloDeUsuarioA le dio "Me gusta" a tu publicación'),
-    ).toBeInTheDocument();
+    expect(await row('SoloDeUsuarioA le dio “Me gusta” a tu publicación')).toBeInTheDocument();
 
     authMock.user = { uid: 'viewer-2', displayName: 'Viewer 2' };
     rerender(
@@ -383,25 +421,17 @@ describe('NotificationsPage', () => {
       </MemoryRouter>,
     );
 
+    expect(await row('SoloDeUsuarioB le dio “Me gusta” a tu publicación')).toBeInTheDocument();
     expect(
-      await screen.findByText('SoloDeUsuarioB le dio "Me gusta" a tu publicación'),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText('SoloDeUsuarioA le dio "Me gusta" a tu publicación'),
+      screen.queryByRole('article', { name: 'SoloDeUsuarioA le dio “Me gusta” a tu publicación' }),
     ).not.toBeInTheDocument();
   });
 
   it('navigates to requester profile when clicking requester name on request card', async () => {
-    render(
-      <MemoryRouter initialEntries={['/notifications']}>
-        <Routes>
-          <Route path="/notifications" element={<NotificationsPage />} />
-          <Route path="/user/:userId" element={<div>Perfil destino</div>} />
-        </Routes>
-      </MemoryRouter>,
-    );
+    renderPage();
+    openRequests();
 
-    const requesterButton = await screen.findByRole('button', { name: 'Clara' });
+    const [requesterButton] = await screen.findAllByRole('button', { name: 'Clara' });
     fireEvent.click(requesterButton);
     expect(await screen.findByText('Perfil destino')).toBeInTheDocument();
   });

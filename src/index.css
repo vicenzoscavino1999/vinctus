@@ -788,3 +788,8 @@
     animation: none;
   }
 }
+
+/* Notifications page - the same short fade as Discover */
+.page-notifications {
+  animation: discoverEnter 0.18s ease-out;
+}

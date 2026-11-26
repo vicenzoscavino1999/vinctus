@@ -127,21 +127,19 @@ test.describe('Flujo de Grupos', () => {
         timeout: 15000,
       });
 
-      // Alice accepts Bob's request on Notifications -> Grupos.
+      // Alice accepts Bob's request on Notifications -> Solicitudes -> Grupos.
       await page.goto('/notifications');
-      await page.getByRole('button', { name: /^Grupos$/i }).click();
-      await expect(page.getByText(editedName)).toBeVisible({ timeout: 15000 });
+      await page.getByRole('tab', { name: /Solicitudes/ }).click();
+      await page.getByRole('button', { name: /^Grupos/ }).click();
       const requestRow = page
-        .locator('div.rounded-xl')
-        .filter({ hasText: editedName })
-        .filter({
-          has: page.getByRole('button', { name: /^Aceptar$/i }),
-        });
+        .getByRole('article', { name: /^Solicitud de / })
+        .filter({ hasText: editedName });
+      await expect(requestRow.first()).toBeVisible({ timeout: 15000 });
       await requestRow
         .first()
         .getByRole('button', { name: /^Aceptar$/i })
         .click();
-      await expect(page.getByText(editedName)).toHaveCount(0, { timeout: 15000 });
+      await expect(requestRow).toHaveCount(0, { timeout: 15000 });
 
       // Bob reloads, verifies member access, leaves, and re-applies cleanly.
       await bobPage.reload({ waitUntil: 'domcontentloaded' });
