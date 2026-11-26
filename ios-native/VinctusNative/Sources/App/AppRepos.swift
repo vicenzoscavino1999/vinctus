@@ -100,6 +100,13 @@ enum AppRepos {
     return FirebasePublicDebatesRepo()
   }
 
+  static func notifications() -> NotificationsRepo {
+    #if SCREENSHOTS
+    if isDemo { return SampleNotificationsRepo() }
+    #endif
+    return FirebaseNotificationsRepo()
+  }
+
   // MARK: Repos without sample data
 
   static func auth() -> AuthRepo { FirebaseAuthRepo() }
