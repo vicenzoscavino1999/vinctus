@@ -140,7 +140,7 @@ describe('Profile, Group, and Post Detail flows', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Aun no hay publicaciones.')).toBeInTheDocument();
+      expect(screen.getByText('Aún no hay publicaciones.')).toBeInTheDocument();
     });
 
     const publishButton = screen.getByRole('button', { name: /Publicar/i });

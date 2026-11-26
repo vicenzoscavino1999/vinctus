@@ -4,7 +4,7 @@ import { PostImage } from '@/features/posts/components/ProtectedPostMedia';
 import { FEED_CACHE_INVALIDATED_EVENT } from '@/features/posts/model/feedCache';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Film, Image as ImageIcon, Loader2, Plus } from 'lucide-react';
+import { FileText, Film, Image as ImageIcon, Plus, Quote } from 'lucide-react';
 import { getPostsByUser, type PaginatedResult, type PostRead } from '@/features/posts/api';
 import { getYouTubeThumbnailUrl } from '@/shared/lib/youtube';
 
@@ -172,9 +172,14 @@ const ProfilePostsSession = ({ userId, canView = true }: ProfilePostsGridProps) 
       </div>
 
       {loading || loadedReader !== (user?.uid ?? null) ? (
-        <div className="flex items-center gap-2 text-sm text-neutral-500">
-          <Loader2 size={16} className="animate-spin" />
-          Cargando publicaciones...
+        <div
+          role="status"
+          aria-label="Cargando publicaciones"
+          className="grid grid-cols-2 gap-3 md:grid-cols-3"
+        >
+          {Array.from({ length: 6 }, (_, index) => (
+            <div key={index} className="skeleton aspect-square rounded-2xl" />
+          ))}
         </div>
       ) : error ? (
         <div className="text-sm text-red-400">{error}</div>
@@ -183,7 +188,7 @@ const ProfilePostsSession = ({ userId, canView = true }: ProfilePostsGridProps) 
           <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-neutral-900 flex items-center justify-center text-neutral-500">
             <ImageIcon size={22} />
           </div>
-          <p className="text-neutral-500 text-sm">Aun no hay publicaciones.</p>
+          <p className="text-neutral-500 text-sm">Aún no hay publicaciones.</p>
           {hasMore && (
             <div className="mt-4">
               <button
@@ -233,25 +238,37 @@ const ProfilePostsSession = ({ userId, canView = true }: ProfilePostsGridProps) 
                       className="absolute inset-0 w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="absolute inset-0 bg-gradient-to-br from-neutral-900 via-neutral-800 to-black" />
+                    <div className="absolute inset-0 bg-[radial-gradient(120%_70%_at_0%_0%,rgba(212,175,55,0.14),transparent_62%),linear-gradient(180deg,#1d1d1d,#141414)]" />
                   )}
 
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-80 group-hover:opacity-100 transition-opacity" />
+                  {(image || videoThumbnail) && (
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-80 group-hover:opacity-100 transition-opacity" />
+                  )}
 
-                  <div className="absolute inset-0 p-3 flex flex-col justify-end">
-                    {file && !image && !video ? (
-                      <div className="flex items-center gap-2 text-neutral-200 text-xs">
-                        <FileText size={14} />
-                        <span className="uppercase tracking-wide">{fileExt}</span>
-                      </div>
-                    ) : displayText ? (
-                      <p className="text-neutral-100 text-xs leading-snug line-clamp-3">
+                  {!image && !videoThumbnail && !file && displayText ? (
+                    // Text only: the words are the picture, like a quote.
+                    <div className="absolute inset-0 flex flex-col justify-center p-4">
+                      <Quote size={16} className="mb-2 text-brand-gold/70" strokeWidth={1.6} />
+                      <p className="font-display text-sm leading-snug text-white line-clamp-5 sm:text-base">
                         {displayText}
                       </p>
-                    ) : (
-                      <p className="text-neutral-400 text-xs">Publicacion</p>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="absolute inset-0 p-3 flex flex-col justify-end">
+                      {file && !image && !video ? (
+                        <div className="flex items-center gap-2 text-neutral-200 text-xs">
+                          <FileText size={14} />
+                          <span className="uppercase tracking-wide">{fileExt}</span>
+                        </div>
+                      ) : displayText ? (
+                        <p className="text-neutral-100 text-xs leading-snug line-clamp-3">
+                          {displayText}
+                        </p>
+                      ) : (
+                        <p className="text-neutral-400 text-xs">Publicación</p>
+                      )}
+                    </div>
+                  )}
 
                   <div className="absolute top-3 right-3 flex flex-col gap-2 text-neutral-200">
                     {video && (

@@ -124,6 +124,7 @@ test('@smoke likes and saves retry a lost acknowledgement without changing times
   expect(injected).toEqual(['like', 'save']);
   await expectServerCounters(1);
   await page.goto('/profile');
+  await page.getByRole('tab', { name: /Guardados/ }).click();
   const savedPanel = page.getByRole('region', { name: 'Publicaciones guardadas', exact: true });
   await expect(savedPanel.getByRole('link', { name: /Hola mundo desde el seed/ })).toBeVisible({
     timeout: 20000,
