@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// A group like the web's "Grupos recomendados" cards (`src/features/discover/pages/DiscoverPage.tsx`):
-/// round icon, name, description, the join button, and members, posts and visibility underneath.
+/// A group like the web's "Grupos para ti" cards (`src/features/discover/components/GroupsSection.tsx`):
+/// round icon, name, description, the join button, and members and visibility underneath.
 struct GroupCard: View {
   let group: GroupSummary
   /// Opens the group; the join button keeps its own action.
@@ -52,7 +52,7 @@ struct GroupCard: View {
         .padding(.top, 16)
 
       HStack {
-        Text("\(group.memberCount.formatted()) miembros")
+        Text("\(group.memberCount.formatted()) \(group.memberCount == 1 ? "miembro" : "miembros")")
           .font(.caption)
           .foregroundStyle(VinctusTokens.Color.textMuted)
         Spacer()

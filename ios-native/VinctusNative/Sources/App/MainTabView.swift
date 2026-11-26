@@ -5,6 +5,7 @@ struct MainTabView: View {
   @EnvironmentObject private var authVM: AuthViewModel
   private let discoverRepo = AppRepos.discover()
   private let feedRepo = AppRepos.feed()
+  private let connectionsRepo = AppRepos.connections()
   private let profileRepo = AppRepos.profile()
   private let profileContentRepo = AppRepos.profileContent()
   private let groupsRepo = AppRepos.groups()
@@ -19,13 +20,16 @@ struct MainTabView: View {
 
   var body: some View {
     TabView(selection: $selectedTab) {
+      // Same tabs, order and icons as the web's MobileNav: Descubrir, Buscar, Mensajes (#),
+      // Conexiones and Perfil. The feed lives inside Descubrir, as on the web.
       NavigationStack {
         DiscoverView(
           repo: discoverRepo,
           profileRepo: profileRepo,
           groupsRepo: groupsRepo,
           aiRepo: aiRepo,
-          profileContentRepo: profileContentRepo
+          profileContentRepo: profileContentRepo,
+          feedRepo: feedRepo
         )
       }
       .toolbar(.hidden, for: .tabBar)
@@ -42,16 +46,16 @@ struct MainTabView: View {
       .tag("search")
 
       NavigationStack {
-        FeedView(repo: feedRepo, profileRepo: profileRepo)
-      }
-      .toolbar(.hidden, for: .tabBar)
-      .tag("feed")
-
-      NavigationStack {
         MessagesListView(repo: chatRepo, profileRepo: profileRepo)
       }
       .toolbar(.hidden, for: .tabBar)
       .tag("messages")
+
+      NavigationStack {
+        ConnectionsView(repo: connectionsRepo)
+      }
+      .toolbar(.hidden, for: .tabBar)
+      .tag("connections")
 
       NavigationStack {
         ProfileRootView(repo: profileRepo)
@@ -84,8 +88,9 @@ struct MainTabView: View {
   }
 }
 
-/// Bottom navigation like the web's MobileNav (`src/app/routes/AppLayout.tsx`): thin icons,
-/// white when selected and gray otherwise, over a thin top border.
+/// Bottom navigation identical to the web's MobileNav (`src/app/routes/AppLayout.tsx`): the same
+/// five destinations, order and icons (Compass, Search, Hash, Briefcase, User), thin strokes with
+/// a short label, white when selected and gray otherwise, over a thin top border.
 private struct FlatTabBar: View {
   @Binding var selection: String
 
@@ -98,8 +103,8 @@ private struct FlatTabBar: View {
   private let items = [
     Item(tag: "discover", icon: "safari", title: "Descubrir"),
     Item(tag: "search", icon: "magnifyingglass", title: "Buscar"),
-    Item(tag: "feed", icon: "number", title: "Comunidad"),
-    Item(tag: "messages", icon: "bubble.left.and.bubble.right", title: "Mensajes"),
+    Item(tag: "messages", icon: "number", title: "Mensajes"),
+    Item(tag: "connections", icon: "briefcase", title: "Conexiones"),
     Item(tag: "profile", icon: "person", title: "Perfil"),
   ]
 
@@ -110,11 +115,17 @@ private struct FlatTabBar: View {
         Button {
           selection = item.tag
         } label: {
-          Image(systemName: item.icon)
-            .font(.system(size: 22, weight: .light))
-            .foregroundStyle(isSelected ? VinctusTokens.Color.textPrimary : SwiftUI.Color(white: 0.34))
-            .frame(maxWidth: .infinity, minHeight: 48)
-            .contentShape(Rectangle())
+          VStack(spacing: 3) {
+            Image(systemName: item.icon)
+              .font(.system(size: 21, weight: .light))
+            Text(item.title)
+              .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
+              .lineLimit(1)
+              .minimumScaleFactor(0.8)
+          }
+          .foregroundStyle(isSelected ? VinctusTokens.Color.textPrimary : VinctusTokens.Color.textMuted)
+          .frame(maxWidth: .infinity, minHeight: 50)
+          .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(item.title)

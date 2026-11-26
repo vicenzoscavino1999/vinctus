@@ -1,24 +1,43 @@
 import SwiftUI
+import UIKit
 
+/// The full feed. Since the bottom bar matches the web's, it opens from "Ver todo" in Descubrir's
+/// "Publicaciones", pushed with a back button; Descubrir already shows the stories above it.
 struct FeedView: View {
   @StateObject private var vm: FeedViewModel
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
+  @State private var openedPost: FeedItem?
   private let profileRepo: ProfileRepo
   private let commentsRepo: any PostCommentsRepo
+  private let isPushed: Bool
 
-  init(repo: FeedRepo, profileRepo: ProfileRepo) {
+  init(repo: FeedRepo, profileRepo: ProfileRepo, isPushed: Bool = true) {
     self.profileRepo = profileRepo
     self.commentsRepo = AppRepos.postComments()
+    self.isPushed = isPushed
     _vm = StateObject(wrappedValue: FeedViewModel(repo: repo))
   }
 
   var body: some View {
+    if isPushed {
+      feedList
+        .navigationTitle("Publicaciones")
+        .navigationBarTitleDisplayMode(.inline)
+    } else {
+      feedList
+        .vinctusTopBar()
+    }
+  }
+
+  private var feedList: some View {
     List {
-      Section {
-        StoriesBar()
+      if !isPushed {
+        Section {
+          StoriesBar()
+        }
+        .listRowSeparator(.hidden)
+        .listRowBackground(SwiftUI.Color.clear)
       }
-      .listRowSeparator(.hidden)
-      .listRowBackground(SwiftUI.Color.clear)
 
       if vm.isShowingCachedData {
         VCard {
@@ -76,14 +95,9 @@ struct FeedView: View {
         .listRowBackground(SwiftUI.Color.clear)
       } else {
         ForEach(vm.items.filter { !blockedUsers.isBlocked($0.authorID) }) { item in
-          FeedCard(
-            item: item,
-            profileRepo: profileRepo,
-            commentsRepo: commentsRepo,
-            onCommentCountChanged: { newCount in
-              vm.updateCommentCount(postID: item.id, newCount: newCount)
-            }
-          )
+          // Edge to edge, like Instagram: the photo spans the whole width.
+          FeedCard(item: item, onOpen: { openedPost = item })
+            .listRowInsets(EdgeInsets())
             .listRowSeparator(.hidden)
             .listRowBackground(SwiftUI.Color.clear)
             .onAppear {
@@ -147,9 +161,16 @@ struct FeedView: View {
       }
     }
     .listStyle(.plain)
-    .vinctusTopBar()
     .scrollContentBackground(.hidden)
     .background(VinctusTokens.Color.background)
+    .navigationDestination(item: $openedPost) { item in
+      PostDetailView(
+        item: item,
+        profileRepo: profileRepo,
+        commentsRepo: commentsRepo,
+        onCommentCountChange: { newCount in vm.updateCommentCount(postID: item.id, newCount: newCount) }
+      )
+    }
     .task {
       await vm.refresh()
     }
@@ -189,99 +210,183 @@ struct FeedView: View {
   }
 }
 
+/// A post laid out like Instagram, with the same anatomy as the web's FeedPostCard: header, the
+/// photo edge to edge, one row of actions, caption and comments. A double tap on the photo likes
+/// the post (never unlikes it) with a heart burst and a haptic; a single tap opens it.
 private struct FeedCard: View {
   let item: FeedItem
-  let profileRepo: ProfileRepo
-  let commentsRepo: any PostCommentsRepo
-  let onCommentCountChanged: (Int) -> Void
+  let onOpen: () -> Void
+
+  @State private var likeTrigger = 0
+  @State private var heartScale: CGFloat = 0.3
+  @State private var heartOpacity: Double = 0
 
   var body: some View {
-    VCard {
-      VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-          Text(item.authorName)
-            .font(.headline)
-            .foregroundStyle(VinctusTokens.Color.textPrimary)
+    VStack(alignment: .leading, spacing: 0) {
+      header
+      if let preview = item.previewImageURL {
+        media(preview)
+      } else {
+        textBody
+      }
+      actions
+      footer
+    }
+    .overlay(alignment: .bottom) {
+      Rectangle()
+        .fill(VinctusTokens.Color.border.opacity(0.5))
+        .frame(height: 0.5)
+    }
+  }
 
+  private var header: some View {
+    HStack(spacing: 10) {
+      HStack(spacing: 10) {
+        AvatarView(name: item.authorName, photoURLString: nil, size: 36)
+        VStack(alignment: .leading, spacing: 1) {
+          Text(item.authorName)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(VinctusTokens.Color.textPrimary)
+            .lineLimit(1)
           if let createdAt = item.createdAt {
             Text(createdAt, style: .relative)
               .font(.caption)
               .foregroundStyle(VinctusTokens.Color.textMuted)
           }
-
-          Spacer()
-
-          ModerationMenu(
-            target: .post(postID: item.id, authorID: item.authorID),
-            authorID: item.authorID,
-            authorName: item.authorName
-          )
         }
+        Spacer(minLength: 0)
+      }
+      .contentShape(Rectangle())
+      .onTapGesture(perform: onOpen)
 
-        if let title = item.title {
-          Text(title).font(.headline)
-        }
-        if !item.text.isEmpty {
-          Text(item.text)
-            .font(.body)
-            .lineLimit(6)
-            .multilineTextAlignment(.leading)
-            .foregroundStyle(VinctusTokens.Color.textPrimary)
-        }
+      ModerationMenu(
+        target: .post(postID: item.id, authorID: item.authorID),
+        authorID: item.authorID,
+        authorName: item.authorName
+      )
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 10)
+  }
 
-        if item.previewImageURL == nil {
-          if item.hasVideo { Label("Video adjunto", systemImage: "play.rectangle").font(.caption) }
-          if let name = item.fileName { Label(name, systemImage: "doc").font(.caption).lineLimit(1) }
-        }
-
-        if let preview = item.previewImageURL {
-          SwiftUI.Color.clear
-            .aspectRatio(4 / 3, contentMode: .fit)
-            .overlay {
-              PostImageView(source: preview)
-            }
-            .overlay {
-              if item.hasVideo {
-                Image(systemName: "play.fill")
-                  .font(.title2)
-                  .foregroundStyle(.white)
-                  .frame(width: 56, height: 56)
-                  .background(SwiftUI.Color.black.opacity(0.5))
-                  .clipShape(Circle())
-              }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-
-        HStack(spacing: 12) {
-          PostReactionButton(postID: item.id, initialCount: item.likeCount)
-            .font(.caption)
-          PostReactionButton(postID: item.id, kind: .save)
-            .font(.caption)
-
-          Label("\(item.commentCount)", systemImage: "text.bubble")
-            .font(.caption)
-            .foregroundStyle(VinctusTokens.Color.textMuted)
-
-          Spacer()
-
-          NavigationLink(
-            destination: PostDetailView(
-              item: item,
-              profileRepo: profileRepo,
-              commentsRepo: commentsRepo,
-              onCommentCountChange: onCommentCountChanged
-            )
-          ) {
-            Text("Ver post")
-              .font(.caption.weight(.semibold))
-              .foregroundStyle(VinctusTokens.Color.accent)
-          }
-          .buttonStyle(.plain)
+  private func media(_ preview: String) -> some View {
+    SwiftUI.Color.clear
+      .aspectRatio(1, contentMode: .fit)
+      .overlay { PostImageView(source: preview) }
+      .clipped()
+      .overlay {
+        if item.hasVideo {
+          Image(systemName: "play.fill")
+            .font(.title2)
+            .foregroundStyle(.white)
+            .frame(width: 56, height: 56)
+            .background(SwiftUI.Color.black.opacity(0.5), in: Circle())
         }
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
+      .overlay {
+        Image(systemName: "heart.fill")
+          .font(.system(size: 92))
+          .foregroundStyle(.white)
+          .shadow(color: .black.opacity(0.35), radius: 16, y: 4)
+          .scaleEffect(heartScale)
+          .opacity(heartOpacity)
+          .allowsHitTesting(false)
+      }
+      .contentShape(Rectangle())
+      .onTapGesture(count: 2, perform: likeFromPhoto)
+      .onTapGesture(perform: onOpen)
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(item.hasVideo ? "Video de la publicación" : "Foto de la publicación")
+      .accessibilityAddTraits(.isButton)
+      .accessibilityAction { onOpen() }
+      .accessibilityAction(named: "Me gusta") { likeTrigger += 1 }
+  }
+
+  private var textBody: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      if let title = item.title {
+        Text(title)
+          .font(VinctusTokens.Typography.serif(22))
+          .foregroundStyle(VinctusTokens.Color.textPrimary)
+      }
+      if !item.text.isEmpty {
+        Text(item.text)
+          .font(.body)
+          .lineLimit(8)
+          .foregroundStyle(VinctusTokens.Color.textPrimary)
+      }
+      if item.hasVideo { Label("Video adjunto", systemImage: "play.rectangle").font(.caption) }
+      if let name = item.fileName { Label(name, systemImage: "doc").font(.caption).lineLimit(1) }
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, 14)
+    .padding(.bottom, 2)
+    .contentShape(Rectangle())
+    .onTapGesture(perform: onOpen)
+  }
+
+  // Same order as the web: like, comments, save.
+  private var actions: some View {
+    HStack(spacing: 18) {
+      PostReactionButton(postID: item.id, initialCount: item.likeCount, selectTrigger: likeTrigger)
+        .font(.title3)
+      Button(action: onOpen) {
+        Image(systemName: "bubble.left")
+          .font(.title3)
+          .foregroundStyle(VinctusTokens.Color.textPrimary)
+      }
+      .buttonStyle(.borderless)
+      .accessibilityLabel(item.commentCount == 1 ? "1 comentario" : "\(item.commentCount) comentarios")
+      Spacer()
+      PostReactionButton(postID: item.id, kind: .save)
+        .font(.title3)
+        .labelStyle(.iconOnly)
+    }
+    .padding(.horizontal, 14)
+    .padding(.top, 10)
+  }
+
+  private var footer: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      if item.previewImageURL != nil, let caption = captionText {
+        (Text(item.authorName).fontWeight(.semibold) + Text("  \(caption)"))
+          .font(.subheadline)
+          .foregroundStyle(VinctusTokens.Color.textPrimary)
+          .lineLimit(2)
+          .onTapGesture(perform: onOpen)
+      }
+      Button(action: onOpen) {
+        Text(commentsLine)
+          .font(.subheadline)
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+      }
+      .buttonStyle(.borderless)
+    }
+    .padding(.horizontal, 14)
+    .padding(.top, 6)
+    .padding(.bottom, 14)
+  }
+
+  private var captionText: String? {
+    let parts = [item.title, item.text.isEmpty ? nil : item.text].compactMap { $0 }
+    return parts.isEmpty ? nil : parts.joined(separator: " · ")
+  }
+
+  private var commentsLine: String {
+    switch item.commentCount {
+    case 0: return "Añadir un comentario…"
+    case 1: return "Ver el comentario"
+    default: return "Ver los \(item.commentCount) comentarios"
+    }
+  }
+
+  private func likeFromPhoto() {
+    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    likeTrigger += 1
+    heartScale = 0.3
+    heartOpacity = 1
+    withAnimation(.spring(response: 0.32, dampingFraction: 0.55)) { heartScale = 1 }
+    withAnimation(.easeOut(duration: 0.3).delay(0.65)) { heartOpacity = 0 }
   }
 }
 

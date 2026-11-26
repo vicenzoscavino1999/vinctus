@@ -147,6 +147,8 @@ struct DiscoverAIPromoCard: View {
   }
 }
 
+/// A suggested person. The ring is neutral: the gold ring means "unseen story" (StoriesBar), so
+/// it isn't used for people who are only suggestions.
 struct DiscoverStoryChip: View {
   let user: DiscoverUser
 
@@ -154,14 +156,7 @@ struct DiscoverStoryChip: View {
     VStack(spacing: 8) {
       ZStack {
         Circle()
-          .stroke(
-            LinearGradient(
-              colors: [VinctusTokens.Color.accent, VinctusTokens.Color.accentBright],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            ),
-            lineWidth: 2
-          )
+          .stroke(VinctusTokens.Color.border, lineWidth: 1.5)
           .frame(width: 64, height: 64)
         DiscoverAvatarView(name: user.displayName, photoURLString: user.photoURL, size: 56)
       }
@@ -172,65 +167,5 @@ struct DiscoverStoryChip: View {
         .lineLimit(1)
     }
     .frame(width: 76)
-  }
-}
-
-struct DiscoverTrendCard: View {
-  let trend: DiscoverTrend
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      HStack {
-        Image(systemName: trend.icon)
-          .font(.system(size: 17, weight: .semibold))
-          .foregroundStyle(VinctusTokens.Color.accent)
-          .frame(width: 36, height: 36)
-          .background(VinctusTokens.Color.accent.opacity(0.14))
-          .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        Spacer()
-        Text(trend.rankLabel)
-          .font(.caption2.weight(.bold))
-          .padding(.horizontal, 9)
-          .padding(.vertical, 4)
-          .background(VinctusTokens.Color.accent.opacity(0.18))
-          .foregroundStyle(VinctusTokens.Color.accent)
-          .clipShape(Capsule())
-      }
-
-      Text(trend.title)
-        .font(VinctusTokens.Typography.sectionTitle(size: 20))
-        .foregroundStyle(VinctusTokens.Color.textPrimary)
-        .lineLimit(1)
-
-      Text(trend.subtitle)
-        .font(.footnote)
-        .foregroundStyle(VinctusTokens.Color.textMuted)
-        .lineLimit(2, reservesSpace: true)
-
-      Text("\(trend.signalLabel) · \(trend.groupsLabel)")
-        .font(.caption)
-        .foregroundStyle(VinctusTokens.Color.textMuted)
-
-      HStack(spacing: 6) {
-        ForEach(trend.tags.prefix(2), id: \.self) { tag in
-          Text(tag.capitalized)
-            .font(.caption2.weight(.medium))
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background(VinctusTokens.Color.surface2)
-            .foregroundStyle(VinctusTokens.Color.textMuted)
-            .clipShape(Capsule())
-            .lineLimit(1)
-        }
-      }
-    }
-    .padding(14)
-    .frame(width: 250, alignment: .leading)
-    .background(VinctusTokens.Color.surface)
-    .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous))
-    .overlay(
-      RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous)
-        .stroke(VinctusTokens.Color.border.opacity(0.55), lineWidth: 1)
-    )
   }
 }

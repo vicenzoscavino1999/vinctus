@@ -70,6 +70,12 @@ final class PostReactionViewModel: ObservableObject {
       errorMessage = "No se confirmó el cambio. Reintenta."
     }
   }
+
+  /// Double tap on a post's photo: turns the reaction on, never off (like Instagram).
+  func selectIfNeeded(initialCount: Int) async {
+    guard isLoaded, !isSelected, !isSaving, !isLoading, pendingValue == nil else { return }
+    await toggle(initialCount: initialCount)
+  }
 }
 
 /// State of the follow button on another user's profile. Private accounts get a follow request.
