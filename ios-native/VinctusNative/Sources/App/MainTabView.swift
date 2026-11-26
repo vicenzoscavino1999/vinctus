@@ -20,6 +20,9 @@ struct MainTabView: View {
   @State private var loadedTabs: Set<String> = []
   @State private var isKeyboardVisible = false
   @State private var isBottomNavigationHidden = false
+  /// Height of the bottom bar above the home indicator, measured.
+  @State private var barHeight: CGFloat = 54.5
+  @Environment(\.scenePhase) private var scenePhase
 
   /// Same tabs, order and icons as the web's MobileNav: Descubrir, Buscar, Mensajes (#),
   /// Conexiones and Perfil. The feed lives inside Descubrir, as on the web.
@@ -27,27 +30,33 @@ struct MainTabView: View {
   /// After launch, the other tabs are built in the background so the first switch is instant.
   static let warmUpDelay: UInt64 = 2_000_000_000
 
-  /// A plain container instead of TabView. With TabView the system tab bar (hidden behind the
-  /// web-style bar) flashed the first time a tab opened, and the space of our bar did not reach
-  /// the screens, so their last part stayed under it and bounced back after scrolling.
+  private var showsBar: Bool {
+    !isKeyboardVisible && !isBottomNavigationHidden
+  }
+
+  /// The tabs live in `TabPagesView`, a UIKit container, instead of a TabView. With TabView the
+  /// system tab bar (hidden behind the web-style bar) flashed the first time a tab opened, and the
+  /// space of our bar did not reach the screens inside each NavigationStack, so their last part
+  /// stayed under it and bounced back after scrolling.
   var body: some View {
-    ZStack {
-      ForEach(Self.tabs, id: \.self) { tab in
-        if tab == selectedTab || loadedTabs.contains(tab) {
-          tabRoot(tab)
-            .environment(\.isActiveTab, tab == selectedTab)
-            .opacity(tab == selectedTab ? 1 : 0)
-            .allowsHitTesting(tab == selectedTab)
-            .accessibilityHidden(tab != selectedTab)
-            .zIndex(tab == selectedTab ? 1 : 0)
-        }
-      }
-    }
-    // The web's flat bottom bar. As a safe-area inset every screen ends above it. It hides
-    // while typing, so it never sits above the keyboard (for example over the chat composer).
-    .safeAreaInset(edge: .bottom, spacing: 0) {
-      if !isKeyboardVisible && !isBottomNavigationHidden {
+    ZStack(alignment: .bottom) {
+      TabPagesView(
+        selection: selectedTab,
+        built: Self.tabs.filter { $0 == selectedTab || loadedTabs.contains($0) },
+        bottomInset: showsBar ? barHeight : 0,
+        page: page
+      )
+      .ignoresSafeArea()
+
+      // The web's flat bottom bar. It hides while typing, so it never sits above the keyboard
+      // (for example over the chat composer).
+      if showsBar {
         FlatTabBar(selection: $selectedTab)
+          .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+          } action: { height in
+            barHeight = height
+          }
       }
     }
     .onChange(of: selectedTab, initial: true) { _, tab in
@@ -63,15 +72,26 @@ struct MainTabView: View {
     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
       isKeyboardVisible = false
     }
-    .tint(VinctusTokens.Color.accent)
     .background(VinctusTokens.Color.background.ignoresSafeArea())
-    .environmentObject(blockedUsers)
-    .environment(\.setBottomNavigationHidden) { hidden in
-      isBottomNavigationHidden = hidden
-    }
     .task(id: authVM.currentUserID) {
       await blockedUsers.refresh(for: authVM.currentUserID)
     }
+  }
+
+  /// One tab's screens. Each tab is hosted by its own UIKit controller, which does not inherit
+  /// SwiftUI's environment, so everything the screens read from above is passed here.
+  private func page(_ tab: String) -> AnyView {
+    AnyView(
+      tabRoot(tab)
+        .environment(\.isActiveTab, tab == selectedTab)
+        .environment(\.setBottomNavigationHidden) { hidden in
+          isBottomNavigationHidden = hidden
+        }
+        .environment(\.scenePhase, scenePhase)
+        .environmentObject(authVM)
+        .environmentObject(blockedUsers)
+        .tint(VinctusTokens.Color.accent)
+    )
   }
 
   @ViewBuilder
@@ -107,6 +127,62 @@ struct MainTabView: View {
     default:
       NavigationStack {
         ProfileRootView(repo: profileRepo)
+      }
+    }
+  }
+}
+
+/// Holds the tabs the way UITabBarController does: each tab in its own hosting controller, kept
+/// alive once built; the others hidden, so they take no touches and VoiceOver skips them; and the
+/// space of the bottom bar given to every tab as a UIKit safe-area inset, which reaches every
+/// screen pushed in its navigation stack.
+private struct TabPagesView: UIViewControllerRepresentable {
+  let selection: String
+  let built: [String]
+  let bottomInset: CGFloat
+  let page: (String) -> AnyView
+
+  func makeUIViewController(context: Context) -> TabPagesController {
+    TabPagesController()
+  }
+
+  func updateUIViewController(_ controller: TabPagesController, context: Context) {
+    controller.show(selection: selection, built: built, bottomInset: bottomInset, page: page)
+  }
+}
+
+private final class TabPagesController: UIViewController {
+  private var pages: [String: UIHostingController<AnyView>] = [:]
+
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    view.backgroundColor = .clear
+  }
+
+  func show(selection: String, built: [String], bottomInset: CGFloat, page: (String) -> AnyView) {
+    for tab in built {
+      let controller: UIHostingController<AnyView>
+      if let existing = pages[tab] {
+        controller = existing
+        controller.rootView = page(tab)
+      } else {
+        controller = UIHostingController(rootView: page(tab))
+        controller.overrideUserInterfaceStyle = .dark
+        controller.view.backgroundColor = .clear
+        addChild(controller)
+        controller.view.frame = view.bounds
+        controller.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(controller.view)
+        controller.didMove(toParent: self)
+        pages[tab] = controller
+      }
+      if controller.additionalSafeAreaInsets.bottom != bottomInset {
+        controller.additionalSafeAreaInsets.bottom = bottomInset
+      }
+      let isSelected = tab == selection
+      controller.view.isHidden = !isSelected
+      if isSelected {
+        view.bringSubviewToFront(controller.view)
       }
     }
   }
