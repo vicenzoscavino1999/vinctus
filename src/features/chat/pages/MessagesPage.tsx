@@ -741,7 +741,9 @@ export default function MessagesPage() {
     );
 
     return (
-      <div className="page-feed pt-0 max-w-3xl mx-auto h-[calc(100vh-120px)] flex flex-col">
+      // On phones an open conversation takes the whole screen, over the app header and the
+      // bottom bar (like Instagram); the chat's own modals render inside, above it.
+      <div className="page-feed fixed inset-0 z-[55] mx-auto flex flex-col bg-bg px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] md:static md:z-auto md:h-[calc(100vh-120px)] md:max-w-3xl md:bg-transparent md:px-0 md:pb-0 md:pt-0">
         {/* Chat Header */}
         <ChatConversationHeader
           conversation={activeConversation}
@@ -782,6 +784,7 @@ export default function MessagesPage() {
           highlightMessageId={highlightMessageId}
           clearedAt={clearedAt}
           onRestoreChatLocal={handleRestoreChatLocal}
+          isGroup={activeConversation.type === 'group'}
         />
 
         {/* Input */}

@@ -38,8 +38,10 @@ final class ChatUITests: XCTestCase {
   func testDemoDeepLinkRendersTheConversation() {
     app.launchArguments += ["-VinctusOpenChat", "dm_me_u2"]
     app.launch()
-    XCTAssertTrue(app.buttons["Enviar"].waitForExistence(timeout: 45))
+    // With an empty draft the composer shows the mic; "Enviar" appears once there is something to send.
+    XCTAssertTrue(app.buttons["Grabar nota de voz"].waitForExistence(timeout: 45))
     XCTAssertTrue(app.buttons["Adjuntar fotos o videos"].exists)
+    XCTAssertFalse(app.buttons["Enviar"].exists)
   }
 
   func testVoiceRecordingProducesAnAttachmentForPreview() {
@@ -93,7 +95,7 @@ final class ChatUITests: XCTestCase {
     let person = app.staticTexts["Mateo Rojas"].firstMatch
     XCTAssertTrue(person.waitForExistence(timeout: 45))
     person.tap()
-    XCTAssertTrue(app.buttons["Enviar"].waitForExistence(timeout: 45))
+    XCTAssertTrue(app.buttons["Grabar nota de voz"].waitForExistence(timeout: 45))
     // Wait for the bottom tab bar to finish hiding after navigation push.
     let tabHidden = NSPredicate(format: "exists == false")
     expectation(for: tabHidden, evaluatedWith: app.buttons["Perfil"])

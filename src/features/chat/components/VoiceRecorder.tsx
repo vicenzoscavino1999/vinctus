@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Mic } from 'lucide-react';
+import { Check, Mic, X } from 'lucide-react';
 import { encodeVoiceWav } from '@/shared/lib/chat-media';
 
 type Props = { disabled: boolean; onFile: (file: File) => void; onBusy: (busy: boolean) => void };
@@ -145,25 +145,42 @@ export default function VoiceRecorder({ disabled, onFile, onBusy }: Props) {
           onClick={() => {
             void start();
           }}
-          className="p-3 rounded-full bg-neutral-800 disabled:opacity-40"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white disabled:opacity-40"
         >
-          <Mic size={20} />
+          <Mic size={21} />
         </button>
       ) : (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span role="status">
+        // While recording the recorder takes the whole composer row.
+        <div className="flex h-10 items-center gap-3 rounded-[22px] border border-neutral-800 bg-neutral-900 pl-4 pr-1 text-sm">
+          {phase === 'recording' && (
+            <span
+              aria-hidden="true"
+              className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-red-500"
+            />
+          )}
+          <span role="status" className="min-w-0 flex-1 truncate tabular-nums text-neutral-200">
             {phase === 'permission'
               ? 'Esperando permiso…'
               : phase === 'processing'
                 ? 'Preparando audio…'
                 : `Grabando ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} / 5:00`}
           </span>
-          <button type="button" onClick={cancel}>
-            Cancelar grabación
+          <button
+            type="button"
+            onClick={cancel}
+            aria-label="Cancelar grabación"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-white"
+          >
+            <X size={18} />
           </button>
           {phase === 'recording' && (
-            <button type="button" onClick={() => recorder.current?.stop()}>
-              Terminar grabación
+            <button
+              type="button"
+              onClick={() => recorder.current?.stop()}
+              aria-label="Terminar grabación"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-gold text-black transition-transform active:scale-90"
+            >
+              <Check size={18} strokeWidth={2.5} />
             </button>
           )}
         </div>
