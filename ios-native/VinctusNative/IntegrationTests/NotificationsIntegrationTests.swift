@@ -51,6 +51,31 @@ final class NotificationsIntegrationTests: EmulatorTestCase {
     XCTAssertTrue(remaining.isEmpty)
   }
 
+  func testLikesAndCommentsFromTheAppNotifyTheAuthorLikeTheWeb() async throws {
+    let ana = try await makeUser("Ana")
+    let postID = try await publishPost("Anoche vi los anillos de Saturno")
+    let bruno = try await makeUser("Bruno")
+    let engagement = FirebaseEngagementRepo()
+    try await engagement.setPostLiked(true, postID: postID)
+    try await engagement.setPostLiked(false, postID: postID)
+    try await engagement.setPostLiked(true, postID: postID)
+    try await FirebasePostCommentsRepo().addComment(postID: postID, text: "¡Qué buena foto!")
+
+    try await signIn(ana)
+    let page = try await FirebaseNotificationsRepo().fetchActivity(limit: 20, after: nil)
+    let fromBruno = page.items.filter { $0.fromUID == bruno.uid }
+    let likes = fromBruno.filter { $0.kind == .like }
+    XCTAssertEqual(likes.map(\.id), ["like_\(postID)_\(bruno.uid)"], "Liking again does not repeat the notification")
+    XCTAssertEqual(likes.first?.fromName, "Bruno")
+    XCTAssertEqual(likes.first?.postID, postID)
+    XCTAssertEqual(fromBruno.filter { $0.kind == .comment }.count, 1)
+
+    // Ana's own like on her post notifies nobody.
+    try await engagement.setPostLiked(true, postID: postID)
+    let afterOwnLike = try await FirebaseNotificationsRepo().fetchActivity(limit: 20, after: nil)
+    XCTAssertFalse(afterOwnLike.items.contains { $0.fromUID == ana.uid })
+  }
+
   func testTheRecipientReadsMarksAndDeletesActivity() async throws {
     let ana = try await makeUser("Ana")
     let postID = try await publishPost("Noche de observación")

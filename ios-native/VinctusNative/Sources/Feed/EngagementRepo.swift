@@ -66,7 +66,8 @@ final class FirebaseEngagementRepo: EngagementRepo {
     let userLikeRef = db.collection(FirestoreCollections.users).document(uid)
       .collection(FirestoreSubcollections.likes).document(postID)
     let postRef = db.collection(FirestoreCollections.posts).document(postID)
-    _ = try await db.runTransaction { tx, errorPointer in
+    // Returns the post's author when this call created the like, so they get notified once.
+    let newLikeAuthor = try await db.runTransaction { tx, errorPointer -> Any? in
       do {
         let like = try tx.getDocument(likeRef)
         let index = try tx.getDocument(userLikeRef)
@@ -79,12 +80,17 @@ final class FirebaseEngagementRepo: EngagementRepo {
           if !index.exists {
             tx.setData(["postId": postID, "createdAt": FieldValue.serverTimestamp()], forDocument: userLikeRef)
           }
+          return like.exists ? nil : FirestoreValue.string(post.data()?["authorId"])
         } else {
           if like.exists { tx.deleteDocument(likeRef) }
           if index.exists { tx.deleteDocument(userLikeRef) }
         }
       } catch { errorPointer?.pointee = error as NSError }
       return nil
+    }
+    // Like the web (`likePostWithSync`): the author is told, best effort.
+    if liked, let authorID = newLikeAuthor as? String {
+      await ActivityNotificationWriter.like(postID: postID, authorID: authorID, fromUID: uid, db: db)
     }
   }
 
