@@ -8,8 +8,6 @@ type TrendCardProps = {
   /** Position among the rendered cards; staggers the entrance animation. */
   rankIndex: number;
   rankPosition: number;
-  /** 0-100. */
-  trendScore: number;
   signals: TrendSignals;
   isActive: boolean;
   isSaved: boolean;
@@ -25,7 +23,6 @@ const TrendCard = ({
   variant,
   rankIndex,
   rankPosition,
-  trendScore,
   signals,
   isActive,
   isSaved,
@@ -78,9 +75,6 @@ const TrendCard = ({
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <span className="rounded-full border border-brand-gold/35 bg-brand-gold/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-brand-gold">
                   Top {rankPosition}
-                </span>
-                <span className="rounded-full border border-neutral-700 bg-neutral-900/70 px-2 py-0.5 text-[10px] uppercase tracking-wider text-neutral-300">
-                  {trendScore} score
                 </span>
               </div>
               <p className="text-sm text-neutral-400 mt-1 line-clamp-2">{category.description}</p>

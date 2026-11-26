@@ -155,7 +155,7 @@ const DiscoverSession = () => {
           DESCUBRIR
         </span>
         <h1 className="text-display-sm md:text-display-md font-display font-normal text-white mb-8 tracking-tight">
-          Curaduria de <span className="text-brand-gold italic">Intereses</span>
+          Curaduría de <span className="text-brand-gold italic">Intereses</span>
         </h1>
 
         <div className="w-full max-w-lg mt-4">
@@ -231,6 +231,7 @@ const DiscoverSession = () => {
         feed={publicationFeed}
         onOpenPublication={openPublicationFromDiscover}
         onOpenComments={openPublicationComments}
+        onOpenFeed={() => navigate('/feed')}
       />
 
       {activeYouTubePublication && (

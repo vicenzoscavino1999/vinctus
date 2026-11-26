@@ -284,6 +284,21 @@ describe('DiscoverPage', () => {
     expect(await screen.findByText('/post/p1 openComments=true')).toBeInTheDocument();
   });
 
+  it('opens the full feed from "Ver todo" in Publicaciones', async () => {
+    render(
+      <MemoryRouter initialEntries={['/discover']}>
+        <Routes>
+          <Route path="/discover" element={<DiscoverPage />} />
+          <Route path="/feed" element={<p>feed page</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('Post de la comunidad');
+    fireEvent.click(screen.getByRole('button', { name: 'Ver todo' }));
+    expect(await screen.findByText('feed page')).toBeInTheDocument();
+  });
+
   it('follows and saves a category from its trend card', async () => {
     renderPage();
     await screen.findByText('Fisicos');

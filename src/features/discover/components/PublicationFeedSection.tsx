@@ -10,6 +10,8 @@ type PublicationFeedSectionProps = {
   feed: PublicationFeed;
   onOpenPublication: (publication: PublicationStreamItem) => void;
   onOpenComments: (postId: string) => void;
+  /** "Ver todo": the feed has no tab of its own (same bottom bar as the native app). */
+  onOpenFeed: () => void;
 };
 
 /** "Publicaciones": the YouTube search box, the mixed feed and its load-more controls. */
@@ -17,6 +19,7 @@ const PublicationFeedSection = ({
   feed,
   onOpenPublication,
   onOpenComments,
+  onOpenFeed,
 }: PublicationFeedSectionProps) => {
   const {
     publicationStream,
@@ -37,9 +40,18 @@ const PublicationFeedSection = ({
 
   return (
     <section>
-      <h2 className="text-heading-lg font-display font-normal text-white mb-3">Publicaciones</h2>
+      <div className="mb-3 flex items-baseline justify-between gap-4">
+        <h2 className="text-heading-lg font-display font-normal text-white">Publicaciones</h2>
+        <button
+          type="button"
+          onClick={onOpenFeed}
+          className="shrink-0 text-sm font-semibold text-brand-gold transition-colors hover:text-brand-gold-light"
+        >
+          Ver todo
+        </button>
+      </div>
       <p className="text-neutral-400 text-sm mb-6 max-w-2xl">
-        Feed continuo de comunidad + YouTube para mantener Discover activo sin verse vacio.
+        Lo último de la comunidad y vídeos para descubrir.
       </p>
 
       <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -130,7 +142,7 @@ const PublicationFeedSection = ({
           >
             {communityLoading || youtubeLoading
               ? 'Cargando publicaciones...'
-              : 'Desliza para ver mas'}
+              : 'Desliza para ver más'}
           </div>
         </div>
       )}

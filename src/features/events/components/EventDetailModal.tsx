@@ -232,17 +232,17 @@ const EventDetailModal = ({
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-2">
               <span className="text-xs uppercase tracking-widest text-neutral-500">
-                Descripcion
+                Descripción
               </span>
               <p className="text-sm text-neutral-200 leading-relaxed">
-                {event.description || 'Descripcion por confirmar.'}
+                {event.description || 'Descripción por confirmar.'}
               </p>
             </div>
             <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-2">
-              <span className="text-xs uppercase tracking-widest text-neutral-500">Ubicacion</span>
+              <span className="text-xs uppercase tracking-widest text-neutral-500">Ubicación</span>
               <div className="flex items-start gap-2 text-sm text-neutral-200">
                 <MapPin size={16} className="text-neutral-500 mt-0.5" />
-                <span>{locationLabel || 'Ubicacion por confirmar'}</span>
+                <span>{locationLabel || 'Ubicación por confirmar'}</span>
               </div>
               {mapUrl && (
                 <a

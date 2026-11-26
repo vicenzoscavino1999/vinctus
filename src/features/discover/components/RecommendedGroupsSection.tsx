@@ -84,7 +84,8 @@ const RecommendedGroupCard = ({
 
       <div className="flex items-center justify-between pt-3 border-t border-neutral-800/50 mt-4">
         <div className="text-neutral-500 text-xs">
-          {members.toLocaleString('es-ES')} miembros - {postsWeek} posts/semana
+          {members === 1 ? '1 miembro' : `${members.toLocaleString('es-ES')} miembros`} ·{' '}
+          {postsWeek} publicaciones/semana
         </div>
         <span className="text-[10px] uppercase tracking-wider text-neutral-500">
           {visibilityLabel}

@@ -43,7 +43,7 @@ const EDITORIAL_TITLE_PATTERNS = [
 ];
 
 const EDITORIAL_BODY_PATTERNS = [
-  'Curaduria editorial con foco en {subgroup} dentro de {category}.',
+  'Curaduría editorial con foco en {subgroup} dentro de {category}.',
   'Resumen rapido para explorar {subgroup} sin salir de Discover.',
   'Lectura base para entender el contexto actual de {subgroup}.',
   'Panorama de ideas recientes en {subgroup} para abrir debate.',
@@ -100,7 +100,7 @@ export const buildEditorialPublication = (index: number): PublicationStreamItem 
     .replace('{subgroup}', subgroupName)
     .replace('{category}', base.category);
   const groupVariant =
-    cycle === 0 ? base.group : `${base.group} · ${cycle % 2 === 0 ? 'Radar' : 'Curaduria'}`;
+    cycle === 0 ? base.group : `${base.group} · ${cycle % 2 === 0 ? 'Radar' : 'Curaduría'}`;
   const likesVariant = Math.max(0, base.likes + cycle * 11 + ((index % 7) - 3));
   const commentsVariant = Math.max(0, base.comments + cycle * 2 + ((index % 5) - 2));
 

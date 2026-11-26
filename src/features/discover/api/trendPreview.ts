@@ -83,7 +83,7 @@ export const getTrendPreviewForCategory = async (
         items: observations.slice(0, 2).map((observation) => ({
           id: String(observation.id),
           title: observation.species,
-          subtitle: observation.location || observation.scientificName || 'Ubicacion no disponible',
+          subtitle: observation.location || observation.scientificName || 'Ubicación no disponible',
           meta: observation.observer || 'iNaturalist',
           href: observation.link || null,
         })),
@@ -97,7 +97,7 @@ export const getTrendPreviewForCategory = async (
           id: String(track.id),
           title: track.title,
           subtitle: track.artist || 'Artista no disponible',
-          meta: track.listeners ? `${track.listeners} oyentes` : 'Musica en vivo',
+          meta: track.listeners ? `${track.listeners} oyentes` : 'Música en vivo',
           href: track.link || null,
         })),
       };

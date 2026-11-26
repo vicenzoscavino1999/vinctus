@@ -36,9 +36,10 @@ export default function FeedPostActions({
     void act(kind);
   };
   const error = like.error || save.error;
+  // One row under the post, in the same order as the native app's feed card: like, comments, save.
   return (
-    <>
-      <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-4 z-10">
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-5">
         <button
           type="button"
           onClick={(event) => {
@@ -49,14 +50,16 @@ export default function FeedPostActions({
           aria-label={reactionLabel('like', like)}
           aria-pressed={like.value ?? undefined}
           aria-busy={like.loading}
-          className="flex flex-col items-center gap-1 text-neutral-200/80 hover:text-white transition-colors disabled:opacity-60"
+          className={`flex items-center gap-1.5 rounded-full py-1 text-sm transition-colors disabled:opacity-60 ${
+            like.value ? 'text-red-400' : 'text-neutral-200 hover:text-white'
+          }`}
         >
           {like.loading ? (
-            <Loader2 size={20} className="animate-spin" />
+            <Loader2 size={19} className="animate-spin" />
           ) : (
-            <Heart size={20} fill={like.value ? 'currentColor' : 'none'} />
+            <Heart size={19} fill={like.value ? 'currentColor' : 'none'} />
           )}
-          <span className="text-xs">{like.loaded ? like.count : initialCount}</span>
+          <span className="tabular-nums">{like.loaded ? like.count : initialCount}</span>
         </button>
         <button
           type="button"
@@ -64,11 +67,11 @@ export default function FeedPostActions({
             event.stopPropagation();
             onComments();
           }}
-          className="flex flex-col items-center gap-1 text-neutral-200/80 hover:text-white"
+          className="flex items-center gap-1.5 rounded-full py-1 text-sm text-neutral-200 transition-colors hover:text-white"
           aria-label="Comentarios"
         >
-          <MessageCircle size={20} />
-          <span className="text-xs">{commentCount}</span>
+          <MessageCircle size={19} />
+          <span className="tabular-nums">{commentCount}</span>
         </button>
         <button
           type="button"
@@ -80,23 +83,20 @@ export default function FeedPostActions({
           aria-label={reactionLabel('save', save)}
           aria-pressed={save.value ?? undefined}
           aria-busy={save.loading}
-          className={`flex flex-col items-center gap-1 transition-colors disabled:opacity-60 ${save.value ? 'text-amber-300' : 'text-neutral-200/80 hover:text-white'}`}
+          className={`flex items-center rounded-full py-1 transition-colors disabled:opacity-60 ${save.value ? 'text-amber-300' : 'text-neutral-200 hover:text-white'}`}
         >
           {save.loading ? (
-            <Loader2 size={20} className="animate-spin" />
+            <Loader2 size={19} className="animate-spin" />
           ) : (
-            <Bookmark size={20} fill={save.value ? 'currentColor' : 'none'} />
+            <Bookmark size={19} fill={save.value ? 'currentColor' : 'none'} />
           )}
         </button>
       </div>
       {error && (
-        <p
-          role="alert"
-          className="absolute left-4 right-16 bottom-3 rounded bg-black/90 px-3 py-2 text-xs text-red-300 z-20"
-        >
+        <p role="alert" className="rounded bg-black/80 px-3 py-2 text-xs text-red-300">
           {error}
         </p>
       )}
-    </>
+    </div>
   );
 }

@@ -30,7 +30,6 @@ const TrendsSection = ({
     activateTrendCategory,
     getTrendSignals,
     trendRankPositionByCategory,
-    trendScoresByCategory,
   } = trends;
 
   const renderTrendCard = (
@@ -43,7 +42,6 @@ const TrendsSection = ({
       variant={variant}
       rankIndex={rankIndex}
       rankPosition={trendRankPositionByCategory[category.id] ?? rankIndex + 1}
-      trendScore={Math.round((trendScoresByCategory[category.id]?.score ?? 0) * 100)}
       signals={getTrendSignals(category.id)}
       isActive={activeTrendCategory?.id === category.id}
       isSaved={isCategorySaved(category.id)}
