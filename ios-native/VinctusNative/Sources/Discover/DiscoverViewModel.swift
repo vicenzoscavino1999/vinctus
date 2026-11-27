@@ -181,7 +181,7 @@ final class DiscoverCategoryViewModel: ObservableObject {
     var id: String { rawValue }
     var title: String {
       switch self {
-      case .live: return "En Vivo"
+      case .live: return "En vivo"
       case .groups: return "Comunidades"
       case .library: return "Biblioteca"
       }
@@ -227,6 +227,38 @@ final class DiscoverCategoryViewModel: ObservableObject {
     category.subgroups.first { $0.id == selectedSubgroupID }?.apiQuery ?? category.defaultQuery
   }
 
+  /// Communities and library load the first time their tab opens (like the web), not on every
+  /// visit.
+  private(set) var hasLoadedGroups = false
+  private(set) var hasLoadedLibrary = false
+
+  /// What the category shows first: the live content and whether it is followed.
+  func load() async {
+    async let live: Void = loadLive()
+    async let follow: Void = loadFollowState()
+    _ = await (live, follow)
+  }
+
+  /// The communities or the library, the first time their tab is selected.
+  func loadSelectedTabIfNeeded() async {
+    switch selectedTab {
+    case .live:
+      return
+    case .groups:
+      if !hasLoadedGroups { await loadGroups() }
+    case .library:
+      if !hasLoadedLibrary { await loadLibrary() }
+    }
+  }
+
+  /// Pull to refresh: what is shown first, plus the tabs already opened.
+  func refresh() async {
+    await load()
+    if hasLoadedGroups { await loadGroups() }
+    if hasLoadedLibrary { await loadLibrary() }
+  }
+
+  /// Everything at once.
   func loadAll() async {
     async let live: Void = loadLive()
     async let categoryGroups: Void = loadGroups()
@@ -263,11 +295,12 @@ final class DiscoverCategoryViewModel: ObservableObject {
     } catch {
       guard liveGeneration == generation else { return }
       liveItems = []
-      liveError = (error as? LocalizedError)?.errorDescription ?? "No se pudo cargar contenido en vivo."
+      liveError = "No se pudo cargar el contenido en vivo. Revisa tu conexión e intenta de nuevo."
     }
   }
 
   func loadGroups() async {
+    hasLoadedGroups = true
     isLoadingGroups = true
     groupsError = nil
     defer { isLoadingGroups = false }
@@ -280,6 +313,7 @@ final class DiscoverCategoryViewModel: ObservableObject {
   }
 
   func loadLibrary() async {
+    hasLoadedLibrary = true
     isLoadingLibrary = true
     libraryError = nil
     defer { isLoadingLibrary = false }

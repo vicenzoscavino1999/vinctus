@@ -54,61 +54,76 @@ struct DiscoverCategoryView: View {
       GroupView(repo: groupsRepo, groupID: groupID)
     }
     .task(id: vm.category.id) {
-      await vm.loadAll()
+      // Screenshot builds open a tab with `-VinctusCategoryTab groups|library`.
+      if let tab = AppRepos.demoArgument("-VinctusCategoryTab").flatMap(DiscoverCategoryViewModel.Tab.init(rawValue:)) {
+        vm.selectedTab = tab
+      }
+      await vm.load()
+    }
+    .task(id: vm.selectedTab) {
+      await vm.loadSelectedTabIfNeeded()
     }
     .refreshable {
-      await vm.loadAll()
+      await vm.refresh()
     }
   }
 
+  /// The icon and Seguir, then the title in the display serif and the description, like the web.
   private var header: some View {
-    VCard {
-      VStack(alignment: .leading, spacing: 12) {
-        HStack(alignment: .center, spacing: 12) {
-          Image(systemName: vm.category.icon)
-            .font(.system(size: 22, weight: .semibold))
-            .foregroundStyle(VinctusTokens.Color.accent)
-            .frame(width: 44, height: 44)
-            .background(VinctusTokens.Color.accent.opacity(0.14))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-          VStack(alignment: .leading, spacing: 4) {
-            Text(vm.category.title)
-              .font(VinctusTokens.Typography.sectionTitle(size: 22))
-              .foregroundStyle(VinctusTokens.Color.textPrimary)
-            Text(vm.category.subtitle)
-              .font(.footnote)
-              .foregroundStyle(VinctusTokens.Color.textMuted)
-          }
-        }
-
-        HStack {
-          Button {
-            Task { await vm.toggleFollow() }
-          } label: {
-            Label(
-              vm.isFollowed ? "Siguiendo" : "Seguir categoría",
-              systemImage: vm.isFollowed ? "checkmark" : "plus"
-            )
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(vm.isFollowed ? VinctusTokens.Color.accent.opacity(0.2) : VinctusTokens.Color.surface2)
-            .foregroundStyle(vm.isFollowed ? VinctusTokens.Color.accent : VinctusTokens.Color.textPrimary)
-            .clipShape(Capsule())
-          }
-          .buttonStyle(.plain)
-          .disabled(vm.isUpdatingFollow)
-
-          Spacer()
-        }
-
-        if let followError = vm.followError {
-          Text(followError)
-            .font(.caption)
-            .foregroundStyle(.red)
-        }
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(alignment: .center) {
+        Image(systemName: vm.category.icon)
+          .font(.system(size: 24, weight: .regular))
+          .foregroundStyle(VinctusTokens.Color.accent)
+          .frame(width: 56, height: 56)
+          .background(VinctusTokens.Color.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+          .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+              .stroke(VinctusTokens.Color.border.opacity(0.7), lineWidth: 0.5)
+          )
+          .accessibilityHidden(true)
+        Spacer()
+        followButton
       }
+      Text(vm.category.title)
+        .font(VinctusTokens.Typography.serif(32))
+        .foregroundStyle(VinctusTokens.Color.textPrimary)
+        .padding(.top, 4)
+      Text(vm.category.subtitle)
+        .font(.subheadline)
+        .foregroundStyle(VinctusTokens.Color.textSecondary)
+      if let followError = vm.followError {
+        Text(followError)
+          .font(.caption)
+          .foregroundStyle(.red)
+      }
+    }
+  }
+
+  private var followButton: some View {
+    Button {
+      Task { await vm.toggleFollow() }
+    } label: {
+      Label(vm.isFollowed ? "Siguiendo" : "Seguir", systemImage: vm.isFollowed ? "checkmark" : "plus")
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(vm.isFollowed ? VinctusTokens.Color.textPrimary : SwiftUI.Color.black)
+        .padding(.horizontal, 16)
+        .frame(height: 36)
+        .background(vm.isFollowed ? SwiftUI.Color.clear : VinctusTokens.Color.accent, in: Capsule())
+        .overlay(Capsule().stroke(vm.isFollowed ? VinctusTokens.Color.border : SwiftUI.Color.clear, lineWidth: 1))
+    }
+    .buttonStyle(.plain)
+    .disabled(vm.isUpdatingFollow)
+    .accessibilityLabel(vm.isFollowed ? "Siguiendo" : "Seguir categoría")
+  }
+
+  private func icon(for type: ContributionType) -> String {
+    switch type {
+    case .project: return "folder"
+    case .paper: return "doc.text"
+    case .cv: return "graduationcap"
+    case .certificate: return "rosette"
+    case .other: return "doc"
     }
   }
 
@@ -277,17 +292,21 @@ struct DiscoverCategoryView: View {
           VCard {
             VStack(alignment: .leading, spacing: 8) {
               HStack {
-                Text(item.type.title.uppercased())
-                  .font(.caption2.weight(.bold))
+                Label(item.type.title, systemImage: icon(for: item.type))
+                  .font(.caption.weight(.semibold))
                   .foregroundStyle(VinctusTokens.Color.accent)
                 Spacer()
-                Text(item.authorName)
-                  .font(.caption)
-                  .foregroundStyle(VinctusTokens.Color.textMuted)
+                HStack(spacing: 6) {
+                  AvatarView(name: item.authorName, photoURLString: nil, size: 20)
+                  Text(item.authorName)
+                    .font(.caption)
+                    .foregroundStyle(VinctusTokens.Color.textMuted)
+                    .lineLimit(1)
+                }
               }
 
               Text(item.title)
-                .font(.headline)
+                .font(VinctusTokens.Typography.serif(19))
                 .foregroundStyle(VinctusTokens.Color.textPrimary)
 
               if let description = item.description {
