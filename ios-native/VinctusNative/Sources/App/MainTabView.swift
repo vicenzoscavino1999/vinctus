@@ -23,6 +23,9 @@ struct MainTabView: View {
   /// Height of the bottom bar above the home indicator, measured.
   @State private var barHeight: CGFloat = 54.5
   @Environment(\.scenePhase) private var scenePhase
+  /// Ajustes > Apariencia: Clásico (default) or Vidrio (Liquid Glass, iOS 26).
+  @AppStorage(AppAppearance.storageKey) private var appearance = AppAppearance.classic.rawValue
+  private var usesGlass: Bool { AppAppearance.usesGlass(saved: appearance) }
 
   /// Same tabs, order and icons as the web's MobileNav: Descubrir, Buscar, Mensajes (#),
   /// Conexiones and Perfil. The feed lives inside Descubrir, as on the web.
@@ -51,7 +54,7 @@ struct MainTabView: View {
       // The web's flat bottom bar. It hides while typing, so it never sits above the keyboard
       // (for example over the chat composer).
       if showsBar {
-        FlatTabBar(selection: $selectedTab)
+        FlatTabBar(selection: $selectedTab, usesGlass: usesGlass)
           .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.height
           } action: { height in
@@ -88,6 +91,7 @@ struct MainTabView: View {
           isBottomNavigationHidden = hidden
         }
         .environment(\.scenePhase, scenePhase)
+        .environment(\.usesGlass, usesGlass)
         .environmentObject(authVM)
         .environmentObject(blockedUsers)
         .tint(VinctusTokens.Color.accent)
@@ -193,6 +197,8 @@ private final class TabPagesController: UIViewController {
 /// a short label, white when selected and gray otherwise, over a thin top border.
 private struct FlatTabBar: View {
   @Binding var selection: String
+  /// "Vidrio": a floating glass capsule over the content, like iOS 26's own tab bar.
+  var usesGlass = false
 
   private struct Item {
     let tag: String
@@ -209,6 +215,28 @@ private struct FlatTabBar: View {
   ]
 
   var body: some View {
+    if usesGlass {
+      buttons
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .vinctusGlass(true, in: Capsule())
+        .padding(.horizontal, 14)
+        .padding(.bottom, 2)
+    } else {
+      buttons
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
+        .background(VinctusTokens.Color.background.opacity(0.95))
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) {
+          Rectangle()
+            .fill(SwiftUI.Color(white: 0.09))
+            .frame(height: 0.5)
+        }
+    }
+  }
+
+  private var buttons: some View {
     HStack(spacing: 0) {
       ForEach(items, id: \.tag) { item in
         let isSelected = selection == item.tag
@@ -224,7 +252,13 @@ private struct FlatTabBar: View {
               .minimumScaleFactor(0.8)
           }
           .foregroundStyle(isSelected ? VinctusTokens.Color.textPrimary : VinctusTokens.Color.textMuted)
-          .frame(maxWidth: .infinity, minHeight: 50)
+          .frame(maxWidth: .infinity, minHeight: usesGlass ? 48 : 50)
+          .background {
+            // In glass the selected tab sits on a soft pill, like the system's.
+            if usesGlass && isSelected {
+              Capsule().fill(SwiftUI.Color.white.opacity(0.12))
+            }
+          }
           .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -232,15 +266,6 @@ private struct FlatTabBar: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("tab-\(item.tag)")
       }
-    }
-    .padding(.horizontal, 12)
-    .padding(.top, 4)
-    .background(VinctusTokens.Color.background.opacity(0.95))
-    .background(.ultraThinMaterial)
-    .overlay(alignment: .top) {
-      Rectangle()
-        .fill(SwiftUI.Color(white: 0.09))
-        .frame(height: 0.5)
     }
   }
 }

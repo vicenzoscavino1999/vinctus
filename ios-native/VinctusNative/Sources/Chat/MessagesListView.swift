@@ -11,6 +11,7 @@ struct MessagesListView: View {
 
   @EnvironmentObject private var authVM: AuthViewModel
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
+  @Environment(\.usesGlass) private var usesGlass
   @StateObject private var vm: ConversationsViewModel
   /// Screenshot builds open a conversation with `-VinctusOpenChat <id>`.
   @State private var openedConversation: ChatConversation?
@@ -249,8 +250,9 @@ struct MessagesListView: View {
             .padding(.horizontal, 14)
             .frame(height: 32)
             .foregroundStyle(isSelected ? SwiftUI.Color.black : VinctusTokens.Color.textSecondary)
-            .background(isSelected ? SwiftUI.Color.white : VinctusTokens.Color.surface)
+            .background(isSelected ? SwiftUI.Color.white : (usesGlass ? SwiftUI.Color.clear : VinctusTokens.Color.surface))
             .clipShape(Capsule())
+            .vinctusGlass(usesGlass && !isSelected, in: Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
