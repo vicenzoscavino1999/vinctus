@@ -159,6 +159,10 @@ jobs:
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab discover -VinctusOpenNotifications 1 -VinctusNotificationsTab requests
           sleep 9
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/16-notification-requests.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenComposer 1
+          sleep 8
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/17-create-post.png"
 
       - name: Export chat UI evidence
         if: always()
