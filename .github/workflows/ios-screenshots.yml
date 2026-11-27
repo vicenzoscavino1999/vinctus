@@ -112,6 +112,15 @@ jobs:
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab messages -VinctusOpenChat dm_me_u2
           sleep 20
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/06-chat.png"
+          # The chat details (mute, files, search, report), for a person and for a group.
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab messages -VinctusOpenChat dm_me_u2 -VinctusOpenChatDetails 1
+          sleep 20
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/06b-chat-details.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab messages -VinctusOpenChat grp_g2 -VinctusOpenChatDetails 1
+          sleep 20
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/06c-group-chat-details.png"
           xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab profile
           sleep 8

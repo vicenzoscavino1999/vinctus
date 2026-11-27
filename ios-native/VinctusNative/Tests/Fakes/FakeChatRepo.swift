@@ -77,4 +77,23 @@ final class FakeChatRepo: ChatRepo {
     if failsToOpen { throw FakeError() }
     return "grp_\(groupID)"
   }
+
+  var muteState = ChatMuteState.off
+  var failsToMute = false
+  var muteCalls: [Date?] = []
+  var clearMuteCalls = 0
+
+  func fetchMute(conversationID: String) async throws -> ChatMuteState { muteState }
+
+  func setMute(conversationID: String, until: Date?) async throws {
+    if failsToMute { throw FakeError() }
+    muteCalls.append(until)
+    muteState = ChatMuteState(muted: true, mutedUntil: until)
+  }
+
+  func clearMute(conversationID: String) async throws {
+    if failsToMute { throw FakeError() }
+    clearMuteCalls += 1
+    muteState = .off
+  }
 }
