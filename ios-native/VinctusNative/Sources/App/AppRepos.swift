@@ -37,6 +37,13 @@ enum AppRepos {
     return FirebaseDiscoverRepo()
   }
 
+  static func groupNames() -> GroupNamesRepo {
+    #if SCREENSHOTS
+    if isDemo { return SampleGroupNamesRepo() }
+    #endif
+    return FirebaseGroupNamesRepo()
+  }
+
   static func groups() -> any GroupsRepo {
     #if SCREENSHOTS
     if isDemo { return SampleGroupsRepo() }
