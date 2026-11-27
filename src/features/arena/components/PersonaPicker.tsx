@@ -1,15 +1,20 @@
+import { Check } from 'lucide-react';
 import { ARENA_PERSONAS, type Persona } from '@/features/arena/types';
 
 interface PersonaPickerProps {
   label: string;
+  /** "A" defends the topic, "B" argues against it. */
+  side: 'A' | 'B';
   selectedId: string | null;
   onSelect: (persona: Persona) => void;
   excludeId?: string | null;
   disabled?: boolean;
 }
 
+/** One side of the debate: the personas as cards in a row that scrolls on phones. */
 export function PersonaPicker({
   label,
+  side,
   selectedId,
   onSelect,
   excludeId,
@@ -18,9 +23,18 @@ export function PersonaPicker({
   const options = ARENA_PERSONAS.filter((persona) => persona.id !== excludeId);
 
   return (
-    <section className="space-y-3">
-      <h3 className="text-sm font-medium text-neutral-300">{label}</h3>
-      <div className="grid grid-cols-2 gap-3">
+    <section className="space-y-2.5">
+      <h3 className="flex items-center gap-2 text-sm font-medium text-neutral-300">
+        <span
+          className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold ${
+            side === 'A' ? 'bg-white text-black' : 'bg-brand-gold text-black'
+          }`}
+        >
+          {side}
+        </span>
+        {label}
+      </h3>
+      <div className="-mx-4 flex snap-x gap-2.5 overflow-x-auto px-4 pb-1 md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0">
         {options.map((persona) => {
           const selected = selectedId === persona.id;
           return (
@@ -29,20 +43,25 @@ export function PersonaPicker({
               type="button"
               onClick={() => onSelect(persona)}
               disabled={disabled}
-              className={`relative rounded-xl border p-3 text-left transition-all ${
+              aria-pressed={selected}
+              className={`relative w-36 shrink-0 snap-start rounded-2xl border p-3 text-left transition-colors md:w-auto ${
                 selected
-                  ? 'border-brand-gold/70 bg-brand-gold/10 shadow-glow'
-                  : 'border-neutral-800 bg-surface-1/60 hover:border-neutral-600'
-              } ${disabled ? 'opacity-60' : ''}`}
+                  ? 'border-brand-gold/70 bg-brand-gold/10'
+                  : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20'
+              } disabled:opacity-60`}
             >
               {selected && (
-                <span className="absolute right-2 top-2 rounded-full bg-brand-gold px-2 py-0.5 text-[10px] font-semibold text-black">
-                  OK
+                <span className="absolute right-2.5 top-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-brand-gold text-black">
+                  <Check size={12} strokeWidth={3} />
                 </span>
               )}
-              <div className="mb-2 text-xl">{persona.avatar}</div>
-              <p className="text-sm font-medium text-text-1">{persona.name}</p>
-              <p className="mt-1 line-clamp-2 text-xs text-text-3">{persona.description}</p>
+              <span className="mb-2 block text-2xl" aria-hidden="true">
+                {persona.avatar}
+              </span>
+              <span className="block text-sm font-medium text-white">{persona.name}</span>
+              <span className="mt-0.5 line-clamp-2 block text-xs text-neutral-500">
+                {persona.description}
+              </span>
             </button>
           );
         })}

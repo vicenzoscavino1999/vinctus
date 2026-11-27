@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { MessageCircle, Swords } from 'lucide-react';
 
 interface AIModeTabsProps {
   active: 'arena' | 'chat';
@@ -6,36 +7,38 @@ interface AIModeTabsProps {
   chatPath?: string;
 }
 
+/** Chat con IA and Arena IA as one segmented control. */
 export function AIModeTabs({
   active,
   arenaPath = '/arena',
   chatPath = '/ai/chat',
 }: AIModeTabsProps) {
-  const baseClass =
-    'rounded-lg px-4 py-2 text-[11px] font-medium uppercase tracking-[0.15em] transition';
+  const tab = (selected: boolean) =>
+    `inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm transition-colors ${
+      selected ? 'bg-white text-black font-medium' : 'text-neutral-400 hover:text-white'
+    }`;
 
   return (
-    <div className="inline-flex rounded-xl border border-neutral-800 bg-neutral-900/60 p-1">
-      <Link
-        to={arenaPath}
-        className={`${baseClass} ${
-          active === 'arena'
-            ? 'bg-brand-gold text-black'
-            : 'text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'
-        }`}
-      >
-        Arena IA
-      </Link>
+    <nav
+      aria-label="Modos de IA"
+      className="inline-flex rounded-full border border-white/[0.08] bg-white/[0.03] p-1"
+    >
       <Link
         to={chatPath}
-        className={`${baseClass} ${
-          active === 'chat'
-            ? 'bg-brand-gold text-black'
-            : 'text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'
-        }`}
+        aria-current={active === 'chat' ? 'page' : undefined}
+        className={tab(active === 'chat')}
       >
-        Conversación IA
+        <MessageCircle size={15} />
+        Chat
       </Link>
-    </div>
+      <Link
+        to={arenaPath}
+        aria-current={active === 'arena' ? 'page' : undefined}
+        className={tab(active === 'arena')}
+      >
+        <Swords size={15} />
+        Arena
+      </Link>
+    </nav>
   );
 }

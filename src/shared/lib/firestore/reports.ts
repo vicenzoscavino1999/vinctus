@@ -122,3 +122,32 @@ export async function createStoryReport(input: {
     conversationId: `story_${input.storyId}`,
   });
 }
+
+/** `reportedUid` of AI reports; moderators can remove nothing and suspend no one for them. */
+export const AI_REPORTED_UID = 'ai_assistant';
+
+/**
+ * A reply of Chat con IA or Arena IA. Built exactly like the native app's `ReportFields`
+ * (`.aiResponse`): the excerpt is capped so the whole report fits the rules' 2000 characters.
+ * `contextId` is "chat" or `arena_<debateId>`.
+ */
+export async function createAIResponseReport(input: {
+  reporterUid: string;
+  contextId: string;
+  excerpt: string;
+  reason: UserReportReason;
+  details?: string | null;
+}): Promise<string> {
+  const excerpt = input.excerpt.slice(0, 900);
+  const details = input.details?.trim();
+  return createUserReport({
+    reporterUid: input.reporterUid,
+    reportedUid: AI_REPORTED_UID,
+    reason: input.reason,
+    details: `[IA ${input.contextId}] ${excerpt}${details ? ` | Motivo: ${details}` : ''}`.slice(
+      0,
+      2000,
+    ),
+    conversationId: `ai_${input.contextId}`,
+  });
+}
