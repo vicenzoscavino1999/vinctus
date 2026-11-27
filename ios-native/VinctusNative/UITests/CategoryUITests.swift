@@ -29,7 +29,7 @@ final class CategoryUITests: XCTestCase {
     XCTAssertTrue(app.buttons["Seguir categoría"].exists || app.buttons["Siguiendo"].exists)
 
     app.buttons["Comunidades"].tap()
-    XCTAssertTrue(app.staticTexts["Física para curiosos"].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.buttons["Física para curiosos"].waitForExistence(timeout: 10))
 
     app.buttons["Biblioteca"].tap()
     XCTAssertTrue(app.staticTexts["Lectura recomendada de la comunidad"].waitForExistence(timeout: 10))
