@@ -4,6 +4,8 @@ type Props = {
   following: number;
   onOpenFollowers: () => void;
   onOpenFollowing: () => void;
+  /** A private account you don't follow: the lists can't be opened. */
+  listsDisabled?: boolean;
 };
 
 const cardClass =
@@ -21,7 +23,11 @@ export default function ProfileStats({
   following,
   onOpenFollowers,
   onOpenFollowing,
+  listsDisabled = false,
 }: Props) {
+  const listClass = listsDisabled
+    ? `${cardClass} cursor-not-allowed opacity-60`
+    : `${cardClass} transition-colors hover:border-neutral-700 hover:bg-neutral-800/40`;
   return (
     <div className="grid grid-cols-3 gap-2">
       <div className={cardClass}>
@@ -31,7 +37,8 @@ export default function ProfileStats({
       <button
         type="button"
         onClick={onOpenFollowers}
-        className={`${cardClass} transition-colors hover:border-neutral-700 hover:bg-neutral-800/40`}
+        disabled={listsDisabled}
+        className={listClass}
       >
         <div className={labelClass}>Seguidores</div>
         <div className={valueClass}>{format(followers)}</div>
@@ -39,7 +46,8 @@ export default function ProfileStats({
       <button
         type="button"
         onClick={onOpenFollowing}
-        className={`${cardClass} transition-colors hover:border-neutral-700 hover:bg-neutral-800/40`}
+        disabled={listsDisabled}
+        className={listClass}
       >
         <div className={labelClass}>Siguiendo</div>
         <div className={valueClass}>{format(following)}</div>

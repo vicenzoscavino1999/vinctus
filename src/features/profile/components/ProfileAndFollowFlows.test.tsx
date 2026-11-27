@@ -407,7 +407,9 @@ describe('Perfiles y seguidores flows', () => {
       </ToastProvider>,
     );
 
-    const blockButton = await screen.findByRole('button', { name: 'Bloquear usuario' });
+    // Block and report are in the "⋯" menu.
+    fireEvent.click(await screen.findByRole('button', { name: 'Opciones del perfil' }));
+    const blockButton = screen.getByRole('button', { name: 'Bloquear usuario' });
     fireEvent.click(blockButton);
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar bloqueo' }));
 
@@ -416,6 +418,9 @@ describe('Perfiles y seguidores flows', () => {
       expect(screen.getByText('Has bloqueado a este usuario')).toBeInTheDocument();
     });
 
+    fireEvent.click(screen.getByRole('button', { name: 'Opciones del perfil' }));
+    // A blocked person can still be reported, but not blocked again.
+    expect(screen.queryByRole('button', { name: 'Bloquear usuario' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Reportar usuario' }));
     fireEvent.click(screen.getByRole('button', { name: /Enviar reporte/i }));
 

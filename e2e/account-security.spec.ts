@@ -52,7 +52,8 @@ test.describe('Account and security flows', () => {
     await page.goto('/user/user_c');
     await expect(page.getByRole('heading', { name: /Carla R\./i })).toBeVisible({ timeout: 15000 });
 
-    // Report Carla from profile
+    // Report Carla from profile (block and report are in the "⋯" menu)
+    await page.getByRole('button', { name: 'Opciones del perfil' }).click();
     await page.getByRole('button', { name: 'Reportar usuario' }).click();
     await expect(page.getByRole('heading', { name: /Reportar usuario/i })).toBeVisible();
     await page.getByPlaceholder(/Describe el motivo del reporte/i).fill('Prueba E2E de reporte');
@@ -60,6 +61,7 @@ test.describe('Account and security flows', () => {
     await expect(page.getByText('Reporte enviado')).toBeVisible({ timeout: 15000 });
 
     // Block Carla from profile
+    await page.getByRole('button', { name: 'Opciones del perfil' }).click();
     await page.getByRole('button', { name: 'Bloquear usuario' }).click();
     await expect(page.getByRole('heading', { name: 'Bloquear usuario' })).toBeVisible();
     await page.getByRole('button', { name: 'Confirmar bloqueo' }).click();

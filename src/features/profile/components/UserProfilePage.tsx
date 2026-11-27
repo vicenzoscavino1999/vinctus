@@ -1,571 +1,113 @@
-import {
-  Ban,
-  ChevronLeft,
-  Flag,
-  MapPin,
-  UserPlus,
-  UserCheck,
-  Check,
-  Clock,
-  Loader2,
-  MessageCircle,
-  X,
-} from 'lucide-react';
+import { useState } from 'react';
+import { ChevronLeft, Loader2, X } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useState, useEffect, useRef } from 'react';
-import { AppError } from '@/shared/lib/errors';
-import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
-import {
-  getUserProfile,
-  getFollowStatus,
-  getAccountVisibilityServer,
-  sendFollowRequest,
-  acceptFollowRequest,
-  declineFollowRequest,
-  cancelFollowRequest,
-  followPublicUser,
-  unfollowUser,
-  blockUser,
-  unblockUser,
-  reportUserProfile,
-  getOrCreateDirectConversation,
-  isUserBlocked,
-  type FollowStatus,
-  type UserProfileRead,
-  type UserReportReason,
-} from '@/features/profile/api';
 import ContentReportModal from '@/features/posts/components/ContentReportModal';
 import ProfilePostsGrid from '@/features/posts/components/ProfilePostsGrid';
 import ContributionsSection from '@/features/profile/components/ContributionsSection';
-import { CATEGORIES } from '@/shared/constants/mockData';
+import ProfileStats from '@/features/profile/components/ProfileStats';
+import ReputationSection from '@/features/profile/components/ReputationSection';
+import UserProfileHeader, {
+  FollowButton,
+  IncomingRequestNotice,
+  MessageButton,
+  ProfileOptionsMenu,
+} from '@/features/profile/components/UserProfileHeader';
+import { useUserProfile } from '@/features/profile/hooks/useUserProfile';
+import { profileSectionTitle } from '@/features/profile/model/profileStyles';
 
-const isPermissionDeniedError = (err: unknown): boolean => {
-  if (err instanceof AppError) return err.code === 'PERMISSION_DENIED';
-  const code = (err as { code?: unknown })?.code;
-  return code === 'permission-denied' || code === 'PERMISSION_DENIED';
-};
+const count = (value: unknown) => (typeof value === 'number' ? value : 0);
 
+/** Confirms a block, saying what it does. */
+function BlockUserDialog({
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center safe-area-inset"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="profile-block-modal-title"
+    >
+      <div
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        onClick={() => !busy && onCancel()}
+      />
+      <div className="relative mx-4 w-full max-w-md overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
+        <div className="flex items-center justify-between border-b border-neutral-800 px-6 py-4">
+          <h3 id="profile-block-modal-title" className="text-lg font-medium text-white">
+            Bloquear usuario
+          </h3>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-full p-2 text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-white"
+            aria-label="Cerrar"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="space-y-4 p-5">
+          <p className="text-sm text-neutral-400">
+            No podrán enviarse mensajes ni ver sus publicaciones, y se eliminará el seguimiento
+            entre ambos. Puedes desbloquearlo desde Ajustes &gt; Privacidad y seguridad.
+          </p>
+          <div className="flex items-center justify-end gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={busy}
+              className="rounded-lg px-4 py-2 text-neutral-300 transition-colors hover:text-white"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={busy}
+              className="rounded-lg bg-red-600 px-4 py-2 font-medium text-white transition-colors hover:bg-red-500 disabled:opacity-50"
+            >
+              {busy ? 'Bloqueando...' : 'Confirmar bloqueo'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Notice({ title, children }: { title: string; children: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-white/[0.08] px-6 py-14 text-center">
+      <p className="mb-2 text-lg font-light text-white">{title}</p>
+      <p className="text-sm text-neutral-500">{children}</p>
+    </div>
+  );
+}
+
+/**
+ * Someone else's profile, laid out like your own: the header with Seguir and Mensaje (block and
+ * report in "⋯"), the counters, then their posts and contributions next to their reputation.
+ * The data and actions live in useUserProfile.
+ */
 const UserProfilePage = () => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
-  const { user: currentUser } = useAuth();
   const { showToast } = useToast();
+  const person = useUserProfile(userId);
+  const [isBlocking, setIsBlocking] = useState(false);
+  const { profile } = person;
 
-  const [profile, setProfile] = useState<UserProfileRead | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [followStatus, setFollowStatus] = useState<FollowStatus>('none');
-  const [hasIncomingRequest, setHasIncomingRequest] = useState(false);
-  const [isMutual, setIsMutual] = useState(false);
-  const [blockedByMe, setBlockedByMe] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [showBlockModal, setShowBlockModal] = useState(false);
-  const [showReportModal, setShowReportModal] = useState(false);
-  const [reportReason, setReportReason] = useState<UserReportReason>('spam');
-  const [reportDetails, setReportDetails] = useState('');
-  const [reportError, setReportError] = useState<string | null>(null);
-  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
-  const refreshTimerRef = useRef<number | null>(null);
-  const activeUserIdRef = useRef<string | undefined>(userId);
-
-  useEffect(() => {
-    activeUserIdRef.current = userId;
-    setShowBlockModal(false);
-    setShowReportModal(false);
-    setReportReason('spam');
-    setReportDetails('');
-    setReportError(null);
-    return () => {
-      if (refreshTimerRef.current !== null) {
-        window.clearTimeout(refreshTimerRef.current);
-        refreshTimerRef.current = null;
-      }
-    };
-  }, [userId]);
-
-  const scheduleProfileRefresh = (targetUid: string) => {
-    if (refreshTimerRef.current !== null) {
-      window.clearTimeout(refreshTimerRef.current);
-    }
-    refreshTimerRef.current = window.setTimeout(() => {
-      refreshTimerRef.current = null;
-      if (activeUserIdRef.current !== targetUid) return;
-      void getUserProfile(targetUid)
-        .then((fresh) => {
-          if (activeUserIdRef.current === targetUid && fresh) {
-            setProfile(fresh);
-          }
-        })
-        .catch(() => undefined);
-    }, 1200);
-  };
-
-  // Load user profile
-  useEffect(() => {
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-    const loadProfile = async () => {
-      setLoading(true);
-      try {
-        const shouldCheckBlock = Boolean(currentUser && currentUser.uid !== userId);
-        const [userProfile, blocked] = await Promise.all([
-          getUserProfile(userId),
-          shouldCheckBlock && currentUser
-            ? isUserBlocked(currentUser.uid, userId).catch(() => false)
-            : Promise.resolve(false),
-        ]);
-        if (!isMounted || activeUserIdRef.current !== userId) return;
-
-        setProfile(userProfile);
-        setBlockedByMe(blocked);
-
-        // Get follow status if logged in and not blocked
-        if (currentUser && userProfile && currentUser.uid !== userId && !blocked) {
-          const status = await getFollowStatus(
-            currentUser.uid,
-            userId,
-            userProfile.accountVisibility,
-          );
-          if (!isMounted || activeUserIdRef.current !== userId) return;
-
-          const outgoingStatus: FollowStatus =
-            status.status === 'pending_received'
-              ? 'none'
-              : userProfile.accountVisibility !== 'private' && status.status === 'pending_sent'
-                ? 'none'
-                : status.status;
-          setFollowStatus(outgoingStatus);
-          setHasIncomingRequest(Boolean(status.hasIncomingRequest));
-          setIsMutual(!!status.isMutual);
-        } else {
-          setFollowStatus('none');
-          setHasIncomingRequest(false);
-          setIsMutual(false);
-        }
-      } catch (error) {
-        console.error('Error loading profile:', error);
-      } finally {
-        if (isMounted && activeUserIdRef.current === userId) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void loadProfile();
-    return () => {
-      isMounted = false;
-    };
-  }, [userId, currentUser]);
-
-  const handleFollow = async () => {
-    if (!currentUser || !userId || !profile) return;
-
-    try {
-      const blocked = await isUserBlocked(currentUser.uid, userId);
-      if (blocked) {
-        setBlockedByMe(true);
-        showToast('Desbloquea a este usuario para poder seguirlo', 'info');
-        return;
-      }
-    } catch (err) {
-      console.error('Error checking block status:', err);
-    }
-
-    setActionLoading(true);
-    try {
-      const visibility = await getAccountVisibilityServer(userId);
-      if (visibility !== profile.accountVisibility) {
-        setProfile((prev) => (prev ? { ...prev, accountVisibility: visibility } : prev));
-      }
-      if (visibility === 'private') {
-        try {
-          await sendFollowRequest(currentUser.uid, userId);
-          setFollowStatus('pending_sent');
-          showToast('Solicitud enviada', 'success');
-        } catch (err) {
-          if (isPermissionDeniedError(err)) {
-            const fallbackVisibility = await getAccountVisibilityServer(userId);
-            if (fallbackVisibility !== 'private') {
-              await followPublicUser(currentUser.uid, userId);
-              const status = await getFollowStatus(currentUser.uid, userId, fallbackVisibility);
-              setFollowStatus(status.status === 'pending_received' ? 'none' : status.status);
-              setHasIncomingRequest(Boolean(status.hasIncomingRequest));
-              setIsMutual(!!status.isMutual);
-              setProfile((prev) =>
-                prev ? { ...prev, followersCount: (prev.followersCount ?? 0) + 1 } : prev,
-              );
-              scheduleProfileRefresh(userId);
-              showToast('Siguiendo', 'success');
-            } else {
-              throw err;
-            }
-          } else {
-            throw err;
-          }
-        }
-      } else {
-        try {
-          await Promise.allSettled([cancelFollowRequest(currentUser.uid, userId)]);
-          await followPublicUser(currentUser.uid, userId);
-          const status = await getFollowStatus(currentUser.uid, userId, visibility);
-          setFollowStatus(status.status === 'pending_received' ? 'none' : status.status);
-          setHasIncomingRequest(Boolean(status.hasIncomingRequest));
-          setIsMutual(!!status.isMutual);
-          setProfile((prev) =>
-            prev ? { ...prev, followersCount: (prev.followersCount ?? 0) + 1 } : prev,
-          );
-          scheduleProfileRefresh(userId);
-          showToast('Siguiendo', 'success');
-        } catch (err) {
-          if (isPermissionDeniedError(err)) {
-            const fallbackVisibility = await getAccountVisibilityServer(userId);
-            if (fallbackVisibility === 'private') {
-              await sendFollowRequest(currentUser.uid, userId);
-              setProfile((prev) => (prev ? { ...prev, accountVisibility: 'private' } : prev));
-              setFollowStatus('pending_sent');
-              setIsMutual(false);
-              showToast('Solicitud enviada', 'success');
-            } else {
-              throw err;
-            }
-          } else {
-            throw err;
-          }
-        }
-      }
-    } catch (err) {
-      const message = isPermissionDeniedError(err)
-        ? 'No se pudo seguir a este usuario en este momento.'
-        : err instanceof Error
-          ? err.message
-          : 'Error al seguir usuario';
-      showToast(message, 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleAcceptRequest = async () => {
-    if (!currentUser || !userId) return;
-
-    setActionLoading(true);
-    try {
-      await acceptFollowRequest(userId, currentUser.uid);
-      setHasIncomingRequest(false);
-      setIsMutual(followStatus === 'following');
-      setProfile((prev) =>
-        prev ? { ...prev, followingCount: (prev.followingCount ?? 0) + 1 } : prev,
-      );
-      scheduleProfileRefresh(userId);
-      showToast('Solicitud aceptada', 'success');
-    } catch {
-      showToast('Error al aceptar solicitud', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleDeclineRequest = async () => {
-    if (!currentUser || !userId) return;
-
-    setActionLoading(true);
-    try {
-      await declineFollowRequest(userId, currentUser.uid);
-      setHasIncomingRequest(false);
-      showToast('Solicitud rechazada', 'info');
-    } catch {
-      showToast('Error al rechazar solicitud', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleCancelRequest = async () => {
-    if (!currentUser || !userId) return;
-
-    setActionLoading(true);
-    try {
-      await cancelFollowRequest(currentUser.uid, userId);
-      setFollowStatus('none');
-      setIsMutual(false);
-      showToast('Solicitud cancelada', 'info');
-    } catch {
-      showToast('Error al cancelar solicitud', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUnfollow = async () => {
-    if (!currentUser || !userId) return;
-
-    setActionLoading(true);
-    try {
-      await unfollowUser(currentUser.uid, userId);
-      setFollowStatus('none');
-      setIsMutual(false);
-      setProfile((prev) =>
-        prev ? { ...prev, followersCount: Math.max(0, (prev.followersCount ?? 0) - 1) } : prev,
-      );
-      scheduleProfileRefresh(userId);
-      showToast('Dejaste de seguir', 'info');
-    } catch {
-      showToast('Error al dejar de seguir', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleBlock = async () => {
-    if (!currentUser || !userId || currentUser.uid === userId || actionLoading) return;
-
-    setActionLoading(true);
-    try {
-      await blockUser(currentUser.uid, userId);
-      setBlockedByMe(true);
-      setFollowStatus('none');
-      setHasIncomingRequest(false);
-      setIsMutual(false);
-      setShowBlockModal(false);
-      showToast('Usuario bloqueado', 'success');
-    } catch {
-      showToast('No se pudo bloquear al usuario', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUnblock = async () => {
-    if (!currentUser || !userId || !profile || actionLoading) return;
-
-    setActionLoading(true);
-    try {
-      await unblockUser(currentUser.uid, userId);
-      setBlockedByMe(false);
-      const status = await getFollowStatus(currentUser.uid, userId, profile.accountVisibility);
-      setFollowStatus(status.status === 'pending_received' ? 'none' : status.status);
-      setHasIncomingRequest(Boolean(status.hasIncomingRequest));
-      setIsMutual(!!status.isMutual);
-      showToast('Usuario desbloqueado', 'info');
-    } catch {
-      showToast('No se pudo desbloquear al usuario', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const resetReportForm = () => {
-    setReportReason('spam');
-    setReportDetails('');
-    setReportError(null);
-  };
-
-  const handleSubmitReport = async () => {
-    if (!currentUser || !userId || currentUser.uid === userId || isSubmittingReport) return;
-
-    setIsSubmittingReport(true);
-    setReportError(null);
-    try {
-      await reportUserProfile({
-        reporterUid: currentUser.uid,
-        reportedUid: userId,
-        reason: reportReason,
-        details: reportDetails.trim() || null,
-      });
-      setShowReportModal(false);
-      resetReportForm();
-      showToast('Reporte enviado', 'success');
-    } catch {
-      setReportError('No se pudo enviar el reporte. Intenta de nuevo.');
-    } finally {
-      setIsSubmittingReport(false);
-    }
-  };
-
-  const handleSendMessage = async () => {
-    if (!currentUser || !userId) return;
-
-    setActionLoading(true);
-    try {
-      const blocked = await isUserBlocked(currentUser.uid, userId);
-      if (blocked) {
-        setBlockedByMe(true);
-        showToast('Desbloquea a este usuario para enviarle mensajes', 'info');
-        return;
-      }
-      const conversationId = await getOrCreateDirectConversation(currentUser.uid, userId);
-      navigate(`/messages?conversation=${conversationId}`);
-    } catch {
-      showToast('Error al crear conversación', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const renderFollowActions = () => {
-    if (!currentUser || currentUser.uid === userId) return null;
-
-    if (blockedByMe) {
-      return (
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={handleUnblock}
-            disabled={actionLoading}
-            className="flex items-center gap-2 px-5 py-2.5 border border-red-500/40 text-red-300 hover:bg-red-500/10 transition-colors text-sm disabled:opacity-50 rounded-lg"
-          >
-            {actionLoading ? <Loader2 size={16} className="animate-spin" /> : 'Desbloquear usuario'}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowReportModal(true)}
-            disabled={actionLoading}
-            aria-label="Reportar usuario"
-            className="flex items-center gap-2 px-3.5 py-2.5 border border-neutral-800 text-neutral-400 hover:text-red-300 hover:border-red-500/40 transition-colors text-sm disabled:opacity-50 rounded-lg"
-          >
-            <Flag size={16} />
-            Reportar
-          </button>
-        </div>
-      );
-    }
-
-    const isPrivate = profile?.accountVisibility === 'private';
-    const canMessage = !isPrivate || isMutual || followStatus === 'following';
-    const messageButton = canMessage ? (
-      <button
-        onClick={handleSendMessage}
-        disabled={actionLoading}
-        className="flex items-center gap-2 px-5 py-2.5 bg-neutral-800 border border-neutral-700 text-white hover:bg-neutral-700 transition-colors text-sm disabled:opacity-50 rounded-lg"
-      >
-        <MessageCircle size={16} />
-        Mensaje
-      </button>
-    ) : null;
-
-    const outgoingButton = (() => {
-      switch (followStatus) {
-        case 'following':
-          return (
-            <button
-              onClick={handleUnfollow}
-              disabled={actionLoading}
-              className="flex items-center gap-2 px-5 py-2.5 border border-neutral-700 text-white hover:bg-neutral-900 transition-colors text-sm disabled:opacity-50 rounded-lg"
-            >
-              {actionLoading ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <>
-                  <UserCheck size={16} />
-                  Siguiendo
-                </>
-              )}
-            </button>
-          );
-        case 'pending_sent':
-          return (
-            <button
-              onClick={handleCancelRequest}
-              disabled={actionLoading}
-              className="flex items-center gap-2 px-5 py-2.5 border border-amber-500/50 text-amber-400 hover:bg-amber-500/10 transition-colors text-sm disabled:opacity-50 rounded-lg"
-            >
-              {actionLoading ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <>
-                  <Clock size={16} />
-                  Pendiente
-                </>
-              )}
-            </button>
-          );
-        default:
-          return (
-            <button
-              onClick={handleFollow}
-              disabled={actionLoading}
-              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-medium hover:from-amber-400 hover:to-amber-500 transition-all text-sm disabled:opacity-50 rounded-lg"
-            >
-              {actionLoading ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <>
-                  <UserPlus size={16} />
-                  Seguir
-                </>
-              )}
-            </button>
-          );
-      }
-    })();
-
+  if (person.loading) {
     return (
-      <div className="flex flex-wrap items-center gap-3">
-        {hasIncomingRequest && (
-          <>
-            <button
-              onClick={handleAcceptRequest}
-              disabled={actionLoading}
-              className="flex items-center gap-2 px-5 py-2.5 bg-green-500/20 border border-green-500/50 text-green-400 hover:bg-green-500/30 transition-colors text-sm disabled:opacity-50 rounded-lg"
-            >
-              {actionLoading ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <>
-                  <Check size={16} />
-                  Aceptar solicitud
-                </>
-              )}
-            </button>
-            <button
-              onClick={handleDeclineRequest}
-              disabled={actionLoading}
-              className="flex items-center gap-2 px-5 py-2.5 border border-neutral-700 text-neutral-300 hover:bg-neutral-900 transition-colors text-sm disabled:opacity-50 rounded-lg"
-            >
-              {actionLoading ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <>
-                  <X size={16} />
-                  Rechazar
-                </>
-              )}
-            </button>
-          </>
-        )}
-        {messageButton}
-        {outgoingButton}
-        <button
-          type="button"
-          onClick={() => setShowBlockModal(true)}
-          disabled={actionLoading}
-          aria-label="Bloquear usuario"
-          className="flex items-center gap-1.5 px-3.5 py-2.5 border border-neutral-800 text-neutral-400 hover:text-red-300 hover:border-red-500/40 transition-colors text-sm disabled:opacity-50 rounded-lg"
-        >
-          <Ban size={15} />
-          Bloquear
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowReportModal(true)}
-          disabled={actionLoading}
-          aria-label="Reportar usuario"
-          className="flex items-center gap-1.5 px-3.5 py-2.5 border border-neutral-800 text-neutral-400 hover:text-red-300 hover:border-red-500/40 transition-colors text-sm disabled:opacity-50 rounded-lg"
-        >
-          <Flag size={15} />
-          Reportar
-        </button>
-      </div>
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="page-profile flex items-center justify-center h-[60vh]">
+      <div className="page-profile flex h-[60vh] items-center justify-center">
         <Loader2 size={32} className="animate-spin text-amber-500" />
       </div>
     );
@@ -573,40 +115,57 @@ const UserProfilePage = () => {
 
   if (!profile) {
     return (
-      <div className="page-profile flex flex-col items-center justify-center h-[60vh] text-neutral-600">
-        <p className="font-serif italic text-lg mb-4">Usuario no encontrado</p>
-        <button onClick={() => navigate(-1)} className="text-white underline text-sm">
+      <div className="page-profile flex h-[60vh] flex-col items-center justify-center text-neutral-600">
+        <p className="mb-4 font-serif text-lg italic">Usuario no encontrado</p>
+        <button onClick={() => navigate(-1)} className="text-sm text-white underline">
           Volver
         </button>
       </div>
     );
   }
 
-  const initial = profile.displayName?.charAt(0).toUpperCase() || '?';
-  const isOwner = currentUser?.uid === userId;
-  const isPrivate = profile.accountVisibility === 'private';
-  const canViewPrivateContent =
-    !blockedByMe && (!isPrivate || isOwner || isMutual || followStatus === 'following');
-  const canViewFollowLists =
-    !blockedByMe && (!isPrivate || isOwner || isMutual || followStatus === 'following');
-  const postsCount = typeof profile.postsCount === 'number' ? profile.postsCount : 0;
-  const followersCount = typeof profile.followersCount === 'number' ? profile.followersCount : 0;
-  const followingCount = typeof profile.followingCount === 'number' ? profile.followingCount : 0;
-  const interestEntries = profile.karmaByInterest
-    ? Object.entries(profile.karmaByInterest)
-        .filter(([, value]) => typeof value === 'number' && value > 0)
-        .sort((a, b) => (b[1] as number) - (a[1] as number))
-        .slice(0, 6)
-    : [];
+  const displayName = profile.displayName || 'Usuario';
+  const showActions = person.isSignedIn && !person.isOwner;
 
-  const getInterestLabel = (interestId: string) => {
-    const category = CATEGORIES.find((item) => item.id === interestId);
-    return category?.label ?? interestId;
-  };
+  const actions = !showActions ? null : person.blockedByMe ? (
+    <div className="flex items-center gap-3">
+      <button
+        type="button"
+        onClick={() => void person.unblock()}
+        disabled={person.actionLoading}
+        className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-red-500/40 px-5 py-2.5 text-sm text-red-300 transition-colors hover:bg-red-500/10 disabled:opacity-50 sm:flex-none"
+      >
+        {person.actionLoading ? (
+          <Loader2 size={16} className="animate-spin" />
+        ) : (
+          'Desbloquear usuario'
+        )}
+      </button>
+      <ProfileOptionsMenu busy={person.actionLoading} onReport={person.report.show} />
+    </div>
+  ) : (
+    <div className="flex items-center gap-3">
+      <FollowButton
+        status={person.followStatus}
+        busy={person.actionLoading}
+        onFollow={() => void person.follow()}
+        onUnfollow={() => void person.unfollow()}
+        onCancelRequest={() => void person.cancelRequest()}
+      />
+      {person.canMessage && (
+        <MessageButton busy={person.actionLoading} onClick={() => void person.sendMessage()} />
+      )}
+      <ProfileOptionsMenu
+        busy={person.actionLoading}
+        onBlock={() => setIsBlocking(true)}
+        onReport={person.report.show}
+      />
+    </div>
+  );
 
-  const handleFollowListClick = (tab: 'followers' | 'following') => {
+  const openFollowList = (tab: 'followers' | 'following') => {
     if (!userId) return;
-    if (!canViewFollowLists) {
+    if (!person.canViewContent) {
       showToast('Esta cuenta es privada', 'info');
       return;
     }
@@ -614,235 +173,100 @@ const UserProfilePage = () => {
   };
 
   return (
-    <div className="page-profile pt-8 max-w-4xl mx-auto pb-20">
-      {/* Back button */}
+    <div className="page-profile mx-auto max-w-4xl pb-32 pt-6">
       <button
         onClick={() => navigate(-1)}
-        className="group flex items-center text-neutral-500 hover:text-neutral-300 mb-8 transition-colors text-xs tracking-widest uppercase"
+        className="group mb-6 flex items-center text-xs uppercase tracking-widest text-neutral-500 transition-colors hover:text-neutral-300"
       >
-        <ChevronLeft size={14} className="mr-2 group-hover:-translate-x-1 transition-transform" />
+        <ChevronLeft size={14} className="mr-2 transition-transform group-hover:-translate-x-1" />
         Volver
       </button>
 
-      {/* Profile header */}
-      <header className="flex flex-col md:flex-row items-start justify-between mb-12 pb-8 border-b border-neutral-900 gap-6">
-        <div className="flex items-center gap-6">
-          {/* Avatar */}
-          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-amber-500/20 to-amber-600/20 border border-amber-500/30 flex items-center justify-center text-3xl font-serif text-amber-500 overflow-hidden">
-            {profile.photoURL ? (
-              <img
-                src={profile.photoURL}
-                alt={profile.displayName || 'Usuario'}
-                className="w-full h-full rounded-full object-cover"
-              />
-            ) : (
-              initial
-            )}
-          </div>
+      <UserProfileHeader
+        displayName={displayName}
+        photoURL={profile.photoURL ?? null}
+        role={profile.role ?? null}
+        location={profile.location ?? null}
+        bio={profile.bio ?? null}
+        actions={actions}
+        request={
+          showActions && !person.blockedByMe && person.hasIncomingRequest ? (
+            <IncomingRequestNotice
+              name={displayName}
+              busy={person.actionLoading}
+              onAccept={() => void person.acceptRequest()}
+              onDecline={() => void person.declineRequest()}
+            />
+          ) : null
+        }
+      />
 
-          {/* Name and info */}
-          <div>
-            <h1 className="text-3xl md:text-4xl font-serif font-light text-white mb-2">
-              {profile.displayName || 'Usuario'}
-            </h1>
-            {(profile.role || isOwner) && (
-              <p className="text-neutral-400 mb-1">{profile.role || 'Nuevo miembro'}</p>
-            )}
-            {(profile.location || isOwner) && (
-              <p className="text-neutral-600 text-sm flex items-center">
-                <MapPin size={12} className="mr-1" />
-                {profile.location || 'Sin ubicación'}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex items-center gap-3">{renderFollowActions()}</div>
-      </header>
-
-      <div className="grid grid-cols-3 gap-2 mb-10">
-        <div className="rounded-xl border border-neutral-800 bg-neutral-900/30 px-2 sm:px-4 py-3 text-center min-w-0">
-          <div className="text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest text-neutral-500 truncate">
-            Publicaciones
-          </div>
-          <div className="text-lg font-semibold text-white mt-1">{postsCount}</div>
-        </div>
-        <button
-          type="button"
-          onClick={() => handleFollowListClick('followers')}
-          disabled={!canViewFollowLists}
-          className={`rounded-xl border border-neutral-800 bg-neutral-900/30 px-2 sm:px-4 py-3 text-center transition-colors min-w-0 ${canViewFollowLists ? 'hover:bg-neutral-800/40' : 'opacity-60 cursor-not-allowed'}`}
-        >
-          <div className="text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest text-neutral-500 truncate">
-            Seguidores
-          </div>
-          <div className="text-lg font-semibold text-white mt-1">{followersCount}</div>
-        </button>
-        <button
-          type="button"
-          onClick={() => handleFollowListClick('following')}
-          disabled={!canViewFollowLists}
-          className={`rounded-xl border border-neutral-800 bg-neutral-900/30 px-2 sm:px-4 py-3 text-center transition-colors min-w-0 ${canViewFollowLists ? 'hover:bg-neutral-800/40' : 'opacity-60 cursor-not-allowed'}`}
-        >
-          <div className="text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest text-neutral-500 truncate">
-            Siguiendo
-          </div>
-          <div className="text-lg font-semibold text-white mt-1">{followingCount}</div>
-        </button>
+      <div className="mt-8">
+        <ProfileStats
+          posts={count(profile.postsCount)}
+          followers={count(profile.followersCount)}
+          following={count(profile.followingCount)}
+          onOpenFollowers={() => openFollowList('followers')}
+          onOpenFollowing={() => openFollowList('following')}
+          listsDisabled={!person.canViewContent}
+        />
       </div>
 
-      {/* Content grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-        {/* Left column - About */}
-        <div className="md:col-span-1 space-y-8">
-          {/* About me */}
-          {(profile.bio || isOwner) && (
-            <section>
-              <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">Sobre Mí</h2>
-              {profile.bio ? (
-                <p className="text-neutral-400 font-light leading-relaxed">{profile.bio}</p>
-              ) : (
-                <p className="text-neutral-600 font-light italic">Sin biografía aún.</p>
-              )}
-            </section>
-          )}
-
-          {/* Reputation */}
-          <section>
-            <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">Reputación</h2>
-            <div className="flex items-center gap-4">
-              <div className="flex-1 h-1 bg-neutral-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full transition-all duration-500"
-                  style={{ width: `${profile.reputation || 0}%` }}
-                />
-              </div>
-              <span className="text-neutral-400 text-lg font-light">{profile.reputation || 0}</span>
-            </div>
-            {interestEntries.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-4">
-                {interestEntries.map(([interestId, value]) => (
-                  <span
-                    key={interestId}
-                    className="px-3 py-1.5 rounded-full border border-neutral-800/80 bg-neutral-900/40 text-xs text-neutral-300"
-                  >
-                    {getInterestLabel(interestId)} · {Math.round(value as number)}
-                  </span>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {/* Member since */}
-          <section>
-            <h2 className="text-xs tracking-[0.2em] text-neutral-600 uppercase mb-4">
-              Miembro desde
-            </h2>
-            <p className="text-neutral-400 text-sm">
-              {profile.createdAt?.toLocaleDateString('es-ES', {
-                year: 'numeric',
-                month: 'long',
-              }) || 'Fecha desconocida'}
-            </p>
-          </section>
-        </div>
-
-        {/* Right column - Posts + Portfolio */}
-        <div className="md:col-span-2">
-          {canViewPrivateContent ? (
+      {/* Phones: the posts first, the details after them. Wide screens: details on the left. */}
+      <div className="mt-10 grid grid-cols-1 gap-12 md:grid-cols-3">
+        <div className="md:order-2 md:col-span-2">
+          {person.canViewContent ? (
             <div className="space-y-10">
-              <ProfilePostsGrid userId={profile.uid} canView={canViewPrivateContent} />
-
+              <ProfilePostsGrid userId={profile.uid} canView={person.canViewContent} />
               <ContributionsSection userId={profile.uid} canEdit={false} />
             </div>
-          ) : blockedByMe ? (
-            <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
-              <p className="text-white text-lg font-light mb-2">Has bloqueado a este usuario</p>
-              <p className="text-neutral-500 text-sm">
-                Desbloquéalo para volver a ver sus publicaciones y enviarle mensajes.
-              </p>
-            </div>
+          ) : person.blockedByMe ? (
+            <Notice title="Has bloqueado a este usuario">
+              Desbloquéalo para volver a ver sus publicaciones y enviarle mensajes.
+            </Notice>
           ) : (
-            <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
-              <p className="text-white text-lg font-light mb-2">Cuenta privada</p>
-              <p className="text-neutral-500 text-sm">
-                Sigue a este usuario para ver sus publicaciones.
-              </p>
-            </div>
+            <Notice title="Cuenta privada">Sigue a este usuario para ver sus publicaciones.</Notice>
           )}
         </div>
+
+        <aside className="space-y-8 md:order-1">
+          <ReputationSection
+            reputation={profile.reputation || 0}
+            karmaByInterest={profile.karmaByInterest ?? null}
+          />
+          <section>
+            <h2 className={profileSectionTitle}>Miembro desde</h2>
+            <p className="text-sm text-neutral-400">
+              {profile.createdAt?.toLocaleDateString('es-ES', { year: 'numeric', month: 'long' }) ||
+                'Fecha desconocida'}
+            </p>
+          </section>
+        </aside>
       </div>
 
-      {showBlockModal && (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center safe-area-inset"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="profile-block-modal-title"
-        >
-          <div
-            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-            onClick={() => !actionLoading && setShowBlockModal(false)}
-          />
-          <div className="relative w-full max-w-md mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
-              <h3 id="profile-block-modal-title" className="text-lg font-medium text-white">
-                Bloquear usuario
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowBlockModal(false)}
-                disabled={actionLoading}
-                className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
-                aria-label="Cerrar"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <p className="text-sm text-neutral-400">
-                No podrán enviarse mensajes ni ver sus publicaciones, y se eliminará el seguimiento
-                entre ambos. Puedes desbloquearlo desde Ajustes &gt; Privacidad y seguridad.
-              </p>
-              <div className="flex items-center justify-end gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowBlockModal(false)}
-                  disabled={actionLoading}
-                  className="px-4 py-2 rounded-lg text-neutral-300 hover:text-white transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleBlock()}
-                  disabled={actionLoading}
-                  className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium transition-colors disabled:opacity-50"
-                >
-                  {actionLoading ? 'Bloqueando...' : 'Confirmar bloqueo'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {isBlocking && (
+        <BlockUserDialog
+          busy={person.actionLoading}
+          onCancel={() => setIsBlocking(false)}
+          onConfirm={() => {
+            void person.block().then((blocked) => {
+              if (blocked) setIsBlocking(false);
+            });
+          }}
+        />
       )}
 
       <ContentReportModal
-        open={showReportModal}
+        open={person.report.open}
         targetLabel="usuario"
-        reason={reportReason}
-        details={reportDetails}
-        error={reportError}
-        isSubmitting={isSubmittingReport}
-        onClose={() => {
-          if (isSubmittingReport) return;
-          setShowReportModal(false);
-          resetReportForm();
-        }}
-        onReasonChange={setReportReason}
-        onDetailsChange={setReportDetails}
-        onSubmit={() => void handleSubmitReport()}
+        reason={person.report.reason}
+        details={person.report.details}
+        error={person.report.error}
+        isSubmitting={person.report.submitting}
+        onClose={person.report.close}
+        onReasonChange={person.report.setReason}
+        onDetailsChange={person.report.setDetails}
+        onSubmit={() => void person.report.submit()}
       />
     </div>
   );
