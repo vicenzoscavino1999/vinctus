@@ -123,7 +123,8 @@ struct MessagesListView: View {
     .scrollContentBackground(.hidden)
     .background(VinctusTokens.Color.background)
     .navigationTitle("Mensajes")
-    .searchable(text: $query, prompt: "Buscar conversaciones o grupos")
+    // Pinned under the title: iOS 26 would otherwise put it at the bottom, behind our tab bar.
+    .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Buscar conversaciones o grupos")
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
         Button {

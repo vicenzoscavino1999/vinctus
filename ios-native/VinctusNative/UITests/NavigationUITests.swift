@@ -42,6 +42,26 @@ final class NavigationUITests: XCTestCase {
     )
   }
 
+  /// The Mensajes search sits under the title and can be used, instead of behind the bar
+  /// (where iOS 26 puts searchable fields by default).
+  func testTheMessagesSearchIsAboveTheBottomBar() {
+    app.launchArguments = ["-VinctusDemo", "-VinctusTab", "messages"]
+    app.launch()
+    let messagesTab = app.buttons["tab-messages"]
+    XCTAssertTrue(messagesTab.waitForExistence(timeout: 45))
+    let search = app.searchFields["Buscar conversaciones o grupos"]
+    XCTAssertTrue(search.waitForExistence(timeout: 20))
+
+    XCTAssertTrue(search.isHittable, "The search field must be tappable")
+    XCTAssertLessThan(search.frame.maxY, messagesTab.frame.minY, "The search must not sit behind the bar")
+    XCTAssertLessThan(search.frame.minY, app.frame.height / 2, "The search goes under the title")
+
+    search.tap()
+    search.typeText("Mateo")
+    XCTAssertTrue(app.staticTexts["Mateo Rojas"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts["Diego Salazar"].exists, "The search filters the list")
+  }
+
   /// Each tab opens from the web-style bar, with no system tab bar behind it that could flash.
   func testSwitchingTabsUsesOnlyTheWebStyleBar() {
     app.launchArguments = ["-VinctusDemo", "-VinctusTab", "discover"]
