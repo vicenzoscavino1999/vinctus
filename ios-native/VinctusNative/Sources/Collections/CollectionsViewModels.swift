@@ -8,6 +8,10 @@ final class CollectionsViewModel: ObservableObject {
   @Published var errorMessage: String?
   @Published var searchText = ""
   @Published private(set) var deletingIDs: Set<String> = []
+  /// "Recientes": the newest saved items across folders, like the web.
+  @Published private(set) var recents: [RecentCollectionItem] = []
+
+  static let recentsLimit = 6
 
   let repo: CollectionsRepo
   private var loadGeneration = 0
@@ -23,9 +27,20 @@ final class CollectionsViewModel: ObservableObject {
     return collections.filter { DiscoverCategory.normalizedSearch($0.name).contains(query) }
   }
 
+  /// Recents whose title or folder matches the search, like the web.
+  var visibleRecents: [RecentCollectionItem] {
+    let query = DiscoverCategory.normalizedSearch(searchText)
+    guard !query.isEmpty else { return recents }
+    return recents.filter {
+      DiscoverCategory.normalizedSearch($0.item.title).contains(query)
+        || DiscoverCategory.normalizedSearch($0.collectionName).contains(query)
+    }
+  }
+
   func reset() {
     loadGeneration += 1
     collections = []
+    recents = []
     searchText = ""
     errorMessage = nil
     deletingIDs = []
@@ -38,6 +53,7 @@ final class CollectionsViewModel: ObservableObject {
     if collections.isEmpty {
       isLoading = true
     }
+    async let recentItems = try? repo.fetchRecentItems(limit: Self.recentsLimit)
     do {
       let fetched = try await repo.fetchCollections()
       guard !Task.isCancelled, gen == loadGeneration else { return }
@@ -46,6 +62,11 @@ final class CollectionsViewModel: ObservableObject {
     } catch {
       guard !Task.isCancelled, gen == loadGeneration else { return }
       errorMessage = "No se pudieron cargar tus colecciones."
+    }
+    // Recents are extra: if they fail, the folders still show.
+    let loadedRecents = await recentItems
+    if !Task.isCancelled, gen == loadGeneration, let loadedRecents {
+      recents = loadedRecents
     }
     isLoading = false
   }
@@ -57,7 +78,9 @@ final class CollectionsViewModel: ObservableObject {
     defer { deletingIDs.remove(collection.id) }
 
     let originalIndex = collections.firstIndex(where: { $0.id == collection.id })
+    let originalRecents = recents
     collections.removeAll { $0.id == collection.id }
+    recents.removeAll { $0.collectionID == collection.id }
     errorMessage = nil
     do {
       try await repo.deleteCollection(id: collection.id)
@@ -67,6 +90,7 @@ final class CollectionsViewModel: ObservableObject {
         let index = min(originalIndex ?? collections.count, collections.count)
         collections.insert(collection, at: index)
       }
+      recents = originalRecents
       errorMessage = "No se pudo eliminar la colección."
     }
   }
