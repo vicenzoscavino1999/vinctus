@@ -39,6 +39,10 @@ private struct VinctusTopBarModifier: ViewModifier {
         if !isShowingNotifications, AppRepos.demoArgument("-VinctusOpenNotifications") != nil {
           isShowingNotifications = true
         }
+        // `-VinctusOpenAI chat|arena` opens the AI (AIHubView then opens that mode).
+        if !isShowingAI, AppRepos.demoArgument("-VinctusOpenAI") != nil {
+          isShowingAI = true
+        }
       }
   }
 }
