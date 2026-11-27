@@ -156,6 +156,15 @@ jobs:
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenGroup g1 -VinctusEditGroup 1
           sleep 10
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/13-group-edit.png"
+          # A category: its live content and its communities.
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenCategory science
+          sleep 10
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/20-category.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenCategory science -VinctusCategoryTab groups
+          sleep 10
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/20b-category-groups.png"
           xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab connections
           sleep 9

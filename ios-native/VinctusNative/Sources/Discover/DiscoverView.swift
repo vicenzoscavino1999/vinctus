@@ -273,6 +273,10 @@ struct DiscoverView: View {
       if !isShowingFeed, AppRepos.demoArgument("-VinctusOpenFeed") != nil {
         isShowingFeed = true
       }
+      // `-VinctusOpenCategory <id>` opens that category.
+      if openedCategory == nil, let categoryID = AppRepos.demoArgument("-VinctusOpenCategory") {
+        openedCategory = DiscoverCategory.all.first { $0.id == categoryID }
+      }
     }
     .onReceive(NotificationCenter.default.publisher(for: .vinctusPostPublished)) { _ in
       Task { await postsPreview.refresh() }
