@@ -119,9 +119,9 @@ final class GroupMembershipTests: XCTestCase {
   }
 
   func testMemberRoles() {
-    XCTAssertEqual(GroupView.roleTitle("admin"), "ADMIN")
-    XCTAssertEqual(GroupView.roleTitle("moderator"), "MODERADOR")
-    XCTAssertEqual(GroupView.roleTitle("member"), "MIEMBRO")
+    XCTAssertEqual(GroupView.roleTitle("admin"), "Admin")
+    XCTAssertEqual(GroupView.roleTitle("moderator"), "Moderador")
+    XCTAssertEqual(GroupView.roleTitle("member"), "Miembro")
   }
 }
 
