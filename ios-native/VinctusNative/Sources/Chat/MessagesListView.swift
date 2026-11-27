@@ -162,7 +162,8 @@ struct MessagesListView: View {
         profileRepo: profileRepo,
         conversationID: conversation.id,
         title: conversation.title,
-        otherUserID: conversation.otherUserID
+        otherUserID: conversation.otherUserID,
+        photoURL: conversation.photoURL
       )
     }
     .onAppear {
