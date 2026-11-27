@@ -1,4 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PostCommentsModal from './PostCommentsModal';
 import { getPostComments } from '@/features/posts/api';
@@ -30,6 +32,8 @@ const post = (postId: string): PostSummary => ({
   createdAt: null,
 });
 const empty = { items: [], lastDoc: null, hasMore: false };
+// The sheet links to the post and to people's profiles.
+const inRouter = (ui: ReactElement) => <MemoryRouter>{ui}</MemoryRouter>;
 
 describe('comments modal identity', () => {
   beforeEach(() => {
@@ -40,12 +44,12 @@ describe('comments modal identity', () => {
   it('keeps the editor when the parent updates counters on the same post', async () => {
     const first = post('p1');
     const props = { isOpen: true, post: first, onClose: vi.fn(), onCommentAdded: vi.fn() };
-    const view = render(<PostCommentsModal {...props} />);
+    const view = render(inRouter(<PostCommentsModal {...props} />));
     fireEvent.click(screen.getByRole('button', { name: /Agregar comentario/ }));
     fireEvent.change(screen.getByPlaceholderText('Escribe tu comentario...'), {
       target: { value: 'Mi borrador' },
     });
-    view.rerender(<PostCommentsModal {...props} post={{ ...first, commentCount: 21 }} />);
+    view.rerender(inRouter(<PostCommentsModal {...props} post={{ ...first, commentCount: 21 }} />));
     expect(screen.getByPlaceholderText('Escribe tu comentario...')).toHaveValue('Mi borrador');
     expect(screen.getByRole('heading', { name: 'Comentarios (21)' })).toBeVisible();
     await waitFor(() => expect(getPostComments).toHaveBeenCalledTimes(1));
@@ -59,8 +63,8 @@ describe('comments modal identity', () => {
       }),
     );
     const props = { isOpen: true, post: post('p1'), onClose: vi.fn(), onCommentAdded: vi.fn() };
-    const view = render(<PostCommentsModal {...props} />);
-    view.rerender(<PostCommentsModal {...props} post={post('p2')} />);
+    const view = render(inRouter(<PostCommentsModal {...props} />));
+    view.rerender(inRouter(<PostCommentsModal {...props} post={post('p2')} />));
     await waitFor(() => expect(screen.getByText('No hay comentarios aun.')).toBeVisible());
     await act(async () => {
       complete({
