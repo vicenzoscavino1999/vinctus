@@ -159,6 +159,15 @@ jobs:
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab discover -VinctusOpenNotifications 1 -VinctusNotificationsTab requests
           sleep 9
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/16-notification-requests.png"
+          # Ajustes > Apariencia > Vidrio (Liquid Glass, iOS 26).
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusAppearance glass
+          sleep 10
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/18-glass-discover.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusAppearance glass -VinctusTab messages
+          sleep 8
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/18b-glass-messages.png"
 
       - name: Export chat UI evidence
         if: always()

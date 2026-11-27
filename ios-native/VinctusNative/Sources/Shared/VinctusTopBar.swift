@@ -8,6 +8,7 @@ struct VinctusTopBar: View {
   let onCreatePost: () -> Void
   let onOpenAI: () -> Void
   var onOpenNotifications: () -> Void = {}
+  @Environment(\.usesGlass) private var usesGlass
 
   var body: some View {
     HStack(spacing: 0) {
@@ -16,15 +17,18 @@ struct VinctusTopBar: View {
           .font(.system(size: 20, weight: .semibold))
           .foregroundStyle(.black)
           .frame(width: 44, height: 44)
-          .background(
-            LinearGradient(
-              colors: [VinctusTokens.Color.accentBright, VinctusTokens.Color.accent],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
+          .background {
+            if !usesGlass {
+              LinearGradient(
+                colors: [VinctusTokens.Color.accentBright, VinctusTokens.Color.accent],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+              )
+            }
+          }
           .clipShape(Circle())
-          .shadow(color: VinctusTokens.Color.accent.opacity(0.35), radius: 10, y: 4)
+          .vinctusGlassCircle(usesGlass, tint: VinctusTokens.Color.accent)
+          .shadow(color: VinctusTokens.Color.accent.opacity(usesGlass ? 0 : 0.35), radius: 10, y: 4)
       }
       .buttonStyle(.plain)
       .accessibilityLabel("Crear publicación")
@@ -35,12 +39,13 @@ struct VinctusTopBar: View {
         .foregroundStyle(VinctusTokens.Color.textPrimary)
         .frame(maxWidth: .infinity)
 
-      HStack(spacing: 4) {
+      HStack(spacing: usesGlass ? 8 : 4) {
         Button(action: onOpenAI) {
           Image(systemName: "sparkles")
             .font(.system(size: 21, weight: .light))
             .foregroundStyle(VinctusTokens.Color.textSecondary)
             .frame(width: 44, height: 44)
+            .vinctusGlassCircle(usesGlass)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Inteligencia artificial")
@@ -50,6 +55,7 @@ struct VinctusTopBar: View {
             .font(.system(size: 20, weight: .light))
             .foregroundStyle(VinctusTokens.Color.textSecondary)
             .frame(width: 44, height: 44)
+            .vinctusGlassCircle(usesGlass)
             .overlay(alignment: .topTrailing) {
               if unreadCount > 0 {
                 Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
@@ -69,12 +75,15 @@ struct VinctusTopBar: View {
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 8)
-    .background(VinctusTokens.Color.background.opacity(0.95))
+    // In glass the bar is lighter and borderless, so the glass buttons carry it.
+    .background(VinctusTokens.Color.background.opacity(usesGlass ? 0.55 : 0.95))
     .background(.ultraThinMaterial)
     .overlay(alignment: .bottom) {
-      Rectangle()
-        .fill(VinctusTokens.Color.border.opacity(0.5))
-        .frame(height: 0.5)
+      if !usesGlass {
+        Rectangle()
+          .fill(VinctusTokens.Color.border.opacity(0.5))
+          .frame(height: 0.5)
+      }
     }
   }
 }

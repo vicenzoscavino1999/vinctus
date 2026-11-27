@@ -10,6 +10,7 @@ struct SettingsView: View {
   @State private var showAppleDeletionSheet = false
   @State private var showRevokeSessionsDialog = false
   @State private var isSendingPasswordReset = false
+  @AppStorage(AppAppearance.storageKey) private var appearance = AppAppearance.classic.rawValue
 
   var body: some View {
     List {
@@ -20,6 +21,23 @@ struct SettingsView: View {
         LabeledContent("Firebase") { Text(FirebaseApp.app() == nil ? "Not configured" : "Configured") }
       }
       #endif
+
+      // A choice, not a test: people keep the look they prefer.
+      Section {
+        Picker("Apariencia", selection: $appearance) {
+          ForEach(AppAppearance.allCases) { option in
+            Text(option.label).tag(option.rawValue)
+          }
+        }
+        .pickerStyle(.segmented)
+        .disabled(!AppAppearance.isGlassAvailable)
+      } header: {
+        Text("Apariencia")
+      } footer: {
+        Text(AppAppearance.isGlassAvailable
+             ? "Vidrio usa el diseño Liquid Glass de iOS 26 en las barras y los botones. Clásico mantiene el estilo de la web."
+             : "Vidrio necesita iOS 26. En este iPhone la app usa el estilo Clásico.")
+      }
 
       Section {
         Button {
