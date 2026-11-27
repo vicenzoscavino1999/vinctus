@@ -136,14 +136,9 @@ struct ChatDetailsView: View {
   }
 
   private func withSheets<V: View>(_ view: V) -> some View {
-    view
-      .sheet(item: $sheet) { (shown: DetailsSheet) in
-        sheetContent(shown)
-      }
-      .onChange(of: sheet) { previous, current in
-        // An edited group shows its new name and icon.
-        if case .editGroup? = previous, current == nil { Task { await vm.load() } }
-      }
+    view.sheet(item: $sheet) { (shown: DetailsSheet) in
+      sheetContent(shown)
+    }
   }
 
   private func withNavigation<V: View>(_ view: V) -> some View {
@@ -175,7 +170,10 @@ struct ChatDetailsView: View {
         createdGroupID = groupID
       }
     case let .editGroup(detail):
-      EditGroupSheet(detail: detail, repo: groupsRepo)
+      EditGroupSheet(detail: detail, repo: groupsRepo, ownerID: authVM.currentUserID) {
+        // An edited group shows its new name and icon.
+        Task { await vm.load() }
+      }
     }
   }
 
