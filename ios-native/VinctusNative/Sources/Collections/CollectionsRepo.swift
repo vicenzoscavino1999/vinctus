@@ -272,6 +272,8 @@ protocol CollectionsRepo {
   func fetchItems(collectionID: String) async throws -> [CollectionItem]
   func addItem(_ item: NewCollectionItem, to collection: UserCollection) async throws
   func deleteItem(id: String, from collectionID: String) async throws
+  /// The newest saved items across folders, for "Recientes".
+  func fetchRecentItems(limit: Int) async throws -> [RecentCollectionItem]
 }
 
 enum CollectionsRepoError: LocalizedError {
@@ -397,9 +399,31 @@ final class FirebaseCollectionsRepo: CollectionsRepo {
 
   /// Mirrors `getCollectionItems`.
   func fetchItems(collectionID: String) async throws -> [CollectionItem] {
+    try await newestItems(collectionID: collectionID, limit: Self.itemsLimit)
+  }
+
+  /// The most recently updated folders, for "Recientes".
+  func recentFolders(limit: Int) async throws -> [UserCollection] {
+    let snapshot = try await collectionsRef()
+      .order(by: "updatedAt", descending: true)
+      .limit(to: limit)
+      .getDocuments()
+    return snapshot.documents.map { document in
+      let data = document.data()
+      return UserCollection(
+        id: document.documentID,
+        name: FirestoreValue.string(data["name"]) ?? "Colección",
+        icon: CollectionIcon.from(data["icon"] as? String),
+        itemCount: max(FirestoreValue.int(data["itemCount"]) ?? 0, 0),
+        updatedAt: FirestoreValue.date(data["updatedAt"]) ?? Date()
+      )
+    }
+  }
+
+  func newestItems(collectionID: String, limit: Int) async throws -> [CollectionItem] {
     let snapshot = try await collectionsRef().document(collectionID).collection(FirestoreSubcollections.items)
       .order(by: "createdAt", descending: true)
-      .limit(to: Self.itemsLimit)
+      .limit(to: limit)
       .getDocuments()
     return snapshot.documents.map { document in
       let data = document.data()
