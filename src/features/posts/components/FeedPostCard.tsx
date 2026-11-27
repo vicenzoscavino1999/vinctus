@@ -5,6 +5,7 @@ import { useToast } from '@/shared/ui/Toast';
 import { triggerSelectionHaptic } from '@/shared/lib/haptics';
 import { usePostEngagement } from '@/features/posts/hooks/usePostEngagement';
 import { reactionLabel } from '@/features/posts/model/PostEngagementSession';
+import PostAuthorRow from '@/features/posts/components/PostAuthorRow';
 import { PostImage } from '@/features/posts/components/ProtectedPostMedia';
 import type { PostSummary } from '@/features/posts/model/postSummary';
 
@@ -77,7 +78,6 @@ export default function FeedPostCard({
   const text = summary.text.trim();
   const likeCount = like.loaded ? like.count : initialLikeCount;
   const commentCount = summary.commentCount;
-  const initial = summary.authorName.charAt(0).toUpperCase() || '?';
 
   const action = (kind: 'like' | 'save') => {
     if (!user) {
@@ -118,33 +118,24 @@ export default function FeedPostCard({
   return (
     <article className="overflow-hidden border-b border-neutral-900 bg-neutral-950 max-md:-mx-4 md:rounded-2xl md:border">
       {/* Header */}
-      <header className="flex items-center gap-3 px-4 py-3">
-        {summary.authorPhoto ? (
-          <img
-            src={summary.authorPhoto}
-            alt=""
-            className="h-9 w-9 shrink-0 rounded-full object-cover"
-          />
-        ) : (
-          <div
-            aria-hidden="true"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-sm font-semibold text-black"
-          >
-            {initial}
-          </div>
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-white">{summary.authorName}</p>
-          <p className="text-xs text-neutral-500">{timeLabel}</p>
-        </div>
-        <button
-          type="button"
-          onClick={onCopyLink}
-          aria-label="Copiar enlace"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-white"
-        >
-          <Link2 size={18} />
-        </button>
+      <header className="px-4 py-3">
+        <PostAuthorRow
+          authorId={summary.authorId}
+          authorName={summary.authorName}
+          authorPhoto={summary.authorPhoto}
+          groupId={summary.groupId}
+          timeLabel={timeLabel}
+          trailing={
+            <button
+              type="button"
+              onClick={onCopyLink}
+              aria-label="Copiar enlace"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-white"
+            >
+              <Link2 size={18} />
+            </button>
+          }
+        />
       </header>
 
       {/* Media, or the text itself for text posts */}

@@ -86,21 +86,25 @@ struct ProfileAboutSection: View {
   let isOwnProfile: Bool
   let onEdit: () -> Void
 
+  /// The bio as plain text under the header (no card), like the web header.
   var body: some View {
-    ProfileSectionCard(title: "Sobre mí", icon: "person.text.rectangle") {
+    Group {
       if let bio = profile.bio, !bio.isEmpty {
         Text(bio)
-          .font(.body)
-          .foregroundStyle(VinctusTokens.Color.textPrimary)
+          .font(.subheadline)
+          .foregroundStyle(VinctusTokens.Color.textSecondary)
+          .multilineTextAlignment(.center)
+          .accessibilityLabel("Sobre mí: \(bio)")
       } else if isOwnProfile {
-        ProfileSectionMessage(text: "Aún no has añadido una biografía. ¡Cuéntale al mundo sobre ti!")
-        Button("+ Añadir biografía", action: onEdit)
-          .font(.subheadline.weight(.semibold))
+        Button("Añadir biografía", action: onEdit)
+          .font(.footnote.weight(.semibold))
           .foregroundStyle(VinctusTokens.Color.accent)
       } else {
         ProfileSectionMessage(text: "Sin biografía aún.")
       }
     }
+    .frame(maxWidth: .infinity)
+    .padding(.horizontal, VinctusTokens.Spacing.sm)
   }
 }
 

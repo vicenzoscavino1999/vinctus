@@ -121,13 +121,13 @@ struct CollaborationDetailSheet: View {
       ScrollView {
         VStack(alignment: .leading, spacing: VinctusTokens.Spacing.lg) {
           VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
-            ConnectionsChip(text: collaboration.topic ?? "Proyecto", isOutlined: true)
+            Text(collaboration.context.uppercased())
+              .font(.caption.weight(.medium))
+              .tracking(1.4)
+              .foregroundStyle(VinctusTokens.Color.textMuted)
             Text(collaboration.title)
               .font(VinctusTokens.Typography.serif(28))
               .foregroundStyle(VinctusTokens.Color.textPrimary)
-            Text(collaboration.context)
-              .font(.body)
-              .foregroundStyle(VinctusTokens.Color.textSecondary)
           }
 
           HStack(spacing: VinctusTokens.Spacing.sm) {
@@ -148,6 +148,7 @@ struct CollaborationDetailSheet: View {
               detailRow("Modalidad", collaboration.mode.label)
               if let location = collaboration.location { detailRow("Ubicación", location) }
               detailRow("Nivel", collaboration.level.label)
+              if let topic = collaboration.topic, !topic.isEmpty { detailRow("Tema", topic) }
             }
           }
 

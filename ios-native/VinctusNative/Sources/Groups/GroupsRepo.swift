@@ -128,6 +128,14 @@ protocol GroupsRepo {
   func updateGroup(groupID: String, _ update: GroupUpdate) async throws
   /// Uploads a new icon to `groups/{ownerId}/{groupId}/icon/`, like the web's `uploadGroupIcon`.
   func uploadGroupIcon(ownerID: String, groupID: String, jpegData: Data) async throws -> String
+  /// Creates a group owned by `ownerID`, like the web's `createGroup`: the group, then the
+  /// owner's admin membership on both sides. The group is removed if the membership fails.
+  func createGroup(_ draft: GroupUpdate, ownerID: String) async throws -> String
+  /// Adds someone to a group the signed-in user owns, like the web's `addGroupMember`.
+  func addMember(groupID: String, uid: String) async throws
+  /// The groups `uid` belongs to, newest membership first, like the web's
+  /// `subscribeToUserMemberships` (`users/{uid}/memberships`).
+  func fetchMyGroups(uid: String, limit: Int) async throws -> [GroupSummary]
 }
 
 enum GroupsRepoError: LocalizedError {
@@ -174,7 +182,7 @@ final class FirebaseGroupsRepo: GroupsRepo {
       .limit(to: pageSize)
 
     let (snapshot, isFromCache) = try await getDocumentsWithFallback(query)
-    let groups = snapshot.documents.map(mapGroupSummary)
+    let groups = snapshot.documents.map { mapGroupSummary(id: $0.documentID, data: $0.data()) }
 
     return GroupsPage(items: groups, isFromCache: isFromCache || snapshot.metadata.isFromCache)
   }
@@ -423,6 +431,93 @@ final class FirebaseGroupsRepo: GroupsRepo {
     try await db.collection(FirestoreCollections.groups).document(groupID).updateData(fields)
   }
 
+  func createGroup(_ draft: GroupUpdate, ownerID: String) async throws -> String {
+    guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
+    guard let draft = draft.validated() else { throw GroupsRepoError.invalidUpdate }
+    let db = self.db ?? Firestore.firestore()
+    let groupRef = db.collection(FirestoreCollections.groups).document()
+    let groupID = groupRef.documentID
+
+    // Fields of `isValidGroupCreate` in firestore.rules.
+    var fields: [String: Any] = [
+      "name": draft.name,
+      "description": draft.description,
+      "visibility": draft.visibility.rawValue,
+      "ownerId": ownerID,
+      "memberCount": 1,
+      "createdAt": FieldValue.serverTimestamp(),
+      "updatedAt": FieldValue.serverTimestamp(),
+    ]
+    fields["categoryId"] = draft.categoryID ?? NSNull()
+    fields["iconUrl"] = draft.iconURL ?? NSNull()
+    try await groupRef.setData(fields)
+
+    let batch = db.batch()
+    batch.setData(
+      ["uid": ownerID, "groupId": groupID, "role": "admin", "joinedAt": FieldValue.serverTimestamp()],
+      forDocument: groupRef.collection(FirestoreSubcollections.members).document(ownerID)
+    )
+    batch.setData(
+      ["groupId": groupID, "joinedAt": FieldValue.serverTimestamp()],
+      forDocument: db.collection(FirestoreCollections.users).document(ownerID)
+        .collection(FirestoreSubcollections.memberships).document(groupID)
+    )
+    do {
+      try await batch.commit()
+    } catch {
+      try? await groupRef.delete()
+      throw error
+    }
+    return groupID
+  }
+
+  func addMember(groupID: String, uid: String) async throws {
+    guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
+    let db = self.db ?? Firestore.firestore()
+    let memberRef = db.collection(FirestoreCollections.groups).document(groupID)
+      .collection(FirestoreSubcollections.members).document(uid)
+    if try await memberRef.getDocument().exists { return }
+
+    // memberCount is kept by the onGroupMemberCreated function, as on the web.
+    let batch = db.batch()
+    batch.setData(
+      ["uid": uid, "groupId": groupID, "role": "member", "joinedAt": FieldValue.serverTimestamp()],
+      forDocument: memberRef
+    )
+    batch.setData(
+      ["groupId": groupID, "joinedAt": FieldValue.serverTimestamp()],
+      forDocument: db.collection(FirestoreCollections.users).document(uid)
+        .collection(FirestoreSubcollections.memberships).document(groupID)
+    )
+    try await batch.commit()
+  }
+
+  func fetchMyGroups(uid: String, limit: Int) async throws -> [GroupSummary] {
+    guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
+    let db = self.db ?? Firestore.firestore()
+    let memberships = try await db.collection(FirestoreCollections.users).document(uid)
+      .collection(FirestoreSubcollections.memberships)
+      .order(by: "joinedAt", descending: true)
+      .limit(to: max(1, min(50, limit)))
+      .getDocuments()
+    let ids = memberships.documents.map(\.documentID)
+    guard !ids.isEmpty else { return [] }
+
+    // At most 30 ids per "in" query.
+    var byID: [String: GroupSummary] = [:]
+    for start in stride(from: 0, to: ids.count, by: 30) {
+      let chunk = Array(ids[start..<min(start + 30, ids.count)])
+      let snapshot = try await db.collection(FirestoreCollections.groups)
+        .whereField(FieldPath.documentID(), in: chunk)
+        .getDocuments()
+      for doc in snapshot.documents {
+        byID[doc.documentID] = mapGroupSummary(id: doc.documentID, data: doc.data())
+      }
+    }
+    // Groups that no longer exist are skipped.
+    return ids.compactMap { byID[$0] }
+  }
+
   func uploadGroupIcon(ownerID: String, groupID: String, jpegData: Data) async throws -> String {
     guard FirebaseApp.app() != nil else { throw GroupsRepoError.firebaseNotConfigured }
     let millis = Int64(Date().timeIntervalSince1970 * 1000)
@@ -470,14 +565,13 @@ final class FirebaseGroupsRepo: GroupsRepo {
     }
   }
 
-  private func mapGroupSummary(doc: QueryDocumentSnapshot) -> GroupSummary {
-    let data = doc.data()
+  private func mapGroupSummary(id: String, data: [String: Any]) -> GroupSummary {
     let visibility = (data["visibility"] as? String) == ProfileAccountVisibility.private.rawValue
       ? ProfileAccountVisibility.private
       : ProfileAccountVisibility.public
 
     return GroupSummary(
-      id: doc.documentID,
+      id: id,
       name: FirestoreValue.string(data["name"]) ?? "Grupo",
       description: FirestoreValue.string(data["description"]) ?? "",
       categoryID: FirestoreValue.string(data["categoryId"]),

@@ -278,21 +278,10 @@ struct DiscoverView: View {
       Task { await postsPreview.refresh() }
     }
     .task(id: authVM.currentUserID) {
-      if authVM.currentUserID == nil && !AppRepos.isDemo {
-        discoverQuery = ""
-        lastRefresh = nil
-        vm.reset()
-        suggestedGroups.reset()
-        interests.reset()
-        debates.reset()
-        return
-      }
-      if let lastRefresh, Date().timeIntervalSince(lastRefresh) < Self.refreshInterval,
-        vm.currentUserID == authVM.currentUserID
-      {
-        return
-      }
-      await refreshDiscoverData(force: false)
+      await loadIfStale()
+    }
+    .refreshOnTabReturn {
+      await loadIfStale()
     }
     .refreshable {
       await refreshDiscoverData(force: true)
@@ -317,6 +306,25 @@ struct DiscoverView: View {
     return unblocked.filter {
       DiscoverCategory.normalizedSearch($0.displayName).contains(normalizedDiscoverQuery)
     }
+  }
+
+  /// Loads on open and when the tab comes back, at most once every `refreshInterval`.
+  private func loadIfStale() async {
+    if authVM.currentUserID == nil && !AppRepos.isDemo {
+      discoverQuery = ""
+      lastRefresh = nil
+      vm.reset()
+      suggestedGroups.reset()
+      interests.reset()
+      debates.reset()
+      return
+    }
+    if let lastRefresh, Date().timeIntervalSince(lastRefresh) < Self.refreshInterval,
+      vm.currentUserID == authVM.currentUserID
+    {
+      return
+    }
+    await refreshDiscoverData(force: false)
   }
 
   /// Every section asks at the same time, so a slow one (a sleeping function, a slow source)

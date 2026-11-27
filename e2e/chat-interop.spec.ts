@@ -160,7 +160,11 @@ test.describe('Web/native conversation interoperability', () => {
     });
     await expect(input).toHaveValue('Este borrador nuevo debe conservarse');
     await page.getByRole('button', { name: 'Volver a conversaciones' }).click();
-    await page.getByText(text, { exact: true }).click();
+    // The inbox row shows the last message as "Tú: <text>".
+    await page
+      .getByRole('list')
+      .getByRole('button', { name: new RegExp(text) })
+      .click();
     await expect(input).toHaveValue('Este borrador nuevo debe conservarse');
   });
 

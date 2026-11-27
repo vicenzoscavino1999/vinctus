@@ -42,11 +42,10 @@ struct ProfilePostsSection: View {
           } label: {
             Label("Publicar", systemImage: "plus")
               .font(.caption.weight(.semibold))
-              .foregroundStyle(.black)
+              .foregroundStyle(VinctusTokens.Color.accent)
               .padding(.horizontal, 12)
               .padding(.vertical, 6)
-              .background(VinctusTokens.Color.accent)
-              .clipShape(Capsule())
+              .overlay(Capsule().stroke(VinctusTokens.Color.accent.opacity(0.45), lineWidth: 1))
           }
           .buttonStyle(.plain)
         }
@@ -104,27 +103,41 @@ struct ProfilePostsSection: View {
 private struct PostGridTile: View {
   let post: FeedItem
 
+  /// No photo, video or file: the words are the picture, like a quote (as on the web).
+  private var isTextOnly: Bool {
+    post.previewImageURL == nil && !post.hasVideo && post.fileName == nil
+  }
+
   var body: some View {
     SwiftUI.Color.clear
       .aspectRatio(1, contentMode: .fit)
       .overlay {
         if let preview = post.previewImageURL {
           PostImageView(source: preview)
+        } else if isTextOnly {
+          quoteBackground
         } else {
           emptyBackground
         }
       }
       .overlay {
-        LinearGradient(
-          colors: [.black.opacity(0.7), .black.opacity(0.2), .clear],
-          startPoint: .bottom,
-          endPoint: .top
-        )
-        .opacity(0.8)
+        if !isTextOnly {
+          LinearGradient(
+            colors: [.black.opacity(0.7), .black.opacity(0.2), .clear],
+            startPoint: .bottom,
+            endPoint: .top
+          )
+          .opacity(0.8)
+        }
       }
-      .overlay(alignment: .bottomLeading) {
-        caption
-          .padding(14)
+      .overlay(alignment: isTextOnly ? .leading : .bottomLeading) {
+        if isTextOnly {
+          quote
+            .padding(14)
+        } else {
+          caption
+            .padding(14)
+        }
       }
       .overlay(alignment: .topTrailing) {
         if post.hasVideo {
@@ -163,6 +176,36 @@ private struct PostGridTile: View {
     }
   }
 
+  private var quote: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Image(systemName: "quote.opening")
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(VinctusTokens.Color.accent.opacity(0.5))
+      Text(post.title ?? (post.text.isEmpty ? "Publicación" : post.text))
+        .font(VinctusTokens.Typography.serif(16))
+        .foregroundStyle(VinctusTokens.Color.textPrimary)
+        .lineLimit(5)
+        .multilineTextAlignment(.leading)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private var quoteBackground: some View {
+    ZStack {
+      LinearGradient(
+        colors: [SwiftUI.Color(white: 0.115), SwiftUI.Color(white: 0.08)],
+        startPoint: .top,
+        endPoint: .bottom
+      )
+      RadialGradient(
+        colors: [VinctusTokens.Color.accent.opacity(0.08), .clear],
+        center: .topLeading,
+        startRadius: 0,
+        endRadius: 170
+      )
+    }
+  }
+
   private var emptyBackground: some View {
     LinearGradient(
       colors: [SwiftUI.Color(white: 0.09), SwiftUI.Color(white: 0.15), .black],
@@ -196,7 +239,7 @@ struct ProfileContributionsSection: View {
         Button {
           isAdding = true
         } label: {
-          Image(systemName: "plus.circle.fill")
+          Image(systemName: "plus.circle")
             .foregroundStyle(VinctusTokens.Color.accent)
         }
         .accessibilityLabel("Añadir aporte")
@@ -230,7 +273,7 @@ struct ProfileContributionsSection: View {
   private func row(_ item: Contribution) -> some View {
     HStack(alignment: .top, spacing: VinctusTokens.Spacing.sm) {
       Image(systemName: item.type.icon)
-        .foregroundStyle(VinctusTokens.Color.accent)
+        .foregroundStyle(VinctusTokens.Color.textMuted)
         .frame(width: 22)
       VStack(alignment: .leading, spacing: 4) {
         Text(item.title)
@@ -245,24 +288,42 @@ struct ProfileContributionsSection: View {
             .foregroundStyle(VinctusTokens.Color.textMuted)
             .lineLimit(3)
         }
-        HStack(spacing: VinctusTokens.Spacing.md) {
-          if let url = Self.safeWebURL(item.link) {
-            Button("Abrir enlace") { openURL(url) }
-          }
-          if let url = Self.safeWebURL(item.fileURL) {
-            Button(item.fileName ?? "Ver archivo") { openURL(url) }
-              .lineLimit(1)
-          }
-          if canEdit {
-            Button("Eliminar", role: .destructive) {
-              Task { await vm.delete(item) }
-            }
-          }
-        }
-        .font(.caption.weight(.semibold))
       }
+      Spacer(minLength: 0)
+      rowMenu(item)
     }
     .padding(.vertical, 6)
+  }
+
+  /// Open the link or file and delete, in one quiet "..." instead of colored links on each row.
+  @ViewBuilder
+  private func rowMenu(_ item: Contribution) -> some View {
+    let link = Self.safeWebURL(item.link)
+    let file = Self.safeWebURL(item.fileURL)
+    if link != nil || file != nil || canEdit {
+      Menu {
+        if let link {
+          Button { openURL(link) } label: { Label("Abrir enlace", systemImage: "arrow.up.right") }
+        }
+        if let file {
+          Button { openURL(file) } label: { Label(item.fileName ?? "Ver archivo", systemImage: "doc") }
+        }
+        if canEdit {
+          Button(role: .destructive) {
+            Task { await vm.delete(item) }
+          } label: {
+            Label("Eliminar", systemImage: "trash")
+          }
+        }
+      } label: {
+        Image(systemName: "ellipsis")
+          .font(.footnote.weight(.semibold))
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+          .frame(width: 32, height: 32)
+          .contentShape(Rectangle())
+      }
+      .accessibilityLabel("Opciones de \(item.title)")
+    }
   }
 
   static func safeWebURL(_ rawValue: String?) -> URL? {

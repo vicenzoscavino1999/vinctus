@@ -39,6 +39,7 @@ private struct ProfileBodyView: View {
   @State private var followList: FollowListKind?
   @State private var reloadToken = 0
   @State private var followRefreshTask: Task<Void, Never>?
+  @State private var tab: ProfileTab = .profile
 
   private let repo: ProfileRepo
   private let chatRepo: ChatRepo
@@ -100,6 +101,7 @@ private struct ProfileBodyView: View {
     .task(id: vm.profile?.id) {
       // Screenshot builds scroll to a section with `-VinctusScrollTo <id>`.
       guard vm.profile != nil, let target = AppRepos.demoArgument("-VinctusScrollTo") else { return }
+      if let targetTab = ProfileTab.containing(target) { tab = targetTab }
       try? await Task.sleep(nanoseconds: 500_000_000)
       proxy.scrollTo(target, anchor: .top)
     }
@@ -146,6 +148,9 @@ private struct ProfileBodyView: View {
     .task(id: userID) {
       await reload()
     }
+    .refreshOnTabReturn {
+      await reload()
+    }
     .onReceive(NotificationCenter.default.publisher(for: .vinctusPostPublished)) { _ in
       guard isOwnProfile else { return }
       Task { await reload() }
@@ -184,20 +189,34 @@ private struct ProfileBodyView: View {
         }
         if connection.incomingRequestCount > 0 {
           Button { followList = .followers } label: {
-            Label(
-              connection.incomingRequestCount == 1
-                ? "1 solicitud de seguimiento"
-                : "\(connection.incomingRequestCount) solicitudes de seguimiento",
-              systemImage: "person.badge.clock"
-            )
-            .font(.subheadline.weight(.semibold))
-            .frame(maxWidth: .infinity)
-            .frame(height: 40)
-            .foregroundStyle(SwiftUI.Color.black)
-            .background(VinctusTokens.Color.accent)
+            HStack(spacing: VinctusTokens.Spacing.sm) {
+              Image(systemName: "person.badge.clock")
+                .foregroundStyle(VinctusTokens.Color.textSecondary)
+              Text("Solicitudes de seguimiento")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(VinctusTokens.Color.textPrimary)
+              Spacer()
+              Text("\(connection.incomingRequestCount)")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.black)
+                .padding(.horizontal, 7)
+                .frame(minWidth: 22, minHeight: 22)
+                .background(Capsule().fill(VinctusTokens.Color.accent))
+              Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(VinctusTokens.Color.textMuted)
+            }
+            .padding(.horizontal, VinctusTokens.Spacing.md)
+            .frame(height: 44)
+            .background(VinctusTokens.Color.surface)
             .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.sm, style: .continuous))
           }
           .buttonStyle(.plain)
+          .accessibilityLabel(
+            connection.incomingRequestCount == 1
+              ? "1 solicitud de seguimiento"
+              : "\(connection.incomingRequestCount) solicitudes de seguimiento"
+          )
         }
       }
     } else if !blockedUsers.isBlocked(userID) {
@@ -281,6 +300,9 @@ private struct ProfileBodyView: View {
 
   // MARK: Content
 
+  /// Your posts come first, like the web: on your own profile "Mi perfil" holds your work and
+  /// the details, "Guardados" what you saved and "Colecciones" your collections. Other people's
+  /// profiles show the same order without tabs.
   @ViewBuilder
   private func content(_ profile: UserProfile) -> some View {
     if !isOwnProfile && blockedUsers.isBlocked(userID) {
@@ -289,26 +311,76 @@ private struct ProfileBodyView: View {
       if isOwnProfile || !(profile.bio ?? "").isEmpty {
         ProfileAboutSection(profile: profile, isOwnProfile: isOwnProfile) { isEditing = true }
       }
-      ProfileReputationSection(reputation: profile.reputation, karma: profile.karmaByInterest)
       if isOwnProfile {
         StoriesBar()
-        ProfileCollectionsLink()
-          .id("collections")
-        NavigationLink {
-          SavedPostsView(profileRepo: repo)
-        } label: {
-          Label("Publicaciones guardadas", systemImage: "bookmark")
+        Picker("Sección del perfil", selection: $tab) {
+          ForEach(ProfileTab.allCases) { item in
+            Text(item.title).tag(item)
+          }
         }
-        ProfileCategoriesSection(repo: contentRepo)
-          .id("categories")
-        ProfileSavedDebatesSection(repo: contentRepo)
+        .pickerStyle(.segmented)
+        switch tab {
+        case .profile:
+          workSections(profile)
+        case .saved:
+          NavigationLink {
+            SavedPostsView(profileRepo: repo)
+          } label: {
+            ProfileLinkRow(
+              icon: "bookmark",
+              title: "Publicaciones guardadas",
+              subtitle: "Lo que guardaste del feed y de los grupos"
+            )
+          }
+          .buttonStyle(.plain)
+          ProfileSavedDebatesSection(repo: contentRepo)
+        case .collections:
+          ProfileCollectionsLink()
+            .id("collections")
+        }
+      } else {
+        workSections(profile)
       }
-      ProfilePostsSection(repo: contentRepo, profileRepo: repo, userID: userID, canCreate: isOwnProfile, reloadToken: reloadToken)
-        .id("posts")
-      ProfileContributionsSection(repo: contentRepo, userID: userID, canEdit: isOwnProfile, reloadToken: reloadToken)
-      ProfileDetailsSection(profile: profile, isOwnProfile: isOwnProfile)
     } else {
       PrivateProfileNotice()
+    }
+  }
+
+  @ViewBuilder
+  private func workSections(_ profile: UserProfile) -> some View {
+    ProfilePostsSection(repo: contentRepo, profileRepo: repo, userID: userID, canCreate: isOwnProfile, reloadToken: reloadToken)
+      .id("posts")
+    ProfileContributionsSection(repo: contentRepo, userID: userID, canEdit: isOwnProfile, reloadToken: reloadToken)
+    ProfileReputationSection(reputation: profile.reputation, karma: profile.karmaByInterest)
+    if isOwnProfile {
+      ProfileCategoriesSection(repo: contentRepo)
+        .id("categories")
+    }
+    ProfileDetailsSection(profile: profile, isOwnProfile: isOwnProfile)
+  }
+}
+
+/// The tabs of your own profile, like the web's "Mi Perfil · Guardados · Colecciones".
+enum ProfileTab: String, CaseIterable, Identifiable {
+  case profile, saved, collections
+
+  var id: String { rawValue }
+
+  var title: String {
+    switch self {
+    case .profile: return "Mi perfil"
+    case .saved: return "Guardados"
+    case .collections: return "Colecciones"
+    }
+  }
+
+  /// The tab that holds a section id used by `-VinctusScrollTo` in screenshot builds.
+  static func containing(_ sectionID: String) -> ProfileTab? {
+    switch sectionID {
+    case "posts", "categories": return .profile
+    case "saved": return .saved
+    case "collections": return .collections
+    default: return nil
     }
   }
 }

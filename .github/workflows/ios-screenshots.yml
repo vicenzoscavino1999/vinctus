@@ -101,6 +101,14 @@ jobs:
           sleep 8
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/05-messages.png"
           xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab messages -VinctusInboxFilter group
+          sleep 8
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/05b-messages-groups.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab messages -VinctusCreateGroup 1
+          sleep 8
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/05c-create-group.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab messages -VinctusOpenChat dm_me_u2
           sleep 20
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/06-chat.png"
@@ -113,6 +121,10 @@ jobs:
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab discover -VinctusOpenFeed 1
           sleep 8
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/09-feed-stories.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenFeed 1 -VinctusOpenPost f1
+          sleep 10
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/09b-post-detail.png"
           for section in collections categories posts; do
             xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
             xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab profile -VinctusScrollTo "$section"
