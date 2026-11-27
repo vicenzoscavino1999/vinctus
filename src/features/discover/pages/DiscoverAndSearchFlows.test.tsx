@@ -255,7 +255,7 @@ describe('Discover and Search flows', () => {
       </ToastProvider>,
     );
 
-    expect(await screen.findByText('arXiv down')).toBeInTheDocument();
+    expect(await screen.findByText(/No se pudo cargar el contenido en vivo/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Reintentar/i }));
     expect(await screen.findByText('Quantum Paper Recovered')).toBeInTheDocument();
 
@@ -267,6 +267,50 @@ describe('Discover and Search flows', () => {
       'href',
       'https://cdn.example.com/paper.pdf',
     );
+  });
+
+  it('CategoryPage asks for communities only when their tab opens, and keeps them for the session', async () => {
+    mockFetchArxivPapers.mockResolvedValue([]);
+    mockGetGroupsByCategory.mockResolvedValue([
+      {
+        id: 'g_quantum',
+        name: 'Mecánica Cuántica',
+        description: 'Charlas de física',
+        categoryId: 'science',
+        memberCount: 12,
+        visibility: 'private',
+      },
+    ]);
+    const renderPage = () =>
+      render(
+        <ToastProvider>
+          <MemoryRouter initialEntries={['/category/science']}>
+            <Routes>
+              <Route path="/category/:categoryId" element={<CategoryPage />} />
+              <Route path="/group/:groupId" element={<p>Página del grupo</p>} />
+            </Routes>
+          </MemoryRouter>
+        </ToastProvider>,
+      );
+
+    const first = renderPage();
+    expect(await screen.findByRole('heading', { name: 'Ciencia & Materia' })).toBeInTheDocument();
+    expect(mockGetGroupsByCategory).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Comunidades' }));
+    expect(await screen.findByText('Mecánica Cuántica')).toBeInTheDocument();
+    expect(screen.getByText(/12 miembros.*Privado/)).toBeInTheDocument();
+    expect(mockGetGroupsByCategory).toHaveBeenCalledTimes(1);
+    first.unmount();
+
+    // Coming back shows them at once, without asking again.
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Comunidades' }));
+    expect(screen.getByText('Mecánica Cuántica')).toBeInTheDocument();
+    expect(mockGetGroupsByCategory).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByText('Mecánica Cuántica'));
+    expect(await screen.findByText('Página del grupo')).toBeInTheDocument();
   });
 
   it('UserSearchPage hides blocked users, shows matching groups, and recovers suggested-user errors', async () => {
