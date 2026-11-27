@@ -4,7 +4,8 @@ import SwiftUI
 /// not Shared, because it reaches into the Feed and AI features.
 private struct VinctusTopBarModifier: ViewModifier {
   @ObservedObject private var badge = NotificationBadge.shared
-  @State private var isCreatingPost = false
+  /// Screenshot builds open the composer with `-VinctusOpenComposer 1`.
+  @State private var isCreatingPost = AppRepos.demoArgument("-VinctusOpenComposer") != nil
   @State private var isShowingAI = false
   @State private var isShowingNotifications = false
 
