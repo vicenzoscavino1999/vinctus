@@ -203,12 +203,10 @@ struct ArenaView: View {
   private var usageToolbar: some ToolbarContent {
     if let usage = vm.usage {
       ToolbarItem(placement: .topBarTrailing) {
+        // Plain text: the toolbar already gives it a capsule on iOS 26.
         Text("Hoy \(usage.used)/\(usage.limit)")
-          .font(.caption.weight(.semibold))
+          .font(.subheadline.weight(.semibold))
           .foregroundStyle(usage.remaining == 0 ? .red : VinctusTokens.Color.accent)
-          .padding(.horizontal, 10)
-          .padding(.vertical, 5)
-          .overlay(Capsule().stroke(VinctusTokens.Color.border, lineWidth: 1))
           .accessibilityLabel("Debates hoy: \(usage.used) de \(usage.limit)")
       }
     }
