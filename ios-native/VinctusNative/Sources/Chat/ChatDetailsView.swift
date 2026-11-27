@@ -64,18 +64,18 @@ struct ChatDetailsView: View {
     }
   }
 
+  // The body is split in steps so the type checker handles it in reasonable time.
   var body: some View {
+    withNavigation(withSheets(withDialogs(page)))
+  }
+
+  private var page: some View {
     ScrollView {
       VStack(spacing: 0) {
         hero
         quickActions
           .padding(.bottom, 28)
-        switch vm.kind {
-        case let .direct(otherUserID):
-          directOptions(otherUserID: otherUserID)
-        case let .group(groupID):
-          groupOptions(groupID: groupID)
-        }
+        options
         if let error = vm.errorMessage ?? actionError {
           Text(error)
             .font(.footnote)
@@ -90,58 +90,92 @@ struct ChatDetailsView: View {
     .navigationTitle(vm.kind.isGroup ? "Detalles del grupo" : "Detalles del chat")
     .navigationBarTitleDisplayMode(.inline)
     .task { await vm.load() }
-    .confirmationDialog("Silenciar conversación", isPresented: $isChoosingMute, titleVisibility: .visible) {
-      ForEach(ChatMuteFormat.options) { option in
-        Button(option.label) {
-          Task { await vm.mute(hours: option.hours) }
+  }
+
+  @ViewBuilder
+  private var options: some View {
+    switch vm.kind {
+    case let .direct(otherUserID):
+      directOptions(otherUserID: otherUserID)
+    case let .group(groupID):
+      groupOptions(groupID: groupID)
+    }
+  }
+
+  private var isConfirming: Binding<Bool> {
+    Binding(get: { confirmation != nil }, set: { if !$0 { confirmation = nil } })
+  }
+
+  private var confirmationTitle: String {
+    confirmation?.title(name: name) ?? ""
+  }
+
+  private func withDialogs<V: View>(_ view: V) -> some View {
+    view
+      .confirmationDialog("Silenciar conversación", isPresented: $isChoosingMute, titleVisibility: .visible) {
+        ForEach(ChatMuteFormat.options) { option in
+          Button(option.label) {
+            Task { await vm.mute(hours: option.hours) }
+          }
         }
+      } message: {
+        Text("No recibirás notificaciones de este chat.")
       }
-    } message: {
-      Text("No recibirás notificaciones de este chat.")
-    }
-    .confirmationDialog(
-      confirmation?.title(name: name) ?? "",
-      isPresented: Binding(get: { confirmation != nil }, set: { if !$0 { confirmation = nil } }),
-      titleVisibility: .visible,
-      presenting: confirmation
-    ) { pending in
-      Button(pending.actionLabel, role: pending.isDestructive ? .destructive : nil) {
-        confirm(pending)
-      }
-    } message: { pending in
-      Text(pending.message(name: name))
-    }
-    .sheet(item: $sheet) { sheet in
-      switch sheet {
-      case .files:
-        ChatFilesSheet(files: files)
-      case .search:
-        ChatSearchSheet(messages: messages, currentUserID: authVM.currentUserID) { messageID in
-          self.sheet = nil
-          onJumpToMessage(messageID)
+      .confirmationDialog(
+        confirmationTitle,
+        isPresented: isConfirming,
+        titleVisibility: .visible,
+        presenting: confirmation
+      ) { (pending: DetailsConfirmation) in
+        Button(pending.actionLabel, role: pending.role) {
+          confirm(pending)
         }
-      case let .report(target):
-        ReportSheet(target: target, repo: blockedUsers.repo)
-      case let .createGroup(person):
-        CreateGroupSheet(
-          repo: groupsRepo,
-          contentRepo: AppRepos.profileContent(),
-          preselected: [person]
-        ) { groupID, warning in
-          self.sheet = nil
-          actionError = warning
-          createdGroupID = groupID
-        }
-      case let .editGroup(detail):
-        EditGroupSheet(detail: detail, repo: groupsRepo)
+      } message: { (pending: DetailsConfirmation) in
+        Text(pending.message(name: name))
       }
-    }
-    .onChange(of: sheet) { previous, current in
-      // An edited group shows its new name and icon.
-      if case .editGroup? = previous, current == nil { Task { await vm.load() } }
-    }
-    .navigationDestination(item: $createdGroupID) { groupID in
+  }
+
+  private func withSheets<V: View>(_ view: V) -> some View {
+    view
+      .sheet(item: $sheet) { (shown: DetailsSheet) in
+        sheetContent(shown)
+      }
+      .onChange(of: sheet) { previous, current in
+        // An edited group shows its new name and icon.
+        if case .editGroup? = previous, current == nil { Task { await vm.load() } }
+      }
+  }
+
+  private func withNavigation<V: View>(_ view: V) -> some View {
+    view.navigationDestination(item: $createdGroupID) { (groupID: String) in
       GroupView(repo: groupsRepo, groupID: groupID, chatRepo: chatRepo, profileRepo: profileRepo)
+    }
+  }
+
+  @ViewBuilder
+  private func sheetContent(_ shown: DetailsSheet) -> some View {
+    switch shown {
+    case .files:
+      ChatFilesSheet(files: files)
+    case .search:
+      ChatSearchSheet(messages: messages, currentUserID: authVM.currentUserID) { messageID in
+        sheet = nil
+        onJumpToMessage(messageID)
+      }
+    case let .report(target):
+      ReportSheet(target: target, repo: blockedUsers.repo)
+    case let .createGroup(person):
+      CreateGroupSheet(
+        repo: groupsRepo,
+        contentRepo: AppRepos.profileContent(),
+        preselected: [person]
+      ) { groupID, warning in
+        sheet = nil
+        actionError = warning
+        createdGroupID = groupID
+      }
+    case let .editGroup(detail):
+      EditGroupSheet(detail: detail, repo: groupsRepo)
     }
   }
 
@@ -395,6 +429,10 @@ private enum DetailsConfirmation: Identifiable {
     case .block, .leave: return true
     case .clear, .unblock: return false
     }
+  }
+
+  var role: ButtonRole? {
+    isDestructive ? .destructive : nil
   }
 
   func title(name: String) -> String {
