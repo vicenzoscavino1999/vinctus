@@ -160,6 +160,19 @@ jobs:
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab connections
           sleep 9
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/14-connections.png"
+          # Chat con IA (a sample question) and Arena IA (the form, then a sample debate).
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenAI chat -VinctusAIAsk "¿Se pueden ver los anillos de Saturno con un telescopio pequeño?"
+          sleep 14
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/19-ai-chat.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenAI arena
+          sleep 12
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/19b-arena.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenAI arena -VinctusArenaTopic "¿La energía nuclear es clave para la transición energética?"
+          sleep 14
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/19c-arena-debate.png"
           xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab discover -VinctusOpenNotifications 1
           sleep 9
