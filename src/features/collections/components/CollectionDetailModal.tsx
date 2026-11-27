@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { formatBytes, formatRelativeTime } from '@/shared/lib/formatUtils';
 import {
@@ -347,22 +348,26 @@ const CollectionDetailDialog = ({
   const iconOption = getCollectionIcon(collection.icon);
   const displayedCount = isLoading && items.length === 0 ? collection.itemCount : items.length;
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="collection-detail-title"
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto safe-area-inset py-6"
+      className="fixed inset-0 z-50 flex items-end justify-center md:items-center"
     >
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative w-full max-w-3xl mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-neutral-800 flex-shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-lg bg-neutral-800/80 flex items-center justify-center text-neutral-200 shrink-0">
-              <iconOption.Icon size={18} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
+      <div className="relative flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-white/[0.08] bg-bg pb-[env(safe-area-inset-bottom)] md:max-w-2xl md:rounded-3xl md:pb-0">
+        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-white/15 md:hidden" />
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 px-5 pb-4 pt-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-gold/15 text-brand-gold">
+              <iconOption.Icon size={19} />
             </div>
             <div className="min-w-0">
-              <h2 id="collection-detail-title" className="text-xl font-serif text-white truncate">
+              <h2
+                id="collection-detail-title"
+                className="truncate font-display text-2xl text-white"
+              >
                 {collection.name}
               </h2>
               <p className="text-xs text-neutral-500">
@@ -404,7 +409,7 @@ const CollectionDetailDialog = ({
         </div>
 
         {confirmDeleteCollection && (
-          <div className="px-6 py-3 bg-red-950/40 border-b border-red-900/50 flex flex-wrap items-center justify-between gap-3">
+          <div className="mx-5 mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3">
             <p className="text-xs text-red-200">
               ¿Eliminar &ldquo;{collection.name}&rdquo; junto con todo su contenido?
             </p>
@@ -429,134 +434,11 @@ const CollectionDetailDialog = ({
           </div>
         )}
 
-        <div className="p-6 space-y-6 overflow-y-auto flex-1">
-          <form onSubmit={handleSubmit} noValidate className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label
-                  htmlFor="collection-item-type"
-                  className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block"
-                >
-                  Tipo
-                </label>
-                <select
-                  id="collection-item-type"
-                  value={itemType}
-                  onChange={(event) => handleTypeChange(event.target.value as CollectionItemType)}
-                  className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-amber-500/50 transition-colors"
-                >
-                  <option value="link">Enlace</option>
-                  <option value="note">Nota</option>
-                  <option value="file">Archivo</option>
-                </select>
-              </div>
-              <div>
-                <label
-                  htmlFor="collection-item-title"
-                  className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block"
-                >
-                  Título *
-                </label>
-                <input
-                  id="collection-item-title"
-                  type="text"
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  maxLength={LIMITS.collectionItems.titleMaxLength}
-                  className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-                  placeholder="Ej: Paper, Video, Idea"
-                />
-              </div>
-            </div>
-
-            {itemType === 'link' ? (
-              <div key="collection-item-link-field">
-                <label
-                  htmlFor="collection-item-url"
-                  className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block"
-                >
-                  Enlace *
-                </label>
-                <input
-                  id="collection-item-url"
-                  type="url"
-                  value={url}
-                  onChange={(event) => setUrl(event.target.value)}
-                  maxLength={LIMITS.collectionItems.urlMaxLength}
-                  className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-                  placeholder="https://..."
-                />
-              </div>
-            ) : itemType === 'note' ? (
-              <div key="collection-item-note-field">
-                <label
-                  htmlFor="collection-item-note"
-                  className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block"
-                >
-                  Nota *
-                </label>
-                <textarea
-                  id="collection-item-note"
-                  value={text}
-                  onChange={(event) => setText(event.target.value)}
-                  maxLength={LIMITS.collectionItems.noteMaxLength}
-                  rows={3}
-                  className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors resize-none"
-                  placeholder="Guarda tu nota o resumen..."
-                />
-              </div>
-            ) : (
-              <div key="collection-item-file-field">
-                <label
-                  htmlFor="collection-item-file"
-                  className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block"
-                >
-                  Archivo *
-                </label>
-                <input
-                  ref={fileInputRef}
-                  id="collection-item-file"
-                  type="file"
-                  accept={COLLECTION_FILE_ACCEPT}
-                  onChange={(event) => {
-                    const selected = event.target.files?.[0] ?? null;
-                    setFile(selected);
-                  }}
-                  className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white file:text-neutral-300 file:border-0 file:bg-neutral-800 file:rounded-md file:px-3 file:py-2 focus:outline-none focus:border-amber-500/50 transition-colors"
-                />
-                {file && (
-                  <p className="text-xs text-neutral-500 mt-2">
-                    {file.name} · {formatBytes(file.size)}
-                  </p>
-                )}
-                {uploadProgress !== null && (
-                  <p className="text-xs text-neutral-500 mt-2">Subiendo {uploadProgress}%</p>
-                )}
-              </div>
-            )}
-
-            {formError && (
-              <div
-                role="alert"
-                className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm"
-              >
-                {formError}
-              </div>
-            )}
-
-            <div className="flex items-center justify-end">
-              <button
-                type="submit"
-                disabled={isBusy}
-                className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-medium rounded-lg hover:from-amber-600 hover:to-amber-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? 'Guardando...' : 'Agregar'}
-              </button>
-            </div>
-          </form>
-
-          <div className="space-y-3">
-            <h3 className="text-xs text-neutral-500 uppercase tracking-widest">Elementos</h3>
+        <div className="flex-1 space-y-6 overflow-y-auto px-5 pb-6">
+          <div className="space-y-2.5">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-neutral-500">
+              Guardados
+            </h3>
             {isLoading ? (
               <div className="text-sm text-neutral-500 text-center py-6">Cargando elementos...</div>
             ) : loadError ? (
@@ -571,7 +453,9 @@ const CollectionDetailDialog = ({
                 </button>
               </div>
             ) : items.length === 0 ? (
-              <div className="text-sm text-neutral-500 text-center py-6">Aún no hay elementos.</div>
+              <div className="rounded-2xl border border-dashed border-white/[0.08] py-8 text-center text-sm text-neutral-500">
+                Aún no hay nada guardado aquí.
+              </div>
             ) : (
               items.map((item) => {
                 const isLink = item.type === 'link';
@@ -584,9 +468,9 @@ const CollectionDetailDialog = ({
                 return (
                   <div
                     key={item.id}
-                    className="flex items-start gap-4 bg-neutral-900/30 border border-neutral-800 rounded-lg p-4"
+                    className="flex items-start gap-3.5 rounded-2xl border border-white/[0.06] bg-surface-overlay p-3.5"
                   >
-                    <div className="w-12 h-12 rounded-lg bg-neutral-800/80 flex items-center justify-center flex-shrink-0 text-neutral-300">
+                    <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-white/[0.05] text-neutral-300">
                       {isLink ? (
                         <Link2 size={18} />
                       ) : isFile ? (
@@ -596,8 +480,8 @@ const CollectionDetailDialog = ({
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-white text-sm font-medium truncate">{item.title}</h4>
-                      <p className="text-neutral-500 text-xs mt-0.5 whitespace-pre-wrap break-words">
+                      <h4 className="truncate text-[15px] font-medium text-white">{item.title}</h4>
+                      <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-xs text-neutral-500">
                         {subtitle || 'Sin descripción'}
                       </p>
                       {isFile && item.fileSize ? (
@@ -655,9 +539,139 @@ const CollectionDetailDialog = ({
               })
             )}
           </div>
+          <form
+            onSubmit={handleSubmit}
+            noValidate
+            className="space-y-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4"
+          >
+            <h3 className="text-sm font-semibold text-white">Agregar a la carpeta</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="collection-item-type"
+                  className="mb-1.5 block text-xs font-medium text-neutral-400"
+                >
+                  Tipo
+                </label>
+                <select
+                  id="collection-item-type"
+                  value={itemType}
+                  onChange={(event) => handleTypeChange(event.target.value as CollectionItemType)}
+                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-white transition-colors focus:border-white/20 focus:outline-none"
+                >
+                  <option value="link">Enlace</option>
+                  <option value="note">Nota</option>
+                  <option value="file">Archivo</option>
+                </select>
+              </div>
+              <div>
+                <label
+                  htmlFor="collection-item-title"
+                  className="mb-1.5 block text-xs font-medium text-neutral-400"
+                >
+                  Título *
+                </label>
+                <input
+                  id="collection-item-title"
+                  type="text"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  maxLength={LIMITS.collectionItems.titleMaxLength}
+                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-white placeholder-neutral-500 transition-colors focus:border-white/20 focus:outline-none"
+                  placeholder="Ej: Paper, Video, Idea"
+                />
+              </div>
+            </div>
+
+            {itemType === 'link' ? (
+              <div key="collection-item-link-field">
+                <label
+                  htmlFor="collection-item-url"
+                  className="mb-1.5 block text-xs font-medium text-neutral-400"
+                >
+                  Enlace *
+                </label>
+                <input
+                  id="collection-item-url"
+                  type="url"
+                  value={url}
+                  onChange={(event) => setUrl(event.target.value)}
+                  maxLength={LIMITS.collectionItems.urlMaxLength}
+                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-white placeholder-neutral-500 transition-colors focus:border-white/20 focus:outline-none"
+                  placeholder="https://..."
+                />
+              </div>
+            ) : itemType === 'note' ? (
+              <div key="collection-item-note-field">
+                <label
+                  htmlFor="collection-item-note"
+                  className="mb-1.5 block text-xs font-medium text-neutral-400"
+                >
+                  Nota *
+                </label>
+                <textarea
+                  id="collection-item-note"
+                  value={text}
+                  onChange={(event) => setText(event.target.value)}
+                  maxLength={LIMITS.collectionItems.noteMaxLength}
+                  rows={3}
+                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-white placeholder-neutral-500 transition-colors focus:border-white/20 focus:outline-none resize-none"
+                  placeholder="Guarda tu nota o resumen..."
+                />
+              </div>
+            ) : (
+              <div key="collection-item-file-field">
+                <label
+                  htmlFor="collection-item-file"
+                  className="mb-1.5 block text-xs font-medium text-neutral-400"
+                >
+                  Archivo *
+                </label>
+                <input
+                  ref={fileInputRef}
+                  id="collection-item-file"
+                  type="file"
+                  accept={COLLECTION_FILE_ACCEPT}
+                  onChange={(event) => {
+                    const selected = event.target.files?.[0] ?? null;
+                    setFile(selected);
+                  }}
+                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-white file:mr-3 file:rounded-full file:border-0 file:bg-white/[0.08] file:px-3 file:py-1.5 file:text-neutral-200 focus:border-white/20 focus:outline-none"
+                />
+                {file && (
+                  <p className="text-xs text-neutral-500 mt-2">
+                    {file.name} · {formatBytes(file.size)}
+                  </p>
+                )}
+                {uploadProgress !== null && (
+                  <p className="text-xs text-neutral-500 mt-2">Subiendo {uploadProgress}%</p>
+                )}
+              </div>
+            )}
+
+            {formError && (
+              <div
+                role="alert"
+                className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm"
+              >
+                {formError}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end">
+              <button
+                type="submit"
+                disabled={isBusy}
+                className="h-11 rounded-xl bg-brand-gold px-6 text-sm font-semibold text-black transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSubmitting ? 'Guardando...' : 'Agregar'}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 

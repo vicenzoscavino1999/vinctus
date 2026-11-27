@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatRelativeTime } from '@/shared/lib/formatUtils';
 import { ArrowRight, File, FileText, FolderPlus, Link2, Search, X } from 'lucide-react';
@@ -167,71 +168,76 @@ const CollectionsSession = ({ userId, showIntro }: { userId: string; showIntro: 
   return (
     <div className="space-y-8">
       {showIntro && (
-        <p className="text-neutral-500 font-light text-sm text-center">
-          Tu archivo personal de lecturas, recursos, música y más.
+        <p className="text-sm text-neutral-500">
+          Tu archivo personal de lecturas, recursos, música y más. Solo tú puedes verlo.
         </p>
       )}
 
-      <div className="relative bg-neutral-900/50 border border-neutral-800 rounded-lg px-5 py-3.5 flex items-center gap-3">
-        <Search className="text-neutral-600 shrink-0" size={18} />
+      <label className="flex items-center gap-2.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-4 focus-within:border-white/20">
+        <Search className="shrink-0 text-neutral-500" size={17} />
         <input
           type="text"
           aria-label="Buscar en colecciones"
-          placeholder="Buscar en colecciones..."
+          placeholder="Buscar en colecciones"
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
-          className="w-full bg-transparent text-white focus:outline-none placeholder:text-neutral-600 font-light"
+          className="h-11 w-full bg-transparent text-[15px] text-white placeholder:text-neutral-500 focus:outline-none"
         />
         {searchQuery && (
           <button
             type="button"
             onClick={() => setSearchQuery('')}
             aria-label="Limpiar búsqueda"
-            className="text-neutral-500 hover:text-white transition-colors shrink-0"
+            className="shrink-0 text-neutral-500 transition-colors hover:text-white"
           >
             <X size={16} />
           </button>
         )}
-      </div>
-
-      <button
-        type="button"
-        onClick={() => setEditorState({ open: true, collection: null })}
-        className="w-full flex items-center justify-between bg-neutral-900/30 border border-neutral-800 rounded-lg px-5 py-4 hover:bg-neutral-900/50 transition-colors group"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-neutral-800 flex items-center justify-center text-neutral-400">
-            <FolderPlus size={18} />
-          </div>
-          <span className="text-neutral-300 font-light">+ Nueva carpeta</span>
-        </div>
-        <ArrowRight
-          size={16}
-          className="text-neutral-600 group-hover:text-neutral-400 transition-colors"
-        />
-      </button>
+      </label>
 
       <section>
-        <h2 className="text-[10px] font-medium tracking-[0.2em] text-neutral-500 uppercase mb-4">
-          CARPETAS {searchQuery && `(${filteredCollections.length})`}
-        </h2>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-white">
+            Carpetas
+            {searchQuery && (
+              <span className="ml-1.5 font-normal text-neutral-500">
+                ({filteredCollections.length})
+              </span>
+            )}
+          </h2>
+          <button
+            type="button"
+            onClick={() => setEditorState({ open: true, collection: null })}
+            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-gold px-4 text-sm font-semibold text-black transition-colors hover:bg-amber-400"
+          >
+            <FolderPlus size={15} />+ Nueva carpeta
+          </button>
+        </div>
         {loadingCollections ? (
-          <div className="text-sm text-neutral-500 text-center py-6">Cargando carpetas...</div>
+          <div aria-hidden className="grid grid-cols-2 gap-3 md:grid-cols-3">
+            {[0, 1, 2, 3].map((index) => (
+              <div key={index} className="skeleton h-[84px] rounded-2xl" />
+            ))}
+          </div>
         ) : collectionsError ? (
-          <div className="text-center py-6 space-y-3">
+          <div className="space-y-3 py-6 text-center">
             <p className="text-sm text-red-400">{collectionsError}</p>
             <button
               type="button"
               onClick={() => void loadCollections()}
-              className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+              className="rounded-full border border-white/[0.12] px-4 py-1.5 text-xs text-neutral-200 transition-colors hover:border-white/25 hover:text-white"
             >
               Reintentar
             </button>
           </div>
         ) : filteredCollections.length === 0 ? (
-          <p className="text-neutral-500 text-sm text-center py-6">No se encontraron carpetas</p>
+          <p className="rounded-2xl border border-dashed border-white/[0.08] py-8 text-center text-sm text-neutral-500">
+            {searchQuery
+              ? 'No se encontraron carpetas'
+              : 'Crea tu primera carpeta para guardar enlaces, notas y archivos.'}
+          </p>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
             {filteredCollections.map((collection) => {
               const icon = getCollectionIcon(collection.icon);
               return (
@@ -239,21 +245,19 @@ const CollectionsSession = ({ userId, showIntro }: { userId: string; showIntro: 
                   key={collection.id}
                   type="button"
                   onClick={() => setSelectedCollectionId(collection.id)}
-                  className="bg-neutral-900/30 border border-neutral-800 rounded-lg p-4 text-left hover:bg-neutral-900/50 hover:border-neutral-700 transition-all"
+                  className="rounded-2xl border border-white/[0.06] bg-surface-overlay p-4 text-left transition-colors hover:border-white/[0.14]"
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-neutral-800/80 flex items-center justify-center text-neutral-200 shrink-0">
-                      <icon.Icon size={18} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-white font-medium text-sm truncate">{collection.name}</h3>
-                      <p className="text-neutral-500 text-xs mt-0.5">
-                        {collection.itemCount === 1
-                          ? '1 guardado'
-                          : `${collection.itemCount} guardados`}
-                      </p>
-                    </div>
-                  </div>
+                  <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-brand-gold/15 text-brand-gold">
+                    <icon.Icon size={18} />
+                  </span>
+                  <span className="block truncate text-[15px] font-semibold text-white">
+                    {collection.name}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-neutral-500">
+                    {collection.itemCount === 1
+                      ? '1 guardado'
+                      : `${collection.itemCount} guardados`}
+                  </span>
                 </button>
               );
             })}
@@ -262,28 +266,35 @@ const CollectionsSession = ({ userId, showIntro }: { userId: string; showIntro: 
       </section>
 
       <section>
-        <h2 className="text-[10px] font-medium tracking-[0.2em] text-neutral-500 uppercase mb-4">
-          RECIENTES {searchQuery && `(${filteredRecents.length})`}
+        <h2 className="mb-3 text-sm font-semibold text-white">
+          Recientes
+          {searchQuery && (
+            <span className="ml-1.5 font-normal text-neutral-500">({filteredRecents.length})</span>
+          )}
         </h2>
         {loadingRecents ? (
-          <div className="text-sm text-neutral-500 text-center py-6">Cargando recientes...</div>
+          <div aria-hidden className="space-y-2.5">
+            {[0, 1, 2].map((index) => (
+              <div key={index} className="skeleton h-[68px] rounded-2xl" />
+            ))}
+          </div>
         ) : recentsError ? (
-          <div className="text-center py-6 space-y-3">
+          <div className="space-y-3 py-6 text-center">
             <p className="text-sm text-red-400">{recentsError}</p>
             <button
               type="button"
               onClick={() => void loadRecents()}
-              className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+              className="rounded-full border border-white/[0.12] px-4 py-1.5 text-xs text-neutral-200 transition-colors hover:border-white/25 hover:text-white"
             >
               Reintentar
             </button>
           </div>
         ) : filteredRecents.length === 0 ? (
-          <p className="text-neutral-500 text-sm text-center py-6">
+          <p className="rounded-2xl border border-dashed border-white/[0.08] py-8 text-center text-sm text-neutral-500">
             No se encontraron elementos recientes
           </p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {filteredRecents.map((item) => {
               const isLink = item.type === 'link';
               const isFile = item.type === 'file';
@@ -292,9 +303,9 @@ const CollectionsSession = ({ userId, showIntro }: { userId: string; showIntro: 
                   key={`${item.collectionId}-${item.id}`}
                   type="button"
                   onClick={() => handleRecentClick(item)}
-                  className="w-full text-left flex items-center gap-4 bg-neutral-900/30 border border-neutral-800 rounded-lg p-4 hover:bg-neutral-900/50 hover:border-neutral-700 transition-all group"
+                  className="group flex w-full items-center gap-3.5 rounded-2xl border border-white/[0.06] bg-surface-overlay p-3.5 text-left transition-colors hover:border-white/[0.14]"
                 >
-                  <div className="w-12 h-12 rounded-lg bg-neutral-800/80 flex items-center justify-center flex-shrink-0 text-neutral-300">
+                  <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-white/[0.05] text-neutral-300">
                     {isLink ? (
                       <Link2 size={18} />
                     ) : isFile ? (
@@ -302,22 +313,20 @@ const CollectionsSession = ({ userId, showIntro }: { userId: string; showIntro: 
                     ) : (
                       <FileText size={18} />
                     )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-white font-light text-base truncate group-hover:text-white/90">
-                      {item.title}
-                    </h3>
-                    <p className="text-neutral-500 text-xs mt-0.5">
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] text-white">{item.title}</span>
+                    <span className="mt-0.5 block text-xs text-neutral-500">
                       Colección: {item.collectionName || 'Sin carpeta'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 text-neutral-500 text-xs flex-shrink-0">
-                    <span>{formatRelativeTime(item.createdAt)}</span>
+                    </span>
+                  </span>
+                  <span className="flex flex-shrink-0 items-center gap-1.5 text-xs text-neutral-500">
+                    {formatRelativeTime(item.createdAt)}
                     <ArrowRight
                       size={14}
-                      className="text-neutral-600 group-hover:text-neutral-400 transition-colors"
+                      className="text-neutral-600 transition-colors group-hover:text-neutral-400"
                     />
-                  </div>
+                  </span>
                 </button>
               );
             })}
@@ -359,45 +368,46 @@ const CollectionsSession = ({ userId, showIntro }: { userId: string; showIntro: 
         }}
       />
 
-      {selectedRecent && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="recent-note-title"
-          className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset px-4"
-        >
+      {selectedRecent &&
+        createPortal(
           <div
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={() => setSelectedRecent(null)}
-          />
-          <div className="relative w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 id="recent-note-title" className="text-lg font-serif text-white">
-                  {selectedRecent.title}
-                </h3>
-                <p className="text-xs text-neutral-500 mt-1">
-                  Colección: {selectedRecent.collectionName || 'Sin carpeta'}
-                </p>
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="recent-note-title"
+            className="fixed inset-0 z-50 flex items-end justify-center md:items-center"
+          >
+            <div
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              onClick={() => setSelectedRecent(null)}
+            />
+            <div className="relative max-h-[85dvh] w-full overflow-y-auto rounded-t-3xl border border-white/[0.08] bg-bg p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] md:max-w-lg md:rounded-3xl">
+              <div className="mx-auto -mt-2 mb-3 h-1 w-10 rounded-full bg-white/15 md:hidden" />
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h3 id="recent-note-title" className="font-display text-2xl text-white">
+                    {selectedRecent.title}
+                  </h3>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Colección: {selectedRecent.collectionName || 'Sin carpeta'} ·{' '}
+                    {formatRelativeTime(selectedRecent.createdAt)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRecent(null)}
+                  className="-mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-white/[0.06] hover:text-white"
+                  aria-label="Cerrar"
+                >
+                  <X size={18} />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedRecent(null)}
-                className="text-neutral-400 hover:text-white transition-colors"
-                aria-label="Cerrar"
-              >
-                ×
-              </button>
+              <div className="mt-4 whitespace-pre-wrap break-words text-[15px] leading-relaxed text-neutral-200">
+                {selectedRecent.text || 'Sin contenido.'}
+              </div>
             </div>
-            <div className="mt-4 text-sm text-neutral-300 whitespace-pre-wrap break-words">
-              {selectedRecent.text || 'Sin contenido.'}
-            </div>
-            <div className="mt-5 text-xs text-neutral-500">
-              {formatRelativeTime(selectedRecent.createdAt)}
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 };
