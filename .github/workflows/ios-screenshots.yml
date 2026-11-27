@@ -121,6 +121,10 @@ jobs:
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab discover -VinctusOpenFeed 1
           sleep 8
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/09-feed-stories.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenFeed 1 -VinctusOpenPost f1
+          sleep 10
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/09b-post-detail.png"
           for section in collections categories posts; do
             xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
             xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab profile -VinctusScrollTo "$section"

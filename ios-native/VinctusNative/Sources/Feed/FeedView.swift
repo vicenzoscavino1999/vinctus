@@ -7,6 +7,8 @@ struct FeedView: View {
   @StateObject private var vm: FeedViewModel
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
   @State private var openedPost: FeedItem?
+  @State private var openedProfileID: String?
+  @State private var openedGroupID: String?
   private let profileRepo: ProfileRepo
   private let commentsRepo: any PostCommentsRepo
   private let isPushed: Bool
@@ -96,7 +98,12 @@ struct FeedView: View {
       } else {
         ForEach(vm.items.filter { !blockedUsers.isBlocked($0.authorID) }) { item in
           // Edge to edge, like Instagram: the photo spans the whole width.
-          FeedCard(item: item, onOpen: { openedPost = item })
+          FeedCard(
+            item: item,
+            onOpen: { openedPost = item },
+            onOpenProfile: item.authorID.map { id in { openedProfileID = id } },
+            onOpenGroup: item.groupID.map { id in { openedGroupID = id } }
+          )
             .listRowInsets(EdgeInsets())
             .listRowSeparator(.hidden)
             .listRowBackground(SwiftUI.Color.clear)
@@ -171,8 +178,20 @@ struct FeedView: View {
         onCommentCountChange: { newCount in vm.updateCommentCount(postID: item.id, newCount: newCount) }
       )
     }
+    .navigationDestination(item: $openedProfileID) { userID in
+      ProfileView(repo: profileRepo, userID: userID)
+    }
+    .navigationDestination(item: $openedGroupID) { groupID in
+      GroupView(repo: AppRepos.groups(), groupID: groupID, profileRepo: profileRepo)
+    }
     .task {
       await vm.refresh()
+    }
+    // Screenshot builds open a post with `-VinctusOpenPost <id>`.
+    .onChange(of: vm.items.count) { _, _ in
+      if openedPost == nil, let id = AppRepos.demoArgument("-VinctusOpenPost") {
+        openedPost = vm.items.first { $0.id == id }
+      }
     }
     .onReceive(NotificationCenter.default.publisher(for: .vinctusPostPublished)) { _ in
       Task { await vm.refresh() }
@@ -216,6 +235,8 @@ struct FeedView: View {
 private struct FeedCard: View {
   let item: FeedItem
   let onOpen: () -> Void
+  var onOpenProfile: (() -> Void)?
+  var onOpenGroup: (() -> Void)?
 
   @State private var likeTrigger = 0
   @State private var heartScale: CGFloat = 0.3
@@ -240,25 +261,14 @@ private struct FeedCard: View {
   }
 
   private var header: some View {
-    HStack(spacing: 10) {
-      HStack(spacing: 10) {
-        AvatarView(name: item.authorName, photoURLString: nil, size: 36)
-        VStack(alignment: .leading, spacing: 1) {
-          Text(item.authorName)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(VinctusTokens.Color.textPrimary)
-            .lineLimit(1)
-          if let createdAt = item.createdAt {
-            Text(createdAt, style: .relative)
-              .font(.caption)
-              .foregroundStyle(VinctusTokens.Color.textMuted)
-          }
-        }
-        Spacer(minLength: 0)
-      }
-      .contentShape(Rectangle())
-      .onTapGesture(perform: onOpen)
-
+    PostAuthorHeader(
+      authorID: item.authorID,
+      authorName: item.authorName,
+      groupID: item.groupID,
+      createdAt: item.createdAt,
+      onOpenProfile: onOpenProfile,
+      onOpenGroup: onOpenGroup
+    ) {
       ModerationMenu(
         target: .post(postID: item.id, authorID: item.authorID),
         authorID: item.authorID,

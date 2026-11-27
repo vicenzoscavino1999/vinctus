@@ -37,6 +37,13 @@ enum AppRepos {
     return FirebaseDiscoverRepo()
   }
 
+  static func groupNames() -> GroupNamesRepo {
+    #if SCREENSHOTS
+    if isDemo { return SampleGroupNamesRepo() }
+    #endif
+    return FirebaseGroupNamesRepo()
+  }
+
   static func groups() -> any GroupsRepo {
     #if SCREENSHOTS
     if isDemo { return SampleGroupsRepo() }
@@ -112,7 +119,12 @@ enum AppRepos {
   static func auth() -> AuthRepo { FirebaseAuthRepo() }
   static func profileBootstrap() -> UserProfileBootstrapRepo { FirebaseUserProfileBootstrapRepo() }
   static func createPost() -> any CreatePostRepo { FirebaseCreatePostRepo() }
-  static func postComments() -> any PostCommentsRepo { FirebasePostCommentsRepo() }
+  static func postComments() -> any PostCommentsRepo {
+    #if SCREENSHOTS
+    if isDemo { return SamplePostCommentsRepo() }
+    #endif
+    return FirebasePostCommentsRepo()
+  }
   static func engagement() -> EngagementRepo {
     #if SCREENSHOTS
     if isDemo { return SampleEngagementRepo() }
