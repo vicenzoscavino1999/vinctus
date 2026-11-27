@@ -32,6 +32,12 @@ vi.mock('@/context/auth', () => ({
 vi.mock('@/features/posts/api', () => ({
   getPostsByUser: (...args: unknown[]) => mockGetPostsByUser(...args),
   getPost: (...args: unknown[]) => mockGetPost(...args),
+  // The post page lists its comments under the post.
+  getPostComments: vi.fn(async () => ({ items: [], lastDoc: null, hasMore: false })),
+  addPostComment: vi.fn(),
+  getNewPostId: vi.fn(),
+  createPostReport: vi.fn(),
+  createPostCommentReport: vi.fn(),
 }));
 
 vi.mock('@/features/groups/api', () => ({
@@ -245,7 +251,7 @@ describe('Profile, Group, and Post Detail flows', () => {
     });
   });
 
-  it('renders multi-line body text on PostDetailPage even when the post has no explicit title', async () => {
+  it('shows the whole text of a post without a title as its body, not as a heading', async () => {
     mockGetPost.mockResolvedValue({
       id: 'post_multiline',
       postId: 'post_multiline',
@@ -269,11 +275,13 @@ describe('Profile, Group, and Post Detail flows', () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => {
-      expect(
-        screen.getByRole('heading', { name: 'Primera línea como encabezado' }),
-      ).toBeInTheDocument();
-    });
+    expect(await screen.findByText('Primera línea como encabezado')).toBeInTheDocument();
     expect(screen.getByText('Segunda línea del cuerpo completo.')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Primera línea como encabezado' }),
+    ).not.toBeInTheDocument();
+    // The comments are on the page, under the post.
+    expect(await screen.findByRole('heading', { name: 'Comentarios (0)' })).toBeInTheDocument();
+    expect(await screen.findByText('No hay comentarios aun.')).toBeInTheDocument();
   });
 });

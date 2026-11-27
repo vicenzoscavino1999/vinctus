@@ -166,19 +166,19 @@ test('@smoke restores closed and reloaded drafts, partial media uploads and lost
     await loginWithSeedUser(bob, 'bob');
     await bob.goto(`/post/${id}?comments=1`);
     await expect(bob.getByRole('heading', { name: title }).first()).toBeVisible({ timeout: 15000 });
-    const modal = bob.getByRole('dialog', { name: 'Comentarios de la publicación' });
-    await expect(modal).toBeVisible();
-    const bounds = (await modal.boundingBox())!;
-    expect(bounds.y).toBeGreaterThanOrEqual(0);
-    expect(bounds.y + bounds.height).toBeLessThanOrEqual(bob.viewportSize()!.height);
-    const image = modal.locator('img[alt="Adjunto"]');
+    // The post page shows the whole post, with its comments under it.
+    const post = bob.getByRole('article', { name: 'Publicación' });
+    await expect(post).toBeVisible();
+    await expect(bob.getByRole('heading', { name: /^Comentarios \(/ })).toBeVisible();
+    // The post's photo (avatars have an empty alt).
+    const image = post.locator('img:not([alt=""])').first();
     await expect
       .poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth))
       .toBeGreaterThan(0);
     await expect
-      .poll(() => modal.locator('video').evaluate((node: HTMLVideoElement) => node.readyState))
+      .poll(() => post.locator('video').evaluate((node: HTMLVideoElement) => node.readyState))
       .toBeGreaterThanOrEqual(1);
-    const player = modal.locator('video');
+    const player = post.locator('video');
     await player.evaluate(async (node: HTMLVideoElement) => {
       node.muted = true;
       await node.play();
@@ -189,7 +189,7 @@ test('@smoke restores closed and reloaded drafts, partial media uploads and lost
     await player.evaluate((node: HTMLVideoElement) => node.pause());
     expect(media[2].url.stringValue).toMatch(/^post-media:posts\//);
     const downloadEvent = bob.waitForEvent('download');
-    await modal.getByRole('link', { name: /notes.pdf/ }).click();
+    await post.getByRole('link', { name: /notes.pdf/ }).click();
     const downloaded = await downloadEvent;
     const downloadPath = await downloaded.path();
     expect(downloadPath).toBeTruthy();
