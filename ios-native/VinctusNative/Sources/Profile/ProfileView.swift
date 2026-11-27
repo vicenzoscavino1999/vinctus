@@ -148,6 +148,9 @@ private struct ProfileBodyView: View {
     .task(id: userID) {
       await reload()
     }
+    .refreshOnTabReturn {
+      await reload()
+    }
     .onReceive(NotificationCenter.default.publisher(for: .vinctusPostPublished)) { _ in
       guard isOwnProfile else { return }
       Task { await reload() }
