@@ -91,6 +91,11 @@ jobs:
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusShowPasswordReset
           sleep 8
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/03-password-reset.png"
+          # The welcome of a new account (interests, then real groups).
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusShowWelcome 1
+          sleep 8
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/03b-welcome.png"
           # Signed-in screens with sample data (the Sample…Repo.swift files, see App/DemoData.swift).
           xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo
