@@ -301,4 +301,40 @@ final class ConnectionsFormatTests: XCTestCase {
     XCTAssertEqual(ConnectionsFormat.place(city: nil, venue: "Barranco"), "Barranco")
     XCTAssertNil(ConnectionsFormat.place(city: nil, venue: nil))
   }
+
+  private func collaboration(tags: [String], location: String?) -> Collaboration {
+    Collaboration(
+      id: "c", title: "Cuarteto", context: "Música", seekingRole: "Bajista", mode: .presencial,
+      location: location, level: .experto, topic: nil, tags: tags, authorID: "u", authorName: "Mateo",
+      authorPhotoURL: nil, createdAt: Date()
+    )
+  }
+
+  func testTagsUseTheProjectsOwnOrFallBackLikeTheWeb() {
+    XCTAssertEqual(
+      ConnectionsFormat.tags(for: collaboration(tags: [" Jazz ", "", "Bajo", "Ensayos", "Extra"], location: nil)),
+      ["Jazz", "Bajo", "Ensayos"]
+    )
+    XCTAssertEqual(
+      ConnectionsFormat.tags(for: collaboration(tags: [], location: "Lima")),
+      ["Lima", "Presencial", "Nivel Experto"]
+    )
+  }
+
+  func testAttendanceSaysWhenAnEncounterIsFull() {
+    XCTAssertEqual(ConnectionsFormat.attendance(count: 12, capacity: 12).text, "Completo · 12/12")
+    XCTAssertTrue(ConnectionsFormat.attendance(count: 12, capacity: 12).isFull)
+    XCTAssertEqual(ConnectionsFormat.attendance(count: 5, capacity: 30).text, "5 de 30 asistentes")
+    XCTAssertEqual(ConnectionsFormat.attendance(count: 0, capacity: nil).text, "Aún sin asistentes")
+    XCTAssertEqual(ConnectionsFormat.attendance(count: 1, capacity: nil).text, "1 asistente")
+    XCTAssertEqual(ConnectionsFormat.attendance(count: 7, capacity: 0).text, "7 asistentes")
+  }
+
+  func testWeekdayTimeLikeTheWeb() throws {
+    let date = try XCTUnwrap(
+      Calendar(identifier: .gregorian).date(from: DateComponents(year: 2026, month: 12, day: 5, hour: 20))
+    )
+    XCTAssertEqual(ConnectionsFormat.weekdayTime(date), "Sáb · 20:00")
+    XCTAssertEqual(ConnectionsFormat.weekdayTime(nil), "Fecha por confirmar")
+  }
 }

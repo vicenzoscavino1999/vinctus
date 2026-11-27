@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// The Conexiones tab, like the web's ProjectsPage (`src/features/projects/pages/ProjectsPage.tsx`):
-/// a header with "Publicar proyecto", the open collaborations and the upcoming encounters.
+/// open projects looking for people, then upcoming encounters, each section with its own
+/// "+ Publicar …".
 struct ConnectionsView: View {
   @EnvironmentObject private var authVM: AuthViewModel
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
@@ -91,11 +92,6 @@ struct ConnectionsView: View {
       Text("Conecta. Colabora. Encuentra.")
         .font(.subheadline)
         .foregroundStyle(VinctusTokens.Color.textSecondary)
-
-      ConnectionsPublishButton(title: "Publicar proyecto") {
-        isCreatingCollaboration = true
-      }
-      .padding(.top, VinctusTokens.Spacing.sm)
     }
   }
 
@@ -103,7 +99,13 @@ struct ConnectionsView: View {
 
   private var collaborationsSection: some View {
     VStack(alignment: .leading, spacing: VinctusTokens.Spacing.md) {
-      DiscoverSectionHeader(title: "Colaboraciones")
+      ConnectionsSectionHeader(
+        title: "Colaboraciones",
+        subtitle: "Proyectos abiertos que buscan a alguien",
+        actionTitle: "Publicar proyecto"
+      ) {
+        isCreatingCollaboration = true
+      }
 
       if vm.isLoadingCollaborations, vm.collaborations.isEmpty {
         ForEach(0..<2, id: \.self) { _ in ConnectionsSkeletonCard(height: 132) }
@@ -130,16 +132,18 @@ struct ConnectionsView: View {
 
   private var encountersSection: some View {
     VStack(alignment: .leading, spacing: VinctusTokens.Spacing.md) {
-      DiscoverSectionHeader(title: "Encuentros")
-
-      ConnectionsPublishButton(title: "Publicar encuentro") {
+      ConnectionsSectionHeader(
+        title: "Encuentros",
+        subtitle: "Próximas reuniones de la comunidad",
+        actionTitle: "Publicar encuentro"
+      ) {
         isCreatingEncounter = true
       }
 
       if vm.isLoadingEncounters, vm.encounters.isEmpty {
         HStack(spacing: VinctusTokens.Spacing.md) {
-          ConnectionsSkeletonCard(height: 168)
-          ConnectionsSkeletonCard(height: 168)
+          ConnectionsSkeletonCard(height: 184)
+          ConnectionsSkeletonCard(height: 184)
         }
       } else if let error = vm.encountersError, vm.encounters.isEmpty {
         ConnectionsMessageCard(text: error, actionTitle: "Reintentar") {
@@ -168,7 +172,29 @@ struct ConnectionsView: View {
 
 // MARK: - Components
 
-/// The web's gold, full width "+ PUBLICAR …" button.
+/// A section heading like the web's: the serif title with a small gold "+ Publicar …", then a
+/// short line.
+struct ConnectionsSectionHeader: View {
+  let title: String
+  let subtitle: String
+  let actionTitle: String
+  let action: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      HStack(alignment: .center, spacing: VinctusTokens.Spacing.md) {
+        DiscoverSectionHeader(title: title)
+        Spacer(minLength: 8)
+        ConnectionsPublishButton(title: actionTitle, action: action)
+      }
+      Text(subtitle)
+        .font(.footnote)
+        .foregroundStyle(VinctusTokens.Color.textMuted)
+    }
+  }
+}
+
+/// The web's small gold "+ PUBLICAR …" of a section.
 struct ConnectionsPublishButton: View {
   let title: String
   let action: () -> Void
@@ -176,10 +202,10 @@ struct ConnectionsPublishButton: View {
   var body: some View {
     Button(action: action) {
       Label(title, systemImage: "plus")
-        .font(.subheadline.weight(.semibold))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 13)
-        .padding(.horizontal, VinctusTokens.Spacing.lg)
+        .font(.caption.weight(.semibold))
+        .lineLimit(1)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
         .foregroundStyle(.black)
         .background(VinctusTokens.Color.accent)
         .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.sm, style: .continuous))
@@ -188,44 +214,58 @@ struct ConnectionsPublishButton: View {
   }
 }
 
+/// One open project, like the web's card: its field and age, its name, who it looks for, who
+/// leads it, its tags and whether you can still ask to join. Tapping opens it.
 struct CollaborationCard: View {
   let collaboration: Collaboration
   let relation: CollaborationRelation
 
   var body: some View {
     VCard {
-      VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
-        HStack(alignment: .firstTextBaseline) {
-          ConnectionsChip(text: collaboration.topic ?? "Proyecto", isOutlined: true)
-          Spacer()
+      VStack(alignment: .leading, spacing: 0) {
+        HStack(alignment: .firstTextBaseline, spacing: VinctusTokens.Spacing.sm) {
+          Text(collaboration.context.uppercased())
+            .font(.caption2.weight(.medium))
+            .tracking(1.4)
+            .foregroundStyle(VinctusTokens.Color.textMuted)
+            .lineLimit(1)
+          Spacer(minLength: 8)
           Text(ConnectionsFormat.relativeAge(collaboration.createdAt))
             .font(.caption)
             .foregroundStyle(VinctusTokens.Color.textMuted)
         }
 
-        Text(collaboration.seekingRole.isEmpty ? collaboration.title : collaboration.seekingRole)
+        Text(collaboration.title)
           .font(VinctusTokens.Typography.serif(22))
           .foregroundStyle(VinctusTokens.Color.textPrimary)
           .multilineTextAlignment(.leading)
+          .padding(.top, 10)
 
-        (Text("Por ").foregroundStyle(VinctusTokens.Color.textSecondary)
-          + Text(collaboration.authorName).foregroundStyle(VinctusTokens.Color.accent))
-          .font(.subheadline)
-
-        HStack(spacing: VinctusTokens.Spacing.sm) {
-          if let location = collaboration.location {
-            ConnectionsChip(text: location)
-          } else {
-            ConnectionsChip(text: collaboration.mode.label)
-          }
-          Spacer()
-          if let badge = relation.badge {
-            ConnectionsChip(text: badge, isOutlined: true)
-          }
-          Image(systemName: "arrow.right")
-            .font(.footnote)
-            .foregroundStyle(VinctusTokens.Color.textMuted)
+        if !collaboration.seekingRole.isEmpty {
+          (Text("Busca ").foregroundStyle(VinctusTokens.Color.textSecondary)
+            + Text(collaboration.seekingRole).foregroundStyle(VinctusTokens.Color.textPrimary))
+            .font(.subheadline)
+            .padding(.top, 4)
         }
+
+        HStack(alignment: .bottom, spacing: VinctusTokens.Spacing.md) {
+          VStack(alignment: .leading, spacing: 3) {
+            (Text("Por ").foregroundStyle(VinctusTokens.Color.textSecondary)
+              + Text(collaboration.authorName).foregroundStyle(VinctusTokens.Color.accent))
+              .font(.subheadline)
+              .lineLimit(1)
+            let tags = ConnectionsFormat.tags(for: collaboration)
+            if !tags.isEmpty {
+              Text(tags.joined(separator: " · "))
+                .font(.caption)
+                .foregroundStyle(VinctusTokens.Color.textMuted)
+                .lineLimit(1)
+            }
+          }
+          Spacer(minLength: 8)
+          ConnectionsRelationBadge(relation: relation)
+        }
+        .padding(.top, VinctusTokens.Spacing.lg)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -234,45 +274,78 @@ struct CollaborationCard: View {
   }
 }
 
+/// "Solicitar" in a small gold outline; "Solicitud enviada" and "Tu proyecto" neutral. The
+/// request itself is written in the project's sheet, as on the web.
+struct ConnectionsRelationBadge: View {
+  let relation: CollaborationRelation
+
+  var body: some View {
+    HStack(spacing: 4) {
+      if relation == .requested {
+        Image(systemName: "checkmark")
+          .font(.caption2.weight(.semibold))
+      }
+      Text(relation.badge ?? "Solicitar")
+    }
+    .font(.caption.weight(.medium))
+    .lineLimit(1)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 6)
+    .foregroundStyle(relation == .available ? VinctusTokens.Color.accent : VinctusTokens.Color.textSecondary)
+    .overlay(
+      Capsule().stroke(
+        relation == .available ? VinctusTokens.Color.accent.opacity(0.45) : VinctusTokens.Color.border,
+        lineWidth: 1
+      )
+    )
+  }
+}
+
+/// An upcoming encounter: the day with its gold month, weekday and time, the name, the place and
+/// who is going ("Completo · 12/12" when it is full).
 struct EncounterCard: View {
   let encounter: Encounter
 
   var body: some View {
+    let attendance = ConnectionsFormat.attendance(count: encounter.attendeesCount ?? 0, capacity: encounter.capacity)
     VCard {
-      VStack(alignment: .leading, spacing: VinctusTokens.Spacing.xs) {
-        HStack(alignment: .top) {
-          VStack(alignment: .leading, spacing: 2) {
-            Text(ConnectionsFormat.day(encounter.startAt))
-              .font(VinctusTokens.Typography.serif(34))
-              .foregroundStyle(VinctusTokens.Color.textPrimary)
-            Text(ConnectionsFormat.month(encounter.startAt))
-              .font(.caption.weight(.medium))
-              .tracking(1.2)
-              .foregroundStyle(VinctusTokens.Color.textMuted)
-          }
-          Spacer()
-          Image(systemName: "arrow.right")
-            .font(.footnote)
-            .foregroundStyle(VinctusTokens.Color.textSecondary)
-            .frame(width: 34, height: 34)
-            .overlay(Circle().stroke(VinctusTokens.Color.border, lineWidth: 1))
+      VStack(alignment: .leading, spacing: 0) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+          Text(ConnectionsFormat.day(encounter.startAt))
+            .font(VinctusTokens.Typography.serif(34))
+            .foregroundStyle(VinctusTokens.Color.textPrimary)
+          Text(ConnectionsFormat.month(encounter.startAt))
+            .font(.caption.weight(.semibold))
+            .tracking(1.4)
+            .foregroundStyle(VinctusTokens.Color.accent.opacity(0.85))
         }
-
-        Spacer(minLength: VinctusTokens.Spacing.sm)
+        Text(ConnectionsFormat.weekdayTime(encounter.startAt))
+          .font(.caption)
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+          .padding(.top, 2)
 
         Text(encounter.title)
           .font(VinctusTokens.Typography.serif(18))
           .foregroundStyle(VinctusTokens.Color.textPrimary)
           .lineLimit(2)
+          .multilineTextAlignment(.leading)
+          .padding(.top, VinctusTokens.Spacing.md)
 
-        if let place = ConnectionsFormat.place(city: encounter.city, venue: encounter.venue) {
-          Label(place, systemImage: "mappin.and.ellipse")
-            .font(.caption)
-            .foregroundStyle(VinctusTokens.Color.textMuted)
+        Spacer(minLength: VinctusTokens.Spacing.sm)
+
+        VStack(alignment: .leading, spacing: 4) {
+          if let place = ConnectionsFormat.place(city: encounter.city, venue: encounter.venue) {
+            Label(place, systemImage: "mappin.and.ellipse")
+              .lineLimit(1)
+              .foregroundStyle(VinctusTokens.Color.textMuted)
+          }
+          Label(attendance.text, systemImage: "person.2")
             .lineLimit(1)
+            .foregroundStyle(attendance.isFull ? VinctusTokens.Color.accent.opacity(0.85) : VinctusTokens.Color.textMuted)
         }
+        .font(.caption)
       }
-      .frame(width: 168, height: 150, alignment: .topLeading)
+      .frame(width: 184, height: 166, alignment: .topLeading)
     }
     .accessibilityElement(children: .combine)
   }
@@ -355,6 +428,41 @@ enum ConnectionsFormat {
     formatter.locale = spanish
     formatter.dateFormat = "MMM"
     return formatter.string(from: date).replacingOccurrences(of: ".", with: "").uppercased()
+  }
+
+  /// "Sáb · 20:00", like the web.
+  static func weekdayTime(_ date: Date?) -> String {
+    guard let date else { return "Fecha por confirmar" }
+    let formatter = DateFormatter()
+    formatter.locale = spanish
+    formatter.dateFormat = "EEE"
+    let weekday = formatter.string(from: date).replacingOccurrences(of: ".", with: "")
+    formatter.dateFormat = "HH:mm"
+    return "\(weekday.prefix(1).uppercased())\(weekday.dropFirst()) · \(formatter.string(from: date))"
+  }
+
+  /// Up to three short labels, like the web: the project's own tags or, without them, place,
+  /// mode and level.
+  static func tags(for collaboration: Collaboration) -> [String] {
+    let own = collaboration.tags
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+    if !own.isEmpty { return Array(own.prefix(3)) }
+    var tags: [String] = []
+    if let location = collaboration.location, !location.isEmpty { tags.append(location) }
+    tags.append(collaboration.mode.label)
+    tags.append("Nivel \(collaboration.level.label)")
+    return Array(tags.prefix(3))
+  }
+
+  /// Who is going, and whether places are left when the encounter has a capacity.
+  static func attendance(count: Int, capacity: Int?) -> (text: String, isFull: Bool) {
+    if let capacity, capacity > 0 {
+      if count >= capacity { return ("Completo · \(count)/\(capacity)", true) }
+      return ("\(count) de \(capacity) asistentes", false)
+    }
+    if count <= 0 { return ("Aún sin asistentes", false) }
+    return (count == 1 ? "1 asistente" : "\(count) asistentes", false)
   }
 
   static func fullDate(_ date: Date?) -> String {
