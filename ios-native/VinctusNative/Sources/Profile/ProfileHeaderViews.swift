@@ -6,50 +6,44 @@ struct ProfileHeader: View {
   var isOwnProfile: Bool = true
 
   var body: some View {
-    VStack(spacing: 10) {
-      AvatarView(name: profile.displayName, photoURLString: profile.photoURL, size: 96)
+    VStack(spacing: 8) {
+      AvatarView(name: profile.displayName, photoURLString: profile.photoURL, size: 88)
         .overlay(
           Circle()
-            .stroke(
-              LinearGradient(
-                colors: [VinctusTokens.Color.accent, VinctusTokens.Color.accentBright],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-              ),
-              lineWidth: 2
-            )
-            .padding(-5)
+            .stroke(VinctusTokens.Color.accent.opacity(0.45), lineWidth: 1)
+            .padding(-4)
         )
         .padding(.top, 8)
+        .padding(.bottom, 4)
 
       Text(profile.displayName)
-        .font(VinctusTokens.Typography.brandTitle(size: 28))
+        .font(VinctusTokens.Typography.brandTitle(size: 26))
         .foregroundStyle(VinctusTokens.Color.textPrimary)
         .multilineTextAlignment(.center)
 
-      if isOwnProfile || profile.role != nil {
-        Text(profile.role ?? "Nuevo miembro")
-          .font(.subheadline)
-          .foregroundStyle(VinctusTokens.Color.textMuted)
-      }
-
-      HStack(spacing: 8) {
+      // Role, username and visibility on one quiet line.
+      HStack(spacing: 6) {
+        let showsRole = isOwnProfile || profile.role != nil
+        if showsRole {
+          Text(profile.role ?? "Nuevo miembro")
+        }
         if let username = profile.username {
+          if showsRole { Text("·") }
           Text("@\(username)")
-            .foregroundStyle(VinctusTokens.Color.textMuted)
+        }
+        if showsRole || profile.username != nil {
+          Text("·")
         }
         Label(
           profile.accountVisibility == .private ? "Privada" : "Pública",
-          systemImage: profile.accountVisibility == .private ? "lock.fill" : "globe"
+          systemImage: profile.accountVisibility == .private ? "lock" : "globe"
         )
-        .font(.caption.weight(.semibold))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(VinctusTokens.Color.surface2)
-        .foregroundStyle(VinctusTokens.Color.textMuted)
-        .clipShape(Capsule())
+        .labelStyle(.titleAndIcon)
       }
-      .font(.subheadline)
+      .font(.footnote)
+      .foregroundStyle(VinctusTokens.Color.textMuted)
+      .lineLimit(1)
+      .minimumScaleFactor(0.85)
     }
     .frame(maxWidth: .infinity)
   }
@@ -80,25 +74,19 @@ struct ProfileStatsBar: View {
       divider
       stat(value: profile.reputation, label: "Reputación")
     }
-    .padding(.vertical, 14)
-    .background(VinctusTokens.Color.surface)
-    .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous))
-    .overlay(
-      RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous)
-        .stroke(VinctusTokens.Color.border.opacity(0.55), lineWidth: 1)
-    )
+    .padding(.vertical, 4)
   }
 
+  /// Just space between the numbers: no box, no lines.
   private var divider: some View {
-    Rectangle()
-      .fill(VinctusTokens.Color.border.opacity(0.6))
-      .frame(width: 1, height: 30)
+    SwiftUI.Color.clear.frame(width: 1, height: 1)
   }
 
   private func stat(value: Int, label: String) -> some View {
     VStack(spacing: 2) {
-      Text("\(value)")
-        .font(.title3.weight(.bold))
+      Text(value.formatted())
+        .font(.headline)
+        .monospacedDigit()
         .foregroundStyle(VinctusTokens.Color.textPrimary)
       Text(label)
         .font(.caption2)
@@ -157,26 +145,43 @@ struct ProfileCollectionsLink: View {
     NavigationLink {
       CollectionsView()
     } label: {
-      HStack(spacing: VinctusTokens.Spacing.sm) {
-        Image(systemName: "books.vertical")
-          .foregroundStyle(VinctusTokens.Color.accent)
-        VStack(alignment: .leading, spacing: 2) {
-          Text("Colecciones")
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(VinctusTokens.Color.textPrimary)
-          Text("Tus enlaces y notas guardados, solo para ti")
-            .font(.caption)
-            .foregroundStyle(VinctusTokens.Color.textMuted)
-        }
-        Spacer()
-        Image(systemName: "chevron.right")
-          .foregroundStyle(VinctusTokens.Color.textMuted)
-      }
-      .padding(VinctusTokens.Spacing.md)
-      .background(VinctusTokens.Color.surface)
-      .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous))
+      ProfileLinkRow(
+        icon: "books.vertical",
+        title: "Colecciones",
+        subtitle: "Tus enlaces y notas guardados, solo para ti"
+      )
     }
     .buttonStyle(.plain)
+  }
+}
+
+/// A card row that opens another screen of the profile (Colecciones, Publicaciones guardadas).
+struct ProfileLinkRow: View {
+  let icon: String
+  let title: String
+  let subtitle: String
+
+  var body: some View {
+    HStack(spacing: VinctusTokens.Spacing.sm) {
+      Image(systemName: icon)
+        .foregroundStyle(VinctusTokens.Color.accent)
+        .frame(width: 24)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title)
+          .font(.subheadline.weight(.semibold))
+          .foregroundStyle(VinctusTokens.Color.textPrimary)
+        Text(subtitle)
+          .font(.caption)
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+      }
+      Spacer()
+      Image(systemName: "chevron.right")
+        .foregroundStyle(VinctusTokens.Color.textMuted)
+    }
+    .padding(VinctusTokens.Spacing.md)
+    .background(VinctusTokens.Color.surface)
+    .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous))
+    .contentShape(Rectangle())
   }
 }
 

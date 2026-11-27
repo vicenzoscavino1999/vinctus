@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ProjectsPage from '@/features/projects/pages/ProjectsPage';
+import { clearSessionResources } from '@/shared/hooks/useSessionResource';
 import type { CollaborationRead } from '@/features/collaborations/api';
 import type { FirestoreEvent } from '@/features/events/api';
 
@@ -85,6 +86,8 @@ const makeEvent = (overrides: Partial<FirestoreEvent>): FirestoreEvent => ({
 describe('ProjectsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Conexiones keeps its lists for the session; each test starts empty.
+    clearSessionResources();
     authMock.user = { uid: 'viewer-1', displayName: 'Viewer', photoURL: null };
     groupsApiMock.getBlockedUsers.mockResolvedValue(['author-blocked']);
     collabApiMock.getCollaborations.mockResolvedValue([
@@ -174,5 +177,58 @@ describe('ProjectsPage', () => {
     const sentButton = await screen.findByRole('button', { name: 'Solicitud enviada' });
     expect(sentButton).toBeDisabled();
     expect(collabApiMock.getSentCollaborationRequestIds).toHaveBeenCalledWith('viewer-1');
+  });
+
+  it('shows who each project looks for and how the reader stands with it', async () => {
+    collabApiMock.getCollaborations.mockResolvedValueOnce([
+      makeCollab({ id: 'c-open', title: 'Telescopio DIY', seekingRole: 'Óptica' }),
+      makeCollab({ id: 'c-own', title: 'Mi club', authorId: 'viewer-1', seekingRole: 'Moderador' }),
+    ]);
+
+    render(<ProjectsPage />);
+
+    expect(await screen.findByText('Óptica')).toBeInTheDocument();
+    expect(screen.getByText('Tu proyecto')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Tu proyecto' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Solicitar' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('asks for the blocked list once for both lists', async () => {
+    render(<ProjectsPage />);
+
+    expect(await screen.findByText('Telescopio DIY')).toBeInTheDocument();
+    expect(await screen.findByText('Noche de estrellas')).toBeInTheDocument();
+    expect(groupsApiMock.getBlockedUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it('says when an encounter is full and how many go to the others', async () => {
+    eventsApiMock.getUpcomingEvents.mockResolvedValueOnce([
+      makeEvent({ id: 'e-full', title: 'Lleno', capacity: 2 }),
+      makeEvent({ id: 'e-open', title: 'Abierto', capacity: null }),
+    ]);
+    eventsApiMock.getEventAttendeeCount.mockImplementation(async (id: string) =>
+      id === 'e-full' ? 2 : 5,
+    );
+
+    render(<ProjectsPage />);
+
+    expect(await screen.findByText('Completo · 2/2')).toBeInTheDocument();
+    expect(await screen.findByText('5 asistentes')).toBeInTheDocument();
+  });
+
+  it('shows calm empty states with nothing published', async () => {
+    collabApiMock.getCollaborations.mockResolvedValueOnce([]);
+    eventsApiMock.getUpcomingEvents.mockResolvedValueOnce([]);
+
+    render(<ProjectsPage />);
+
+    expect(
+      await screen.findByText('Aún no hay proyectos abiertos. Publica el primero.'),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText('No hay encuentros próximos. Organiza uno.'),
+    ).toBeInTheDocument();
   });
 });

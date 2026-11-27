@@ -37,5 +37,11 @@ struct SampleGroupsRepo: GroupsRepo {
   func requestToJoin(groupID: String, groupName: String, ownerID: String, uid: String) async throws {}
   func updateGroup(groupID: String, _ update: GroupUpdate) async throws {}
   func uploadGroupIcon(ownerID: String, groupID: String, jpegData: Data) async throws -> String { "" }
+  func createGroup(_ draft: GroupUpdate, ownerID: String) async throws -> String { "new-group" }
+  func addMember(groupID: String, uid: String) async throws {}
+
+  func fetchMyGroups(uid: String, limit: Int) async throws -> [GroupSummary] {
+    Array(DemoSample.groups.filter { ["g1", "g2", "g4"].contains($0.id) }.prefix(limit))
+  }
 }
 #endif

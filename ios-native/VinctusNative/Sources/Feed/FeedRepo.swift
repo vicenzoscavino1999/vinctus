@@ -19,6 +19,8 @@ struct FeedItem: Identifiable, Hashable {
   var fileName: String? = nil
   var title: String? = nil
   var media: [PostMediaItem] = []
+  /// The group it was published in, if any.
+  var groupID: String? = nil
 
   /// What the posts grid shows: the photo, or else the video's thumbnail.
   var previewImageURL: String? { imageURL ?? videoThumbnailURL }
@@ -115,6 +117,7 @@ final class FirebaseFeedRepo: FeedRepo {
     )
     item.applyMedia(data["media"])
     item.title = FirestoreValue.string(data["title"])
+    item.groupID = FirestoreValue.string(data["groupId"])
     return item
   }
 }

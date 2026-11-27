@@ -13,6 +13,8 @@ export type PostSummary = {
   commentCount: number;
   media: PostMedia[];
   createdAt: unknown;
+  /** The group it was published in, if any. */
+  groupId?: string | null;
 };
 
 type PostSummaryOverrides = Partial<Pick<PostSummary, 'likeCount' | 'commentCount'>>;
@@ -46,5 +48,6 @@ export const toPostSummary = (
         : Math.max(0, post.commentCount || 0),
     media: post.media ?? [],
     createdAt: post.createdAt,
+    groupId: post.groupId ?? null,
   };
 };

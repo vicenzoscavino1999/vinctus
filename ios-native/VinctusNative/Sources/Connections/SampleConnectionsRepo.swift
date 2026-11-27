@@ -9,20 +9,23 @@ struct SampleConnectionsRepo: ConnectionsRepo {
   func fetchCollaborations(limit: Int) async throws -> [Collaboration] {
     [
       Collaboration(
-        id: "c1", title: "Cuarteto de jazz para los viernes", context: "Tocamos standards en un café de Barranco.",
-        seekingRole: "Bajista", mode: .presencial, location: "Lima", level: .intermedio, topic: "Proyecto de jazz",
+        id: "c1", title: "Cuarteto de jazz para los viernes", context: "Proyecto de jazz",
+        seekingRole: "Bajista", mode: .presencial, location: "Lima", level: .intermedio,
+        topic: "Standards en un café de Barranco",
         tags: ["jazz", "contrabajo"], authorID: "u2", authorName: "Mateo Rojas", authorPhotoURL: nil,
         createdAt: Date().addingTimeInterval(-3 * Self.day)
       ),
       Collaboration(
-        id: "c2", title: "Podcast de divulgación científica", context: "Un episodio al mes sobre física moderna.",
-        seekingRole: "Editor de audio", mode: .virtual, location: nil, level: .principiante, topic: "Ciencia",
+        id: "c2", title: "Podcast de divulgación científica", context: "Ciencia",
+        seekingRole: "Editor de audio", mode: .virtual, location: nil, level: .principiante,
+        topic: "Un episodio al mes sobre física moderna",
         tags: ["podcast", "audio"], authorID: AppRepos.demoUserID, authorName: "Lucía Fernández", authorPhotoURL: nil,
         createdAt: Date().addingTimeInterval(-6 * Self.day)
       ),
       Collaboration(
-        id: "c3", title: "Robot seguidor de línea", context: "Para la feria de ciencias de diciembre.",
-        seekingRole: "Programador de Arduino", mode: .presencial, location: "Miraflores", level: .experto, topic: "Hardware",
+        id: "c3", title: "Robot seguidor de línea", context: "Hardware",
+        seekingRole: "Programador de Arduino", mode: .presencial, location: "Miraflores", level: .experto,
+        topic: "Para la feria de ciencias de diciembre",
         tags: ["arduino", "robótica"], authorID: "u4", authorName: "Diego Salazar", authorPhotoURL: nil,
         createdAt: Date().addingTimeInterval(-10 * Self.day)
       ),

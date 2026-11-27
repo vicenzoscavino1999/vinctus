@@ -1,44 +1,83 @@
-import { PostDownload, PostImage, PostVideo } from '@/features/posts/components/ProtectedPostMedia';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Bookmark,
   ChevronLeft,
-  FileText,
-  Film,
   Heart,
+  Link2,
   Loader2,
   MessageCircle,
+  MoreHorizontal,
   Share2,
-  User,
+  Flag,
 } from 'lucide-react';
 import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
 import { triggerSelectionHaptic } from '@/shared/lib/haptics';
-import PostCommentsModal from '@/features/posts/components/PostCommentsModal';
-import { toPostSummary } from '@/features/posts/model/postSummary';
+import PostAuthorRow from '@/features/posts/components/PostAuthorRow';
+import PostComments from '@/features/posts/components/PostComments';
+import PostMediaGallery from '@/features/posts/components/PostMediaGallery';
+import { useContentReport } from '@/features/posts/hooks/useContentReport';
 import { getPost, type PostRead } from '@/features/posts/api';
 import { formatRelativeTime } from '@/shared/lib/formatUtils';
-import { parseYouTubeUrl } from '@/shared/lib/youtube';
 import { usePostEngagement } from '@/features/posts/hooks/usePostEngagement';
 import { reactionLabel } from '@/features/posts/model/PostEngagementSession';
 
-type PostMediaItem = {
-  type: 'image' | 'video' | 'file';
-  url: string;
-  path: string;
-  fileName?: string;
-  contentType?: string;
-  size?: number;
-};
+const postUrl = (postId: string) => `${window.location.origin}/post/${postId}`;
 
-const getFileExtension = (name: string | undefined): string | null => {
-  if (!name) return null;
-  const clean = name.split('?')[0];
-  const ext = clean.split('.').pop();
-  if (!ext) return null;
-  return ext.toUpperCase();
-};
+/** "⋯" next to the back button: copy the link or report the post. */
+function PostOptions({ onCopyLink, onReport }: { onCopyLink: () => void; onReport: () => void }) {
+  const [open, setOpen] = useState(false);
+  const item =
+    'flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition-colors hover:bg-white/[0.06]';
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-label="Más opciones"
+        aria-expanded={open}
+        className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-white/[0.06] hover:text-white"
+      >
+        <MoreHorizontal size={20} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div
+            role="menu"
+            className="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-2xl border border-white/10 bg-neutral-900 shadow-xl"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onCopyLink();
+              }}
+              className={`${item} text-neutral-200`}
+            >
+              <Link2 size={16} />
+              Copiar enlace
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onReport();
+              }}
+              className={`${item} text-red-300`}
+            >
+              <Flag size={16} />
+              Reportar publicacion
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 const PostDetailSession = () => {
   const { postId } = useParams<{ postId: string }>();
@@ -46,6 +85,7 @@ const PostDetailSession = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { showToast } = useToast();
+  const report = useContentReport();
 
   const [post, setPost] = useState<PostRead | null>(null);
   const [loadedScope, setLoadedScope] = useState<string | null>(null);
@@ -53,21 +93,20 @@ const PostDetailSession = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [commentCount, setCommentCount] = useState(0);
-  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [composerRequest, setComposerRequest] = useState(0);
+  const commentsRef = useRef<HTMLDivElement>(null);
   const { like, save, act } = usePostEngagement(
     post ? postId : undefined,
     user?.uid,
     post?.likeCount ?? 0,
   );
   const likeCount = like.loaded ? like.count : Math.max(0, post?.likeCount ?? 0);
-  const liked = like.value;
-  const saved = save.value;
 
-  const shouldOpenCommentsFromNavigation = useMemo(() => {
+  // Links and the comment button of other screens open the post at its comments.
+  const openAtComments = useMemo(() => {
     const navigationState = (location.state as { openComments?: boolean } | null) ?? null;
     if (navigationState?.openComments) return true;
-    const params = new URLSearchParams(location.search);
-    return params.get('comments') === '1';
+    return new URLSearchParams(location.search).get('comments') === '1';
   }, [location.state, location.search]);
 
   useEffect(() => {
@@ -105,46 +144,17 @@ const PostDetailSession = () => {
     };
 
     void loadPost();
-
     return () => {
       active = false;
     };
   }, [postId, readScope]);
 
+  const ready = !!post && loadedScope === readScope;
   useEffect(() => {
-    if (!postId) return;
-    if (!shouldOpenCommentsFromNavigation) return;
-    setCommentsOpen(true);
-  }, [postId, shouldOpenCommentsFromNavigation]);
-
-  const media = useMemo(() => (post?.media ?? []) as PostMediaItem[], [post]);
-  const primaryVideo = media.find((item) => item.type === 'video') ?? null;
-  const primaryVideoYouTube = primaryVideo ? parseYouTubeUrl(primaryVideo.url) : null;
-  const primaryImage = media.find((item) => item.type === 'image') ?? null;
-  const primaryVisual = primaryVideo ?? primaryImage;
-  const additionalVisualMedia = useMemo(
-    () =>
-      media.filter(
-        (item) => (item.type === 'image' || item.type === 'video') && item !== primaryVisual,
-      ),
-    [media, primaryVisual],
-  );
-  const fileAttachments = media.filter((item) => item.type === 'file');
-  const displayText = post?.text ?? post?.content ?? '';
-  const authorName = post?.authorSnapshot?.displayName ?? post?.authorName ?? 'Usuario';
-  const authorPhoto = post?.authorSnapshot?.photoURL ?? post?.authorPhoto ?? null;
-  const trimmedBody = displayText.trim();
-  const fallbackTitle = trimmedBody ? (trimmedBody.split('\n')[0] ?? trimmedBody) : '';
-  const titleText = post?.title?.trim() || fallbackTitle || 'Publicacion';
-  const isLongContent = trimmedBody.length > 140;
-  const showBody = post?.title
-    ? trimmedBody.length > 0
-    : isLongContent || trimmedBody !== titleText;
-
-  const commentsSummary = useMemo(() => {
-    if (!post || !postId) return null;
-    return toPostSummary(post, { likeCount, commentCount });
-  }, [commentCount, likeCount, post, postId]);
+    if (ready && openAtComments) {
+      commentsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [ready, openAtComments]);
 
   const handleReaction = (kind: 'like' | 'save') => {
     if (!user) {
@@ -155,35 +165,46 @@ const PostDetailSession = () => {
     void act(kind);
   };
 
+  const copyLink = async () => {
+    if (!postId) return;
+    try {
+      await navigator.clipboard.writeText(postUrl(postId));
+      showToast('Enlace copiado', 'success');
+    } catch {
+      showToast('No se pudo copiar el enlace', 'error');
+    }
+  };
+
   const handleShare = async () => {
     if (!postId) return;
-    const url = `${window.location.origin}/post/${postId}`;
     try {
       if (navigator.share) {
-        await navigator.share({ title: 'Vinctus', url });
-      } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(url);
-        showToast('Enlace copiado', 'success');
+        await navigator.share({ title: 'Vinctus', url: postUrl(postId) });
       } else {
-        showToast('No se pudo copiar el enlace', 'error');
+        await copyLink();
       }
     } catch (err) {
       console.error('Error sharing post:', err);
     }
   };
 
-  if (loading || (post !== null && loadedScope !== readScope)) {
+  const openComposer = () => {
+    setComposerRequest((value) => value + 1);
+    commentsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  if (loading || (post !== null && !ready)) {
     return (
-      <div className="page-category pb-32 text-center pt-20">
-        <Loader2 size={32} className="animate-spin text-amber-500 mx-auto" />
+      <div className="page-category pb-32 pt-20 text-center">
+        <Loader2 size={32} className="mx-auto animate-spin text-amber-500" />
       </div>
     );
   }
 
   if (!post || error) {
     return (
-      <div className="page-category pb-32 text-center pt-20">
-        <p className="text-neutral-500 mb-4">{error ?? 'Publicacion no encontrada'}</p>
+      <div className="page-category pb-32 pt-20 text-center">
+        <p className="mb-4 text-neutral-500">{error ?? 'Publicacion no encontrada'}</p>
         <button onClick={() => navigate('/discover')} className="text-brand-gold hover:underline">
           Volver a Descubrir
         </button>
@@ -191,210 +212,160 @@ const PostDetailSession = () => {
     );
   }
 
-  return (
-    <div className="page-category pb-32">
-      <button
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-neutral-500 hover:text-white transition-colors mb-6 mt-4"
-      >
-        <ChevronLeft size={20} />
-        <span className="text-sm">Volver</span>
-      </button>
+  const media = post.media ?? [];
+  const hasMedia = media.some((item) => item.type === 'image' || item.type === 'video');
+  const text = (post.text ?? post.content ?? '').trim();
+  const title = post.title?.trim() || '';
+  const authorName = post.authorSnapshot?.displayName ?? post.authorName ?? 'Usuario';
+  const authorPhoto = post.authorSnapshot?.photoURL ?? post.authorPhoto ?? null;
+  const paragraphs = text
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
 
-      <div className="flex items-center gap-3 mb-8">
-        <div className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center overflow-hidden">
-          {authorPhoto ? (
-            <img src={authorPhoto} alt={authorName} className="w-full h-full object-cover" />
-          ) : (
-            <User size={20} className="text-neutral-500" />
-          )}
-        </div>
-        <div>
-          <p className="text-white font-medium">{authorName}</p>
-          <p className="text-neutral-500 text-sm">
-            Comunidad · {formatRelativeTime(post.createdAt)}
-          </p>
-        </div>
-      </div>
-
-      <h1 className="text-display-sm md:text-display-md font-display text-white mb-6 leading-tight">
-        {titleText}
-      </h1>
-
-      {(primaryVideo || primaryImage) && (
-        <div className="relative rounded-xl overflow-hidden mb-8 aspect-video bg-surface-overlay">
-          {primaryVideo ? (
-            primaryVideoYouTube ? (
-              <iframe
-                src={primaryVideoYouTube.embedUrl}
-                title={titleText}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-                className="w-full h-full"
-              />
-            ) : (
-              <PostVideo src={primaryVideo.url} controls className="w-full h-full object-cover" />
-            )
-          ) : (
-            <PostImage
-              src={primaryImage?.url}
-              alt={titleText}
-              className="w-full h-full object-cover"
-            />
-          )}
-          {media.length > 1 && (
-            <div className="absolute top-3 right-3 rounded-full bg-black/60 text-white text-xs px-2 py-1">
-              +{media.length - 1}
-            </div>
-          )}
-        </div>
+  const words = (
+    <div className="space-y-3">
+      {title && (
+        <h1 className="font-display text-3xl leading-tight text-white md:text-4xl">{title}</h1>
       )}
-
-      {additionalVisualMedia.length > 0 && (
-        <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {additionalVisualMedia.map((item) => {
-            const youtube = item.type === 'video' ? parseYouTubeUrl(item.url) : null;
-            return (
-              <div
-                key={item.path || item.url}
-                className="relative rounded-xl overflow-hidden aspect-video bg-surface-overlay"
-              >
-                {item.type === 'video' ? (
-                  youtube ? (
-                    <iframe
-                      src={youtube.embedUrl}
-                      title={titleText}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      allowFullScreen
-                      className="w-full h-full"
-                    />
-                  ) : (
-                    <PostVideo src={item.url} controls className="w-full h-full object-cover" />
-                  )
-                ) : (
-                  <PostImage
-                    src={item.url}
-                    alt={titleText}
-                    className="w-full h-full object-cover"
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {fileAttachments.length > 0 && (
-        <div className="mb-8 space-y-2">
-          {fileAttachments.map((file) => {
-            const label = file.fileName ?? file.url;
-            const ext = getFileExtension(label) ?? 'ARCHIVO';
-            return (
-              <PostDownload
-                key={file.url}
-                href={file.url}
-                download={file.fileName || 'archivo'}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-3 rounded-lg border border-neutral-800 bg-neutral-900/50 px-4 py-3 text-neutral-200 hover:border-neutral-600 transition-colors"
-              >
-                <FileText size={18} />
-                <div className="flex-1">
-                  <p className="text-sm font-medium truncate">{label}</p>
-                  <p className="text-xs text-neutral-500">{ext}</p>
-                </div>
-              </PostDownload>
-            );
-          })}
-        </div>
-      )}
-
-      {showBody && (
-        <article className="prose prose-invert max-w-none mb-8">
-          {displayText.split('\n\n').map((paragraph, idx) => (
-            <p key={idx} className="text-neutral-300 text-body-md leading-relaxed mb-4">
-              {paragraph}
-            </p>
-          ))}
-        </article>
-      )}
-
-      <div className="flex items-center justify-between py-4 border-t border-b border-neutral-800/50">
-        <div className="flex items-center gap-6">
-          <button
-            onClick={() => handleReaction('like')}
-            disabled={like.loading}
-            aria-busy={like.loading}
-            aria-label={reactionLabel('like', like)}
-            aria-pressed={liked ?? undefined}
-            className={`flex items-center gap-2 transition-colors press-scale ${liked ? 'text-red-400' : 'text-neutral-500 hover:text-white'}`}
-          >
-            <Heart size={20} fill={liked ? 'currentColor' : 'none'} />
-            <span className="text-sm">{likeCount}</span>
-          </button>
-
-          <button
-            onClick={() => setCommentsOpen(true)}
-            className="flex items-center gap-2 text-neutral-500 hover:text-white transition-colors"
-          >
-            <MessageCircle size={20} />
-            <span className="text-sm">{commentCount}</span>
-          </button>
-
-          {primaryVideo && (
-            <div className="flex items-center gap-1 text-neutral-500 text-sm">
-              <Film size={16} />
-              Video
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => handleReaction('save')}
-            disabled={save.loading}
-            aria-busy={save.loading}
-            aria-pressed={saved ?? undefined}
-            aria-label={reactionLabel('save', save)}
-            className={`transition-colors press-scale ${saved ? 'text-brand-gold' : 'text-neutral-500 hover:text-white'}`}
-          >
-            <Bookmark size={20} fill={saved ? 'currentColor' : 'none'} />
-          </button>
-
-          <button
-            type="button"
-            aria-label="Compartir publicacion"
-            onClick={handleShare}
-            className="text-neutral-500 hover:text-white transition-colors"
-          >
-            <Share2 size={20} />
-          </button>
-        </div>
-      </div>
-
-      {(like.error || save.error) && (
-        <p role="alert" className="text-sm text-red-400 py-3">
-          {like.error || save.error}
+      {paragraphs.map((paragraph, index) => (
+        <p
+          key={index}
+          className={`whitespace-pre-line leading-relaxed text-neutral-100 ${
+            hasMedia ? 'text-[15px]' : 'text-[17px]'
+          }`}
+        >
+          {paragraph}
         </p>
-      )}
+      ))}
+    </div>
+  );
 
-      <PostCommentsModal
-        isOpen={commentsOpen}
-        post={commentsSummary}
-        onClose={() => setCommentsOpen(false)}
-        onCommentAdded={() => {
-          setCommentCount((prev) => prev + 1);
-          setPost((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  commentCount: Math.max(0, (prev.commentCount || 0) + 1),
-                }
-              : prev,
-          );
-        }}
-      />
+  return (
+    <div className="page-category mx-auto max-w-[600px] pb-32">
+      <div className="mb-5 mt-4 flex items-center justify-between">
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-1.5 text-neutral-400 transition-colors hover:text-white"
+        >
+          <ChevronLeft size={20} />
+          <span className="text-sm">Volver</span>
+        </button>
+        <PostOptions
+          onCopyLink={() => void copyLink()}
+          onReport={() => report.reportPost(post.postId || post.id, post.authorId)}
+        />
+      </div>
+
+      <article aria-label="Publicación" className="space-y-4">
+        <PostAuthorRow
+          authorId={post.authorId}
+          authorName={authorName}
+          authorPhoto={authorPhoto}
+          groupId={post.groupId}
+          timeLabel={formatRelativeTime(post.createdAt)}
+        />
+
+        {/* Like the feed: the media first and the words under the actions, or the words first. */}
+        {hasMedia ? (
+          <PostMediaGallery
+            media={media}
+            alt={title || text.slice(0, 80) || 'Imagen de la publicación'}
+          />
+        ) : (
+          <>
+            {words}
+            {media.length > 0 && <PostMediaGallery media={media} alt={title || 'Publicación'} />}
+          </>
+        )}
+
+        <div>
+          <div className="-mx-1 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => handleReaction('like')}
+              disabled={like.loading}
+              aria-busy={like.loading}
+              aria-label={reactionLabel('like', like)}
+              aria-pressed={like.value ?? undefined}
+              className={`flex h-10 items-center rounded-full px-1 transition-colors disabled:opacity-60 ${
+                like.value ? 'text-red-500' : 'text-neutral-100 hover:text-white'
+              }`}
+            >
+              {like.loading ? (
+                <Loader2 size={24} className="animate-spin" />
+              ) : (
+                <Heart
+                  key={like.value ? 'liked' : 'not-liked'}
+                  size={24}
+                  fill={like.value ? 'currentColor' : 'none'}
+                  className={like.value ? 'animate-like-pop' : ''}
+                />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={openComposer}
+              aria-label="Comentarios"
+              className="flex h-10 items-center rounded-full px-1 text-neutral-100 transition-colors hover:text-white"
+            >
+              <MessageCircle size={24} />
+            </button>
+            <button
+              type="button"
+              aria-label="Compartir publicacion"
+              onClick={() => void handleShare()}
+              className="flex h-10 items-center rounded-full px-1 text-neutral-100 transition-colors hover:text-white"
+            >
+              <Share2 size={22} />
+            </button>
+            <div className="flex-1" />
+            <button
+              type="button"
+              onClick={() => handleReaction('save')}
+              disabled={save.loading}
+              aria-busy={save.loading}
+              aria-pressed={save.value ?? undefined}
+              aria-label={reactionLabel('save', save)}
+              className={`flex h-10 items-center rounded-full px-1 transition-colors disabled:opacity-60 ${
+                save.value ? 'text-brand-gold' : 'text-neutral-100 hover:text-white'
+              }`}
+            >
+              {save.loading ? (
+                <Loader2 size={24} className="animate-spin" />
+              ) : (
+                <Bookmark size={24} fill={save.value ? 'currentColor' : 'none'} />
+              )}
+            </button>
+          </div>
+          <p className="mt-1 text-sm font-semibold tabular-nums text-white">
+            {likeCount === 1 ? '1 me gusta' : `${likeCount.toLocaleString('es-ES')} me gusta`}
+          </p>
+          {(like.error || save.error) && (
+            <p role="alert" className="mt-2 text-sm text-red-400">
+              {like.error || save.error}
+            </p>
+          )}
+        </div>
+
+        {hasMedia && (title || paragraphs.length > 0) && words}
+      </article>
+
+      <div ref={commentsRef} id="comentarios" className="mt-10 scroll-mt-24">
+        <PostComments
+          postId={post.postId || post.id}
+          commentCount={commentCount}
+          composerRequest={composerRequest}
+          onCommentAdded={() => {
+            setCommentCount((prev) => prev + 1);
+            setPost((prev) =>
+              prev ? { ...prev, commentCount: Math.max(0, (prev.commentCount || 0) + 1) } : prev,
+            );
+          }}
+          onReportComment={(comment) => report.reportComment(post.postId || post.id, comment)}
+        />
+      </div>
+      {report.modal}
     </div>
   );
 };

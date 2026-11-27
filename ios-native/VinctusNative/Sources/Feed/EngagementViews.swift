@@ -82,6 +82,8 @@ private struct PostReactionButtonSession: View {
 /// Follow / unfollow button for another user's profile. Private accounts get a follow request.
 struct FollowButton: View {
   let isPrivate: Bool
+  /// A small capsule for list rows instead of the full-width profile button.
+  let compact: Bool
   /// Called with the loaded status and after every change.
   let onStatusChange: ((FollowStatus) -> Void)?
 
@@ -90,15 +92,59 @@ struct FollowButton: View {
   init(
     targetUID: String,
     isPrivate: Bool,
+    compact: Bool = false,
     repo: EngagementRepo = AppRepos.engagement(),
     onStatusChange: ((FollowStatus) -> Void)? = nil
   ) {
     self.isPrivate = isPrivate
+    self.compact = compact
     self.onStatusChange = onStatusChange
     _vm = StateObject(wrappedValue: FollowViewModel(targetUID: targetUID, repo: repo))
   }
 
   var body: some View {
+    if compact {
+      compactButton
+    } else {
+      fullButton
+    }
+  }
+
+  private var compactButton: some View {
+    Button {
+      Task {
+        if vm.loadFailed {
+          await vm.load()
+        } else {
+          await vm.toggle(isPrivate: isPrivate)
+        }
+      }
+    } label: {
+      HStack(spacing: 5) {
+        if vm.isSaving {
+          ProgressView()
+            .controlSize(.mini)
+        }
+        Text(vm.title)
+          .font(.footnote.weight(.semibold))
+      }
+      .padding(.horizontal, 14)
+      .frame(height: 32)
+      .foregroundStyle(vm.status == FollowStatus.none ? SwiftUI.Color.black : VinctusTokens.Color.textPrimary)
+      .background(
+        Capsule().fill(vm.status == FollowStatus.none ? VinctusTokens.Color.accent : VinctusTokens.Color.surface2)
+      )
+    }
+    .buttonStyle(.borderless)
+    .disabled(vm.isSaving || (vm.status == nil && !vm.loadFailed))
+    .accessibilityHint(vm.errorMessage ?? "")
+    .task { await vm.load() }
+    .onChange(of: vm.status) { _, newValue in
+      if let newValue { onStatusChange?(newValue) }
+    }
+  }
+
+  private var fullButton: some View {
     VStack(alignment: .leading, spacing: 6) {
       Button {
         Task {

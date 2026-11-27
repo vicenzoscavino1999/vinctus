@@ -65,6 +65,57 @@ final class GroupsIntegrationTests: EmulatorTestCase {
     }
   }
 
+  /// The app's "Crear grupo" and "Tus grupos" against firestore.rules, like the web's
+  /// CreateGroupModal: create a private group, add someone, and both see it in their groups.
+  func testCreateAGroupAddSomeoneAndBothListIt() async throws {
+    let ana = try await makeUser("Ana")
+    let bruno = try await makeUser("Bruno")
+    let groups = FirebaseGroupsRepo()
+    let draft = GroupUpdate(
+      name: "  Astronomía urbana ", description: "Miramos el cielo desde la ciudad.",
+      categoryID: "science", visibility: .private, iconURL: nil
+    )
+
+    let groupID = try await groups.createGroup(draft, ownerID: bruno.uid)
+    let status = try await groups.membershipStatus(groupID: groupID, ownerID: bruno.uid, uid: bruno.uid)
+    XCTAssertEqual(status, .owner)
+    let member = try await Firestore.firestore().collection("groups").document(groupID)
+      .collection("members").document(bruno.uid).getDocument()
+    XCTAssertEqual(member.data()?["role"] as? String, "admin")
+
+    try await groups.addMember(groupID: groupID, uid: ana.uid)
+    try await groups.addMember(groupID: groupID, uid: ana.uid) // already in: nothing to do
+
+    let brunos = try await groups.fetchMyGroups(uid: bruno.uid, limit: 50)
+    XCTAssertEqual(brunos.map(\.id), [groupID])
+    XCTAssertEqual(brunos.first?.name, "Astronomía urbana")
+    XCTAssertEqual(brunos.first?.visibility, .private)
+
+    try await signIn(ana)
+    let anas = try await groups.fetchMyGroups(uid: ana.uid, limit: 50)
+    XCTAssertEqual(anas.map(\.id), [groupID])
+    let conversationID = try await FirebaseChatRepo().openGroupConversation(groupID: groupID)
+    XCTAssertEqual(conversationID, "grp_\(groupID)")
+  }
+
+  func testOnlyTheOwnerAddsMembers() async throws {
+    let carla = try await makeUser("Carla")
+    let bruno = try await makeUser("Bruno")
+    let groups = FirebaseGroupsRepo()
+    let groupID = try await groups.createGroup(
+      GroupUpdate(name: "Privado", description: "Solo invitados", categoryID: nil, visibility: .private, iconURL: nil),
+      ownerID: bruno.uid
+    )
+    // Dani, now signed in, does not own the group.
+    _ = try await makeUser("Dani")
+    do {
+      try await groups.addMember(groupID: groupID, uid: carla.uid)
+      XCTFail("Only the owner may add people to a private group")
+    } catch {
+      XCTAssertEqual((error as NSError).code, FirestoreErrorCode.permissionDenied.rawValue)
+    }
+  }
+
   func testJoinAPublicGroupOpenItsChatAndLeave() async throws {
     let bruno = try await makeUser("Bruno")
     let groupID = try await makeGroup(name: "Astronomía", visibility: .public)

@@ -18,133 +18,35 @@ struct ConnectionsSearchView: View {
     _suggestedGroups = StateObject(wrappedValue: GroupSuggestionsViewModel(repo: groupsRepo, limit: 50))
   }
 
+  /// Like the web's Search: suggested people first (with a follow button); while searching,
+  /// people and then groups.
   var body: some View {
     List {
       Section {
-        DiscoverPeopleSearchField(
-          searchText: $vm.searchText,
-          placeholder: "Buscar amigos o grupos...",
-          icon: "magnifyingglass"
-        )
-        if trimmedSearchLength == 1 {
-          Text("Escribe al menos 2 letras para buscar personas.")
-            .font(.caption)
-            .foregroundStyle(VinctusTokens.Color.textMuted)
+        VStack(alignment: .leading, spacing: VinctusTokens.Spacing.md) {
+          Text("Buscar")
+            .font(VinctusTokens.Typography.serif(30))
+            .foregroundStyle(VinctusTokens.Color.textPrimary)
+          DiscoverPeopleSearchField(
+            searchText: $vm.searchText,
+            placeholder: "Buscar personas o grupos",
+            icon: "magnifyingglass"
+          )
+          if trimmedSearchLength == 1 {
+            Text("Escribe al menos 2 letras para buscar.")
+              .font(.caption)
+              .foregroundStyle(VinctusTokens.Color.textMuted)
+          }
         }
+        .padding(.top, 8)
       }
       .listRowSeparator(.hidden)
       .listRowBackground(SwiftUI.Color.clear)
 
-      if suggestedGroups.isShowingCachedData {
-        HStack(spacing: 8) {
-          Image(systemName: "externaldrive.badge.clock")
-            .foregroundStyle(VinctusTokens.Color.accent)
-          Text("Mostrando grupos desde cache local.")
-            .font(.footnote)
-            .foregroundStyle(VinctusTokens.Color.textMuted)
-        }
-        .listRowSeparator(.hidden)
-        .listRowBackground(SwiftUI.Color.clear)
-      }
+      peopleSection
 
-      if suggestedGroups.isLoading, suggestedGroups.groups.isEmpty {
-        groupSkeletonRows
-      } else if let groupsError = suggestedGroups.errorMessage {
-        VCard {
-          VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
-            Text(groupsError)
-              .font(.footnote)
-              .foregroundStyle(.red)
-
-            VButton("Reintentar", variant: .secondary) {
-              Task {
-                await refreshData()
-              }
-            }
-          }
-        }
-        .listRowSeparator(.hidden)
-        .listRowBackground(SwiftUI.Color.clear)
-      } else if filteredGroups.isEmpty, vm.isSearchActive {
-        VCard {
-          Text("Sin grupos para esa búsqueda.")
-            .font(.footnote)
-            .foregroundStyle(VinctusTokens.Color.textMuted)
-        }
-        .listRowSeparator(.hidden)
-        .listRowBackground(SwiftUI.Color.clear)
-      } else if !filteredGroups.isEmpty {
-        Section(vm.isSearchActive ? "Resultados de grupos" : "Grupos recientes") {
-          ForEach(filteredGroups.prefix(10)) { group in
-            GroupCard(group: group, repo: groupsRepo) {
-              openedGroupID = group.id
-            }
-            .textCase(nil)
-            .listRowSeparator(.hidden)
-          }
-        }
-        .textCase(.uppercase)
-        .listRowBackground(SwiftUI.Color.clear)
-      }
-
-      if vm.isInitialLoading, visibleDisplayedUsers.isEmpty {
-        peopleSkeletonRows
-      } else if let error = vm.errorMessage {
-        VCard {
-          VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
-            Text(error)
-              .font(.footnote)
-              .foregroundStyle(.red)
-
-            VButton("Reintentar", variant: .secondary) {
-              vm.retryCurrentState()
-            }
-          }
-        }
-        .listRowSeparator(.hidden)
-        .listRowBackground(SwiftUI.Color.clear)
-      } else if vm.isSearching, visibleDisplayedUsers.isEmpty {
-        EmptyView()
-      } else if visibleDisplayedUsers.isEmpty {
-        VCard {
-          VStack(alignment: .leading, spacing: 6) {
-            Text(vm.isSearchActive ? "Sin resultados" : "Aún no hay personas recientes")
-              .font(.headline)
-              .foregroundStyle(VinctusTokens.Color.textPrimary)
-            Text(
-              vm.isSearchActive
-                ? "Prueba otro término de búsqueda."
-                : "Cuando existan perfiles recientes, aparecerán aquí."
-            )
-            .font(.footnote)
-            .foregroundStyle(VinctusTokens.Color.textMuted)
-          }
-        }
-        .listRowSeparator(.hidden)
-        .listRowBackground(SwiftUI.Color.clear)
-      } else {
-        Section(vm.isSearchActive ? "Resultados de personas" : "Personas recientes") {
-          ForEach(visibleDisplayedUsers) { user in
-            NavigationLink(destination: ProfileView(repo: profileRepo, userID: user.uid)) {
-              DiscoverUserRow(user: user)
-            }
-          }
-        }
-        .textCase(.uppercase)
-        .listRowBackground(SwiftUI.Color.clear)
-      }
-
-      if vm.isSearching {
-        HStack(spacing: 10) {
-          ProgressView()
-            .controlSize(.small)
-          Text("Buscando personas…")
-            .font(.footnote)
-            .foregroundStyle(VinctusTokens.Color.textMuted)
-        }
-        .frame(maxWidth: .infinity, alignment: .center)
-        .listRowSeparator(.hidden)
-        .listRowBackground(SwiftUI.Color.clear)
+      if vm.isSearchActive {
+        groupsSection
       }
     }
     .listStyle(.plain)
@@ -165,6 +67,10 @@ struct ConnectionsSearchView: View {
       }
       await refreshData()
     }
+    .refreshOnTabReturn {
+      guard authVM.currentUserID != nil || AppRepos.isDemo else { return }
+      await refreshData()
+    }
     .refreshable {
       if vm.isSearchActive {
         vm.currentUserID = authVM.currentUserID
@@ -174,6 +80,117 @@ struct ConnectionsSearchView: View {
         await refreshData()
       }
     }
+  }
+
+  // MARK: People
+
+  @ViewBuilder
+  private var peopleSection: some View {
+    if vm.isInitialLoading, visibleDisplayedUsers.isEmpty {
+      peopleSkeletonRows
+    } else if let error = vm.errorMessage {
+      VCard {
+        VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
+          Text(error)
+            .font(.footnote)
+            .foregroundStyle(.red)
+          VButton("Reintentar", variant: .secondary) {
+            vm.retryCurrentState()
+          }
+        }
+      }
+      .listRowSeparator(.hidden)
+      .listRowBackground(SwiftUI.Color.clear)
+    } else if vm.isSearching, visibleDisplayedUsers.isEmpty {
+      HStack(spacing: 10) {
+        ProgressView()
+          .controlSize(.small)
+        Text("Buscando personas…")
+          .font(.footnote)
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+      }
+      .frame(maxWidth: .infinity, alignment: .center)
+      .listRowSeparator(.hidden)
+      .listRowBackground(SwiftUI.Color.clear)
+    } else if visibleDisplayedUsers.isEmpty {
+      // While searching, groups may still match: say nothing here, the groups section answers.
+      if !vm.isSearchActive {
+        sectionMessage("Aún no hay personas recientes. Cuando existan perfiles, aparecerán aquí.")
+      } else if filteredGroups.isEmpty, !suggestedGroups.isLoading {
+        sectionMessage("No hay resultados. Prueba otro término de búsqueda.")
+      }
+    } else {
+      Section {
+        ForEach(visibleDisplayedUsers) { user in
+          SearchPersonRow(user: user, profileRepo: profileRepo)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+            .listRowBackground(SwiftUI.Color.clear)
+        }
+      } header: {
+        sectionHeader(vm.isSearchActive ? "Personas" : "Personas sugeridas")
+      }
+    }
+  }
+
+  // MARK: Groups
+
+  @ViewBuilder
+  private var groupsSection: some View {
+    if suggestedGroups.isLoading, suggestedGroups.groups.isEmpty {
+      groupSkeletonRows
+    } else if let groupsError = suggestedGroups.errorMessage {
+      VCard {
+        VStack(alignment: .leading, spacing: VinctusTokens.Spacing.sm) {
+          Text(groupsError)
+            .font(.footnote)
+            .foregroundStyle(.red)
+          VButton("Reintentar", variant: .secondary) {
+            Task { await refreshData() }
+          }
+        }
+      }
+      .listRowSeparator(.hidden)
+      .listRowBackground(SwiftUI.Color.clear)
+    } else if !filteredGroups.isEmpty {
+      Section {
+        if suggestedGroups.isShowingCachedData {
+          Label("Mostrando grupos desde cache local.", systemImage: "externaldrive.badge.clock")
+            .font(.footnote)
+            .foregroundStyle(VinctusTokens.Color.textMuted)
+            .listRowSeparator(.hidden)
+            .listRowBackground(SwiftUI.Color.clear)
+        }
+        ForEach(filteredGroups.prefix(10)) { group in
+          GroupCard(group: group, repo: groupsRepo) {
+            openedGroupID = group.id
+          }
+          .listRowSeparator(.hidden)
+          .listRowBackground(SwiftUI.Color.clear)
+        }
+      } header: {
+        sectionHeader("Grupos")
+      }
+    }
+  }
+
+  private func sectionHeader(_ title: String) -> some View {
+    Text(title.uppercased())
+      .font(.caption.weight(.semibold))
+      .tracking(1.6)
+      .foregroundStyle(VinctusTokens.Color.textMuted)
+      .padding(.top, 8)
+  }
+
+  private func sectionMessage(_ text: String) -> some View {
+    Text(text)
+      .font(.footnote)
+      .foregroundStyle(VinctusTokens.Color.textMuted)
+      .frame(maxWidth: .infinity, alignment: .center)
+      .multilineTextAlignment(.center)
+      .padding(.vertical, 24)
+      .listRowSeparator(.hidden)
+      .listRowBackground(SwiftUI.Color.clear)
   }
 
   private var trimmedSearchLength: Int {
@@ -248,8 +265,11 @@ struct ConnectionsSearchView: View {
   }
 }
 
-private struct DiscoverUserRow: View {
+/// A person: photo, name, "Cuenta privada" when it is, and a compact follow button. Tapping the
+/// row (outside the button) opens the profile; a hidden link avoids List's disclosure arrow.
+private struct SearchPersonRow: View {
   let user: DiscoverUser
+  let profileRepo: ProfileRepo
 
   var body: some View {
     HStack(spacing: VinctusTokens.Spacing.md) {
@@ -257,21 +277,32 @@ private struct DiscoverUserRow: View {
 
       VStack(alignment: .leading, spacing: 3) {
         Text(user.displayName)
-          .font(.headline)
+          .font(.subheadline.weight(.semibold))
           .foregroundStyle(VinctusTokens.Color.textPrimary)
-
-        Text(user.accountVisibility == .private ? "Perfil privado" : "Perfil público")
-          .font(.caption)
-          .foregroundStyle(VinctusTokens.Color.textMuted)
+          .lineLimit(1)
+        if user.accountVisibility == .private {
+          Label("Cuenta privada", systemImage: "lock")
+            .font(.caption)
+            .foregroundStyle(VinctusTokens.Color.textMuted)
+        }
       }
 
-      Spacer()
+      Spacer(minLength: 8)
 
-      Image(systemName: "chevron.right")
-        .font(.caption)
-        .foregroundStyle(VinctusTokens.Color.textMuted.opacity(0.8))
+      FollowButton(targetUID: user.uid, isPrivate: user.accountVisibility == .private, compact: true)
     }
-    .padding(.vertical, 2)
+    .padding(.horizontal, 14)
+    .padding(.vertical, 10)
+    .background(
+      RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous)
+        .fill(VinctusTokens.Color.surface)
+    )
+    .background(
+      NavigationLink(destination: ProfileView(repo: profileRepo, userID: user.uid)) { EmptyView() }
+        .opacity(0)
+    )
+    .contentShape(Rectangle())
+    .accessibilityElement(children: .contain)
   }
 }
 
