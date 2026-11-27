@@ -59,6 +59,31 @@ final class FakeGroupsRepo: GroupsRepo {
 
   func uploadGroupIcon(ownerID: String, groupID: String, jpegData: Data) async throws -> String {
     uploadedIcons += 1
+    if failsToUploadIcon { throw FakeError() }
     return "https://example.com/groups/\(ownerID)/\(groupID)/icon.jpg"
+  }
+
+  var createdGroups: [(draft: GroupUpdate, ownerID: String)] = []
+  var failsToCreate = false
+  var failsToUploadIcon = false
+  var addedMembers: [(groupID: String, uid: String)] = []
+  var failingMemberUIDs: Set<String> = []
+  var myGroups: [GroupSummary] = []
+  var failsToListMine = false
+
+  func createGroup(_ draft: GroupUpdate, ownerID: String) async throws -> String {
+    if failsToCreate { throw FakeError() }
+    createdGroups.append((draft, ownerID))
+    return "created-\(createdGroups.count)"
+  }
+
+  func addMember(groupID: String, uid: String) async throws {
+    if failingMemberUIDs.contains(uid) { throw FakeError() }
+    addedMembers.append((groupID, uid))
+  }
+
+  func fetchMyGroups(uid: String, limit: Int) async throws -> [GroupSummary] {
+    if failsToListMine { throw FakeError() }
+    return myGroups
   }
 }

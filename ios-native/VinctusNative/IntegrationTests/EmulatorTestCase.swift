@@ -127,7 +127,7 @@ class EmulatorTestCase: XCTestCase {
   }
 
   /// Creates a group owned by the signed-in user with the fields `isValidGroupCreate` accepts
-  /// (the app can't create groups yet; the web does).
+  /// (a bare group document, without the owner's membership; FirebaseGroupsRepo.createGroup adds it).
   func makeGroup(name: String, visibility: ProfileAccountVisibility) async throws -> String {
     let uid = try XCTUnwrap(Auth.auth().currentUser?.uid)
     let group = Firestore.firestore().collection("groups").document()
