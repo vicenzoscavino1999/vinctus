@@ -1,223 +1,302 @@
-import { useState } from 'react';
-import { ArrowRight, Check, Sparkles, Users, BookOpen } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowRight, Check, Sparkles, Users } from 'lucide-react';
+import { useAuth } from '@/context/auth';
+import { getGroups, joinPublicGroup, type FirestoreGroup } from '@/features/groups/api';
+import { followCategoryWithSync, getUserProfile } from '@/features/profile/api';
 import { CATEGORIES } from '@/shared/constants';
 import type { OnboardingFlowProps } from '@/shared/types';
 
-// Onboarding Flow Component
+const MIN_INTERESTS = 2;
+const GROUPS_TO_SHOW = 6;
+/** Accounts older than this already know Vinctus; a new device doesn't greet them again. */
+const NEW_ACCOUNT_MS = 24 * 60 * 60 * 1000;
+
+const safeSetItem = (key: string, value: string): void => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Private mode or a full quota: the welcome still finishes.
+  }
+};
+
+const formatMembers = (count: number) =>
+  `${new Intl.NumberFormat('es-ES', { notation: 'compact', maximumFractionDigits: 1 }).format(count)} ${
+    count === 1 ? 'miembro' : 'miembros'
+  }`;
+
+/**
+ * The welcome after signing up: what Vinctus is, the interests to follow (they become followed
+ * categories) and real public groups to join. Accounts that already existed skip it.
+ */
 const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
+  const { user } = useAuth();
+  const uid = user?.uid ?? null;
+  const [checking, setChecking] = useState(true);
   const [step, setStep] = useState(0);
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
-  const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
+  const [interests, setInterests] = useState<string[]>([]);
+  const [groups, setGroups] = useState<FirestoreGroup[] | null>(null);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [finishing, setFinishing] = useState(false);
 
-  // Sample groups for onboarding
-  const SAMPLE_GROUPS = [
-    { id: 1, name: 'Exploradores Cuánticos', members: 2340, icon: '⚛️' },
-    { id: 2, name: 'Historia Viva', members: 1890, icon: '🏛️' },
-    { id: 3, name: 'Jazz & Vinilos', members: 956, icon: '🎷' },
-    { id: 4, name: 'Filosofía Contemporánea', members: 1234, icon: '🤔' },
-  ];
+  // Someone who already had an account (or already posted) goes straight in.
+  useEffect(() => {
+    let active = true;
+    if (!uid) return;
+    getUserProfile(uid)
+      .then((profile) => {
+        if (!active) return;
+        const created = profile?.createdAt?.getTime?.() ?? Date.now();
+        const isExisting = Date.now() - created > NEW_ACCOUNT_MS || (profile?.postsCount ?? 0) > 0;
+        if (isExisting) {
+          safeSetItem('vinctus_onboarding_complete', 'true');
+          onComplete();
+        } else {
+          setChecking(false);
+        }
+      })
+      .catch(() => {
+        if (active) setChecking(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [uid, onComplete]);
 
-  const toggleInterest = (catId: string) => {
-    setSelectedInterests((prev) =>
-      prev.includes(catId) ? prev.filter((id) => id !== catId) : [...prev, catId],
-    );
-  };
+  // Real public groups, the ones of the chosen interests first.
+  useEffect(() => {
+    if (step !== 2 || groups) return;
+    let active = true;
+    getGroups()
+      .then((all) => {
+        if (active) setGroups(all.filter((group) => (group.visibility ?? 'public') === 'public'));
+      })
+      .catch(() => {
+        if (active) setGroups([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [step, groups]);
 
-  const toggleGroup = (groupId: number) => {
-    setSelectedGroups((prev) =>
-      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId],
-    );
-  };
+  const suggestedGroups = useMemo(() => {
+    if (!groups) return [];
+    const chosen = new Set(interests);
+    return [...groups]
+      .sort((a, b) => {
+        const byInterest =
+          Number(chosen.has(b.categoryId ?? '')) - Number(chosen.has(a.categoryId ?? ''));
+        return byInterest || (b.memberCount ?? 0) - (a.memberCount ?? 0);
+      })
+      .slice(0, GROUPS_TO_SHOW);
+  }, [groups, interests]);
 
-  const safeSetItem = (key: string, value: string): void => {
-    try {
-      localStorage.setItem(key, value);
-    } catch {
-      // ignore storage errors (private mode, quota, SSR)
+  const toggle = (list: string[], id: string) =>
+    list.includes(id) ? list.filter((item) => item !== id) : [...list, id];
+
+  const finish = async () => {
+    if (finishing) return;
+    setFinishing(true);
+    safeSetItem('vinctus_interests', JSON.stringify(interests));
+    if (uid) {
+      // One that fails doesn't stop the others or the welcome.
+      await Promise.allSettled([
+        ...interests.map((categoryId) => followCategoryWithSync(categoryId, uid)),
+        ...selectedGroups.map((groupId) => joinPublicGroup(groupId, uid)),
+      ]);
     }
-  };
-
-  const handleComplete = () => {
-    // Persist selections to localStorage
-    safeSetItem('vinctus_interests', JSON.stringify(selectedInterests));
-    safeSetItem('vinctus_groups', JSON.stringify(selectedGroups));
     safeSetItem('vinctus_onboarding_complete', 'true');
     onComplete();
   };
 
-  const nextStep = () => {
-    if (step < 2) {
-      setStep(step + 1);
-    } else {
-      handleComplete();
-    }
+  const canContinue = step !== 1 || interests.length >= MIN_INTERESTS;
+  const next = () => {
+    if (step < 2) setStep(step + 1);
+    else void finish();
   };
 
-  const canProceed = () => {
-    if (step === 1) return selectedInterests.length >= 2;
-    if (step === 2) return selectedGroups.length >= 1;
-    return true;
-  };
+  if (checking) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg">
+        <div className="h-7 w-7 animate-spin rounded-full border-2 border-brand-gold border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
-    <div className="fixed inset-0 bg-surface-base z-50 flex flex-col safe-area-inset">
-      {/* Progress dots */}
-      <div className="flex justify-center gap-2 pt-8 pb-4">
-        {[0, 1, 2].map((i) => (
+    <div className="safe-area-inset fixed inset-0 z-50 flex flex-col bg-bg">
+      <div className="flex justify-center gap-2 pb-4 pt-8" aria-hidden="true">
+        {[0, 1, 2].map((index) => (
           <div
-            key={i}
-            className={`w-2 h-2 rounded-full transition-all duration-300 ${
-              i === step ? 'w-8 bg-brand-gold' : i < step ? 'bg-brand-gold/50' : 'bg-neutral-700'
+            key={index}
+            className={`h-1.5 rounded-full transition-all duration-300 ${
+              index === step
+                ? 'w-8 bg-brand-gold'
+                : index < step
+                  ? 'w-1.5 bg-brand-gold/50'
+                  : 'w-1.5 bg-white/15'
             }`}
           />
         ))}
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-6 pb-32">
-        {/* Step 0: Welcome */}
+      <div className="flex-1 overflow-y-auto px-6 pb-40">
         {step === 0 && (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-up">
-            <div className="w-20 h-20 rounded-full bg-brand-gold/10 flex items-center justify-center mb-8">
-              <Sparkles size={40} className="text-brand-gold" />
+          <div className="mx-auto flex min-h-[60vh] max-w-sm flex-col items-center justify-center text-center animate-fade-up">
+            <div className="mb-8 flex h-20 w-20 items-center justify-center rounded-3xl bg-brand-gold/15">
+              <Sparkles size={36} className="text-brand-gold" />
             </div>
-            <h1 className="text-display-sm font-display text-white mb-4">
+            <h1 className="mb-4 font-display text-display-sm text-white">
               Bienvenido a <span className="text-brand-gold">Vinctus</span>
             </h1>
-            <p className="text-neutral-400 text-body-md max-w-sm mb-2">
+            <p className="mb-2 text-base text-neutral-300">
               Una red social basada en lo que realmente te apasiona.
             </p>
-            <p className="text-neutral-500 text-body-sm max-w-xs">
-              Conecta con personas que comparten tus intereses más profundos.
+            <p className="text-sm text-neutral-500">
+              Elige tus intereses y te mostraremos personas, grupos y temas que valen la pena.
             </p>
           </div>
         )}
 
-        {/* Step 1: Select Interests */}
         {step === 1 && (
-          <div className="animate-fade-up">
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 rounded-full bg-brand-gold/10 flex items-center justify-center mx-auto mb-6">
-                <BookOpen size={32} className="text-brand-gold" />
-              </div>
-              <h2 className="text-display-sm font-display text-white mb-2">¿Qué te apasiona?</h2>
-              <p className="text-neutral-500 text-body-sm">Selecciona al menos 2 intereses</p>
+          <div className="mx-auto max-w-md animate-fade-up">
+            <div className="mb-8 text-center">
+              <h2 className="mb-2 font-display text-display-sm text-white">¿Qué te apasiona?</h2>
+              <p className="text-sm text-neutral-500">
+                Elige al menos {MIN_INTERESTS}. Seguirás esas categorías y podrás cambiarlas cuando
+                quieras.
+              </p>
             </div>
-
-            <div className="grid grid-cols-2 gap-3 max-w-md mx-auto">
-              {CATEGORIES.map((cat) => {
-                const isSelected = selectedInterests.includes(cat.id);
+            <div className="grid grid-cols-2 gap-3">
+              {CATEGORIES.map((category) => {
+                const selected = interests.includes(category.id);
                 return (
                   <button
-                    key={cat.id}
-                    onClick={() => toggleInterest(cat.id)}
-                    className={`relative p-4 rounded-xl border text-left transition-all duration-200 press-scale ${
-                      isSelected
-                        ? 'bg-brand-gold/10 border-brand-gold/50 shadow-glow-gold'
-                        : 'bg-surface-overlay border-neutral-800 hover:border-neutral-700'
+                    key={category.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setInterests((previous) => toggle(previous, category.id))}
+                    className={`relative rounded-2xl border p-4 text-left transition-colors ${
+                      selected
+                        ? 'border-brand-gold/60 bg-brand-gold/10'
+                        : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20'
                     }`}
                   >
-                    <div className={`${cat.color} mb-2`}>
-                      <cat.icon size={24} strokeWidth={1.5} />
-                    </div>
+                    <category.icon
+                      size={24}
+                      strokeWidth={1.5}
+                      className={`mb-3 ${category.color}`}
+                    />
                     <span
-                      className={`text-sm font-medium ${isSelected ? 'text-white' : 'text-neutral-300'}`}
+                      className={`block text-sm font-medium ${selected ? 'text-white' : 'text-neutral-300'}`}
                     >
-                      {cat.label}
+                      {category.label}
                     </span>
-                    {isSelected && (
-                      <div className="absolute top-2 right-2">
-                        <Check size={16} className="text-brand-gold" />
-                      </div>
+                    {selected && (
+                      <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-brand-gold text-black">
+                        <Check size={12} strokeWidth={3} />
+                      </span>
                     )}
                   </button>
                 );
               })}
             </div>
-
-            <p className="text-center text-neutral-600 text-xs mt-6">
-              {selectedInterests.length} de 2 mínimo seleccionados
+            <p className="mt-5 text-center text-xs text-neutral-500">
+              {interests.length} {interests.length === 1 ? 'elegido' : 'elegidos'}
             </p>
           </div>
         )}
 
-        {/* Step 2: Join Groups */}
         {step === 2 && (
-          <div className="animate-fade-up">
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 rounded-full bg-brand-gold/10 flex items-center justify-center mx-auto mb-6">
-                <Users size={32} className="text-brand-gold" />
-              </div>
-              <h2 className="text-display-sm font-display text-white mb-2">
-                Únete a tu primer grupo
-              </h2>
-              <p className="text-neutral-500 text-body-sm">
-                Selecciona al menos 1 grupo para empezar
+          <div className="mx-auto max-w-md animate-fade-up">
+            <div className="mb-8 text-center">
+              <h2 className="mb-2 font-display text-display-sm text-white">Grupos para empezar</h2>
+              <p className="text-sm text-neutral-500">
+                Únete a los que te interesen. Puedes saltar este paso.
               </p>
             </div>
-
-            <div className="space-y-3 max-w-md mx-auto">
-              {SAMPLE_GROUPS.map((group) => {
-                const isSelected = selectedGroups.includes(group.id);
-                return (
-                  <button
-                    key={group.id}
-                    onClick={() => toggleGroup(group.id)}
-                    className={`w-full p-4 rounded-xl border flex items-center gap-4 transition-all duration-200 press-scale ${
-                      isSelected
-                        ? 'bg-brand-gold/10 border-brand-gold/50 shadow-glow-gold'
-                        : 'bg-surface-overlay border-neutral-800 hover:border-neutral-700'
-                    }`}
-                  >
-                    <span className="text-2xl">{group.icon}</span>
-                    <div className="flex-1 text-left">
-                      <p
-                        className={`font-medium ${isSelected ? 'text-white' : 'text-neutral-300'}`}
-                      >
-                        {group.name}
-                      </p>
-                      <p className="text-neutral-500 text-xs">
-                        {group.members.toLocaleString()} miembros
-                      </p>
-                    </div>
-                    <div
-                      className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                        isSelected ? 'bg-brand-gold border-brand-gold' : 'border-neutral-600'
+            {groups === null ? (
+              <div aria-hidden className="space-y-3">
+                {[0, 1, 2].map((index) => (
+                  <div key={index} className="skeleton h-[72px] rounded-2xl" />
+                ))}
+              </div>
+            ) : suggestedGroups.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-white/[0.08] py-10 text-center text-sm text-neutral-500">
+                Aún no hay grupos públicos. Podrás crear el primero desde tu perfil.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {suggestedGroups.map((group) => {
+                  const selected = selectedGroups.includes(group.id);
+                  return (
+                    <button
+                      key={group.id}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setSelectedGroups((previous) => toggle(previous, group.id))}
+                      className={`flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition-colors ${
+                        selected
+                          ? 'border-brand-gold/60 bg-brand-gold/10'
+                          : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20'
                       }`}
                     >
-                      {isSelected && <Check size={14} className="text-black" />}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-900">
+                        {group.iconUrl ? (
+                          <img src={group.iconUrl} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <Users size={19} className="text-neutral-500" />
+                        )}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium text-white">{group.name}</span>
+                        <span className="block text-xs text-neutral-500">
+                          {formatMembers(group.memberCount ?? 0)}
+                        </span>
+                      </span>
+                      <span
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${
+                          selected ? 'border-brand-gold bg-brand-gold' : 'border-white/25'
+                        }`}
+                      >
+                        {selected && <Check size={13} strokeWidth={3} className="text-black" />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Bottom CTA */}
-      <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-surface-base via-surface-base to-transparent">
-        <button
-          onClick={nextStep}
-          disabled={!canProceed()}
-          className={`w-full py-4 rounded-xl font-medium text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all btn-premium ${
-            canProceed()
-              ? 'bg-brand-gold text-black'
-              : 'bg-neutral-800 text-neutral-500 cursor-not-allowed'
-          }`}
-        >
-          {step === 2 ? 'Comenzar' : 'Continuar'}
-          <ArrowRight size={18} />
-        </button>
-
-        {step > 0 && (
+      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-bg via-bg to-transparent p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        <div className="mx-auto max-w-md">
           <button
-            onClick={() => setStep(step - 1)}
-            className="w-full mt-3 py-2 text-neutral-500 text-sm hover:text-white transition-colors"
+            type="button"
+            onClick={next}
+            disabled={!canContinue || finishing}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-brand-gold text-sm font-semibold text-black transition-opacity disabled:opacity-40"
           >
-            Volver
+            {finishing
+              ? 'Preparando tu Vinctus...'
+              : step === 2
+                ? selectedGroups.length > 0
+                  ? 'Unirme y empezar'
+                  : 'Empezar'
+                : 'Continuar'}
+            {!finishing && <ArrowRight size={17} />}
           </button>
-        )}
+          {step > 0 && (
+            <button
+              type="button"
+              onClick={() => setStep(step - 1)}
+              disabled={finishing}
+              className="mt-3 w-full py-2 text-sm text-neutral-500 transition-colors hover:text-white"
+            >
+              Atrás
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

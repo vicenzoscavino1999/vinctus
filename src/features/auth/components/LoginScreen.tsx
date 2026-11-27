@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/context/auth';
 import { LEGAL_LINKS } from '@/shared/constants';
 import { setMetricsFlow } from '@/shared/lib/devMetrics';
@@ -31,6 +32,7 @@ const LoginScreen = () => {
   const [displayName, setDisplayName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     setMetricsFlow('login');
@@ -176,12 +178,13 @@ const LoginScreen = () => {
 
       <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
         {/* Logo */}
-        <div className="mb-10 opacity-90 hover:opacity-100 transition-opacity duration-1000">
+        <div className="mb-10 flex flex-col items-center text-center">
           <img
             src="/image_fdd620.png"
             alt="Vinctus Logo"
-            className="w-auto h-14 md:h-16 object-contain"
+            className="h-14 w-auto object-contain opacity-90 md:h-16"
           />
+          <p className="mt-4 text-sm text-neutral-500">Conecta con comunidades de tu interés</p>
         </div>
 
         {/* reCAPTCHA container (invisible) */}
@@ -225,11 +228,12 @@ const LoginScreen = () => {
                     <input
                       type="tel"
                       placeholder="Número de celular"
+                      aria-label="Número de celular"
                       value={phoneNumber}
                       onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
                       required
                       maxLength={9}
-                      className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 pl-14 pr-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
+                      className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] py-3 pl-14 pr-4 text-white transition-colors placeholder:text-neutral-500 focus:border-white/25 focus:outline-none"
                     />
                   </div>
                   <p className="text-neutral-600 text-xs text-center italic">
@@ -241,11 +245,13 @@ const LoginScreen = () => {
                   <input
                     type="text"
                     placeholder="Código de 6 dígitos"
+                    aria-label="Código de 6 dígitos"
+                    inputMode="numeric"
                     value={verificationCode}
                     onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
                     required
                     maxLength={6}
-                    className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600 text-center tracking-[0.5em] text-lg"
+                    className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-white transition-colors placeholder:text-neutral-500 focus:border-white/25 focus:outline-none text-center tracking-[0.5em] text-lg"
                   />
                   <div className="text-center">
                     <p className="text-neutral-600 text-xs">Código enviado a +51{phoneNumber}</p>
@@ -262,7 +268,7 @@ const LoginScreen = () => {
 
               {/* Error message */}
               {displayedError && (
-                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm text-center">
+                <div className="p-3 rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-sm text-center">
                   {displayedError}
                 </div>
               )}
@@ -270,10 +276,10 @@ const LoginScreen = () => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-neutral-800 text-white py-3 px-6 font-medium hover:bg-neutral-700 active:bg-neutral-600 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded border border-neutral-700"
+                className="h-12 w-full rounded-xl bg-brand-gold px-6 font-semibold text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isLoading ? (
-                  <div className="w-5 h-5 mx-auto border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <div className="w-5 h-5 mx-auto animate-spin rounded-full border-2 border-black/30 border-t-black" />
                 ) : !phoneCodeSent ? (
                   'Enviar Código SMS'
                 ) : (
@@ -310,14 +316,14 @@ const LoginScreen = () => {
 
             {/* Success message */}
             {successMessage && (
-              <div className="w-full mb-6 p-3 bg-green-500/10 border border-green-500/30 rounded text-green-400 text-sm text-center">
+              <div className="w-full mb-6 p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-sm text-center">
                 {successMessage}
               </div>
             )}
 
             {/* Error message */}
             {displayedError && (
-              <div className="w-full mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm text-center">
+              <div className="w-full mb-4 p-3 rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-sm text-center">
                 {displayedError}
               </div>
             )}
@@ -326,6 +332,8 @@ const LoginScreen = () => {
               <input
                 type="email"
                 placeholder="Correo electrónico"
+                aria-label="Correo electrónico"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
@@ -333,15 +341,15 @@ const LoginScreen = () => {
                   if (localError) setLocalError(null);
                 }}
                 required
-                className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
+                className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-white transition-colors placeholder:text-neutral-500 focus:border-white/25 focus:outline-none"
               />
               <button
                 type="submit"
                 disabled={isLoading || !!successMessage}
-                className="w-full bg-white text-black py-3 px-6 font-medium hover:bg-neutral-100 active:bg-neutral-200 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded"
+                className="h-12 w-full rounded-xl bg-brand-gold px-6 font-semibold text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isLoading ? (
-                  <div className="w-5 h-5 mx-auto border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                  <div className="w-5 h-5 mx-auto animate-spin rounded-full border-2 border-black/30 border-t-black" />
                 ) : (
                   'Enviar Correo'
                 )}
@@ -352,23 +360,25 @@ const LoginScreen = () => {
           <>
             {/* Main Auth View */}
             {/* Tabs */}
-            <div className="flex w-full mb-6 border-b border-neutral-800">
+            <div className="mb-6 flex w-full rounded-full border border-white/[0.08] bg-white/[0.03] p-1">
               <button
                 onClick={() => switchMode('login')}
-                className={`flex-1 pb-3 text-sm tracking-wider uppercase transition-colors ${
+                aria-pressed={mode === 'login'}
+                className={`flex-1 rounded-full py-2 text-sm transition-colors ${
                   mode === 'login'
-                    ? 'text-white border-b-2 border-white'
-                    : 'text-neutral-500 hover:text-neutral-300'
+                    ? 'bg-white font-medium text-black'
+                    : 'text-neutral-400 hover:text-white'
                 }`}
               >
                 Entrar
               </button>
               <button
                 onClick={() => switchMode('register')}
-                className={`flex-1 pb-3 text-sm tracking-wider uppercase transition-colors ${
+                aria-pressed={mode === 'register'}
+                className={`flex-1 rounded-full py-2 text-sm transition-colors ${
                   mode === 'register'
-                    ? 'text-white border-b-2 border-white'
-                    : 'text-neutral-500 hover:text-neutral-300'
+                    ? 'bg-white font-medium text-black'
+                    : 'text-neutral-400 hover:text-white'
                 }`}
               >
                 Registro
@@ -377,14 +387,14 @@ const LoginScreen = () => {
 
             {/* Success message */}
             {successMessage && (
-              <div className="w-full mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded text-green-400 text-sm text-center">
+              <div className="w-full mb-4 p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-sm text-center">
                 {successMessage}
               </div>
             )}
 
             {/* Error message */}
             {displayedError && (
-              <div className="w-full mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm text-center">
+              <div className="w-full mb-4 p-3 rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-sm text-center">
                 {displayedError}
               </div>
             )}
@@ -395,29 +405,45 @@ const LoginScreen = () => {
                 <input
                   type="text"
                   placeholder="Nombre (opcional)"
+                  aria-label="Nombre (opcional)"
+                  autoComplete="name"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   maxLength={120}
-                  className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
+                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-white transition-colors placeholder:text-neutral-500 focus:border-white/25 focus:outline-none"
                 />
               )}
               <input
                 type="email"
                 placeholder="Correo electrónico"
+                aria-label="Correo electrónico"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
+                className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-white transition-colors placeholder:text-neutral-500 focus:border-white/25 focus:outline-none"
               />
-              <input
-                type="password"
-                placeholder="Contraseña"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                className="w-full bg-neutral-900/50 border border-neutral-800 text-white py-3 px-4 rounded focus:outline-none focus:border-neutral-600 transition-colors placeholder:text-neutral-600"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Contraseña"
+                  aria-label="Contraseña"
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-white transition-colors placeholder:text-neutral-500 focus:border-white/25 focus:outline-none pr-12"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((previous) => !previous)}
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-neutral-500 transition-colors hover:text-white"
+                >
+                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
 
               {mode === 'login' && (
                 <div className="w-full flex justify-end">
@@ -434,10 +460,10 @@ const LoginScreen = () => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-white text-black py-3 px-6 font-medium hover:bg-neutral-100 active:bg-neutral-200 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded"
+                className="h-12 w-full rounded-xl bg-brand-gold px-6 font-semibold text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isLoading ? (
-                  <div className="w-5 h-5 mx-auto border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                  <div className="w-5 h-5 mx-auto animate-spin rounded-full border-2 border-black/30 border-t-black" />
                 ) : mode === 'login' ? (
                   'Entrar'
                 ) : (
@@ -457,7 +483,7 @@ const LoginScreen = () => {
             <button
               onClick={handleGoogleSignIn}
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-3 bg-neutral-900 text-white py-3 px-6 border border-neutral-800 hover:bg-neutral-800 active:bg-neutral-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded"
+              className="flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-white/[0.1] bg-white/[0.03] px-6 text-white transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {/* Google Icon */}
               <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -485,7 +511,7 @@ const LoginScreen = () => {
               <button
                 onClick={handleAppleSignIn}
                 disabled={isLoading}
-                className="mt-3 w-full flex items-center justify-center gap-3 bg-black text-white py-3 px-6 border border-neutral-700 hover:bg-neutral-900 active:bg-neutral-800 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded"
+                className="mt-3 flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-white/[0.1] bg-black px-6 text-white transition-colors hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                   <path d="M16.7 12.6c0-2.2 1.8-3.3 1.9-3.3-1-1.6-2.7-1.8-3.2-1.8-1.4-.1-2.7.8-3.4.8-.7 0-1.8-.8-3-.7-1.5 0-2.9.9-3.7 2.3-1.6 2.8-.4 6.9 1.1 9 .8 1 1.7 2 2.9 2 .8 0 1.1-.3 2.2-.3s1.4.3 2.3.3c1.2 0 2-.9 2.8-1.9.9-1.1 1.3-2.2 1.3-2.2-.1 0-2.2-.9-2.2-4.2zM14.7 6.2c.6-.7 1-1.7.9-2.7-.9 0-2 .6-2.7 1.3-.6.7-1.1 1.7-.9 2.7 1 0 2-.5 2.7-1.3z" />
@@ -505,10 +531,7 @@ const LoginScreen = () => {
         )}
 
         {/* Footer note */}
-        <p className="text-center pt-6 text-neutral-700 text-[10px] font-light uppercase tracking-wider">
-          Conecta con comunidades de tu interés
-        </p>
-        <div className="mt-4 flex flex-wrap justify-center gap-3 text-[10px] text-neutral-500">
+        <div className="mt-8 flex flex-wrap justify-center gap-x-3 gap-y-1 text-[11px] text-neutral-500">
           <a
             href={LEGAL_LINKS.privacyPolicyPublicUrl}
             target="_blank"
