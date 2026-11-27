@@ -17,16 +17,14 @@ test.describe('Smoke e2e', () => {
     const createPostButton = page.getByLabel(/Crear publicaci/i);
     await createPostButton.click();
 
-    await expect(page.getByRole('heading', { name: /Crear Publicacion/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Crear publicaci/i })).toBeVisible();
 
-    await page
-      .getByPlaceholder(/Escribe la descripcion de tu publicacion/i)
-      .fill(`Smoke post ${Date.now()}`);
+    await page.getByLabel('Descripción de la publicación').fill(`Smoke post ${Date.now()}`);
 
     await page.getByRole('button', { name: /^Publicar$/ }).click();
 
     await page.waitForURL('**/feed', { timeout: 15000 });
-    await expect(page.getByRole('heading', { name: /Crear Publicacion/i })).toBeHidden();
+    await expect(page.getByRole('heading', { name: /Crear publicaci/i })).toBeHidden();
   });
 
   test('@smoke crear publicacion desde perfil y grupo, verla y abrir su detalle', async ({
@@ -45,9 +43,9 @@ test.describe('Smoke e2e', () => {
 
     const profileDialog = page.getByRole('dialog', { name: 'Crear publicación' });
     const profileTitle = `Post desde perfil ${Date.now()}`;
-    await profileDialog.getByLabel('Titulo (opcional)').fill(profileTitle);
+    await profileDialog.getByLabel('Título (opcional)').fill(profileTitle);
     await profileDialog
-      .getByPlaceholder(/Escribe la descripcion de tu publicacion/i)
+      .getByLabel('Descripción de la publicación')
       .fill('Cuerpo completo creado desde Mi Perfil.');
     await profileDialog.getByRole('button', { name: /^Publicar$/ }).click();
     await expect(profileDialog).toHaveCount(0, { timeout: 20000 });
@@ -69,9 +67,9 @@ test.describe('Smoke e2e', () => {
 
     const groupDialog = page.getByRole('dialog', { name: 'Crear publicación' });
     const groupTitle = `Post de grupo ${Date.now()}`;
-    await groupDialog.getByLabel('Titulo (opcional)').fill(groupTitle);
+    await groupDialog.getByLabel('Título (opcional)').fill(groupTitle);
     await groupDialog
-      .getByPlaceholder(/Escribe la descripcion de tu publicacion/i)
+      .getByLabel('Descripción de la publicación')
       .fill('Debate publicado directamente dentro del grupo.');
     await groupDialog.getByRole('button', { name: /^Publicar$/ }).click();
     await expect(groupDialog).toHaveCount(0, { timeout: 20000 });

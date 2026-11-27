@@ -1,8 +1,9 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Image as ImageIcon, Loader2, Film, FileText, Link2 } from 'lucide-react';
+import { X, Image as ImageIcon, Loader2, Film, FileText, Link2, Play } from 'lucide-react';
 import { useAuth } from '@/context/auth';
 import { useCreatePost } from '@/features/posts/hooks/useCreatePost';
+import { useGroupName } from '@/features/posts/hooks/useGroupName';
 import { formatBytes } from '@/shared/lib/formatUtils';
 import { formatYouTubeDuration, formatYouTubeViews } from '@/shared/lib/youtubeApi';
 import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
@@ -39,6 +40,8 @@ const CreatePostSession = ({
   onCreated,
 }: CreatePostModalProps) => {
   const formId = useId();
+  const groupName = useGroupName(groupId);
+  const [showYoutubeField, setShowYoutubeField] = useState(false);
   const {
     user,
     title,
@@ -90,197 +93,171 @@ const CreatePostSession = ({
 
   if (!isOpen) return null;
 
+  const mediaLocked =
+    isSubmitting || isPreparingMedia || draftRestoring || usedMediaSlots >= MAX_ATTACHMENTS;
+  const showYoutube = showYoutubeField || youtubeUrl.trim().length > 0;
+  const nearLimit = (value: string, limit: number) => value.length >= limit * 0.8;
+  const toolButton =
+    'flex h-10 items-center gap-2 rounded-full px-3 text-sm text-neutral-300 transition-colors hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-40';
+  const removeButton =
+    'absolute right-2 top-2 rounded-full bg-black/70 p-1.5 text-white transition-opacity md:opacity-0 md:group-hover:opacity-100';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset bg-black/70 p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm md:items-center md:p-4">
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Crear publicación"
-        className="bg-[#1a1a1a] border border-neutral-800 rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col"
+        className="flex h-[94dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-white/[0.08] bg-neutral-950 pb-[env(safe-area-inset-bottom)] md:h-auto md:max-h-[90vh] md:max-w-xl md:rounded-3xl md:pb-0"
       >
-        <div className="flex items-center justify-between p-4 border-b border-neutral-800">
-          <h2 className="text-lg font-medium text-white">Crear Publicacion</h2>
+        <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
           <button
             onClick={() => void closeEditor().catch(() => {})}
             disabled={isSubmitting || isPreparingMedia || (draftRestoring && !draftError)}
-            className="text-neutral-400 hover:text-white transition-colors disabled:opacity-50"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-50"
             aria-label="Cerrar"
           >
-            <X size={24} />
+            <X size={20} />
           </button>
+          <h2 className="font-display text-lg text-white">Crear publicación</h2>
+          <span className="w-9" aria-hidden="true" />
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="mb-4 text-xs text-neutral-400">
-            <p role="status">
-              {draftError
-                ? 'Borrador pendiente de recuperar o guardar'
-                : draftRestoring
-                  ? 'Recuperando borrador…'
-                  : draftSaving
-                    ? 'Guardando borrador…'
-                    : 'Borrador guardado en este dispositivo'}
-            </p>
-            {draftError && (
-              <div role="alert" className="mt-2 text-amber-300">
-                <p>{draftError} No cierres el editor si tienes cambios sin guardar.</p>
-                <button
-                  type="button"
-                  onClick={() => void retryDraftSave().catch(() => {})}
-                  className="mt-1 underline"
-                >
-                  Reintentar guardado
-                </button>
-              </div>
-            )}
-            <button
-              type="button"
-              disabled={isSubmitting || isPreparingMedia || draftRestoring}
-              className="mt-2 text-neutral-500 underline disabled:opacity-50"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    '¿Descartar este borrador y sus adjuntos guardados en este dispositivo?',
-                  )
-                )
-                  void discardDraft().catch(() => {});
-              }}
-            >
-              Descartar borrador
-            </button>
-          </div>
-          <div className="flex items-center gap-3 mb-4">
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {/* Who publishes and where. */}
+          <div className="mb-4 flex items-center gap-3">
             {user?.photoURL ? (
               <img
                 src={user.photoURL}
                 alt={user.displayName || 'Usuario'}
-                className="w-12 h-12 rounded-full object-cover"
+                className="h-10 w-10 rounded-full object-cover"
               />
             ) : (
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-black font-medium text-lg">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 font-semibold text-black">
                 {(user?.displayName || 'U').charAt(0).toUpperCase()}
               </div>
             )}
-            <div>
-              <p className="text-white font-medium">{user?.displayName || 'Usuario'}</p>
-              <p className="text-neutral-500 text-sm">{user?.email || ''}</p>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-white">
+                {user?.displayName || 'Usuario'}
+              </p>
+              <p className="truncate text-xs text-neutral-500">
+                {groupId
+                  ? `Se publicará en ${groupName ?? 'el grupo'}`
+                  : 'Se publicará en tu perfil'}
+              </p>
             </div>
           </div>
 
-          <div className="mb-4">
-            <label
-              htmlFor={`${formId}-title`}
-              className="block text-xs text-neutral-500 uppercase tracking-wider mb-2"
-            >
-              Titulo (opcional)
-            </label>
-            <input
-              id={`${formId}-title`}
-              type="text"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Escribe un titulo breve"
-              className="w-full bg-neutral-900/40 border border-neutral-800 rounded-lg px-4 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-              maxLength={LIMITS.posts.titleMaxLength}
-              disabled={isSubmitting || draftRestoring}
-            />
-            <div className="text-right text-xs text-neutral-600 mt-1">
+          <input
+            id={`${formId}-title`}
+            type="text"
+            aria-label="Título (opcional)"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Título (opcional)"
+            className="w-full bg-transparent font-display text-2xl text-white placeholder-neutral-600 focus:outline-none"
+            maxLength={LIMITS.posts.titleMaxLength}
+            disabled={isSubmitting || draftRestoring}
+          />
+          {nearLimit(title, LIMITS.posts.titleMaxLength) && (
+            <p className="mt-1 text-right text-xs tabular-nums text-neutral-500">
               {title.length}/{LIMITS.posts.titleMaxLength}
-            </div>
-          </div>
+            </p>
+          )}
 
           <textarea
             disabled={draftRestoring}
             aria-label="Descripción de la publicación"
             value={text}
             onChange={(event) => setText(event.target.value)}
-            placeholder="Escribe la descripcion de tu publicacion"
-            className="w-full h-32 bg-transparent text-white placeholder-neutral-500 resize-none focus:outline-none text-base leading-relaxed"
+            placeholder="¿Qué quieres compartir?"
+            className="mt-3 min-h-[9rem] w-full resize-none bg-transparent text-[17px] leading-relaxed text-white placeholder-neutral-500 focus:outline-none"
             maxLength={LIMITS.posts.textMaxLength}
             autoFocus
           />
+          {nearLimit(text, LIMITS.posts.textMaxLength) && (
+            <p className="text-right text-xs tabular-nums text-neutral-500">
+              {text.length}/{LIMITS.posts.textMaxLength}
+            </p>
+          )}
 
-          <div className="text-right text-neutral-500 text-sm">
-            {text.length}/{LIMITS.posts.textMaxLength}
-          </div>
-
-          <div className="mt-4">
-            <label
-              htmlFor={`${formId}-youtube`}
-              className="block text-xs text-neutral-500 uppercase tracking-wider mb-2"
-            >
-              Link de YouTube (opcional)
-            </label>
-            <div className="relative">
-              <Link2
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500"
-              />
-              <input
-                id={`${formId}-youtube`}
-                type="url"
-                value={youtubeUrl}
-                onChange={(event) => setYoutubeUrl(event.target.value)}
-                placeholder="https://www.youtube.com/watch?v=..."
-                className="w-full bg-neutral-900/40 border border-neutral-800 rounded-lg pl-10 pr-4 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-                disabled={isSubmitting || draftRestoring}
-              />
-            </div>
-            {youtubeUrl.trim() && (
-              <p className={`mt-2 text-xs ${youtubeMeta ? 'text-emerald-400' : 'text-red-400'}`}>
-                {youtubeMeta
-                  ? 'Video de YouTube detectado correctamente.'
-                  : 'Link invalido. Usa youtube.com o youtu.be.'}
-              </p>
-            )}
-            {youtubeLoading && (
-              <p className="mt-2 text-xs text-neutral-400">Consultando metadata de YouTube...</p>
-            )}
-            {youtubeError && !youtubeLoading && (
-              <p className="mt-2 text-xs text-amber-300">{youtubeError}</p>
-            )}
-            {youtubeDetails && youtubeMeta && (
-              <div
-                className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
-                  youtubeDetails.embeddable
-                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
-                    : 'border-red-500/40 bg-red-500/10 text-red-200'
-                }`}
-              >
-                <p className="font-medium text-sm text-white line-clamp-2">
-                  {youtubeDetails.title || 'Video de YouTube'}
-                </p>
-                <p className="mt-1 text-neutral-300">
-                  {youtubeDetails.channelTitle || 'Canal desconocido'}
-                  {formatYouTubeDuration(youtubeDetails.durationIso)
-                    ? ` - ${formatYouTubeDuration(youtubeDetails.durationIso)}`
-                    : ''}
-                  {formatYouTubeViews(youtubeDetails.viewCount)
-                    ? ` - ${formatYouTubeViews(youtubeDetails.viewCount)} vistas`
-                    : ''}
-                </p>
-                <p className="mt-1">
-                  {youtubeDetails.embeddable
-                    ? 'Listo para reproducirse dentro de Vinctus.'
-                    : 'YouTube indica que este video no permite embed.'}
-                </p>
+          {showYoutube && (
+            <div className="mt-4">
+              <label htmlFor={`${formId}-youtube`} className="sr-only">
+                Enlace de YouTube (opcional)
+              </label>
+              <div className="relative">
+                <Link2
+                  size={16}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500"
+                />
+                <input
+                  id={`${formId}-youtube`}
+                  type="url"
+                  value={youtubeUrl}
+                  onChange={(event) => setYoutubeUrl(event.target.value)}
+                  placeholder="Pega un enlace de YouTube"
+                  className="h-11 w-full rounded-full border border-white/10 bg-white/[0.03] pl-11 pr-4 text-sm text-white placeholder-neutral-500 transition-colors focus:border-white/25 focus:outline-none"
+                  disabled={isSubmitting || draftRestoring}
+                />
               </div>
-            )}
-          </div>
+              {youtubeUrl.trim() && (
+                <p className={`mt-2 text-xs ${youtubeMeta ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {youtubeMeta
+                    ? 'Video de YouTube detectado correctamente.'
+                    : 'Enlace inválido. Usa youtube.com o youtu.be.'}
+                </p>
+              )}
+              {youtubeLoading && (
+                <p className="mt-2 text-xs text-neutral-400">Consultando el video…</p>
+              )}
+              {youtubeError && !youtubeLoading && (
+                <p className="mt-2 text-xs text-amber-300">{youtubeError}</p>
+              )}
+              {youtubeDetails && youtubeMeta && (
+                <div
+                  className={`mt-3 rounded-2xl border px-4 py-3 text-xs ${
+                    youtubeDetails.embeddable
+                      ? 'border-white/10 bg-white/[0.03] text-neutral-300'
+                      : 'border-red-500/40 bg-red-500/10 text-red-200'
+                  }`}
+                >
+                  <p className="line-clamp-2 text-sm font-medium text-white">
+                    {youtubeDetails.title || 'Video de YouTube'}
+                  </p>
+                  <p className="mt-1 text-neutral-400">
+                    {youtubeDetails.channelTitle || 'Canal desconocido'}
+                    {formatYouTubeDuration(youtubeDetails.durationIso)
+                      ? ` · ${formatYouTubeDuration(youtubeDetails.durationIso)}`
+                      : ''}
+                    {formatYouTubeViews(youtubeDetails.viewCount)
+                      ? ` · ${formatYouTubeViews(youtubeDetails.viewCount)} vistas`
+                      : ''}
+                  </p>
+                  <p className="mt-1">
+                    {youtubeDetails.embeddable
+                      ? 'Se reproducirá dentro de Vinctus.'
+                      : 'YouTube no permite reproducir este video dentro de Vinctus.'}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {imageAttachments.length > 0 && (
             <div className="mt-4 grid grid-cols-2 gap-2">
               {imageAttachments.map((imageAttachment) => (
-                <div key={imageAttachment.id} className="relative group">
+                <div key={imageAttachment.id} className="group relative">
                   <img
                     src={imageAttachment.previewUrl}
                     alt="Preview"
-                    className="w-full h-40 object-cover rounded-lg"
+                    className="h-40 w-full rounded-2xl object-cover"
                   />
                   {!isSubmitting && (
                     <button
                       onClick={() => removeAttachment(imageAttachment.id)}
-                      className="absolute top-2 right-2 bg-black/70 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className={removeButton}
                       aria-label="Eliminar imagen adjunta"
                     >
                       <X size={16} />
@@ -291,56 +268,33 @@ const CreatePostSession = ({
             </div>
           )}
 
-          {videoAttachments.length > 0 && (
+          {videoAttachments.length + fileAttachments.length > 0 && (
             <div className="mt-4 space-y-2">
-              {videoAttachments.map((videoAttachment) => (
+              {[
+                ...videoAttachments.map((item) => ({ item, kind: 'video' as const })),
+                ...fileAttachments.map((item) => ({ item, kind: 'file' as const })),
+              ].map(({ item, kind }) => (
                 <div
-                  key={videoAttachment.id}
-                  className="flex items-center justify-between gap-3 bg-neutral-900/60 border border-neutral-800 rounded-lg px-3 py-2"
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] px-4 py-3"
                 >
-                  <div className="flex items-center gap-2 text-neutral-300 text-sm">
-                    <Film size={16} className="text-sky-300" />
-                    <span className="truncate">{videoAttachment.file.name}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-neutral-500">
-                      {formatBytes(videoAttachment.file.size)}
-                    </span>
-                    {!isSubmitting && (
-                      <button
-                        onClick={() => removeAttachment(videoAttachment.id)}
-                        className="text-neutral-500 hover:text-white"
-                        aria-label="Eliminar video adjunto"
-                      >
-                        <X size={14} />
-                      </button>
+                  <div className="flex min-w-0 items-center gap-2 text-sm text-neutral-200">
+                    {kind === 'video' ? (
+                      <Film size={16} className="shrink-0 text-brand-gold/80" />
+                    ) : (
+                      <FileText size={16} className="shrink-0 text-brand-gold/80" />
                     )}
+                    <span className="truncate">{item.file.name}</span>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {fileAttachments.length > 0 && (
-            <div className="mt-4 space-y-2">
-              {fileAttachments.map((fileAttachment) => (
-                <div
-                  key={fileAttachment.id}
-                  className="flex items-center justify-between gap-3 bg-neutral-900/60 border border-neutral-800 rounded-lg px-3 py-2"
-                >
-                  <div className="flex items-center gap-2 text-neutral-300 text-sm">
-                    <FileText size={16} className="text-emerald-300" />
-                    <span className="truncate">{fileAttachment.file.name}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-neutral-500">
-                      {formatBytes(fileAttachment.file.size)}
-                    </span>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="text-xs text-neutral-500">{formatBytes(item.file.size)}</span>
                     {!isSubmitting && (
                       <button
-                        onClick={() => removeAttachment(fileAttachment.id)}
-                        className="text-neutral-500 hover:text-white"
-                        aria-label="Eliminar archivo adjunto"
+                        onClick={() => removeAttachment(item.id)}
+                        className="text-neutral-500 transition-colors hover:text-white"
+                        aria-label={
+                          kind === 'video' ? 'Eliminar video adjunto' : 'Eliminar archivo adjunto'
+                        }
                       >
                         <X size={14} />
                       </button>
@@ -354,7 +308,7 @@ const CreatePostSession = ({
           {error && (
             <div
               role="alert"
-              className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm"
+              className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
             >
               {error}
             </div>
@@ -368,13 +322,13 @@ const CreatePostSession = ({
 
           {isSubmitting && progress.total > 0 && (
             <div className="mt-4">
-              <div className="flex justify-between text-sm text-neutral-400 mb-2">
-                <span>Subiendo archivos...</span>
-                <span>{progress.percent}%</span>
+              <div className="mb-2 flex justify-between text-sm text-neutral-400">
+                <span>Subiendo archivos…</span>
+                <span className="tabular-nums">{progress.percent}%</span>
               </div>
-              <div className="w-full bg-neutral-800 rounded-full h-2">
+              <div className="h-1.5 w-full rounded-full bg-neutral-800">
                 <div
-                  className="bg-amber-500 h-2 rounded-full transition-all duration-300"
+                  className="h-1.5 rounded-full bg-brand-gold transition-all duration-300"
                   style={{ width: `${progress.percent}%` }}
                 />
               </div>
@@ -382,8 +336,55 @@ const CreatePostSession = ({
           )}
         </div>
 
-        <div className="p-4 border-t border-neutral-800 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="border-t border-white/[0.06] px-4 pb-3 pt-2">
+          {/* The draft: saved on this device, or what went wrong. */}
+          <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-neutral-500">
+            <p role="status">
+              {draftError
+                ? 'Borrador pendiente de recuperar o guardar'
+                : draftRestoring
+                  ? 'Recuperando borrador…'
+                  : draftSaving
+                    ? 'Guardando borrador…'
+                    : 'Borrador guardado en este dispositivo'}
+            </p>
+            <button
+              type="button"
+              aria-label="Descartar borrador"
+              disabled={isSubmitting || isPreparingMedia || draftRestoring}
+              className="text-neutral-400 underline-offset-2 transition-colors hover:text-white hover:underline disabled:opacity-50"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    '¿Descartar este borrador y sus adjuntos guardados en este dispositivo?',
+                  )
+                )
+                  void discardDraft().catch(() => {});
+              }}
+            >
+              Descartar
+            </button>
+            {usedMediaSlots > 0 && (
+              <span className="ml-auto tabular-nums">
+                {usedMediaSlots}/{MAX_ATTACHMENTS} · {formatBytes(totalAttachmentSize)}
+                {youtubeMeta ? ' · YouTube' : ''}
+              </span>
+            )}
+          </div>
+          {draftError && (
+            <div role="alert" className="mb-2 px-1 text-xs text-amber-300">
+              <p>{draftError} No cierres el editor si tienes cambios sin guardar.</p>
+              <button
+                type="button"
+                onClick={() => void retryDraftSave().catch(() => {})}
+                className="mt-1 underline"
+              >
+                Reintentar guardado
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-center gap-1">
             <input
               ref={imageInputRef}
               aria-label="Seleccionar imágenes de la publicación"
@@ -411,69 +412,50 @@ const CreatePostSession = ({
               onChange={handleFileSelect}
               className="hidden"
             />
-            <button
-              onClick={openImagePicker}
-              disabled={
-                isSubmitting ||
-                isPreparingMedia ||
-                draftRestoring ||
-                usedMediaSlots >= MAX_ATTACHMENTS
-              }
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-300 hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <button onClick={openImagePicker} disabled={mediaLocked} className={toolButton}>
               <ImageIcon size={20} />
-              <span className="text-sm">Imagenes</span>
+              <span className="hidden sm:inline">Fotos</span>
+              <span className="sr-only sm:hidden">Fotos</span>
             </button>
-            <button
-              onClick={openVideoPicker}
-              disabled={
-                isSubmitting ||
-                isPreparingMedia ||
-                draftRestoring ||
-                usedMediaSlots >= MAX_ATTACHMENTS
-              }
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-300 hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <button onClick={openVideoPicker} disabled={mediaLocked} className={toolButton}>
               <Film size={20} />
-              <span className="text-sm">Videos</span>
+              <span className="hidden sm:inline">Video</span>
+              <span className="sr-only sm:hidden">Video</span>
+            </button>
+            <button onClick={openFilePicker} disabled={mediaLocked} className={toolButton}>
+              <FileText size={20} />
+              <span className="hidden sm:inline">Archivo</span>
+              <span className="sr-only sm:hidden">Archivo</span>
             </button>
             <button
-              onClick={openFilePicker}
-              disabled={
-                isSubmitting ||
-                isPreparingMedia ||
-                draftRestoring ||
-                usedMediaSlots >= MAX_ATTACHMENTS
-              }
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-300 hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              type="button"
+              onClick={() => setShowYoutubeField(true)}
+              disabled={isSubmitting || draftRestoring}
+              aria-pressed={showYoutube}
+              className={`${toolButton} ${showYoutube ? 'text-white' : ''}`}
             >
-              <FileText size={20} />
-              <span className="text-sm">Archivos</span>
+              <Play size={20} />
+              <span className="hidden sm:inline">YouTube</span>
+              <span className="sr-only sm:hidden">YouTube</span>
             </button>
-            {usedMediaSlots > 0 && (
-              <span className="text-xs text-neutral-500 w-full sm:w-auto">
-                {usedMediaSlots}/{MAX_ATTACHMENTS} - {formatBytes(totalAttachmentSize)}
-                {youtubeMeta ? ' + 1 enlace YouTube' : ''}
-              </span>
-            )}
-          </div>
 
-          <button
-            onClick={() => void handleSubmit()}
-            disabled={!canSubmit}
-            className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-medium rounded-lg hover:from-amber-600 hover:to-amber-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 size={18} className="animate-spin" />
-                Publicando...
-              </>
-            ) : isPublished ? (
-              'Abrir publicación'
-            ) : (
-              'Publicar'
-            )}
-          </button>
+            <button
+              onClick={() => void handleSubmit()}
+              disabled={!canSubmit}
+              className="ml-auto flex h-10 items-center justify-center gap-2 rounded-full bg-brand-gold px-5 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Publicando...
+                </>
+              ) : isPublished ? (
+                'Abrir publicación'
+              ) : (
+                'Publicar'
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

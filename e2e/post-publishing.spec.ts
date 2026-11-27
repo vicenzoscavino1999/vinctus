@@ -47,7 +47,7 @@ test('@smoke restores closed and reloaded drafts, partial media uploads and lost
     .click();
   const dialog = page.getByRole('dialog', { name: 'Crear publicación' });
   const title = `Adjuntos con recuperación ${Date.now()}`;
-  await dialog.getByLabel('Titulo (opcional)').fill(title);
+  await dialog.getByLabel('Título (opcional)').fill(title);
   await dialog.getByLabel('Seleccionar imágenes de la publicación').setInputFiles(photo);
   await expect(dialog.locator('img[src^="blob:"]')).toHaveCount(1, { timeout: 10000 });
   await dialog.getByLabel('Seleccionar videos de la publicación').setInputFiles(video);
@@ -58,7 +58,7 @@ test('@smoke restores closed and reloaded drafts, partial media uploads and lost
       .getByLabel(/Crear publicaci/i)
       .first()
       .click();
-    await expect(dialog.getByLabel('Titulo (opcional)')).toHaveValue(title);
+    await expect(dialog.getByLabel('Título (opcional)')).toHaveValue(title);
     await expect(dialog.locator('img[src^="blob:"]')).toHaveCount(1);
     await expect(dialog.getByText('clip.mp4', { exact: true })).toBeVisible();
     await expect(dialog.getByText('notes.pdf', { exact: true })).toBeVisible();
@@ -95,7 +95,7 @@ test('@smoke restores closed and reloaded drafts, partial media uploads and lost
   await dialog.getByRole('button', { name: 'Publicar', exact: true }).click();
   await expect(dialog.getByRole('alert')).toBeVisible({ timeout: 20000 });
   expect(rejected).toBe(true);
-  await expect(dialog.getByLabel('Titulo (opcional)')).toHaveValue(title);
+  await expect(dialog.getByLabel('Título (opcional)')).toHaveValue(title);
   const project = process.env.FIREBASE_PROJECT_ID || 'vinctus-dev';
   const list = async () => {
     const response = await page.request.get(
