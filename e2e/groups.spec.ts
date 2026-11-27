@@ -47,6 +47,7 @@ test.describe('Flujo de Grupos', () => {
     await expect(joinedButton).toBeVisible({ timeout: 10000 });
 
     page.once('dialog', (dialog) => dialog.accept());
+    await page.getByRole('button', { name: 'Opciones del grupo' }).click();
     await page.getByRole('button', { name: /^Salir$/ }).click();
     await expect(joinButton).toBeVisible({ timeout: 10000 });
   });
@@ -101,6 +102,7 @@ test.describe('Flujo de Grupos', () => {
       await waitForAuthenticatedShell(page);
       await page.goto(`/group/${groupId}`);
       await waitForGroupDetailReady(page, new RegExp(initialName, 'i'), 30000);
+      await page.getByRole('button', { name: 'Opciones del grupo' }).click();
       await page.getByRole('button', { name: /Editar grupo/i }).click();
       await page.waitForURL(new RegExp(`/group/${groupId}/edit`));
       const nameInput = page.locator('form input:not([type="file"])').first();
@@ -109,7 +111,7 @@ test.describe('Flujo de Grupos', () => {
       await page.getByRole('button', { name: /Guardar cambios/i }).click();
       await page.waitForURL(new RegExp(`/group/${groupId}$`));
       await waitForGroupDetailReady(page, new RegExp(editedName, 'i'), 30000);
-      await expect(page.getByText(/1 miembros/i)).toBeVisible();
+      await expect(page.getByText(/1 miembro/i)).toBeVisible();
 
       // Bob (non-member) sees private access lock and sends a join request.
       await prepareOnboardingState(bobPage);
@@ -150,6 +152,7 @@ test.describe('Flujo de Grupos', () => {
       await expect(bobPage.getByRole('button', { name: /Ver miembros/i })).toBeVisible();
 
       bobPage.once('dialog', (dialog) => dialog.accept());
+      await bobPage.getByRole('button', { name: 'Opciones del grupo' }).click();
       await bobPage.getByRole('button', { name: /^Salir$/ }).click();
       await expect(bobPage.getByRole('button', { name: /^Solicitar$/i })).toBeVisible({
         timeout: 15000,

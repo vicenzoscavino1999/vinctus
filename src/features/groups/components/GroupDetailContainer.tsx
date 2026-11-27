@@ -64,6 +64,24 @@ const getPostTitle = (title: string | null | undefined, content: string): string
   return `${firstLine.slice(0, 87)}...`;
 };
 
+type GroupPost = Awaited<ReturnType<typeof getPostsByGroup>>['items'][number];
+
+/** A post of the group as its row shows it: title, author, age, photo and counters. */
+const toRecentPost = (post: GroupPost): RecentPost => {
+  const media = (post as { media?: { type: string; url: string }[] }).media ?? [];
+  const counts = post as { likeCount?: number; commentCount?: number };
+  return {
+    id: post.id,
+    title: getPostTitle(post.title ?? null, getPostBodyText(post)),
+    author: getPostAuthorName(post),
+    time: formatRelativeTime(post.createdAt.toDate()),
+    imageUrl: media.find((item) => item.type === 'image')?.url ?? null,
+    hasVideo: media.some((item) => item.type === 'video'),
+    likeCount: Math.max(0, counts.likeCount ?? 0),
+    commentCount: Math.max(0, counts.commentCount ?? 0),
+  };
+};
+
 const GroupDetailSession = () => {
   const { groupId } = useParams<{ groupId: string }>();
   const navigate = useNavigate();
@@ -155,12 +173,7 @@ const GroupDetailSession = () => {
         blockedUidsRef.current = blockedSet;
         const visibleMemberRows = memberRows.filter((member) => !blockedSet.has(member.uid));
 
-        const recent = postsResult.items.map((post) => ({
-          id: post.id,
-          title: getPostTitle(post.title ?? null, getPostBodyText(post)),
-          author: getPostAuthorName(post),
-          time: formatRelativeTime(post.createdAt.toDate()),
-        })) as RecentPost[];
+        const recent = postsResult.items.map(toRecentPost);
 
         if (!isActive) return;
 
@@ -257,6 +270,7 @@ const GroupDetailSession = () => {
         icon: (group.name || 'G').charAt(0).toUpperCase(),
         recentPosts,
         topMembers,
+        isPrivate: visibility === 'private',
       }
     : null;
 
@@ -322,12 +336,7 @@ const GroupDetailSession = () => {
       ]);
       if (seq !== refreshSeqRef.current) return;
 
-      const recent = postsResult.items.map((post) => ({
-        id: post.id,
-        title: getPostTitle(post.title ?? null, getPostBodyText(post)),
-        author: getPostAuthorName(post),
-        time: formatRelativeTime(post.createdAt.toDate()),
-      })) as RecentPost[];
+      const recent = postsResult.items.map(toRecentPost);
 
       setRecentPosts(recent);
       if (typeof weekCount === 'number' && Number.isFinite(weekCount)) {

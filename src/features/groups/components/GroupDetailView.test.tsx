@@ -90,6 +90,9 @@ describe('GroupDetailView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ver miembros' }));
     expect(onOpenMembers).toHaveBeenCalledTimes(1);
 
+    // Edit and leave are in the group's "⋯" menu.
+    fireEvent.click(screen.getByRole('button', { name: 'Opciones del grupo' }));
+    expect(screen.queryByRole('button', { name: 'Salir' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Editar grupo' }));
     expect(onEditGroup).toHaveBeenCalledTimes(1);
     expect(screen.getByText('4 miembros')).toBeInTheDocument();
