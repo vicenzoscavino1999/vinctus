@@ -55,6 +55,7 @@ export default function MessagesPage() {
         key={active.id}
         conversation={active}
         title={inbox.nameOf(active)}
+        photoURL={inbox.photoOf(active)}
         outbox={outbox}
         blockedUsers={inbox.blockedUsers}
         onBack={backToList}

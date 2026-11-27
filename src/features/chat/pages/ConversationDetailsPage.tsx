@@ -1,669 +1,289 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft,
+  AlertCircle,
   Ban,
+  Bell,
+  BellOff,
+  Eraser,
+  Images,
+  Search,
   ShieldOff,
   User as UserIcon,
   Users,
-  AlertCircle,
-  Loader2,
-  Bell,
-  BellOff,
-  X,
 } from 'lucide-react';
 import { useAuth } from '@/context/auth';
 import { useToast } from '@/shared/ui/Toast';
 import {
-  getUserProfile,
-  getConversationMember,
-  setConversationMute,
-  clearConversationMute,
   blockUser,
-  unblockUser,
-  isUserBlocked,
   createUserReport,
+  getUserProfile,
+  isUserBlocked,
+  unblockUser,
   type UserProfileRead,
-  type ConversationMemberRead,
-  type UserReportReason,
 } from '@/features/chat/api';
 import CreateGroupModal from '@/features/groups/components/CreateGroupModal';
-import { LEGAL_COPY, LEGAL_LINKS } from '@/shared/constants';
 import { directParticipants } from '@/features/chat/lib/conversationIds';
-import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
+import { clearConversationLocally } from '@/features/chat/lib/clearedConversations';
+import { chatFilesOf } from '@/features/chat/model/chatDetails';
+import { useConversationMute } from '@/features/chat/hooks/useConversationMute';
+import { useRecentMessages } from '@/features/chat/hooks/useRecentMessages';
+import { ConfirmSheet, MuteSheet } from '@/features/chat/components/details/ChatSheet';
+import ChatFilesSheet from '@/features/chat/components/details/ChatFilesSheet';
+import ChatSearchSheet from '@/features/chat/components/details/ChatSearchSheet';
+import ReportSheet from '@/features/chat/components/details/ReportSheet';
+import {
+  ActionList,
+  ActionRow,
+  DetailsHeader,
+  DetailsHero,
+  DetailsState,
+  QuickAction,
+  QuickActions,
+} from '@/features/chat/components/details/DetailsParts';
 
-const REPORT_REASON_OPTIONS: Array<{ value: UserReportReason; label: string }> = [
-  { value: 'spam', label: 'Spam o publicidad' },
-  { value: 'harassment', label: 'Acoso' },
-  { value: 'abuse', label: 'Abuso' },
-  { value: 'fake', label: 'Suplantacion' },
-  { value: 'other', label: 'Otro' },
-];
+type Sheet = 'mute' | 'files' | 'search' | 'report' | 'block' | 'clear' | 'group' | null;
+type ProfileState = { key: string; profile: UserProfileRead | null; error: string | null };
 
+/** `/messages/:conversationId/details`: the person, and what you can do with this chat. */
 export default function ConversationDetailsPage() {
   const navigate = useNavigate();
-  const { conversationId } = useParams<{ conversationId: string }>();
+  const { conversationId = '' } = useParams<{ conversationId: string }>();
   const { user } = useAuth();
   const { showToast } = useToast();
+  const uid = user?.uid ?? null;
+  const isDirect = conversationId.startsWith('dm_');
+  const otherId = uid
+    ? (directParticipants(conversationId, uid)?.find((id) => id !== uid) ?? null)
+    : null;
 
-  const [otherUserProfile, setOtherUserProfile] = useState<UserProfileRead | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
-  const [showReportModal, setShowReportModal] = useState(false);
-  const [reportReason, setReportReason] = useState<UserReportReason>('spam');
-  const [reportDetails, setReportDetails] = useState('');
-  const [reportError, setReportError] = useState<string | null>(null);
-  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
-  const [isBlocked, setIsBlocked] = useState(false);
-  const [showBlockModal, setShowBlockModal] = useState(false);
-  const [isBlocking, setIsBlocking] = useState(false);
+  const profileKey = JSON.stringify([conversationId, uid]);
+  const [profileState, setProfileState] = useState<ProfileState | null>(null);
+  const [blockedState, setBlockedState] = useState<{ key: string; blocked: boolean } | null>(null);
+  const [sheet, setSheet] = useState<Sheet>(null);
+  const [busy, setBusy] = useState(false);
+  const mute = useConversationMute(isDirect ? conversationId : null, uid);
+  const messages = useRecentMessages(isDirect ? conversationId : null, uid);
 
-  // Mute state
-  const [memberData, setMemberData] = useState<ConversationMemberRead | null>(null);
-  const [showMuteModal, setShowMuteModal] = useState(false);
-  const [isTogglingMute, setIsTogglingMute] = useState(false);
-
-  const currentUid = user?.uid ?? null;
+  // Only direct chats have these details.
+  useEffect(() => {
+    if (!isDirect) navigate('/messages', { replace: true });
+  }, [isDirect, navigate]);
 
   useEffect(() => {
-    // Guard 1: Wait for auth
-    if (!currentUid) {
-      setLoading(true);
-      return;
-    }
-
-    // Guard 2: Validate conversationId format
-    if (!conversationId || !conversationId.startsWith('dm_')) {
-      console.error('[ConversationDetailsPage] Invalid conversationId format:', conversationId);
-      navigate('/messages', { replace: true });
-      return;
-    }
-
-    // Parse otherUserId
-    const otherId = directParticipants(conversationId, currentUid)?.find((id) => id !== currentUid);
-
-    // Guard 3: Validate otherUserId was parsed successfully
-    if (!otherId) {
-      console.error('[ConversationDetailsPage] Could not parse otherUserId from:', conversationId);
-      setError('No se pudo identificar al usuario.');
-      setLoading(false);
-      return;
-    }
-
+    if (!uid || !otherId) return;
     let active = true;
-    // Load other user's public profile
-    const loadProfile = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const profile = await getUserProfile(otherId);
+    getUserProfile(otherId)
+      .then((profile) => {
         if (!active) return;
-
-        if (!profile) {
-          setError('Usuario no encontrado.');
-          return;
-        }
-
-        setOtherUserProfile(profile);
-      } catch (err) {
-        console.error('[ConversationDetailsPage] Error loading profile:', err);
-        if (active) setError('No se pudo cargar el perfil del usuario.');
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
-    void loadProfile();
-    return () => {
-      active = false;
-    };
-  }, [conversationId, currentUid, navigate]);
-
-  // Load member data for mute state
-  useEffect(() => {
-    if (!conversationId || !currentUid) return;
-
-    let active = true;
-    const loadMemberData = async () => {
-      try {
-        const member = await getConversationMember(conversationId, currentUid);
-        if (!active) return;
-        if (member) {
-          // Auto-unmute if mutedUntil has passed
-          if (member.muted && member.mutedUntil && member.mutedUntil < new Date()) {
-            await clearConversationMute(conversationId, currentUid);
-            if (!active) return;
-            setMemberData({ ...member, muted: false, mutedUntil: null });
-          } else {
-            setMemberData(member);
-          }
-        }
-      } catch (err) {
-        console.error('[ConversationDetailsPage] Error loading member data:', err);
-      }
-    };
-
-    void loadMemberData();
-    return () => {
-      active = false;
-    };
-  }, [conversationId, currentUid]);
-
-  const otherProfileUid = otherUserProfile?.uid ?? null;
-
-  useEffect(() => {
-    if (!currentUid || !otherProfileUid) return;
-    let active = true;
-    const loadBlockStatus = async () => {
-      try {
-        const blocked = await isUserBlocked(currentUid, otherProfileUid);
-        if (active) setIsBlocked(blocked);
-      } catch (err) {
-        console.error('[ConversationDetailsPage] Error loading block status:', err);
-      }
-    };
-    void loadBlockStatus();
-    return () => {
-      active = false;
-    };
-  }, [currentUid, otherProfileUid]);
-
-  const handleGoBack = () => {
-    navigate('/messages');
-  };
-
-  const handleViewProfile = () => {
-    if (!otherUserProfile) return;
-    // Use /user/:userId route (confirmed in AppLayout line 206)
-    navigate(`/user/${otherUserProfile.uid}`);
-  };
-
-  // Mute handlers
-  const handleMute = async (hours: number | null) => {
-    if (!conversationId || !user?.uid) return;
-    setIsTogglingMute(true);
-    try {
-      const mutedUntil = hours ? new Date(Date.now() + hours * 60 * 60 * 1000) : null;
-      await setConversationMute(conversationId, user.uid, mutedUntil);
-      setMemberData((prev) => (prev ? { ...prev, muted: true, mutedUntil } : null));
-      setShowMuteModal(false);
-    } catch (err) {
-      console.error('[ConversationDetailsPage] Error muting:', err);
-    } finally {
-      setIsTogglingMute(false);
-    }
-  };
-
-  const handleUnmute = async () => {
-    if (!conversationId || !user?.uid) return;
-    setIsTogglingMute(true);
-    try {
-      await clearConversationMute(conversationId, user.uid);
-      setMemberData((prev) => (prev ? { ...prev, muted: false, mutedUntil: null } : null));
-    } catch (err) {
-      console.error('[ConversationDetailsPage] Error unmuting:', err);
-    } finally {
-      setIsTogglingMute(false);
-    }
-  };
-
-  const resetReportForm = () => {
-    setReportReason('spam');
-    setReportDetails('');
-    setReportError(null);
-  };
-
-  const handleSubmitReport = async () => {
-    if (!user?.uid || !otherUserProfile || isSubmittingReport) return;
-    setIsSubmittingReport(true);
-    setReportError(null);
-    try {
-      await createUserReport({
-        reporterUid: user.uid,
-        reportedUid: otherUserProfile.uid,
-        reason: reportReason,
-        details: reportDetails.trim() ? reportDetails.trim() : null,
-        conversationId: conversationId ?? null,
+        setProfileState({
+          key: profileKey,
+          profile,
+          error: profile ? null : 'Usuario no encontrado.',
+        });
+      })
+      .catch((error) => {
+        console.error('Error loading the chat profile:', error);
+        if (active)
+          setProfileState({
+            key: profileKey,
+            profile: null,
+            error: 'No se pudo cargar el perfil del usuario.',
+          });
       });
-      showToast('Reporte enviado', 'success');
-      setShowReportModal(false);
-      resetReportForm();
-    } catch (err) {
-      console.error('[ConversationDetailsPage] Error creating report:', err);
-      setReportError('No se pudo enviar el reporte.');
-    } finally {
-      setIsSubmittingReport(false);
-    }
-  };
+    isUserBlocked(uid, otherId)
+      .then((blocked) => {
+        if (active) setBlockedState({ key: profileKey, blocked });
+      })
+      .catch((error) => console.error('Error loading the block status:', error));
+    return () => {
+      active = false;
+    };
+  }, [uid, otherId, profileKey]);
 
-  const handleToggleBlock = async () => {
-    if (!user?.uid || !otherUserProfile || isBlocking) return;
-    setIsBlocking(true);
+  const backToChat = () => navigate(`/messages?conversation=${conversationId}`);
+  const current = profileState?.key === profileKey ? profileState : null;
+  const isBlocked = blockedState?.key === profileKey && blockedState.blocked;
+
+  if (uid && isDirect && !otherId) {
+    return <DetailsState message="No se pudo identificar al usuario." onBack={backToChat} />;
+  }
+  if (!current?.profile) {
+    return <DetailsState message={current?.error ?? null} onBack={backToChat} />;
+  }
+
+  const profile = current.profile;
+  const name = profile.displayName?.trim() || 'Usuario';
+  const files = chatFilesOf(messages);
+  const close = () => setSheet(null);
+
+  const toggleBlock = async () => {
+    if (!uid) return;
+    setBusy(true);
     try {
       if (isBlocked) {
-        await unblockUser(user.uid, otherUserProfile.uid);
-        setIsBlocked(false);
+        await unblockUser(uid, profile.uid);
+        setBlockedState({ key: profileKey, blocked: false });
         showToast('Usuario desbloqueado', 'success');
+        close();
       } else {
-        await blockUser(user.uid, otherUserProfile.uid);
-        setIsBlocked(true);
+        await blockUser(uid, profile.uid);
         showToast('Usuario bloqueado', 'success');
         navigate('/messages');
       }
-    } catch (err) {
-      console.error('[ConversationDetailsPage] Error toggling block:', err);
-      showToast('No se pudo completar la accion', 'error');
+    } catch (error) {
+      console.error('Error toggling the block:', error);
+      showToast('No se pudo completar la acción', 'error');
     } finally {
-      setIsBlocking(false);
-      setShowBlockModal(false);
+      setBusy(false);
     }
   };
 
-  // Helper: format mute status text
-  const getMuteStatusText = () => {
-    if (!memberData?.muted) return null;
-    if (!memberData.mutedUntil) return 'Silenciado';
-    const now = new Date();
-    if (memberData.mutedUntil <= now) return null;
-    return `Silenciado hasta ${memberData.mutedUntil.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}`;
+  const jumpTo = (messageId: string) => {
+    window.sessionStorage.setItem('vinctus:jumpMessageId', messageId);
+    navigate(`/messages?conversation=${conversationId}#msg-${messageId}`);
   };
 
-  // Loading state
-  if (loading) {
-    return (
-      <div className="page-feed pt-6 max-w-3xl mx-auto">
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="animate-spin text-amber-500" size={32} />
-        </div>
-      </div>
-    );
-  }
-
-  // Error state
-  if (error || !otherUserProfile) {
-    return (
-      <div className="page-feed pt-6 max-w-3xl mx-auto">
-        <div className="flex flex-col items-center justify-center py-20">
-          <AlertCircle className="text-red-400 mb-4" size={48} />
-          <p className="text-neutral-400 mb-6">{error || 'Usuario no encontrado.'}</p>
-          <button
-            onClick={handleGoBack}
-            className="px-6 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg transition-colors"
-          >
-            Volver a Mensajes
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="page-feed pt-6 max-w-3xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-8">
-        <button
-          type="button"
-          onClick={handleGoBack}
-          aria-label="Volver a mensajes"
-          className="p-2 -ml-2 text-neutral-400 hover:text-white transition-colors"
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <h1 className="text-2xl font-serif font-light text-white">Detalles del Chat</h1>
-      </div>
-
-      {/* User Info */}
-      <div className="flex flex-col items-center py-8 border-b border-neutral-800/50">
-        <div className="w-24 h-24 rounded-full overflow-hidden bg-neutral-800 border-2 border-neutral-700 mb-4">
-          {otherUserProfile.photoURL ? (
-            <img
-              src={otherUserProfile.photoURL}
-              alt={otherUserProfile.displayName || 'Usuario'}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <UserIcon size={40} className="text-neutral-600" />
-            </div>
-          )}
-        </div>
-        <h2 className="text-xl font-medium text-white mb-1">
-          {otherUserProfile.displayName || 'Usuario'}
-        </h2>
-        {otherUserProfile.username && (
-          <p className="text-sm text-neutral-500">@{otherUserProfile.username}</p>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="mt-8 space-y-2">
-        {/* View Profile - Active */}
-        <button
-          type="button"
-          onClick={handleViewProfile}
-          className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-neutral-900/40 border border-neutral-800/50 hover:border-neutral-700/50 rounded-xl transition-all text-left cursor-pointer"
-        >
-          <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
-            <UserIcon size={18} className="text-amber-500" />
-          </div>
-          <div className="flex-1">
-            <p className="text-white font-medium">Ver perfil</p>
-            <p className="text-xs text-neutral-500">Ver el perfil público de este usuario</p>
-          </div>
-        </button>
-
-        {/* Create Group - Active (Fase 2) */}
-        <button
-          type="button"
-          onClick={() => setShowCreateGroupModal(true)}
-          className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-neutral-900/40 border border-neutral-800/50 hover:border-neutral-700/50 rounded-xl transition-all text-left cursor-pointer"
-        >
-          <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
-            <Users size={18} className="text-amber-500" />
-          </div>
-          <div className="flex-1">
-            <p className="text-white font-medium">Crear grupo con esta persona</p>
-            <p className="text-xs text-neutral-500">Iniciar un nuevo grupo juntos</p>
-          </div>
-        </button>
-
-        {/* Mute - Active */}
-        {memberData?.muted ? (
-          <button
-            type="button"
-            onClick={handleUnmute}
-            disabled={isTogglingMute}
-            className="w-full flex items-center gap-4 p-4 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 hover:border-amber-500/50 rounded-xl transition-all text-left cursor-pointer disabled:opacity-50"
-          >
-            <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
-              <BellOff size={18} className="text-amber-500" />
-            </div>
-            <div className="flex-1">
-              <p className="text-amber-400 font-medium">Quitar silencio</p>
-              <p className="text-xs text-amber-600">{getMuteStatusText()}</p>
-            </div>
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setShowMuteModal(true)}
-            disabled={isTogglingMute}
-            className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-neutral-900/40 border border-neutral-800/50 hover:border-neutral-700/50 rounded-xl transition-all text-left cursor-pointer disabled:opacity-50"
-          >
-            <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
-              <Bell size={18} className="text-amber-500" />
-            </div>
-            <div className="flex-1">
-              <p className="text-white font-medium">Silenciar</p>
-              <p className="text-xs text-neutral-500">No recibir notificaciones de este chat</p>
-            </div>
-          </button>
-        )}
-
-        {/* Block - Active */}
-        <button
-          type="button"
-          onClick={() => setShowBlockModal(true)}
-          className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-red-500/10 border border-neutral-800/50 hover:border-red-500/30 rounded-xl transition-all text-left cursor-pointer"
-        >
-          <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center flex-shrink-0">
-            {isBlocked ? (
-              <ShieldOff size={18} className="text-amber-400" />
-            ) : (
-              <Ban size={18} className="text-red-400" />
-            )}
-          </div>
-          <div className="flex-1">
-            <p className="text-white font-medium">{isBlocked ? 'Desbloquear' : 'Bloquear'}</p>
-            <p className="text-xs text-neutral-500">
-              {isBlocked
-                ? 'Permitir mensajes y seguir de nuevo'
-                : 'No podras ver sus mensajes ni posts'}
-            </p>
-          </div>
-        </button>
-
-        {/* Report - Active */}
-        <button
-          type="button"
-          onClick={() => setShowReportModal(true)}
-          className="w-full flex items-center gap-4 p-4 bg-neutral-900/20 hover:bg-red-500/10 border border-neutral-800/50 hover:border-red-500/30 rounded-xl transition-all text-left cursor-pointer"
-        >
-          <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center flex-shrink-0">
-            <AlertCircle size={18} className="text-red-400" />
-          </div>
-          <div className="flex-1">
-            <p className="text-white font-medium">Reportar</p>
-            <p className="text-xs text-neutral-500">Incumplimiento de las normas de la comunidad</p>
-          </div>
-        </button>
-      </div>
-
-      {/* Create Group Modal */}
-      <CreateGroupModal
-        isOpen={showCreateGroupModal}
-        onClose={() => setShowCreateGroupModal(false)}
-        onCreated={(groupId) => {
-          setShowCreateGroupModal(false);
-          navigate(`/group/${groupId}`);
-        }}
-        preselectedMemberProfiles={otherUserProfile ? [otherUserProfile] : []}
+    <div className="page-feed mx-auto max-w-xl pb-24 pt-4">
+      <DetailsHeader title="Detalles del chat" onBack={backToChat} />
+      <DetailsHero
+        name={name}
+        photoURL={profile.photoURL}
+        shape="person"
+        subtitle={profile.username ? `@${profile.username}` : null}
+        status={mute.statusText}
       />
 
-      {/* Report Modal */}
-      {showReportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
-          <div
-            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-            onClick={() => {
-              setShowReportModal(false);
-              resetReportForm();
-            }}
-          />
-          <div className="relative w-full max-w-md mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
-              <h3 className="text-lg font-medium text-white">Reportar usuario</h3>
-              <button
-                onClick={() => {
-                  setShowReportModal(false);
-                  resetReportForm();
-                }}
-                className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
-                aria-label="Cerrar"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-4 space-y-4">
-              <div className="rounded-lg border border-neutral-700/80 bg-neutral-900/60 p-3 text-xs text-neutral-400 space-y-2">
-                <p>{LEGAL_COPY.moderationNotice}</p>
-                <div className="flex flex-wrap gap-3">
-                  <a
-                    href={LEGAL_LINKS.communityGuidelinesPublicUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-amber-300 hover:text-amber-200 underline"
-                  >
-                    Ver normas de la comunidad
-                  </a>
-                  <a
-                    href={`mailto:${LEGAL_LINKS.securityEmail}`}
-                    className="text-red-300 hover:text-red-200 underline"
-                  >
-                    Reporte urgente: {LEGAL_LINKS.securityEmail}
-                  </a>
-                </div>
-              </div>
+      <QuickActions>
+        <QuickAction
+          icon={UserIcon}
+          label="Perfil"
+          ariaLabel="Ver perfil"
+          onClick={() => navigate(`/user/${profile.uid}`)}
+        />
+        <QuickAction
+          icon={mute.muted ? BellOff : Bell}
+          label={mute.muted ? 'Silenciado' : 'Silenciar'}
+          ariaLabel={mute.muted ? 'Quitar silencio' : 'Silenciar'}
+          active={mute.muted}
+          disabled={mute.busy}
+          onClick={() => (mute.muted ? void mute.unmute() : setSheet('mute'))}
+        />
+        <QuickAction
+          icon={Search}
+          label="Buscar"
+          ariaLabel="Buscar en la conversación"
+          onClick={() => setSheet('search')}
+        />
+      </QuickActions>
 
-              <div>
-                <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
-                  Motivo
-                </label>
-                <select
-                  value={reportReason}
-                  onChange={(event) => setReportReason(event.target.value as UserReportReason)}
-                  className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-red-500/50 transition-colors"
-                >
-                  {REPORT_REASON_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+      <ActionList>
+        <ActionRow
+          icon={Images}
+          label="Fotos y archivos"
+          value={files.length ? String(files.length) : undefined}
+          chevron
+          onClick={() => setSheet('files')}
+        />
+        <ActionRow
+          icon={Users}
+          label="Crear grupo con esta persona"
+          chevron
+          onClick={() => setSheet('group')}
+        />
+        <ActionRow
+          icon={Eraser}
+          label="Limpiar chat local"
+          detail="No borra mensajes del servidor"
+          onClick={() => setSheet('clear')}
+        />
+      </ActionList>
 
-              <div>
-                <label className="text-xs text-neutral-500 uppercase tracking-wider mb-2 block">
-                  Detalles (opcional)
-                </label>
-                <textarea
-                  value={reportDetails}
-                  onChange={(event) => setReportDetails(event.target.value)}
-                  rows={4}
-                  maxLength={LIMITS.reports.detailsMaxLength}
-                  className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-red-500/50 transition-colors resize-none"
-                  placeholder="Describe el motivo del reporte"
-                />
-                <div className="text-right text-xs text-neutral-500 mt-1">
-                  {reportDetails.length}/{LIMITS.reports.detailsMaxLength}
-                </div>
-              </div>
+      <ActionList>
+        <ActionRow
+          icon={isBlocked ? ShieldOff : Ban}
+          label={isBlocked ? `Desbloquear a ${name}` : `Bloquear a ${name}`}
+          tone={isBlocked ? 'default' : 'danger'}
+          onClick={() => setSheet('block')}
+        />
+        <ActionRow
+          icon={AlertCircle}
+          label={`Reportar a ${name}`}
+          tone="danger"
+          onClick={() => setSheet('report')}
+        />
+      </ActionList>
 
-              {reportError && (
-                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
-                  {reportError}
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowReportModal(false);
-                    resetReportForm();
-                  }}
-                  className="px-4 py-2 rounded-lg text-neutral-300 hover:text-white transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSubmitReport}
-                  disabled={isSubmittingReport}
-                  className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmittingReport ? 'Enviando...' : 'Enviar reporte'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {sheet === 'mute' && (
+        <MuteSheet
+          busy={mute.busy}
+          onClose={close}
+          onMute={(hours) => {
+            void mute.mute(hours).then((done) => done && close());
+          }}
+        />
       )}
-
-      {/* Block Modal */}
-      {showBlockModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
-          <div
-            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-            onClick={() => setShowBlockModal(false)}
-          />
-          <div className="relative w-full max-w-md mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
-              <h3 className="text-lg font-medium text-white">
-                {isBlocked ? 'Desbloquear usuario' : 'Bloquear usuario'}
-              </h3>
-              <button
-                onClick={() => setShowBlockModal(false)}
-                className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
-                aria-label="Cerrar"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-4 space-y-4">
-              <p className="text-sm text-neutral-400">
-                {isBlocked
-                  ? 'Podran volver a enviarse mensajes y seguirse.'
-                  : 'No podras enviar ni recibir mensajes. Dejaran de seguirse automaticamente y no veras sus publicaciones.'}
-              </p>
-              <div className="flex items-center justify-end gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowBlockModal(false)}
-                  className="px-4 py-2 rounded-lg text-neutral-300 hover:text-white transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleToggleBlock}
-                  disabled={isBlocking}
-                  className={`px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                    isBlocked
-                      ? 'bg-amber-500 hover:bg-amber-600 text-black'
-                      : 'bg-red-500 hover:bg-red-600 text-white'
-                  }`}
-                >
-                  {isBlocking ? 'Procesando...' : isBlocked ? 'Desbloquear' : 'Bloquear'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {sheet === 'files' && <ChatFilesSheet files={files} onClose={close} />}
+      {sheet === 'search' && (
+        <ChatSearchSheet messages={messages} currentUserId={uid} onJump={jumpTo} onClose={close} />
       )}
-
-      {/* Mute Options Modal */}
-      {showMuteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center safe-area-inset">
-          <div
-            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-            onClick={() => setShowMuteModal(false)}
-          />
-          <div className="relative w-full max-w-sm mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
-              <h3 className="text-lg font-medium text-white">Silenciar conversación</h3>
-              <button
-                onClick={() => setShowMuteModal(false)}
-                className="p-2 text-neutral-400 hover:text-white transition-colors rounded-full hover:bg-neutral-800"
-                aria-label="Cerrar"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-4 space-y-2">
-              <button
-                onClick={() => handleMute(1)}
-                disabled={isTogglingMute}
-                className="w-full p-3 text-left text-white hover:bg-neutral-800 rounded-lg transition-colors disabled:opacity-50"
-              >
-                1 hora
-              </button>
-              <button
-                onClick={() => handleMute(4)}
-                disabled={isTogglingMute}
-                className="w-full p-3 text-left text-white hover:bg-neutral-800 rounded-lg transition-colors disabled:opacity-50"
-              >
-                4 horas
-              </button>
-              <button
-                onClick={() => handleMute(8)}
-                disabled={isTogglingMute}
-                className="w-full p-3 text-left text-white hover:bg-neutral-800 rounded-lg transition-colors disabled:opacity-50"
-              >
-                8 horas
-              </button>
-              <button
-                onClick={() => handleMute(null)}
-                disabled={isTogglingMute}
-                className="w-full p-3 text-left text-white hover:bg-neutral-800 rounded-lg transition-colors disabled:opacity-50"
-              >
-                Para siempre
-              </button>
-            </div>
-          </div>
-        </div>
+      {sheet === 'clear' && (
+        <ConfirmSheet
+          title="Limpiar chat local"
+          message="Los mensajes se ocultan solo en este dispositivo. Siguen en el servidor y puedes volver a mostrarlos desde el chat."
+          confirmLabel="Limpiar"
+          tone="gold"
+          onClose={close}
+          onConfirm={() => {
+            clearConversationLocally(conversationId);
+            showToast('Chat limpiado localmente', 'success');
+            close();
+          }}
+        />
       )}
+      {sheet === 'block' && (
+        <ConfirmSheet
+          title={isBlocked ? `Desbloquear a ${name}` : `Bloquear a ${name}`}
+          message={
+            isBlocked
+              ? 'Podrán volver a enviarse mensajes y seguirse.'
+              : 'No podrán enviarse mensajes. Dejarán de seguirse y no verás sus publicaciones.'
+          }
+          confirmLabel={isBlocked ? 'Desbloquear' : 'Bloquear'}
+          tone={isBlocked ? 'gold' : 'danger'}
+          busy={busy}
+          onClose={close}
+          onConfirm={() => void toggleBlock()}
+        />
+      )}
+      {sheet === 'report' && (
+        <ReportSheet
+          title="Reportar usuario"
+          onClose={close}
+          onSubmit={async (reason, details) => {
+            if (!uid) return;
+            await createUserReport({
+              reporterUid: uid,
+              reportedUid: profile.uid,
+              reason,
+              details,
+              conversationId,
+            });
+            showToast('Reporte enviado', 'success');
+            close();
+          }}
+        />
+      )}
+      <CreateGroupModal
+        isOpen={sheet === 'group'}
+        onClose={close}
+        onCreated={(groupId) => {
+          close();
+          navigate(`/group/${groupId}`);
+        }}
+        preselectedMemberProfiles={[profile]}
+      />
     </div>
   );
 }
