@@ -138,8 +138,19 @@ enum AppRepos {
     return FirebaseSavedPostsRepo()
   }
   static func moderation() -> ModerationRepo { FirebaseModerationRepo() }
-  static func ai() -> AIRepo { FirebaseAIRepo() }
-  static func aiConsent() -> AIConsentRepo { FirebaseAIConsentRepo() }
+  static func ai() -> AIRepo {
+    #if SCREENSHOTS
+    if isDemo { return SampleAIRepo() }
+    #endif
+    return FirebaseAIRepo()
+  }
+
+  static func aiConsent() -> AIConsentRepo {
+    #if SCREENSHOTS
+    if isDemo { return SampleAIConsentRepo() }
+    #endif
+    return FirebaseAIConsentRepo()
+  }
   static func accountSecurity() -> AccountSecurityRepo { FirebaseAccountSecurityRepo() }
   static func deleteAccount() -> DeleteAccountRepo { FirebaseDeleteAccountRepo() }
 }

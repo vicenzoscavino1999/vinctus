@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { LIMITS } from '@/shared/lib/firestore/firestoreContract';
 
 interface TopicInputProps {
@@ -14,6 +13,7 @@ const SUGGESTIONS = [
   'Las criptomonedas serán adopción masiva en 5 años.',
 ];
 
+/** The topic, with the characters left and a few ideas while it is empty. */
 export function TopicInput({
   value,
   onChange,
@@ -21,11 +21,8 @@ export function TopicInput({
   maxLength = LIMITS.arena.topicMaxLength,
 }: TopicInputProps) {
   const remaining = maxLength - value.length;
-  const counterClass = useMemo(() => {
-    if (remaining <= 10) return 'text-red-400';
-    if (remaining <= 30) return 'text-amber-400';
-    return 'text-neutral-500';
-  }, [remaining]);
+  const counterClass =
+    remaining <= 10 ? 'text-red-400' : remaining <= 30 ? 'text-amber-400' : 'text-neutral-600';
 
   return (
     <div className="space-y-3">
@@ -35,24 +32,23 @@ export function TopicInput({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           disabled={disabled}
-          rows={4}
+          rows={3}
           maxLength={maxLength}
-          placeholder="Define un tema claro para el debate..."
-          className="w-full resize-none rounded-xl border border-neutral-800 bg-surface-1/70 px-4 py-3 text-sm text-text-1 placeholder:text-text-3 focus-ring focus:border-white/20 disabled:opacity-60"
+          placeholder="¿Sobre qué quieres que debatan?"
+          className="w-full resize-none rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-3.5 pb-7 font-display text-lg leading-snug text-white placeholder:font-sans placeholder:text-base placeholder:text-neutral-500 focus:border-white/20 focus:outline-none disabled:opacity-60"
         />
-        <span className={`absolute bottom-3 right-3 text-xs ${counterClass}`}>{remaining}</span>
+        <span className={`absolute bottom-3 right-4 text-[11px] ${counterClass}`}>{remaining}</span>
       </div>
 
       {value.trim().length === 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs uppercase tracking-wider text-neutral-500">Ideas:</span>
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
           {SUGGESTIONS.map((suggestion) => (
             <button
               key={suggestion}
               type="button"
               onClick={() => onChange(suggestion)}
               disabled={disabled}
-              className="rounded-full border border-neutral-700 bg-neutral-900/40 px-3 py-1 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-white disabled:opacity-50"
+              className="shrink-0 rounded-full border border-white/[0.08] px-3.5 py-1.5 text-xs text-neutral-400 transition-colors hover:border-white/20 hover:text-white disabled:opacity-50"
             >
               {suggestion}
             </button>

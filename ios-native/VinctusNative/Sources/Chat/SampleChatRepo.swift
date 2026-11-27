@@ -52,5 +52,8 @@ struct SampleChatRepo: ChatRepo {
   func markRead(conversationID: String, through clientCreatedAt: Int64?) async throws {}
   func openDirectConversation(with otherUserID: String) async throws -> String { "dm_me_\(otherUserID)" }
   func openGroupConversation(groupID: String) async throws -> String { "grp_\(groupID)" }
+  func fetchMute(conversationID: String) async throws -> ChatMuteState { .off }
+  func setMute(conversationID: String, until: Date?) async throws {}
+  func clearMute(conversationID: String) async throws {}
 }
 #endif

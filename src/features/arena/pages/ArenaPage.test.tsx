@@ -19,6 +19,10 @@ const mockGetServerAIConsent = vi.fn();
 const mockUpdateServerAIConsent = vi.fn();
 
 vi.mock('@/context/auth', () => ({ useAuth: () => ({ user: { uid: 'u1' } }) }));
+const mockReportAIResponse = vi.fn();
+vi.mock('@/features/ai/api', () => ({
+  reportAIResponse: (...args: unknown[]) => mockReportAIResponse(...args),
+}));
 vi.mock('@/shared/lib/aiConsent', () => ({
   getAIConsent: () => ({ granted: false, updatedAt: null }),
   setAIConsent: vi.fn(),
@@ -172,6 +176,20 @@ describe('ArenaPage', () => {
     fireEvent.click(likeBtn);
     await waitFor(() => expect(mockLikeDebate).toHaveBeenCalledWith('debate_1', 'u1'));
     expect(likeBtn).toHaveAttribute('aria-pressed', 'false');
+
+    // The debate's AI content can be reported, like the native app.
+    mockReportAIResponse.mockResolvedValueOnce('r1');
+    fireEvent.click(screen.getByRole('button', { name: 'Reportar debate' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar reporte' }));
+    await waitFor(() =>
+      expect(mockReportAIResponse).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reporterUid: 'u1',
+          contextId: 'arena_debate_1',
+          excerpt: 'Resumen final. / Empate técnico. / Primer argumento.',
+        }),
+      ),
+    );
 
     const saveBtn = screen.getByRole('button', { name: /Guardar/i });
     fireEvent.click(saveBtn);

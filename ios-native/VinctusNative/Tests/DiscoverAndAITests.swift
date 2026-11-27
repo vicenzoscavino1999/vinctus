@@ -646,6 +646,53 @@ final class DiscoverCategoryViewModelTests: XCTestCase {
     XCTAssertEqual(profileRepo.categoryWrites.last?.categoryID, "science")
   }
 
+  func testCommunitiesAndLibraryLoadWhenTheirTabOpensOnlyOnce() async {
+    let science = DiscoverCategory.all.first { $0.id == "science" }!
+    let repo = FakeDiscoverRepo()
+    repo.categoryGroups = [
+      GroupSummary(
+        id: "g1", name: "Física", description: "Debates", categoryID: "science",
+        visibility: .public, iconURL: nil, memberCount: 5, updatedAt: Date()
+      ),
+    ]
+    let vm = DiscoverCategoryViewModel(
+      category: science, repo: repo, profileContentRepo: FakeProfileContentRepo()
+    )
+
+    await vm.load()
+    await vm.loadSelectedTabIfNeeded()
+    XCTAssertTrue(vm.groups.isEmpty, "En vivo opens first; communities wait for their tab")
+    XCTAssertFalse(vm.hasLoadedGroups)
+    XCTAssertFalse(vm.hasLoadedLibrary)
+
+    vm.selectedTab = .groups
+    await vm.loadSelectedTabIfNeeded()
+    XCTAssertEqual(vm.groups.map(\.id), ["g1"])
+
+    // Opening the tab again keeps what was loaded.
+    repo.categoryGroups = []
+    vm.selectedTab = .live
+    vm.selectedTab = .groups
+    await vm.loadSelectedTabIfNeeded()
+    XCTAssertEqual(vm.groups.map(\.id), ["g1"])
+
+    // Pull to refresh asks again for the tabs already opened, not for the library.
+    await vm.refresh()
+    XCTAssertTrue(vm.groups.isEmpty)
+    XCTAssertFalse(vm.hasLoadedLibrary)
+  }
+
+  func testALiveFailureIsExplainedInSpanish() async {
+    let science = DiscoverCategory.all.first { $0.id == "science" }!
+    let repo = FakeDiscoverRepo()
+    repo.failsLive = true
+    let vm = DiscoverCategoryViewModel(
+      category: science, repo: repo, profileContentRepo: FakeProfileContentRepo()
+    )
+    await vm.load()
+    XCTAssertEqual(vm.liveError, "No se pudo cargar el contenido en vivo. Revisa tu conexión e intenta de nuevo.")
+  }
+
   func testSurfacesErrorsIndependentlyAndHandlesFollowFailure() async {
     let science = DiscoverCategory.all.first { $0.id == "science" }!
     let repo = FakeDiscoverRepo()

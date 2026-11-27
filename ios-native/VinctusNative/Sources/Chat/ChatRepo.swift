@@ -41,6 +41,20 @@ struct ChatMessage: Identifiable, Hashable {
 }
 
 /// Both fields are needed when multiple messages have the same client timestamp.
+/// "Silenciar" on a conversation: `conversations/{id}/members/{uid}.muted` and `mutedUntil`, like
+/// the web's `setConversationMute`. No `mutedUntil` means until it is turned back on.
+struct ChatMuteState: Equatable {
+  var muted: Bool
+  var mutedUntil: Date?
+
+  static let off = ChatMuteState(muted: false, mutedUntil: nil)
+
+  /// A mute whose time has passed no longer counts (the web clears it when the details open).
+  func isActive(now: Date = Date()) -> Bool {
+    muted && (mutedUntil.map { $0 > now } ?? true)
+  }
+}
+
 struct ChatMessageCursor: Equatable {
   let clientCreatedAt: Int64
   let messageID: String
@@ -88,6 +102,11 @@ protocol ChatRepo {
   func markRead(conversationID: String, through clientCreatedAt: Int64?) async throws
   func openDirectConversation(with otherUserID: String) async throws -> String
   func openGroupConversation(groupID: String) async throws -> String
+  /// The signed-in user's mute for the conversation (`.off` when there is no member document yet).
+  func fetchMute(conversationID: String) async throws -> ChatMuteState
+  /// Mutes until `until`, or until turned back on when nil.
+  func setMute(conversationID: String, until: Date?) async throws
+  func clearMute(conversationID: String) async throws
 }
 
 extension ChatRepo {
@@ -339,6 +358,41 @@ final class FirebaseChatRepo: ChatRepo {
       } catch { errorPointer?.pointee = error as NSError }
       return nil
     }
+  }
+
+  // MARK: Mute
+
+  private func memberDocument(_ db: Firestore, conversationID: String, uid: String) -> DocumentReference {
+    db.collection(FirestoreCollections.conversations).document(conversationID)
+      .collection(FirestoreSubcollections.members).document(uid)
+  }
+
+  func fetchMute(conversationID: String) async throws -> ChatMuteState {
+    let (db, uid) = try context()
+    let snapshot = try await memberDocument(db, conversationID: conversationID, uid: uid).getDocument()
+    guard let data = snapshot.data() else { return .off }
+    return ChatMuteState(
+      muted: data["muted"] as? Bool ?? false,
+      mutedUntil: (data["mutedUntil"] as? Timestamp)?.dateValue()
+    )
+  }
+
+  /// The rules let a member change only `muted`, `mutedUntil` and the read fields of their own
+  /// member document.
+  func setMute(conversationID: String, until: Date?) async throws {
+    let (db, uid) = try context()
+    try await memberDocument(db, conversationID: conversationID, uid: uid).updateData([
+      "muted": true,
+      "mutedUntil": until.map { Timestamp(date: $0) } ?? NSNull(),
+    ])
+  }
+
+  func clearMute(conversationID: String) async throws {
+    let (db, uid) = try context()
+    try await memberDocument(db, conversationID: conversationID, uid: uid).updateData([
+      "muted": false,
+      "mutedUntil": NSNull(),
+    ])
   }
 
   // MARK: Opening conversations

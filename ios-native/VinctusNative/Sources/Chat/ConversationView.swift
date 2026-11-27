@@ -3,9 +3,12 @@ import UIKit
 import PhotosUI
 
 struct ConversationView: View {
+  let repo: ChatRepo
   let profileRepo: ProfileRepo
   let title: String
   let otherUserID: String?
+  /// The person's photo or the group's icon, for the header.
+  let photoURL: String?
 
   @EnvironmentObject private var authVM: AuthViewModel
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
@@ -20,18 +23,37 @@ struct ConversationView: View {
   @State private var scrollState = ChatScrollState()
   @State private var selectedPhotos: [PhotosPickerItem] = []
   @StateObject private var voice = ChatVoiceRecorder()
+  /// The details (mute, files, search, report, group options) open from the header.
+  @State private var showsDetails = false
+  @State private var didOpenDemoDetails = false
+  /// "Limpiar chat local": messages up to this moment are hidden on this device.
+  @State private var clearedAt: Date?
+  /// A search result in the details: scroll to it and highlight it when back in the chat.
+  @State private var pendingJumpID: String?
+  @State private var highlightedMessageID: String?
 
-  init(repo: ChatRepo, profileRepo: ProfileRepo, conversationID: String, title: String, otherUserID: String?) {
+  init(repo: ChatRepo, profileRepo: ProfileRepo, conversationID: String, title: String, otherUserID: String?,
+       photoURL: String? = nil) {
+    self.repo = repo
     self.profileRepo = profileRepo
     self.title = title
     self.otherUserID = otherUserID
+    self.photoURL = photoURL
     _vm = StateObject(wrappedValue: ConversationViewModel(repo: repo, conversationID: conversationID))
   }
 
   private var isGroup: Bool { vm.conversationID.hasPrefix("grp_") }
 
   private var visibleMessages: [ChatMessage] {
-    vm.messages.filter { !blockedUsers.isBlocked($0.senderID) }
+    vm.messages.filter { message in
+      !blockedUsers.isBlocked(message.senderID) && clearedAt.map { message.createdAt > $0 } != false
+    }
+  }
+
+  /// Who the details are about; nil for a direct chat whose other person is unknown.
+  private var detailsKind: ChatDetailsViewModel.Kind? {
+    if isGroup { return .group(groupID: String(vm.conversationID.dropFirst(4))) }
+    return otherUserID.map { .direct(otherUserID: $0) }
   }
 
   var body: some View {
@@ -57,6 +79,19 @@ struct ConversationView: View {
                 if vm.isLoading {
                   ProgressView()
                     .padding(.top, 40)
+                } else if visibleMessages.isEmpty, clearedAt != nil {
+                  VStack(spacing: 10) {
+                    Text("Chat limpiado localmente.")
+                      .font(.subheadline)
+                      .foregroundStyle(VinctusTokens.Color.textMuted)
+                    Button("Mostrar mensajes") {
+                      ChatClearedStore.restore(vm.conversationID)
+                      clearedAt = nil
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(VinctusTokens.Color.accent)
+                  }
+                  .padding(.top, 60)
                 } else if visibleMessages.isEmpty {
                   VStack(spacing: 6) {
                     Text("Empieza la conversación")
@@ -77,6 +112,11 @@ struct ConversationView: View {
                       ChatDaySeparator(date: message.createdAt)
                     }
                     messageRow(message, run: run)
+                      .background(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                          .fill(VinctusTokens.Color.accent.opacity(highlightedMessageID == message.id ? 0.18 : 0))
+                          .padding(-4)
+                      )
                   }
                   // Tight spacing inside a run, more between runs (like the web).
                   .padding(.top, run.joinsPrevious ? 2 : (run.showsDay ? 0 : 10))
@@ -221,21 +261,81 @@ struct ConversationView: View {
     .navigationTitle(title)
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
-      if let otherUserID {
-        ToolbarItem(placement: .topBarTrailing) {
-          HStack(spacing: 4) {
-            NavigationLink(destination: ProfileView(repo: profileRepo, userID: otherUserID)) {
-              Image(systemName: "person.crop.circle")
+      if detailsKind != nil {
+        // The person or group opens the details, like the web's header.
+        ToolbarItem(placement: .principal) {
+          Button {
+            showsDetails = true
+          } label: {
+            HStack(spacing: 9) {
+              if isGroup {
+                GroupSquareIcon(name: title, iconURL: photoURL, size: 30)
+              } else {
+                AvatarView(name: title, photoURLString: photoURL, size: 30)
+              }
+              VStack(alignment: .leading, spacing: 0) {
+                Text(title)
+                  .font(.subheadline.weight(.semibold))
+                  .foregroundStyle(VinctusTokens.Color.textPrimary)
+                  .lineLimit(1)
+                Text(isGroup ? "Grupo · ver detalles" : "Ver detalles")
+                  .font(.caption2)
+                  .foregroundStyle(VinctusTokens.Color.textMuted)
+              }
             }
-            .accessibilityLabel("Ver perfil")
-            ModerationMenu(
-              target: .user(userID: otherUserID),
-              authorID: otherUserID,
-              authorName: title,
-              onBlocked: { dismiss() }
-            )
           }
+          .buttonStyle(.plain)
+          .accessibilityLabel(isGroup ? "Opciones del grupo" : "Ver detalles del chat")
+          .accessibilityIdentifier("chat-details-open")
         }
+        ToolbarItem(placement: .topBarTrailing) {
+          Button {
+            showsDetails = true
+          } label: {
+            Image(systemName: "info.circle")
+          }
+          .accessibilityLabel("Detalles")
+        }
+      }
+    }
+    .navigationDestination(isPresented: $showsDetails) {
+      if let detailsKind {
+        ChatDetailsView(
+          kind: detailsKind,
+          conversationID: vm.conversationID,
+          title: title,
+          photoURL: photoURL,
+          messages: visibleMessages,
+          chatRepo: repo,
+          profileRepo: profileRepo,
+          onJumpToMessage: { messageID in
+            pendingJumpID = messageID
+            showsDetails = false
+          },
+          onCleared: {
+            clearedAt = ChatClearedStore.clearedAt(vm.conversationID)
+          },
+          onLeftConversation: {
+            showsDetails = false
+            Task {
+              // Let the details pop before closing the chat under them.
+              try? await Task.sleep(for: .milliseconds(450))
+              dismiss()
+            }
+          }
+        )
+      }
+    }
+    .onChange(of: showsDetails) { _, isShowing in
+      guard !isShowing, let messageID = pendingJumpID else { return }
+      pendingJumpID = nil
+      scrollState.userDidScroll()
+      Task {
+        try? await Task.sleep(for: .milliseconds(350))
+        withAnimation(.snappy) { scrollPosition = messageID }
+        highlightedMessageID = messageID
+        try? await Task.sleep(for: .seconds(2))
+        withAnimation { highlightedMessageID = nil }
       }
     }
     .sheet(item: $reportTarget) { target in
@@ -243,13 +343,20 @@ struct ConversationView: View {
     }
     .onAppear {
       setBottomNavigationHidden(true)
+      clearedAt = ChatClearedStore.clearedAt(vm.conversationID)
       vm.start()
       updateReadingContext()
+      if !didOpenDemoDetails, AppRepos.demoArgument("-VinctusOpenChatDetails") != nil {
+        didOpenDemoDetails = true
+        showsDetails = true
+      }
     }
     .onDisappear {
+      voice.cancel()
+      // The details open over the chat: its messages stay live and the bar stays hidden.
+      guard !showsDetails else { return }
       setBottomNavigationHidden(false)
       vm.stop()
-      voice.cancel()
     }
     .onChange(of: scenePhase) { _, phase in
       if phase != .active { voice.finish() }

@@ -24,9 +24,11 @@ final class CreateGroupViewModel: ObservableObject {
   private let repo: any GroupsRepo
   private let contentRepo: ProfileContentRepo
 
-  init(repo: any GroupsRepo, contentRepo: ProfileContentRepo) {
+  /// `preselected`: people already chosen, like "Crear grupo con esta persona" in a chat.
+  init(repo: any GroupsRepo, contentRepo: ProfileContentRepo, preselected: [ProfileUserSummary] = []) {
     self.repo = repo
     self.contentRepo = contentRepo
+    self.selectedMembers = preselected
   }
 
   private var draft: GroupUpdate {
@@ -123,9 +125,10 @@ struct CreateGroupSheet: View {
   init(
     repo: any GroupsRepo,
     contentRepo: ProfileContentRepo,
+    preselected: [ProfileUserSummary] = [],
     onCreated: @escaping (_ groupID: String, _ warning: String?) -> Void
   ) {
-    _vm = StateObject(wrappedValue: CreateGroupViewModel(repo: repo, contentRepo: contentRepo))
+    _vm = StateObject(wrappedValue: CreateGroupViewModel(repo: repo, contentRepo: contentRepo, preselected: preselected))
     self.onCreated = onCreated
   }
 

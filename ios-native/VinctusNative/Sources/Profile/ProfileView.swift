@@ -63,6 +63,9 @@ private struct ProfileBodyView: View {
     ))
   }
 
+  @State private var isUnblocking = false
+  @State private var unblockError: String?
+
   private var isOwnProfile: Bool { userID == authVM.currentUserID }
 
   /// Same rule as `canViewPrivateContent` in the web's UserProfilePage.
@@ -268,32 +271,88 @@ private struct ProfileBodyView: View {
         }
       }
     } else {
-      Text("Bloqueaste a esta persona. Puedes desbloquearla en Ajustes > Usuarios bloqueados.")
-        .font(.footnote)
-        .foregroundStyle(VinctusTokens.Color.textMuted)
-        .multilineTextAlignment(.center)
+      // Like the web: unblock right here, as well as from Ajustes > Usuarios bloqueados.
+      VStack(alignment: .leading, spacing: 8) {
+        Text("Bloqueaste a esta persona.")
+          .font(.footnote)
+          .foregroundStyle(VinctusTokens.Color.textMuted)
+        Button {
+          Task { await unblock() }
+        } label: {
+          HStack(spacing: 6) {
+            if isUnblocking { ProgressView().controlSize(.small) }
+            Text("Desbloquear usuario")
+              .font(.subheadline.weight(.semibold))
+          }
+          .frame(maxWidth: .infinity)
+          .frame(height: 40)
+          .foregroundStyle(SwiftUI.Color.red.opacity(0.85))
+          .overlay(
+            RoundedRectangle(cornerRadius: VinctusTokens.Radius.sm, style: .continuous)
+              .stroke(SwiftUI.Color.red.opacity(0.4), lineWidth: 1)
+          )
+        }
+        .buttonStyle(.plain)
+        .disabled(isUnblocking)
+        if let unblockError {
+          Text(unblockError)
+            .font(.caption)
+            .foregroundStyle(.red)
+        }
+      }
     }
   }
 
+  private func unblock() async {
+    isUnblocking = true
+    unblockError = nil
+    defer { isUnblocking = false }
+    do {
+      try await blockedUsers.unblock(userID)
+    } catch {
+      unblockError = "No se pudo desbloquear al usuario."
+    }
+  }
+
+  /// "<nombre> quiere seguirte" with Rechazar and Aceptar, compact like the web.
   private func incomingRequestBanner(_ profile: UserProfile) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Text("\(profile.displayName) quiere seguirte")
-        .font(.subheadline.weight(.semibold))
-      HStack(spacing: VinctusTokens.Spacing.sm) {
-        VButton("Aceptar") {
-          Task {
-            if await connection.answerRequest(accept: true) {
-              scheduleSilentCounterRefresh()
-            }
+    HStack(spacing: VinctusTokens.Spacing.sm) {
+      (Text(profile.displayName).fontWeight(.semibold) + Text(" quiere seguirte"))
+        .font(.subheadline)
+        .foregroundStyle(VinctusTokens.Color.textPrimary)
+        .lineLimit(2)
+      Spacer(minLength: 4)
+      Button {
+        Task { await connection.answerRequest(accept: false) }
+      } label: {
+        Text("Rechazar")
+          .font(.caption.weight(.medium))
+          .padding(.horizontal, 12)
+          .padding(.vertical, 7)
+          .foregroundStyle(VinctusTokens.Color.textSecondary)
+          .overlay(Capsule().stroke(VinctusTokens.Color.border, lineWidth: 1))
+      }
+      .buttonStyle(.plain)
+      Button {
+        Task {
+          if await connection.answerRequest(accept: true) {
+            scheduleSilentCounterRefresh()
           }
         }
-        VButton("Rechazar", variant: .secondary) {
-          Task { await connection.answerRequest(accept: false) }
-        }
+      } label: {
+        Text("Aceptar")
+          .font(.caption.weight(.semibold))
+          .padding(.horizontal, 12)
+          .padding(.vertical, 7)
+          .foregroundStyle(.black)
+          .background(VinctusTokens.Color.accent, in: Capsule())
       }
-      .disabled(connection.isAnsweringRequest)
+      .buttonStyle(.plain)
+      .accessibilityLabel("Aceptar solicitud")
     }
-    .padding(VinctusTokens.Spacing.md)
+    .disabled(connection.isAnsweringRequest)
+    .padding(.horizontal, VinctusTokens.Spacing.md)
+    .padding(.vertical, 12)
     .background(VinctusTokens.Color.surface)
     .clipShape(RoundedRectangle(cornerRadius: VinctusTokens.Radius.lg, style: .continuous))
   }

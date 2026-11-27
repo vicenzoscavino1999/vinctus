@@ -112,6 +112,15 @@ jobs:
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab messages -VinctusOpenChat dm_me_u2
           sleep 20
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/06-chat.png"
+          # The chat details (mute, files, search, report), for a person and for a group.
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab messages -VinctusOpenChat dm_me_u2 -VinctusOpenChatDetails 1
+          sleep 20
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/06b-chat-details.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab messages -VinctusOpenChat grp_g2 -VinctusOpenChatDetails 1
+          sleep 20
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/06c-group-chat-details.png"
           xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab profile
           sleep 8
@@ -147,10 +156,32 @@ jobs:
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenGroup g1 -VinctusEditGroup 1
           sleep 10
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/13-group-edit.png"
+          # A category: its live content and its communities.
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenCategory science
+          sleep 10
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/20-category.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenCategory science -VinctusCategoryTab groups
+          sleep 10
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/20b-category-groups.png"
           xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab connections
           sleep 9
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/14-connections.png"
+          # Chat con IA (a sample question) and Arena IA (the form, then a sample debate).
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenAI chat -VinctusAIAsk "¿Se pueden ver los anillos de Saturno con un telescopio pequeño?"
+          sleep 14
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/19-ai-chat.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenAI arena
+          sleep 12
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/19b-arena.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenAI arena -VinctusArenaTopic "¿La energía nuclear es clave para la transición energética?"
+          sleep 14
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/19c-arena-debate.png"
           xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab discover -VinctusOpenNotifications 1
           sleep 9
@@ -159,6 +190,19 @@ jobs:
           xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusTab discover -VinctusOpenNotifications 1 -VinctusNotificationsTab requests
           sleep 9
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/16-notification-requests.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusOpenComposer 1
+          sleep 8
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/17-create-post.png"
+          # Ajustes > Apariencia > Vidrio (Liquid Glass, iOS 26).
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusAppearance glass
+          sleep 10
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/18-glass-discover.png"
+          xcrun simctl terminate "$DEVICE_ID" app.vinctus.social
+          xcrun simctl launch "$DEVICE_ID" app.vinctus.social -VinctusDemo -VinctusAppearance glass -VinctusTab messages
+          sleep 8
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/shots/18b-glass-messages.png"
 
       - name: Export chat UI evidence
         if: always()

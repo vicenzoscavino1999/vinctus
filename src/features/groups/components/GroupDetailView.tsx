@@ -1,5 +1,18 @@
-import React from 'react';
-import { ChevronLeft, Users, MessageCircle, ArrowRight, Check } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+  Check,
+  ChevronLeft,
+  Clock,
+  Heart,
+  Lock,
+  LogOut,
+  MessageCircle,
+  MoreHorizontal,
+  Pencil,
+  Play,
+  Plus,
+} from 'lucide-react';
+import { PostImage } from '@/features/posts/components/ProtectedPostMedia';
 
 // ===== INTERFACES (EL CONTRATO) =====
 
@@ -8,6 +21,11 @@ export interface RecentPost {
   title: string;
   author: string;
   time: string;
+  /** The first photo, shown as the row's thumbnail. */
+  imageUrl?: string | null;
+  hasVideo?: boolean;
+  likeCount?: number;
+  commentCount?: number;
 }
 
 export interface TopMember {
@@ -29,6 +47,7 @@ export interface GroupData {
   icon: string;
   recentPosts: RecentPost[];
   topMembers: TopMember[];
+  isPrivate?: boolean;
 }
 
 export interface CategoryInfo {
@@ -66,8 +85,236 @@ export interface GroupDetailViewProps {
   onLeaveGroup: () => void;
 }
 
+// ===== PIEZAS =====
+
+const plural = (count: number, one: string, many: string) =>
+  `${count.toLocaleString('es-ES')} ${count === 1 ? one : many}`;
+
+const sectionTitle = 'font-display text-[1.375rem] leading-tight text-white md:text-2xl';
+
+const buttonBase =
+  'flex h-11 items-center justify-center gap-2 rounded-lg px-5 text-sm transition-colors disabled:cursor-not-allowed';
+
+/**
+ * Join, request, pending or joined, from the container's label: gold while there is something
+ * to do, quiet once you are in.
+ */
+function JoinButton({
+  label,
+  isJoined,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  isJoined: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  if (isJoined) {
+    return (
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className={`${buttonBase} flex-1 border border-neutral-700 text-white sm:flex-none`}
+      >
+        <Check size={16} />
+        {label}
+      </button>
+    );
+  }
+  if (label === 'Pendiente') {
+    return (
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className={`${buttonBase} flex-1 border border-amber-500/50 text-amber-400 sm:flex-none`}
+      >
+        <Clock size={16} />
+        {label}
+      </button>
+    );
+  }
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`${buttonBase} flex-1 bg-brand-gold font-medium text-black hover:opacity-90 disabled:opacity-50 sm:flex-none`}
+    >
+      {label}
+    </button>
+  );
+}
+
+/** "⋯": edit the group (owner) and leave it (members). */
+function GroupOptionsMenu({
+  canEdit,
+  canLeave,
+  onEdit,
+  onLeave,
+}: {
+  canEdit: boolean;
+  canLeave: boolean;
+  onEdit: () => void;
+  onLeave: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!canEdit && !canLeave) return null;
+  const item =
+    'flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition-colors hover:bg-white/[0.06]';
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-label="Opciones del grupo"
+        aria-expanded={open}
+        className="flex h-11 w-11 items-center justify-center rounded-lg border border-neutral-700 text-neutral-300 transition-colors hover:bg-neutral-900 hover:text-white"
+      >
+        <MoreHorizontal size={18} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-2xl border border-white/10 bg-neutral-900 shadow-xl">
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onEdit();
+                }}
+                className={`${item} text-neutral-200`}
+              >
+                <Pencil size={16} />
+                Editar grupo
+              </button>
+            )}
+            {canLeave && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onLeave();
+                }}
+                className={`${item} text-red-300`}
+              >
+                <LogOut size={16} />
+                Salir
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** A post of the group: thumbnail, title, author, age and counters; opens the post page. */
+function GroupPostRow({ post, onOpen }: { post: RecentPost; onOpen?: () => void }) {
+  return (
+    <div
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (!onOpen) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+      role={onOpen ? 'button' : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      aria-label={onOpen ? `Abrir publicacion: ${post.title}` : undefined}
+      className={`flex items-center gap-4 rounded-2xl px-2 py-3 transition-colors ${
+        onOpen ? 'cursor-pointer hover:bg-white/[0.04]' : ''
+      }`}
+    >
+      <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.03]">
+        {post.imageUrl ? (
+          <PostImage src={post.imageUrl} alt="" className="h-full w-full object-cover" />
+        ) : post.hasVideo ? (
+          <Play size={18} className="text-neutral-400" />
+        ) : (
+          <span className="font-display text-2xl text-brand-gold/70">“</span>
+        )}
+        {post.imageUrl && post.hasVideo && (
+          <Play
+            size={14}
+            className="absolute right-1 top-1 rounded-full bg-black/60 p-0.5 text-white"
+          />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="line-clamp-2 font-display text-lg leading-snug text-white">{post.title}</p>
+        <p className="mt-1 flex flex-wrap items-center gap-x-3 text-xs text-neutral-500">
+          <span>
+            {post.author} · {post.time}
+          </span>
+          {(post.likeCount ?? 0) > 0 && (
+            <span className="flex items-center gap-1">
+              <Heart size={12} />
+              {post.likeCount}
+            </span>
+          )}
+          {(post.commentCount ?? 0) > 0 && (
+            <span className="flex items-center gap-1">
+              <MessageCircle size={12} />
+              {post.commentCount}
+            </span>
+          )}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** A member as a small row: photo, name and role. */
+function MemberRow({ member, onOpen }: { member: TopMember; onOpen?: () => void }) {
+  return (
+    <div
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (!onOpen) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+      role={onOpen ? 'button' : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      aria-label={onOpen ? `Abrir perfil de ${member.name}` : undefined}
+      className={`flex items-center gap-3 rounded-2xl px-2 py-2.5 transition-colors ${
+        onOpen ? 'cursor-pointer hover:bg-white/[0.04]' : ''
+      }`}
+    >
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-sm font-semibold text-black">
+        {member.photoURL ? (
+          <img src={member.photoURL} alt={member.name} className="h-full w-full object-cover" />
+        ) : (
+          member.name.charAt(0).toUpperCase()
+        )}
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium text-white">{member.name}</p>
+        <p className="text-xs text-neutral-500">{member.role}</p>
+      </div>
+    </div>
+  );
+}
+
+function Notice({ children }: { children: string }) {
+  return (
+    <p className="rounded-2xl border border-dashed border-white/[0.08] px-4 py-6 text-center text-sm text-neutral-500">
+      {children}
+    </p>
+  );
+}
+
 // ===== COMPONENTE VIEW (SOLO UI) =====
 
+/**
+ * A group's page: who it is (icon, name, members, activity, category), what you can do (join or
+ * request, chat, and edit or leave in "⋯"), its latest posts and its members.
+ */
 export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
   isLoading,
   error,
@@ -94,31 +341,29 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
   onOpenMembers,
   onLeaveGroup,
 }) => {
-  // Loading state
   if (isLoading) {
     return (
-      <div className="page-category pb-32">
-        <div className="animate-pulse">
-          <div className="h-8 w-24 bg-neutral-800 rounded mb-6 mt-4" />
-          <div className="flex items-start gap-4 mb-4">
-            <div className="w-16 h-16 bg-neutral-800 rounded" />
-            <div className="flex-1">
-              <div className="h-8 w-48 bg-neutral-800 rounded mb-2" />
-              <div className="h-4 w-32 bg-neutral-800 rounded" />
+      <div className="page-category pb-32" role="status" aria-label="Cargando grupo">
+        <div className="animate-pulse" aria-hidden="true">
+          <div className="mb-6 mt-4 h-6 w-20 rounded bg-neutral-800" />
+          <div className="mb-4 flex items-center gap-4">
+            <div className="h-20 w-20 rounded-2xl bg-neutral-800" />
+            <div className="flex-1 space-y-2">
+              <div className="h-8 w-48 rounded bg-neutral-800" />
+              <div className="h-4 w-32 rounded bg-neutral-800" />
             </div>
           </div>
-          <div className="h-20 bg-neutral-800 rounded mb-6" />
-          <div className="h-12 bg-neutral-800 rounded" />
+          <div className="mb-6 h-16 rounded bg-neutral-800" />
+          <div className="h-11 w-64 rounded-lg bg-neutral-800" />
         </div>
       </div>
     );
   }
 
-  // Error state
   if (error) {
     return (
-      <div className="page-category pb-32 text-center pt-20">
-        <p className="text-red-400 mb-4">{error}</p>
+      <div className="page-category pb-32 pt-20 text-center">
+        <p className="mb-4 text-red-400">{error}</p>
         <button onClick={onGoBack} className="text-brand-gold hover:underline">
           Volver
         </button>
@@ -126,11 +371,10 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
     );
   }
 
-  // Not found state
   if (!group) {
     return (
-      <div className="page-category pb-32 text-center pt-20">
-        <p className="text-neutral-500 mb-4">Grupo no encontrado</p>
+      <div className="page-category pb-32 pt-20 text-center">
+        <p className="mb-4 text-neutral-500">Grupo no encontrado</p>
         <button onClick={onGoBack} className="text-brand-gold hover:underline">
           Volver a Descubrir
         </button>
@@ -138,69 +382,77 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
     );
   }
 
-  // Success state - render group details
   return (
-    <div className="page-category pb-32">
-      {/* Back button */}
+    <div className="page-category mx-auto max-w-3xl pb-32">
       <button
         onClick={onGoBack}
-        className="flex items-center gap-2 text-neutral-500 hover:text-white transition-colors mb-6 mt-4"
+        className="mb-6 mt-4 flex items-center gap-1.5 text-neutral-400 transition-colors hover:text-white"
       >
         <ChevronLeft size={20} />
         <span className="text-sm">Volver</span>
       </button>
 
-      {/* Header */}
-      <header className="mb-8">
-        <div className="flex items-start gap-4 mb-4">
-          <div className="w-16 h-16 rounded-2xl bg-neutral-800 border border-neutral-700 flex items-center justify-center overflow-hidden">
+      <header className="mb-10 border-b border-neutral-900 pb-8">
+        <div className="flex items-center gap-4 sm:gap-5">
+          <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-br from-neutral-800 to-neutral-900 shadow-[0_0_0_4px_rgba(212,175,55,0.05)]">
             {group.iconUrl ? (
-              <img src={group.iconUrl} alt={group.name} className="w-full h-full object-cover" />
+              <img src={group.iconUrl} alt={group.name} className="h-full w-full object-cover" />
             ) : (
-              <span className="text-2xl text-neutral-200">{group.icon}</span>
+              <span className="font-display text-3xl text-brand-gold/80">{group.icon}</span>
             )}
           </div>
-          <div className="flex-1">
-            <h1 className="text-display-sm font-display text-white mb-2">{group.name}</h1>
-            <div className="flex items-center gap-3 text-neutral-500 text-sm">
-              <span className="flex items-center gap-1">
-                <Users size={14} />
-                {group.members.toLocaleString()} miembros
+          <div className="min-w-0">
+            <h1 className="mb-1.5 break-words font-display text-3xl leading-tight text-white sm:text-4xl">
+              {group.name}
+            </h1>
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral-400">
+              <span>{plural(group.members, 'miembro', 'miembros')}</span>
+              <span className="text-neutral-700">·</span>
+              <span>
+                {group.postsPerWeek === 1
+                  ? '1 publicación esta semana'
+                  : `${group.postsPerWeek} publicaciones esta semana`}
               </span>
-              <span className="flex items-center gap-1">
-                <MessageCircle size={14} />
-                {group.postsPerWeek} posts/semana
-              </span>
-            </div>
+              {group.isPrivate && (
+                <>
+                  <span className="text-neutral-700">·</span>
+                  <span className="flex items-center gap-1">
+                    <Lock size={12} />
+                    Privado
+                  </span>
+                </>
+              )}
+            </p>
           </div>
         </div>
 
-        <p className="text-neutral-400 text-body-md mb-6">{group.description}</p>
-
-        <div className="flex items-center gap-3">
+        {category && (
           <button
-            onClick={onJoinGroup}
-            disabled={joinDisabled}
-            className={`flex-1 py-3 rounded-button font-medium text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all btn-premium ${
-              isJoined
-                ? 'bg-brand-gold text-black'
-                : joinDisabled
-                  ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed'
-                  : 'bg-neutral-800 text-white hover:bg-neutral-700'
-            }`}
+            type="button"
+            onClick={onNavigateToCategory}
+            className="mt-5 rounded-full border border-white/10 px-3.5 py-1.5 text-xs font-medium text-neutral-300 transition-colors hover:border-white/25 hover:text-white"
           >
-            {isJoined ? (
-              <>
-                <Check size={18} /> {joinLabel}
-              </>
-            ) : (
-              joinLabel
-            )}
+            {category.label}
           </button>
+        )}
+
+        {group.description && (
+          <p className="mt-5 max-w-2xl whitespace-pre-line font-light leading-relaxed text-neutral-300">
+            {group.description}
+          </p>
+        )}
+
+        <div className="mt-6 flex items-center gap-3">
+          <JoinButton
+            label={joinLabel}
+            isJoined={isJoined}
+            disabled={joinDisabled}
+            onClick={onJoinGroup}
+          />
           <button
             onClick={onOpenGroupChat}
             disabled={openingChat || !isAuthenticated || !canOpenChat}
-            className="px-5 py-3 rounded-button bg-neutral-800 border border-neutral-700 text-white hover:bg-neutral-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`${buttonBase} flex-1 border border-neutral-700 text-white hover:bg-neutral-900 disabled:opacity-50 sm:flex-none`}
             title={
               !isAuthenticated
                 ? 'Debes iniciar sesion para chatear'
@@ -209,144 +461,72 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
                   : ''
             }
           >
-            <MessageCircle size={18} />
+            <MessageCircle size={16} />
             {openingChat ? 'Abriendo...' : 'Chat'}
           </button>
-          {canLeaveGroup && (
-            <button
-              onClick={onLeaveGroup}
-              className="px-4 py-3 rounded-button bg-red-500/10 border border-red-500/30 text-red-300 text-sm hover:bg-red-500/20 transition-colors"
-            >
-              Salir
-            </button>
-          )}
-          {canEditGroup && (
-            <button
-              onClick={onEditGroup}
-              className="px-4 py-3 rounded-button bg-neutral-800 border border-neutral-700 text-neutral-200 text-sm hover:bg-neutral-700 transition-colors"
-            >
-              Editar grupo
-            </button>
-          )}
-          {category && (
-            <button
-              onClick={onNavigateToCategory}
-              className="px-4 py-3 rounded-button bg-surface-overlay border border-neutral-800 text-neutral-400 text-sm hover:border-neutral-700 transition-colors"
-            >
-              Ver {category.label}
-            </button>
-          )}
+          <GroupOptionsMenu
+            canEdit={canEditGroup}
+            canLeave={canLeaveGroup}
+            onEdit={onEditGroup}
+            onLeave={onLeaveGroup}
+          />
         </div>
       </header>
 
-      {/* Recent posts */}
-      <section className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-heading-lg font-display text-white">Publicaciones recientes</h2>
+      <section className="mb-12">
+        <div className="mb-3 flex items-center justify-between gap-4">
+          <h2 className={sectionTitle}>Publicaciones</h2>
           {canCreatePost && (
             <button
               onClick={onOpenCreatePost}
-              className="px-4 py-2 rounded-button bg-brand-gold text-black text-xs uppercase tracking-wider font-medium hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-1.5 rounded-button bg-brand-gold px-3.5 py-1.5 text-xs font-medium uppercase tracking-wider text-black transition-opacity hover:opacity-90"
             >
+              <Plus size={14} />
               Publicar
             </button>
           )}
         </div>
-        <div className="space-y-3 stagger-premium">
-          {isPrivateLocked ? (
-            <div className="text-center text-neutral-500 py-6">
-              Este grupo es privado. Solicita acceso para ver las publicaciones.
-            </div>
-          ) : group.recentPosts.length === 0 ? (
-            <div className="text-center text-neutral-500 py-6">
-              Aun no hay publicaciones en este grupo.
-            </div>
-          ) : (
-            group.recentPosts.map((post) => (
-              <div
+        {isPrivateLocked ? (
+          <Notice>Este grupo es privado. Solicita acceso para ver las publicaciones.</Notice>
+        ) : group.recentPosts.length === 0 ? (
+          <Notice>Aún no hay publicaciones en este grupo.</Notice>
+        ) : (
+          <div className="-mx-2 divide-y divide-white/[0.04]">
+            {group.recentPosts.map((post) => (
+              <GroupPostRow
                 key={post.id}
-                onClick={() => onOpenPost?.(post.id)}
-                onKeyDown={(event) => {
-                  if (!onOpenPost) return;
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    onOpenPost(post.id);
-                  }
-                }}
-                role={onOpenPost ? 'button' : undefined}
-                tabIndex={onOpenPost ? 0 : undefined}
-                aria-label={onOpenPost ? `Abrir publicacion: ${post.title}` : undefined}
-                className={`bg-surface-overlay border border-neutral-800/50 rounded-card p-4 flex items-center justify-between card-premium ${onOpenPost ? 'cursor-pointer' : ''}`}
-              >
-                <div>
-                  <p className="text-white font-medium mb-1">{post.title}</p>
-                  <p className="text-neutral-500 text-sm">
-                    {post.author} - {post.time}
-                  </p>
-                </div>
-                <ArrowRight size={16} className="text-neutral-600" />
-              </div>
-            ))
-          )}
-        </div>
+                post={post}
+                onOpen={onOpenPost ? () => onOpenPost(post.id) : undefined}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
-      {/* Top members */}
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-heading-lg font-display text-white">Miembros destacados</h2>
+        <div className="mb-3 flex items-center justify-between gap-4">
+          <h2 className={sectionTitle}>Miembros</h2>
           {!isPrivateLocked && (
             <button
               onClick={onOpenMembers}
-              className="text-xs uppercase tracking-wider text-amber-400 hover:text-amber-300 transition-colors"
+              className="rounded-full px-2 py-1 text-sm font-semibold text-brand-gold transition-colors hover:text-brand-gold-light"
             >
               Ver miembros
             </button>
           )}
         </div>
         {isPrivateLocked ? (
-          <div className="text-center text-neutral-500 py-6">
-            Solo los miembros pueden ver la lista de participantes.
-          </div>
+          <Notice>Solo los miembros pueden ver la lista de participantes.</Notice>
         ) : group.topMembers.length === 0 ? (
-          <div className="text-center text-neutral-500 py-6">
-            No hay miembros destacados por ahora.
-          </div>
+          <Notice>No hay miembros destacados por ahora.</Notice>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="-mx-2 grid grid-cols-1 sm:grid-cols-2">
             {group.topMembers.map((member) => (
-              <div
+              <MemberRow
                 key={member.id}
-                onClick={() => onOpenMember?.(member.id)}
-                onKeyDown={(event) => {
-                  if (!onOpenMember) return;
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    onOpenMember(member.id);
-                  }
-                }}
-                role={onOpenMember ? 'button' : undefined}
-                tabIndex={onOpenMember ? 0 : undefined}
-                aria-label={onOpenMember ? `Abrir perfil de ${member.name}` : undefined}
-                className={`bg-surface-overlay border border-neutral-800/50 rounded-card p-4 text-center ${
-                  onOpenMember ? 'cursor-pointer hover:border-neutral-700 transition-colors' : ''
-                }`}
-              >
-                <div className="w-12 h-12 rounded-full bg-neutral-800 overflow-hidden flex items-center justify-center mx-auto mb-3">
-                  {member.photoURL ? (
-                    <img
-                      src={member.photoURL}
-                      alt={member.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-lg">{member.name.charAt(0)}</span>
-                  )}
-                </div>
-                <p className="text-white font-medium">{member.name}</p>
-                <p className="text-brand-gold text-xs uppercase tracking-wider">{member.role}</p>
-                <p className="text-neutral-500 text-xs mt-1">{member.posts} posts</p>
-              </div>
+                member={member}
+                onOpen={onOpenMember ? () => onOpenMember(member.id) : undefined}
+              />
             ))}
           </div>
         )}

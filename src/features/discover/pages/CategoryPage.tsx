@@ -1,30 +1,35 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
+  Award,
+  Check,
   ChevronLeft,
-  Hash,
-  ArrowRight,
+  ChevronRight,
   Feather,
   FileText,
+  FolderGit2,
+  GraduationCap,
   Link as LinkIcon,
-  Loader2,
-  UserPlus,
+  Lock,
+  Plus,
+  ScrollText,
+  Users,
+  type LucideIcon,
 } from 'lucide-react';
 import { SkeletonContentGrid, EmptyState, ErrorState } from '@/shared/ui/SkeletonLoader';
 import { useToast } from '@/shared/ui/Toast';
 import { useAppState } from '@/context/app-state';
 import { useAuth } from '@/context/auth';
 import ApiContentCard from '@/features/discover/components/ApiContentCard';
+import { SectionEmpty, SectionError } from '@/features/discover/components/DiscoverSection';
+import {
+  useCategoryGroups,
+  useCategoryLibrary,
+} from '@/features/discover/hooks/useCategoryContent';
+import { countLabel } from '@/features/discover/model/discoverCatalog';
 import { useApiContent } from '@/shared/hooks';
 import { CATEGORIES } from '@/shared/constants';
-import { getGroupsByCategory, type FirestoreGroup } from '@/features/groups/api';
-import {
-  getBlockedUsers,
-  getContributionsByCategory,
-  getUserProfile,
-  type ContributionRead,
-  type ContributionType,
-} from '@/features/profile/api';
+import type { ContributionType } from '@/features/profile/api';
 
 const isSafeHttpUrl = (value: string | null | undefined): value is string => {
   if (!value) return false;
@@ -36,69 +41,76 @@ const isSafeHttpUrl = (value: string | null | undefined): value is string => {
   }
 };
 
-type ContributionLibraryItem = ContributionRead & {
-  authorName: string;
-  authorPhoto: string | null;
-};
-
 type CategoryNavigationState = {
   enteredAt?: number;
   fromDiscover?: boolean;
   source?: string;
 };
 
-const CONTRIBUTION_LABELS: Record<ContributionType, string> = {
-  project: 'Proyecto',
-  paper: 'Paper',
-  cv: 'CV',
-  certificate: 'Certificado',
-  other: 'Otro',
+type ViewMode = 'live' | 'subgroups' | 'library';
+
+const TABS: Array<{ id: ViewMode; label: string }> = [
+  { id: 'live', label: 'En vivo' },
+  { id: 'subgroups', label: 'Comunidades' },
+  { id: 'library', label: 'Biblioteca' },
+];
+
+const CONTRIBUTIONS: Record<ContributionType, { label: string; icon: LucideIcon }> = {
+  project: { label: 'Proyecto', icon: FolderGit2 },
+  paper: { label: 'Paper', icon: ScrollText },
+  cv: { label: 'CV', icon: GraduationCap },
+  certificate: { label: 'Certificado', icon: Award },
+  other: { label: 'Otro', icon: FileText },
 };
 
-const formatMembers = (value: number): string => {
-  return new Intl.NumberFormat('es-ES', { notation: 'compact', maximumFractionDigits: 1 }).format(
-    value,
-  );
-};
+const ListSkeleton = () => (
+  <div aria-hidden className="space-y-3">
+    {[0, 1, 2].map((index) => (
+      <div key={index} className="skeleton h-[92px] rounded-2xl" />
+    ))}
+  </div>
+);
 
+/**
+ * `/category/:categoryId`: the interest with its live content, its communities and its library.
+ * Communities and library load the first time their tab opens and stay for the session.
+ */
 const CategoryPage = () => {
   const { categoryId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const [viewMode, setViewMode] = useState<'live' | 'subgroups' | 'library'>('live');
-  const [selectedSubgroupSelection, setSelectedSubgroupSelection] = useState<{
+  const { showToast } = useToast();
+  const { toggleFollowCategory, isCategoryFollowed } = useAppState();
+  const [viewMode, setViewMode] = useState<ViewMode>('live');
+  const [subgroupSelection, setSubgroupSelection] = useState<{
     categoryId: string;
     subgroupId: string;
   } | null>(null);
-  const { showToast } = useToast();
-  const { toggleFollowCategory, isCategoryFollowed } = useAppState();
   const navigationState = (location.state as CategoryNavigationState | null) ?? null;
   const cameFromDiscover = navigationState?.fromDiscover === true;
 
   const category = CATEGORIES.find((c) => c.id === categoryId);
-  const selectedSubgroupId =
-    selectedSubgroupSelection && selectedSubgroupSelection.categoryId === category?.id
-      ? selectedSubgroupSelection.subgroupId
-      : null;
   const selectedSubgroup =
-    category?.subgroups.find((subgroup) => subgroup.id === selectedSubgroupId) || null;
+    category?.subgroups.find(
+      (subgroup) =>
+        subgroupSelection?.categoryId === category.id &&
+        subgroup.id === subgroupSelection.subgroupId,
+    ) || null;
   const activeSubgroupId = selectedSubgroup?.id || category?.subgroups[0]?.id || null;
 
-  const [communityGroups, setCommunityGroups] = useState<FirestoreGroup[]>([]);
-  const [groupsLoading, setGroupsLoading] = useState(false);
-  const [groupsError, setGroupsError] = useState<string | null>(null);
-  const [groupsReloadToken, setGroupsReloadToken] = useState(0);
-
-  const [libraryItems, setLibraryItems] = useState<ContributionLibraryItem[]>([]);
-  const [libraryLoading, setLibraryLoading] = useState(false);
-  const [libraryError, setLibraryError] = useState<string | null>(null);
-  const [libraryReloadToken, setLibraryReloadToken] = useState(0);
-
-  const categoryIsFollowed = category ? isCategoryFollowed(category.id) : false;
-  const pageTransitionClass = cameFromDiscover
-    ? 'animate-in fade-in slide-in-from-right-3 duration-500'
-    : 'animate-in fade-in duration-300';
+  const apiQuery =
+    viewMode === 'live'
+      ? selectedSubgroup?.apiQuery || category?.subgroups[0]?.apiQuery || category?.id || null
+      : null;
+  const apiSource = viewMode === 'live' ? category?.apiSource || null : null;
+  const live = useApiContent(apiSource, apiQuery, 8, showToast);
+  const groups = useCategoryGroups(category?.id ?? null, viewMode === 'subgroups');
+  const library = useCategoryLibrary(
+    category?.id ?? null,
+    user?.uid ?? null,
+    viewMode === 'library',
+  );
 
   const handleBack = () => {
     if (cameFromDiscover && window.history.length > 1) {
@@ -107,96 +119,6 @@ const CategoryPage = () => {
     }
     navigate('/discover');
   };
-
-  // Get API query from selected subgroup or default to first one
-  const apiQuery =
-    viewMode === 'live'
-      ? selectedSubgroup?.apiQuery || category?.subgroups[0]?.apiQuery || category?.id || null
-      : null;
-  const apiSource = viewMode === 'live' ? category?.apiSource || null : null;
-
-  // Fetch live content from API with toast notifications
-  const {
-    data: liveContent,
-    loading,
-    error,
-    retry: retryLiveContent,
-  } = useApiContent(apiSource, apiQuery, 8, showToast);
-
-  useEffect(() => {
-    if (!category?.id) return;
-    let active = true;
-    const loadGroups = async () => {
-      setGroupsLoading(true);
-      setGroupsError(null);
-      setCommunityGroups([]);
-      try {
-        const items = await getGroupsByCategory(category.id);
-        if (!active) return;
-        setCommunityGroups(items);
-      } catch (loadError) {
-        console.error('Error loading category groups:', loadError);
-        if (!active) return;
-        setGroupsError('No se pudieron cargar las comunidades.');
-      } finally {
-        if (active) setGroupsLoading(false);
-      }
-    };
-    void loadGroups();
-    return () => {
-      active = false;
-    };
-  }, [category?.id, groupsReloadToken]);
-
-  useEffect(() => {
-    if (!category?.id) return;
-    let active = true;
-    const loadLibrary = async () => {
-      setLibraryLoading(true);
-      setLibraryError(null);
-      setLibraryItems([]);
-      try {
-        const [contributions, blockedIds] = await Promise.all([
-          getContributionsByCategory(category.id, 16),
-          user?.uid ? getBlockedUsers(user.uid).catch(() => []) : Promise.resolve<string[]>([]),
-        ]);
-        const blockedSet = new Set(blockedIds);
-        const visibleContributions = contributions.filter((item) => !blockedSet.has(item.userId));
-        const uniqueAuthors = Array.from(new Set(visibleContributions.map((item) => item.userId)));
-        const profiles = await Promise.all(
-          uniqueAuthors.map(async (uid) => {
-            try {
-              const profile = await getUserProfile(uid);
-              return { uid, profile };
-            } catch {
-              return { uid, profile: null };
-            }
-          }),
-        );
-        const profileMap = new Map(profiles.map(({ uid, profile }) => [uid, profile]));
-        const items: ContributionLibraryItem[] = visibleContributions.map((item) => {
-          const profile = profileMap.get(item.userId);
-          return {
-            ...item,
-            authorName: profile?.displayName ?? profile?.username ?? 'Usuario',
-            authorPhoto: profile?.photoURL ?? null,
-          };
-        });
-        if (!active) return;
-        setLibraryItems(items);
-      } catch (loadError) {
-        console.error('Error loading library contributions:', loadError);
-        if (!active) return;
-        setLibraryError('No se pudo cargar la biblioteca.');
-      } finally {
-        if (active) setLibraryLoading(false);
-      }
-    };
-    void loadLibrary();
-    return () => {
-      active = false;
-    };
-  }, [category?.id, user?.uid, libraryReloadToken]);
 
   if (!category) {
     return (
@@ -209,260 +131,260 @@ const CategoryPage = () => {
     );
   }
 
+  const followed = isCategoryFollowed(category.id);
+  const toggleFollow = () => {
+    toggleFollowCategory(category.id);
+    showToast(
+      followed ? 'Dejaste de seguir esta categoría' : 'Ahora sigues esta categoría',
+      followed ? 'info' : 'success',
+    );
+  };
+
   return (
-    <div className={`page-category ${pageTransitionClass}`}>
+    <div
+      className={`page-category mx-auto max-w-5xl pb-24 ${
+        cameFromDiscover
+          ? 'animate-in fade-in slide-in-from-right-3 duration-500'
+          : 'animate-in fade-in duration-300'
+      }`}
+    >
       <button
+        type="button"
         onClick={handleBack}
-        className="group flex items-center text-neutral-500 hover:text-neutral-300 mb-8 transition-colors text-xs tracking-widest uppercase"
+        className="-ml-1 mb-6 mt-2 inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-white"
       >
-        <ChevronLeft size={14} className="mr-2 group-hover:-translate-x-1 transition-transform" />
-        Regresar
+        <ChevronLeft size={18} />
+        Descubrir
       </button>
 
-      <header className="mb-12 border-b border-neutral-900 pb-12 animate-in fade-in slide-in-from-bottom-2 duration-500">
-        <div className={`inline-flex mb-6 opacity-80 ${category.color}`}>
-          <category.icon size={40} strokeWidth={0.5} />
-        </div>
-
-        <div className="flex justify-between items-end mb-6">
-          <h1 className="text-5xl md:text-7xl font-serif font-light text-white tracking-tight">
-            {category.label}
-          </h1>
+      <header className="mb-8">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-4">
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.03]">
+              <category.icon size={26} strokeWidth={1.4} className={category.color} />
+            </span>
+            <h1 className="font-display text-display-sm text-white md:text-display-md">
+              {category.label}
+            </h1>
+          </div>
           <button
             type="button"
-            onClick={() => {
-              const alreadyFollowed = isCategoryFollowed(category.id);
-              toggleFollowCategory(category.id);
-              showToast(
-                alreadyFollowed ? 'Categoria dejada de seguir' : 'Categoria seguida',
-                alreadyFollowed ? 'info' : 'success',
-              );
-            }}
-            className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs uppercase tracking-wider transition-colors ${
-              categoryIsFollowed
-                ? 'border-brand-gold/50 bg-brand-gold/15 text-brand-gold'
-                : 'border-neutral-700 text-neutral-300 hover:border-neutral-500 hover:text-white'
+            onClick={toggleFollow}
+            aria-pressed={followed}
+            className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium transition-colors ${
+              followed
+                ? 'border border-white/[0.12] text-neutral-200 hover:border-white/25'
+                : 'bg-brand-gold text-black hover:bg-amber-400'
             }`}
           >
-            <UserPlus size={12} />
-            {categoryIsFollowed ? 'Siguiendo' : 'Seguir categoria'}
+            {followed ? <Check size={15} /> : <Plus size={15} />}
+            {followed ? 'Siguiendo' : 'Seguir'}
           </button>
         </div>
-
-        <p className="text-neutral-400 text-lg md:text-xl max-w-2xl font-light font-sans leading-relaxed mb-8">
+        <p className="mt-4 max-w-2xl text-base leading-relaxed text-neutral-400">
           {category.description}
         </p>
 
-        {/* Tab navigation */}
-        <div className="flex space-x-8 text-sm tracking-widest uppercase">
-          <button
-            onClick={() => setViewMode('live')}
-            className={`pb-2 border-b-2 transition-colors ${viewMode === 'live' ? 'text-white border-white' : 'text-neutral-600 border-transparent hover:text-neutral-400'}`}
-          >
-            En Vivo
-          </button>
-          <button
-            onClick={() => setViewMode('subgroups')}
-            className={`pb-2 border-b-2 transition-colors ${viewMode === 'subgroups' ? 'text-white border-white' : 'text-neutral-600 border-transparent hover:text-neutral-400'}`}
-          >
-            Comunidades
-          </button>
-          <button
-            onClick={() => setViewMode('library')}
-            className={`pb-2 border-b-2 transition-colors ${viewMode === 'library' ? 'text-white border-white' : 'text-neutral-600 border-transparent hover:text-neutral-400'}`}
-          >
-            Biblioteca
-          </button>
+        <div className="mt-6 inline-flex rounded-full border border-white/[0.08] bg-white/[0.03] p-1">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setViewMode(tab.id)}
+              aria-pressed={viewMode === tab.id}
+              className={`rounded-full px-4 py-1.5 text-sm transition-colors ${
+                viewMode === tab.id
+                  ? 'bg-white font-medium text-black'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </header>
 
-      {/* Live content from API */}
       {viewMode === 'live' && (
-        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-          {/* Subgroup filter buttons */}
-          <div className="flex flex-wrap gap-2 mb-8">
-            {category.subgroups.map((group) => (
+        <section className="animate-in fade-in duration-300">
+          <div className="-mx-4 mb-6 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
+            {category.subgroups.map((subgroup) => (
               <button
-                key={group.id}
+                key={subgroup.id}
+                type="button"
                 onClick={() =>
-                  setSelectedSubgroupSelection({ categoryId: category.id, subgroupId: group.id })
+                  setSubgroupSelection({ categoryId: category.id, subgroupId: subgroup.id })
                 }
-                className={`text-xs px-4 py-2 rounded-full border transition-colors ${
-                  activeSubgroupId === group.id
-                    ? 'bg-white text-black border-white'
-                    : 'border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-white'
+                aria-pressed={activeSubgroupId === subgroup.id}
+                className={`shrink-0 rounded-full border px-4 py-1.5 text-sm transition-colors ${
+                  activeSubgroupId === subgroup.id
+                    ? 'border-white bg-white text-black'
+                    : 'border-white/[0.1] text-neutral-400 hover:border-white/25 hover:text-white'
                 }`}
               >
-                {group.name}
+                {subgroup.name}
               </button>
             ))}
           </div>
 
-          {/* Loading state - Premium skeleton */}
-          {loading && <SkeletonContentGrid count={4} />}
-
-          {/* Error state - Premium */}
-          {!loading && error && <ErrorState message={error} onRetry={retryLiveContent} />}
-
-          {/* Content grid */}
-          {!loading && !error && liveContent.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 stagger-premium">
-              {liveContent.map((item, idx) => (
-                <ApiContentCard key={item.id || idx} item={item} type={category.apiSource} />
+          {live.loading && <SkeletonContentGrid count={4} />}
+          {!live.loading && live.error && (
+            <ErrorState
+              message="No se pudo cargar el contenido en vivo. Revisa tu conexión e intenta de nuevo."
+              onRetry={live.retry}
+            />
+          )}
+          {!live.loading && !live.error && live.data.length > 0 && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 stagger-premium">
+              {live.data.map((item, index) => (
+                <ApiContentCard key={item.id || index} item={item} type={category.apiSource} />
               ))}
             </div>
           )}
-
-          {/* Empty state - Premium */}
-          {!loading && !error && liveContent.length === 0 && (
+          {!live.loading && !live.error && live.data.length === 0 && (
             <EmptyState
               icon={Feather}
               title="Sin contenido disponible"
               message="No hay publicaciones en esta categoría aún. ¡Vuelve pronto!"
             />
           )}
-        </div>
+        </section>
       )}
 
-      {/* Subgroups view */}
       {viewMode === 'subgroups' && (
-        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-          {groupsLoading ? (
-            <div className="py-16 text-center text-neutral-500">
-              <Loader2 size={20} className="mx-auto mb-3 animate-spin" />
-              Cargando comunidades...
-            </div>
-          ) : groupsError ? (
-            <div className="py-16 text-center space-y-3">
-              <p className="text-red-400">{groupsError}</p>
-              <button
-                type="button"
-                onClick={() => setGroupsReloadToken((prev) => prev + 1)}
-                className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
-              >
-                Reintentar
-              </button>
-            </div>
-          ) : communityGroups.length === 0 ? (
-            <div className="py-16 text-center border border-dashed border-neutral-800 rounded-lg">
-              <p className="text-neutral-500">Aun no hay comunidades en esta categoria.</p>
-            </div>
+        <section className="animate-in fade-in duration-300">
+          {groups.error && !groups.data ? (
+            <SectionError
+              message="No se pudieron cargar las comunidades."
+              onRetry={groups.reload}
+            />
+          ) : !groups.data ? (
+            <ListSkeleton />
+          ) : groups.data.length === 0 ? (
+            <SectionEmpty>Aún no hay comunidades en esta categoría.</SectionEmpty>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-neutral-900 border border-neutral-900">
-              {communityGroups.map((group) => {
-                const membersLabel =
-                  typeof group.memberCount === 'number'
-                    ? `${formatMembers(group.memberCount)} miembros`
-                    : 'Miembros';
+            <div className="grid gap-3 md:grid-cols-2">
+              {groups.data.map((group) => {
+                const isPrivate = (group.visibility ?? 'public') !== 'public';
                 return (
-                  <div
+                  <button
                     key={group.id}
-                    role="button"
-                    tabIndex={0}
+                    type="button"
                     onClick={() => navigate(`/group/${group.id}`)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        navigate(`/group/${group.id}`);
-                      }
-                    }}
-                    className="bg-neutral-950 p-10 hover:bg-neutral-900/40 transition-colors cursor-pointer group"
+                    className="flex items-start gap-3.5 rounded-2xl border border-white/[0.06] bg-surface-overlay p-4 text-left transition-colors hover:border-white/[0.14]"
                   >
-                    <div className="flex justify-between items-start mb-8">
-                      <Hash
-                        size={16}
-                        className="text-neutral-700 group-hover:text-neutral-500 transition-colors"
-                      />
-                    </div>
-                    <h3 className="text-xl text-neutral-200 font-serif font-light mb-2">
-                      {group.name}
-                    </h3>
-                    <p className="text-neutral-600 text-xs tracking-wider uppercase mb-8">
-                      {membersLabel}
-                    </p>
-                    <div className="flex items-center text-neutral-500 text-xs group-hover:text-white transition-colors">
-                      <span>Explorar</span>
-                      <ArrowRight size={12} className="ml-2" />
-                    </div>
-                  </div>
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/[0.06] bg-neutral-900">
+                      {group.iconUrl ? (
+                        <img
+                          src={group.iconUrl}
+                          alt=""
+                          loading="lazy"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <Users size={20} className="text-neutral-500" strokeWidth={1.6} />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] font-semibold text-white">
+                        {group.name}
+                      </span>
+                      <span className="mt-0.5 line-clamp-2 block text-sm text-neutral-500">
+                        {group.description || 'Sin descripción.'}
+                      </span>
+                      <span className="mt-2 flex items-center gap-1.5 text-xs text-neutral-500">
+                        {countLabel(group.memberCount ?? 0, 'miembro', 'miembros')}
+                        {isPrivate && (
+                          <>
+                            <span aria-hidden>·</span>
+                            <Lock size={11} /> Privado
+                          </>
+                        )}
+                      </span>
+                    </span>
+                    <ChevronRight size={16} className="mt-1 shrink-0 text-neutral-600" />
+                  </button>
                 );
               })}
             </div>
           )}
-        </div>
+        </section>
       )}
 
-      {/* Library view */}
       {viewMode === 'library' && (
-        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-          {libraryLoading ? (
-            <div className="py-16 text-center text-neutral-500">
-              <Loader2 size={20} className="mx-auto mb-3 animate-spin" />
-              Cargando biblioteca...
-            </div>
-          ) : libraryError ? (
-            <div className="py-16 text-center space-y-3">
-              <p className="text-red-400">{libraryError}</p>
-              <button
-                type="button"
-                onClick={() => setLibraryReloadToken((prev) => prev + 1)}
-                className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs uppercase tracking-wider text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
-              >
-                Reintentar
-              </button>
-            </div>
-          ) : libraryItems.length === 0 ? (
-            <div className="py-20 text-center border border-dashed border-neutral-800 rounded-lg">
-              <p className="text-neutral-500 font-light italic">
-                No hay documentos archivados en esta categoría aún.
-              </p>
-            </div>
+        <section className="animate-in fade-in duration-300">
+          {library.error && !library.data ? (
+            <SectionError message="No se pudo cargar la biblioteca." onRetry={library.reload} />
+          ) : !library.data ? (
+            <ListSkeleton />
+          ) : library.data.length === 0 ? (
+            <SectionEmpty>No hay documentos archivados en esta categoría aún.</SectionEmpty>
           ) : (
-            <div className="space-y-3 max-w-4xl">
-              {libraryItems.map((item) => (
-                <div
-                  key={item.id}
-                  className="p-5 border border-neutral-800/80 rounded-2xl bg-neutral-900/20"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-neutral-500 uppercase tracking-wider">
-                      {CONTRIBUTION_LABELS[item.type]}
-                    </span>
-                    <span className="text-xs text-neutral-600">{item.authorName}</span>
-                  </div>
-                  <h3 className="text-lg text-white font-medium mb-2">{item.title}</h3>
-                  {item.description && (
-                    <p className="text-sm text-neutral-400 mb-3">{item.description}</p>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    {isSafeHttpUrl(item.link) && (
-                      <a
-                        href={item.link}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/80 text-neutral-200 text-xs hover:bg-neutral-700 transition-colors"
-                      >
-                        <LinkIcon size={14} />
-                        Ver enlace
-                      </a>
+            <div className="max-w-3xl space-y-3">
+              {library.data.map((item) => {
+                const kind = CONTRIBUTIONS[item.type] ?? CONTRIBUTIONS.other;
+                return (
+                  <article
+                    key={item.id}
+                    className="rounded-2xl border border-white/[0.06] bg-surface-overlay p-4"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-gold">
+                        <kind.icon size={13} />
+                        {kind.label}
+                      </span>
+                      <span className="flex min-w-0 items-center gap-2 text-xs text-neutral-500">
+                        {item.authorPhoto ? (
+                          <img
+                            src={item.authorPhoto}
+                            alt=""
+                            className="h-5 w-5 rounded-full object-cover"
+                          />
+                        ) : (
+                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-neutral-800 text-[10px] text-neutral-300">
+                            {item.authorName.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                        <span className="truncate">{item.authorName}</span>
+                      </span>
+                    </div>
+                    <h3 className="mt-2 font-display text-lg text-white">{item.title}</h3>
+                    {item.description && (
+                      <p className="mt-1 text-sm leading-relaxed text-neutral-400">
+                        {item.description}
+                      </p>
                     )}
-                    {isSafeHttpUrl(item.fileUrl) && (
-                      <a
-                        href={item.fileUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/80 text-neutral-200 text-xs hover:bg-neutral-700 transition-colors"
-                      >
-                        <FileText size={14} />
-                        {item.fileName || 'Ver PDF'}
-                      </a>
+                    {(isSafeHttpUrl(item.link) || isSafeHttpUrl(item.fileUrl)) && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {isSafeHttpUrl(item.link) && (
+                          <a
+                            href={item.link}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.1] px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-white/25"
+                          >
+                            <LinkIcon size={13} />
+                            Ver enlace
+                          </a>
+                        )}
+                        {isSafeHttpUrl(item.fileUrl) && (
+                          <a
+                            href={item.fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.1] px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-white/25"
+                          >
+                            <FileText size={13} />
+                            {item.fileName || 'Ver PDF'}
+                          </a>
+                        )}
+                      </div>
                     )}
-                  </div>
-                </div>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           )}
-        </div>
+        </section>
       )}
     </div>
   );

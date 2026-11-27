@@ -107,10 +107,7 @@ test.describe('Web/native conversation interoperability', () => {
     await expect(page.getByRole('log').locator('[data-message-id]').first()).toBeVisible({
       timeout: 20000,
     });
-    const before = await page
-      .getByRole('log')
-      .getByRole('link', { name: 'Abrir Nota de voz.wav', exact: true })
-      .count();
+    const before = await page.getByRole('log').getByLabel('Audio: Nota de voz.wav').count();
     await page.getByRole('button', { name: 'Grabar nota de voz', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Terminar grabación' })).toBeVisible();
     await page.waitForTimeout(1800); // Obtain a complete real MediaRecorder chunk before stopping.
@@ -120,9 +117,9 @@ test.describe('Web/native conversation interoperability', () => {
     });
     await page.getByRole('button', { name: 'Enviar mensaje', exact: true }).click();
     const thread = page.getByRole('log');
-    await expect(
-      thread.getByRole('link', { name: 'Abrir Nota de voz.wav', exact: true }),
-    ).toHaveCount(before + 1, { timeout: 20000 });
+    await expect(thread.getByLabel('Audio: Nota de voz.wav')).toHaveCount(before + 1, {
+      timeout: 20000,
+    });
     const player = thread.getByLabel('Audio: Nota de voz.wav').last();
     await expect
       .poll(() => player.evaluate((node: HTMLAudioElement) => node.duration))

@@ -82,7 +82,8 @@ struct CollectionsView: View {
         }
       }
     }
-    .searchable(text: $vm.searchText, prompt: "Buscar colecciones")
+    // Pinned under the title: iOS 26 would otherwise put it at the bottom, behind our tab bar.
+    .searchable(text: $vm.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Buscar colecciones")
     .navigationTitle("Colecciones")
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {

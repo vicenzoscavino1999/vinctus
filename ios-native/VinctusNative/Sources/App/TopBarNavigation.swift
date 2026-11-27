@@ -4,7 +4,8 @@ import SwiftUI
 /// not Shared, because it reaches into the Feed and AI features.
 private struct VinctusTopBarModifier: ViewModifier {
   @ObservedObject private var badge = NotificationBadge.shared
-  @State private var isCreatingPost = false
+  /// Screenshot builds open the composer with `-VinctusOpenComposer 1`.
+  @State private var isCreatingPost = AppRepos.demoArgument("-VinctusOpenComposer") != nil
   @State private var isShowingAI = false
   @State private var isShowingNotifications = false
 
@@ -38,6 +39,10 @@ private struct VinctusTopBarModifier: ViewModifier {
         // Screenshot builds open Notifications with `-VinctusOpenNotifications 1`.
         if !isShowingNotifications, AppRepos.demoArgument("-VinctusOpenNotifications") != nil {
           isShowingNotifications = true
+        }
+        // `-VinctusOpenAI chat|arena` opens the AI (AIHubView then opens that mode).
+        if !isShowingAI, AppRepos.demoArgument("-VinctusOpenAI") != nil {
+          isShowingAI = true
         }
       }
   }

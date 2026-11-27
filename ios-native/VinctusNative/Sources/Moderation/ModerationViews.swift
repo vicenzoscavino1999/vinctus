@@ -332,6 +332,8 @@ extension ReportTarget: Identifiable {
       return "msg_\(conversationID)_\(messageID)"
     case let .story(storyID, _):
       return "story_\(storyID)"
+    case let .group(groupID):
+      return "group_\(groupID)"
     }
   }
 }

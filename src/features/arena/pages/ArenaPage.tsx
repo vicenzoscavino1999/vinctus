@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Sparkles } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { collection, doc, getDoc } from 'firebase/firestore';
 import {
   createDebate,
@@ -21,11 +20,15 @@ import { PersonaPicker } from '@/features/arena/components/PersonaPicker';
 import { TopicInput } from '@/features/arena/components/TopicInput';
 import type { Debate, DebateVisibility, Persona, Turn, UsageStats } from '@/features/arena/types';
 import { getPersonaById } from '@/features/arena/types';
-import { AIModeTabs } from '@/features/ai/components/AIModeTabs';
+import {
+  AIConsentCard,
+  AIConsentWarning,
+  AIDisclosure,
+  AIHeader,
+} from '@/features/ai/components/AIShell';
+import { useAIConsent } from '@/features/ai/hooks/useAIConsent';
+import { useAIReport } from '@/features/ai/hooks/useAIReport';
 import { useAuth } from '@/context/auth';
-import { getServerAIConsent, updateServerAIConsent } from '@/features/settings/api/aiConsent';
-import { LEGAL_COPY } from '@/shared/constants';
-import { getAIConsent, setAIConsent } from '@/shared/lib/aiConsent';
 import { db } from '@/shared/lib/firebase';
 import { useToast } from '@/shared/ui/Toast';
 import { COLLECTIONS, LIMITS } from '@/shared/lib/firestore/firestoreContract';
@@ -41,12 +44,8 @@ function ArenaSession({ userId }: { userId: string | null }) {
   const [visibility, setVisibility] = useState<DebateVisibility>('public');
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasAiConsent, setHasAiConsent] = useState(() =>
-    userId ? getAIConsent(userId).granted : false,
-  );
-  const [isConsentSyncing, setIsConsentSyncing] = useState(Boolean(userId));
-  const [consentSyncError, setConsentSyncError] = useState<string | null>(null);
-
+  const consent = useAIConsent(userId, 'arena');
+  const aiReport = useAIReport();
   const [debateSnapshot, setDebateSnapshot] = useState<{
     id: string;
     debate: Debate | null;
@@ -175,49 +174,6 @@ function ArenaSession({ userId }: { userId: string | null }) {
     };
   }, [accessibleDebateId, userId, reactionKey]);
 
-  const syncConsent = useCallback(async () => {
-    if (!userId) {
-      setHasAiConsent(false);
-      setIsConsentSyncing(false);
-      setConsentSyncError(null);
-      return;
-    }
-
-    const localConsent = getAIConsent(userId);
-    setConsentSyncError(null);
-    setIsConsentSyncing(true);
-    try {
-      const serverConsent = await getServerAIConsent(userId);
-      if (!isMountedRef.current) return;
-
-      if (serverConsent.recorded) {
-        setAIConsent(serverConsent.granted, userId);
-        setHasAiConsent(serverConsent.granted);
-        return;
-      }
-
-      if (localConsent.granted) {
-        await updateServerAIConsent(userId, true, 'migration');
-        if (!isMountedRef.current) return;
-        setHasAiConsent(true);
-      } else {
-        setHasAiConsent(false);
-      }
-    } catch (syncError) {
-      console.error('Error syncing AI consent on Arena:', syncError);
-      if (!isMountedRef.current) return;
-      setConsentSyncError('No se pudo verificar tu consentimiento de IA. Intenta de nuevo.');
-    } finally {
-      if (isMountedRef.current) {
-        setIsConsentSyncing(false);
-      }
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    void syncConsent();
-  }, [syncConsent]);
-
   const trimmedTopicLength = topic.trim().length;
   const formValid =
     trimmedTopicLength >= 5 &&
@@ -227,7 +183,7 @@ function ArenaSession({ userId }: { userId: string | null }) {
     personaA.id !== personaB.id;
 
   const disableCreate =
-    !formValid || isCreating || usage?.remaining === 0 || !hasAiConsent || isConsentSyncing;
+    !formValid || isCreating || usage?.remaining === 0 || !consent.granted || consent.busy;
 
   const usageLabel = useMemo(() => {
     if (!usage) return usageError ? '—' : '...';
@@ -236,7 +192,7 @@ function ArenaSession({ userId }: { userId: string | null }) {
 
   const handleCreate = async () => {
     if (isCreating) return;
-    if (!hasAiConsent) {
+    if (!consent.granted) {
       setError('Debes aceptar el consentimiento de IA antes de crear debates.');
       return;
     }
@@ -416,127 +372,80 @@ function ArenaSession({ userId }: { userId: string | null }) {
     }
   };
 
-  const handleAcceptAiConsent = async () => {
-    if (isConsentSyncing) return;
-    setIsConsentSyncing(true);
-    setConsentSyncError(null);
-    setError(null);
-
-    try {
-      if (!userId) {
-        throw new Error('Debes iniciar sesión para guardar el consentimiento.');
-      }
-      await updateServerAIConsent(userId, true, 'arena');
-      if (!isMountedRef.current) return;
-      setAIConsent(true, userId);
-      setHasAiConsent(true);
-    } catch (consentError) {
-      console.error('Error accepting AI consent on Arena:', consentError);
-      if (!isMountedRef.current) return;
-      setHasAiConsent(false);
-      setConsentSyncError('No se pudo guardar tu consentimiento de IA. Intenta nuevamente.');
-    } finally {
-      if (isMountedRef.current) {
-        setIsConsentSyncing(false);
-      }
-    }
-  };
-
   const debateNotFound = Boolean(
     isViewing && !isCreating && loadedDebateId === debateId && !debate,
   );
 
+  const handleShare = async () => {
+    if (!debate) return;
+    const url = `${window.location.origin}/arena/${debate.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('Enlace copiado', 'success');
+    } catch {
+      window.prompt('Copia el enlace del debate:', url);
+    }
+  };
+
+  const handleReport = () => {
+    if (!debate) return;
+    aiReport.report({
+      contextId: `arena_${debate.id}`,
+      excerpt: [debate.summary, debate.verdict?.reason, ...turns.map((turn) => turn.text)]
+        .filter(Boolean)
+        .join(' / '),
+    });
+  };
+
+  const usagePill = userId ? (
+    <div className="flex shrink-0 flex-col items-end gap-1">
+      <span className="rounded-full border border-white/[0.08] px-3 py-1 text-xs text-neutral-400">
+        Debates hoy{' '}
+        <span
+          className={`font-semibold ${usage?.remaining === 0 ? 'text-red-400' : 'text-brand-gold'}`}
+        >
+          {usageLabel}
+        </span>
+      </span>
+      {usageError && (
+        <button
+          type="button"
+          onClick={() => void loadUsage()}
+          className="text-[11px] text-neutral-400 underline underline-offset-2 hover:text-white"
+        >
+          Reintentar
+        </button>
+      )}
+    </div>
+  ) : null;
+
   return (
-    <div className="page-transition pb-24">
-      <header className="mb-8 flex flex-col gap-4 pt-6 md:pt-10">
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl border border-brand-gold/30 bg-brand-gold/10 p-2 text-brand-gold">
-            <Sparkles size={18} />
+    <div className="page-transition mx-auto max-w-3xl pb-24">
+      <AIHeader
+        title="Arena IA"
+        subtitle="Dos IA debaten un tema y un juez da el veredicto."
+        active="arena"
+        action={usagePill}
+      />
+
+      {consent.error && consent.granted && (
+        <AIConsentWarning message={consent.error} onRetry={() => void consent.retry()} />
+      )}
+
+      {!consent.granted && !isViewing ? (
+        consent.checking ? (
+          <div className="flex justify-center py-20" role="status" aria-label="Verificando">
+            <div className="h-7 w-7 animate-spin rounded-full border-2 border-brand-gold border-t-transparent" />
           </div>
-          <div>
-            <h1 className="text-display-sm md:text-display-md font-display text-white">Arena IA</h1>
-            <p className="text-sm text-neutral-500">
-              Debates estructurados entre perspectivas opuestas.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wider text-neutral-500">
-          <span>Debates hoy:</span>
-          <span className={usage?.remaining === 0 ? 'text-red-400' : 'text-brand-gold'}>
-            {usageLabel}
-          </span>
-          {usageError && (
-            <button
-              type="button"
-              onClick={() => void loadUsage()}
-              className="rounded-full border border-neutral-700 px-2.5 py-0.5 text-[10px] text-neutral-300 hover:border-neutral-500 hover:text-white"
-            >
-              Reintentar
-            </button>
-          )}
-        </div>
-
-        <AIModeTabs active="arena" />
-        <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-xs text-neutral-400">
-          <p>{LEGAL_COPY.aiDisclosure}</p>
-          <Link
-            to="/legal/privacy"
-            className="mt-2 inline-block text-amber-300 hover:text-amber-200 transition-colors"
-          >
-            Ver política de privacidad
-          </Link>
-        </div>
-
-        {consentSyncError && hasAiConsent && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-100 flex flex-wrap items-center justify-between gap-2">
-            <span>{consentSyncError}</span>
-            <button
-              type="button"
-              onClick={() => void syncConsent()}
-              disabled={isConsentSyncing}
-              className="rounded-full border border-amber-400/50 px-3 py-1 text-xs text-amber-100 hover:border-amber-300 disabled:opacity-50"
-            >
-              Reintentar
-            </button>
-          </div>
-        )}
-
-        {!hasAiConsent && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-200">
-            <p>{LEGAL_COPY.aiConsent}</p>
-            {consentSyncError && <p className="mt-2 text-red-100">{consentSyncError}</p>}
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={handleAcceptAiConsent}
-                disabled={isConsentSyncing}
-                className="rounded-full bg-red-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-red-400 transition-colors disabled:opacity-60"
-              >
-                {isConsentSyncing ? 'Guardando...' : 'Aceptar y continuar'}
-              </button>
-              {consentSyncError && (
-                <button
-                  type="button"
-                  onClick={() => void syncConsent()}
-                  disabled={isConsentSyncing}
-                  className="rounded-full border border-red-400/60 px-4 py-1.5 text-xs text-red-100 hover:border-red-300 disabled:opacity-60"
-                >
-                  Reintentar
-                </button>
-              )}
-              <Link
-                to="/settings"
-                className="rounded-full border border-red-400/60 px-4 py-1.5 text-xs text-red-100 hover:border-red-300"
-              >
-                Gestionar en Settings
-              </Link>
-            </div>
-          </div>
-        )}
-      </header>
-
-      {isViewing ? (
+        ) : (
+          <AIConsentCard
+            saving={consent.saving}
+            error={consent.error}
+            onAccept={() => void consent.accept()}
+            onRetry={() => void consent.retry()}
+          />
+        )
+      ) : isViewing ? (
         <DebateViewer
           debate={debate}
           turns={turns}
@@ -547,86 +456,88 @@ function ArenaSession({ userId }: { userId: string | null }) {
           onCreateAnother={handleCreateAnother}
           onToggleLike={debate?.status === 'done' ? handleToggleLikeDebate : undefined}
           onToggleSave={debate?.status === 'done' ? handleToggleSaveDebate : undefined}
+          onReport={debate?.status === 'done' ? handleReport : undefined}
+          onShare={debate?.status === 'done' ? () => void handleShare() : undefined}
           isLiked={isDebateLiked}
           isLiking={isLikingDebate}
           isSaved={isDebateSaved}
           isSaving={isSavingDebate}
         />
       ) : (
-        <section className="space-y-6">
-          <div className="card card-premium space-y-6">
+        <section className="space-y-7">
+          <div>
+            <p className="mb-2.5 text-xs font-medium uppercase tracking-wider text-neutral-500">
+              Tema
+            </p>
+            <TopicInput value={topic} onChange={setTopic} disabled={isCreating} />
+          </div>
+
+          <PersonaPicker
+            label="A favor"
+            side="A"
+            selectedId={personaA?.id || null}
+            onSelect={setPersonaA}
+            excludeId={personaB?.id}
+            disabled={isCreating}
+          />
+          <div className="flex items-center gap-3" aria-hidden="true">
+            <span className="h-px flex-1 bg-white/[0.06]" />
+            <span className="text-xs font-semibold tracking-widest text-neutral-600">VS</span>
+            <span className="h-px flex-1 bg-white/[0.06]" />
+          </div>
+          <PersonaPicker
+            label="En contra"
+            side="B"
+            selectedId={personaB?.id || null}
+            onSelect={setPersonaB}
+            excludeId={personaA?.id}
+            disabled={isCreating}
+          />
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
             <div>
-              <p className="mb-2 text-xs uppercase tracking-wider text-neutral-500">Tema</p>
-              <TopicInput value={topic} onChange={setTopic} disabled={isCreating} />
+              <p className="text-sm text-white">Visibilidad</p>
+              <p className="mt-0.5 text-xs text-neutral-500">
+                {visibility === 'public'
+                  ? 'Visible en Descubrir y compartible por enlace.'
+                  : 'Solo tú podrás ver este debate.'}
+              </p>
             </div>
-
-            <div className="grid gap-5 md:grid-cols-2">
-              <PersonaPicker
-                label="Persona A (defiende)"
-                selectedId={personaA?.id || null}
-                onSelect={setPersonaA}
-                excludeId={personaB?.id}
-                disabled={isCreating}
-              />
-              <PersonaPicker
-                label="Persona B (contraparte)"
-                selectedId={personaB?.id || null}
-                onSelect={setPersonaB}
-                excludeId={personaA?.id}
-                disabled={isCreating}
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-800/80 pt-4">
-              <div>
-                <p className="text-xs uppercase tracking-wider text-neutral-500">Visibilidad</p>
-                <p className="mt-1 text-xs text-neutral-400">
-                  {visibility === 'public'
-                    ? 'Visible en Descubrir y compartible por enlace.'
-                    : 'Solo tú podrás ver este debate.'}
-                </p>
-              </div>
-              <div className="inline-flex rounded-lg border border-neutral-800 bg-neutral-900/60 p-1">
+            <div className="inline-flex rounded-full border border-white/[0.08] bg-white/[0.03] p-1">
+              {(['public', 'private'] as const).map((option) => (
                 <button
+                  key={option}
                   type="button"
-                  onClick={() => setVisibility('public')}
+                  onClick={() => setVisibility(option)}
                   disabled={isCreating}
-                  aria-pressed={visibility === 'public'}
-                  className={`rounded-md px-3 py-1.5 text-xs transition ${
-                    visibility === 'public'
-                      ? 'bg-brand-gold font-medium text-black'
+                  aria-pressed={visibility === option}
+                  className={`rounded-full px-3.5 py-1.5 text-xs transition-colors ${
+                    visibility === option
+                      ? 'bg-white font-medium text-black'
                       : 'text-neutral-400 hover:text-white'
                   }`}
                 >
-                  Público
+                  {option === 'public' ? 'Público' : 'Privado'}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setVisibility('private')}
-                  disabled={isCreating}
-                  aria-pressed={visibility === 'private'}
-                  className={`rounded-md px-3 py-1.5 text-xs transition ${
-                    visibility === 'private'
-                      ? 'bg-brand-gold font-medium text-black'
-                      : 'text-neutral-400 hover:text-white'
-                  }`}
-                >
-                  Privado
-                </button>
-              </div>
+              ))}
             </div>
+          </div>
 
-            {error && (
-              <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                {error}
-              </div>
-            )}
+          {error && (
+            <p
+              role="alert"
+              className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+            >
+              {error}
+            </p>
+          )}
 
+          <div className="space-y-3">
             <button
               type="button"
               disabled={disableCreate}
               onClick={handleCreate}
-              className="btn-accent w-full"
+              className="h-12 w-full rounded-2xl bg-brand-gold text-sm font-semibold text-black transition-opacity disabled:opacity-40"
             >
               {isCreating
                 ? 'Generando debate...'
@@ -634,24 +545,16 @@ function ArenaSession({ userId }: { userId: string | null }) {
                   ? 'Límite diario alcanzado'
                   : 'Iniciar debate'}
             </button>
+            <p className="text-center text-xs text-neutral-500">
+              6 turnos alternados · resumen y veredicto imparcial · normalmente menos de 20 segundos
+            </p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-3">
-            <article className="card">
-              <p className="text-xs uppercase tracking-wider text-neutral-500">Formato</p>
-              <p className="mt-2 text-sm text-neutral-200">6 turnos alternados A/B</p>
-            </article>
-            <article className="card">
-              <p className="text-xs uppercase tracking-wider text-neutral-500">Salida</p>
-              <p className="mt-2 text-sm text-neutral-200">Resumen + veredicto imparcial</p>
-            </article>
-            <article className="card">
-              <p className="text-xs uppercase tracking-wider text-neutral-500">Tiempo</p>
-              <p className="mt-2 text-sm text-neutral-200">Normalmente menos de 20 segundos</p>
-            </article>
-          </div>
+          <AIDisclosure />
         </section>
       )}
+
+      {aiReport.modal}
     </div>
   );
 }

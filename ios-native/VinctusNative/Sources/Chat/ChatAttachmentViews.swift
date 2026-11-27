@@ -57,6 +57,12 @@ struct ChatMediaPreview: View {
   @State private var playerItem: AVPlayerItem?
   @State private var playbackError = false
 
+  init(url: URL, kind: ChatMediaKind, title: String) {
+    self.url = url
+    self.kind = kind
+    self.title = title
+  }
+
   var body: some View {
     NavigationStack {
       Group {

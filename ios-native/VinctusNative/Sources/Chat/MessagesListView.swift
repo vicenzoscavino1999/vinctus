@@ -11,6 +11,7 @@ struct MessagesListView: View {
 
   @EnvironmentObject private var authVM: AuthViewModel
   @EnvironmentObject private var blockedUsers: BlockedUsersStore
+  @Environment(\.usesGlass) private var usesGlass
   @StateObject private var vm: ConversationsViewModel
   /// Screenshot builds open a conversation with `-VinctusOpenChat <id>`.
   @State private var openedConversation: ChatConversation?
@@ -122,7 +123,8 @@ struct MessagesListView: View {
     .scrollContentBackground(.hidden)
     .background(VinctusTokens.Color.background)
     .navigationTitle("Mensajes")
-    .searchable(text: $query, prompt: "Buscar conversaciones o grupos")
+    // Pinned under the title: iOS 26 would otherwise put it at the bottom, behind our tab bar.
+    .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Buscar conversaciones o grupos")
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
         Button {
@@ -162,7 +164,8 @@ struct MessagesListView: View {
         profileRepo: profileRepo,
         conversationID: conversation.id,
         title: conversation.title,
-        otherUserID: conversation.otherUserID
+        otherUserID: conversation.otherUserID,
+        photoURL: conversation.photoURL
       )
     }
     .onAppear {
@@ -249,8 +252,9 @@ struct MessagesListView: View {
             .padding(.horizontal, 14)
             .frame(height: 32)
             .foregroundStyle(isSelected ? SwiftUI.Color.black : VinctusTokens.Color.textSecondary)
-            .background(isSelected ? SwiftUI.Color.white : VinctusTokens.Color.surface)
+            .background(isSelected ? SwiftUI.Color.white : (usesGlass ? SwiftUI.Color.clear : VinctusTokens.Color.surface))
             .clipShape(Capsule())
+            .vinctusGlass(usesGlass && !isSelected, in: Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])

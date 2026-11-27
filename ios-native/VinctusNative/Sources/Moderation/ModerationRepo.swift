@@ -42,6 +42,9 @@ enum ReportTarget: Hashable {
   /// A story. The report's conversationId is `story_<storyId>`, which the moderation panel uses
   /// to remove it (parseReportedStoryTarget in functions/src/moderation.ts).
   case story(storyID: String, ownerID: String)
+  /// A group, from its chat details. Built like the web's `createGroupReport`: the group's id as
+  /// `reportedUid` and `grp_<groupId>` as the conversation.
+  case group(groupID: String)
 
   /// `reportedUid` of AI reports; moderators can remove nothing and suspend no one for them.
   static let aiReportedUID = "ai_assistant"
@@ -60,6 +63,8 @@ enum ReportTarget: Hashable {
       return "Denunciar mensaje"
     case .story:
       return "Denunciar historia"
+    case .group:
+      return "Denunciar grupo"
     }
   }
 }
@@ -106,6 +111,10 @@ struct ReportFields: Equatable {
       reportedUID = ownerID
       self.details = "[Historia \(storyID)]" + (details.map { " \($0)" } ?? "")
       conversationID = "story_\(storyID)"
+    case let .group(groupID):
+      reportedUID = groupID
+      self.details = details.map { "[Grupo \(groupID)] \($0)" } ?? "Reporte de grupo \(groupID)"
+      conversationID = "grp_\(groupID)"
     }
   }
 
@@ -131,6 +140,8 @@ struct ReportFields: Equatable {
       prefix = "[Mensaje en \(chatID)] \(String(rawExcerpt.prefix(900))) | Motivo: "
     case let .story(storyID, _):
       prefix = "[Historia \(storyID)] "
+    case let .group(groupID):
+      prefix = "[Grupo \(groupID)] "
     }
     return max(0, maxDetailsLength - prefix.utf8.count)
   }
